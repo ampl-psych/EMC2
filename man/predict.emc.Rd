@@ -19,7 +19,8 @@
 \arguments{
 \item{object}{An emc or emc.prior object from which to generate predictives}
 
-\item{data}{A data frame needed to exactly match the original design}
+\item{data}{Optional data frame or list of data frames needed to exactly match the original design.
+Required for \code{predict.emc()} when the fitted object was created with \code{memory_saver = TRUE}.}
 
 \item{n_post}{Integer. Number of generated datasets}
 

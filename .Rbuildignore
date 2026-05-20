@@ -12,3 +12,5 @@
 ^paper$
 ^\.settings\.json$
 
+^\.positai$
+^\.claude$

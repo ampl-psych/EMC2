@@ -680,6 +680,7 @@ loadRData <- function(fileName){
 #' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
+#' @param memory_saver A Boolean. If `TRUE`, store a pooled design representation and drop per-parameter designs from data to reduce memory usage.
 #' @param ... Additional, optional arguments.
 #' @return An uninitialized emc object
 #' @examples dat <- forstmann
@@ -714,7 +715,7 @@ make_emc <- function(data,design,model=NULL,
                     type="standard",
                     n_chains=3,compress=TRUE,rt_resolution=1/60,
                     prior_list = NULL, group_design = NULL,
-                    par_groups=NULL, ...){
+                    par_groups=NULL, memory_saver = FALSE, ...){
   # arguments for future compatibility
   n_factors <- NULL
   nuisance <- NULL
@@ -794,9 +795,13 @@ make_emc <- function(data,design,model=NULL,
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i])
+                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i],
+                                     memory_saver = memory_saver)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
+      if (memory_saver) {
+        warning("memory_saver not supported for custom likelihoods; ignored")
+      }
       dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
                                                design = design[[i]],model=model[[i]])
       sampled_p_names <- attr(design[[i]],"sampled_p_names")
@@ -883,6 +888,7 @@ fix_fileName <- function(x){
 
 check_duplicate_designs <- function(out){
   if(is.data.frame(out$data[[1]])) return(out)
+  if(!is.null(attr(out$data[[1]][[1]], "design_pool"))) return(out)
   for(i in 1:length(out$data)){ # loop over subjects
     designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
     duplicacy <- duplicated(designs)
