@@ -8,10 +8,11 @@ plot_trend(
   input_data,
   emc,
   par_name,
-  subject = 1,
+  subject = NULL,
   filter = NULL,
   on_x_axis = "trials",
   pp_shaded = TRUE,
+  layout = NULL,
   ...
 )
 }
@@ -22,13 +23,15 @@ plot_trend(
 
 \item{par_name}{Parameter name (or covariate name) to plot}
 
-\item{subject}{Subject number to plot}
+\item{subject}{Subject number to plot. If NULL, plots all subjects separately.}
 
 \item{filter}{Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot}
 
 \item{on_x_axis}{Column name in the \code{dadm} to plot on the x-axis. By default 'trials'.}
 
 \item{pp_shaded}{Boolean. If \code{TRUE} will plot 95\% credible interval as a shaded area. Otherwise plots separate lines for each iteration of the posterior predictives. Only applicable if \code{input_data} are posterior predictives.}
+
+\item{layout}{Optional integer vector of length 2 (e.g. \code{c(2, 3)}) to override the automatic mfrow layout when plotting all subjects.}
 
 \item{...}{Optional arguments that can be passed to \code{plots}.}
 }
