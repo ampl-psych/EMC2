@@ -548,6 +548,13 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   if(dots$return_types){
     return(list(kernels = kernels, bases = bases))
   }
+
+  experimental_kernels <- c('delta2kernel', 'rescorlawagner')
+  kernels <- kernels[!names(kernels) %in% experimental_kernels]
+
+  experimental_bases <- 'exp_lin'
+  bases <- bases[!names(bases) %in% experimental_bases]
+
   if (is.null(kernel) && is.null(base)) {
     cat("Available kernels:\n")
     for (k in names(kernels)) {
