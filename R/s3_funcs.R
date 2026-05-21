@@ -429,7 +429,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
                        trim = TRUE, r_cores = 1)
-  start_time <- Sys.time()
+  # start_time <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
     stop_criteria[["sample"]] <- stop_criteria
@@ -465,7 +465,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
                    r_cores = dots$r_cores)
   }
-  if (verbose) print(Sys.time()-start_time)
+  # if (verbose) print(Sys.time()-start_time)
   return(emc)
 }
 
