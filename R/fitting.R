@@ -101,7 +101,6 @@ run_emc <- function(emc, stage, stop_criteria,
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
-  t_start  <- Sys.time()   # track total run duration
   while(!progress$done){
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
@@ -180,34 +179,6 @@ run_emc <- function(emc, stage, stop_criteria,
                       format_duration(rem$min_time),
                       format_duration(rem$max_time)))
     }
-  }
-
-  # final print
-  if (verbose) {
-    total_duration <- Sys.time() - t_start
-
-    # Final Rhat
-    gd       <- progress$gd$gd
-    gd_final <- NULL
-    if (!is.null(stop_criteria$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
-
-    # Final ESS
-    ess_final <- if (!is.null(progress$curr_min_es)) {
-      sprintf("min ESS=%d", round(progress$curr_min_es))
-    } else NULL
-
-    # Final iters
-    final_iters <- chain_n(emc)[1, stage]
-
-    message(sprintf(
-      "Sampling stopped | iters=%d%s%s | Total duration: %s",
-      stage,
-      final_iters,
-      ifelse(!is.null(gd_final),  paste0(" | ", gd_final),  ""),
-      ifelse(!is.null(ess_final), paste0(" | ", ess_final), ""),
-      format_duration(total_duration)
-    ))
   }
 
   emc <- strip_duplicates(emc)

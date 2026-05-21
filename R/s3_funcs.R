@@ -429,7 +429,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
                        trim = TRUE, r_cores = 1)
-  # start_time <- Sys.time()
+  t_start <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
     stop_criteria[["sample"]] <- stop_criteria
@@ -465,7 +465,40 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
                    r_cores = dots$r_cores)
   }
-  # if (verbose) print(Sys.time()-start_time)
+  if (verbose) {
+    # Re-use check_progress to get final Rhat and ESS for the sample stage,
+    # with verbose = FALSE so it doesn't print anything itself
+    final_progress <- check_progress(
+      emc, stage = "sample",
+      iter       = stop_criteria[["sample"]][["iter"]],
+      stop_criteria = stop_criteria[["sample"]],
+      max_tries  = max_tries,
+      step_size  = step_size,
+      n_cores    = cores_per_chain * cores_for_chains,
+      verbose    = FALSE,
+      progress   = NULL,
+      n_blocks   = dots$n_blocks
+    )
+
+    gd      <- final_progress$gd$gd
+    gd_final <- NULL
+    if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+
+    ess_message <- if (!is.null(final_progress$curr_min_es)) {
+      sprintf("min ESS=%d", round(final_progress$curr_min_es))
+    } else NULL
+
+    final_iters <- chain_n(emc)[1, "sample"]
+
+    message(sprintf(
+      "Sampling stopped | iters=%d%s%s | Total duration: %s",
+      final_iters,
+      ifelse(!is.null(gd_final),   paste0(" | ", gd_final),   ""),
+      ifelse(!is.null(ess_message), paste0(" | ", ess_message), ""),
+      format_duration(Sys.time() - t_start)
+    ))
+  }
   return(emc)
 }
 
