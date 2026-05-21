@@ -1,4 +1,4 @@
-robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, do_plot = TRUE, ...){
+robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, do_plot = TRUE, prob = FALSE, ...){
   ps <- ps[abs(ps) < 1000]
   for(i in 1:log10(length(ps))){
     cuts <- cut(ps, breaks = breaks)
@@ -7,13 +7,11 @@ robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, do_plot = TRUE, ...){
     ps <- ps[cuts %in% names(good_cuts)[good_cuts]]
   }
   if(do_plot){
-    hist(ps, breaks = breaks, ...)
+    hist(ps, breaks = breaks, freq = !prob, ...)
   } else{
     return(ps)
   }
-
 }
-
 robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
   # density estimate over range r (to avoid outlier influence, used
   # here for hyper co/variance which can have long tails)
