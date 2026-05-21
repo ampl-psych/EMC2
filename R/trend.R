@@ -886,17 +886,17 @@ get_kernels <- function() {
                  default_pars = c("q0", "alpha"),
                  transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
                  bases = base_2p),
-    delta2kernel = list(description = paste(
-                "Dual kernel delta rule: k = q[i].\n",
-                  "         Combines fast and slow learning rates\n",
-                  "         and switches between them based on dSwitch.\n",
-                  "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
-                  "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
-                ),
-                default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-                transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
-                                              "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-                bases = base_2p),
+    # delta2kernel = list(description = paste(
+    #             "Dual kernel delta rule: k = q[i].\n",
+    #               "         Combines fast and slow learning rates\n",
+    #               "         and switches between them based on dSwitch.\n",
+    #               "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+    #               "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+    #             ),
+    #             default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+    #             transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
+    #                                           "propSlow" = "pnorm", "dSwitch" = "pnorm")),
+    #             bases = base_2p),
     # delta2kernel2 = list(description = paste(
     #   "Steven fucking around with the delta2kernel. You shouldn't see this! Dual kernel delta rule: k = q[i].\n",
     #   "         Combines fast and slow learning rates\n",
