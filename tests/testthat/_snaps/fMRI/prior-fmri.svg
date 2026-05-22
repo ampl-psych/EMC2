@@ -25,9 +25,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMC4wMHwzNjAuMDB8MC4wMHwxOTIuMDA=)'>
-<text x='189.50' y='23.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='47.56px' lengthAdjust='spacingAndGlyphs'>accuracy</text>
-<text x='189.50' y='179.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(8.55,91.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='189.50' y='22.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='38.05px' lengthAdjust='spacingAndGlyphs'>accuracy</text>
+<text x='189.50' y='179.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(8.55,91.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='50.12' y1='143.53' x2='303.55' y2='143.53' style='stroke-width: 0.75;' />
@@ -97,9 +97,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMzYwLjAwfDcyMC4wMHwwLjAwfDE5Mi4wMA==)'>
-<text x='549.50' y='23.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='32.38px' lengthAdjust='spacingAndGlyphs'>cond1</text>
-<text x='549.50' y='179.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(368.55,91.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='549.50' y='22.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='25.90px' lengthAdjust='spacingAndGlyphs'>cond1</text>
+<text x='549.50' y='179.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(368.55,91.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='420.84' y1='143.53' x2='688.89' y2='143.53' style='stroke-width: 0.75;' />
@@ -168,9 +168,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMC4wMHwzNjAuMDB8MTkyLjAwfDM4NC4wMA==)'>
-<text x='189.50' y='215.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='7.26px' lengthAdjust='spacingAndGlyphs'>rt</text>
-<text x='189.50' y='371.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(8.55,283.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='189.50' y='214.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='5.81px' lengthAdjust='spacingAndGlyphs'>rt</text>
+<text x='189.50' y='371.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(8.55,283.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='60.44' y1='335.53' x2='318.57' y2='335.53' style='stroke-width: 0.75;' />
@@ -242,9 +242,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMzYwLjAwfDcyMC4wMHwxOTIuMDB8Mzg0LjAw)'>
-<text x='549.50' y='215.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='44.92px' lengthAdjust='spacingAndGlyphs'>constant</text>
-<text x='549.50' y='371.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(368.55,283.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='549.50' y='214.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='35.94px' lengthAdjust='spacingAndGlyphs'>constant</text>
+<text x='549.50' y='371.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(368.55,283.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='400.82' y1='335.53' x2='679.60' y2='335.53' style='stroke-width: 0.75;' />
@@ -321,9 +321,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMC4wMHwzNjAuMDB8Mzg0LjAwfDU3Ni4wMA==)'>
-<text x='189.50' y='407.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='17.17px' lengthAdjust='spacingAndGlyphs'>rho</text>
-<text x='189.50' y='563.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(8.55,475.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='189.50' y='406.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='13.74px' lengthAdjust='spacingAndGlyphs'>rho</text>
+<text x='189.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(8.55,475.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='50.12' y1='527.53' x2='328.89' y2='527.53' style='stroke-width: 0.75;' />
@@ -386,9 +386,9 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpMzYwLjAwfDcyMC4wMHwzODQuMDB8NTc2LjAw)'>
-<text x='549.50' y='407.57' text-anchor='middle' style='font-size: 11.88px; font-weight: bold; font-family: sans;' textLength='12.55px' lengthAdjust='spacingAndGlyphs'>sd</text>
-<text x='549.50' y='563.64' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='24.22px' lengthAdjust='spacingAndGlyphs'>alpha</text>
-<text transform='translate(368.55,475.25) rotate(-90)' text-anchor='middle' style='font-size: 9.90px; font-family: sans;' textLength='33.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
+<text x='549.50' y='406.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='10.04px' lengthAdjust='spacingAndGlyphs'>sd</text>
+<text x='549.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='19.38px' lengthAdjust='spacingAndGlyphs'>alpha</text>
+<text transform='translate(368.55,475.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='26.42px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpMC4wMHw3MjAuMDB8MC4wMHw1NzYuMDA=)'>
 <line x1='410.12' y1='527.53' x2='698.50' y2='527.53' style='stroke-width: 0.75;' />
