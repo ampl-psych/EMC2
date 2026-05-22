@@ -6,7 +6,7 @@ using namespace Rcpp;
 //
 // #include "mri.h"
 
-double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector is_ok,
+double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, std::vector<int> is_ok,
                             int n, int m,
                             double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
@@ -33,7 +33,7 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
 
   // LL calculation
   for (int i = 0; i < n; i++) {
-    if(is_ok[i] == FALSE){
+    if(is_ok[i] == 0){
       ll[i] = R_NegInf;
     } else{
       // sigma is in the last column of pars for row i
@@ -47,7 +47,7 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
   return sum(ll);
 }
 //
-double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVector is_ok,
+double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, std::vector<int> is_ok,
                                         int n, int m,
                                         double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
@@ -73,7 +73,7 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
 
   // For the first observation: use the stationary variance directly.
   // sigma is assumed to be the stationary standard deviation (last column of pars).
-  if (!is_ok[0]) {
+  if (is_ok[0] == 0) {
     ll[0] = R_NegInf;
   } else {
     double sigma0 = pars(0, m - 1);
@@ -84,7 +84,7 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
   // The conditional variance is sigma^2 * (1 - rho^2) and
   // the conditional mean is y_hat[t] + rho*(y[t-1] - y_hat[t-1]).
   for (int i = 1; i < n; i++) {
-    if (!is_ok[i]) {
+    if (is_ok[i] == 0) {
       ll[i] = R_NegInf;
     } else {
       double sigma_i = pars(i, m - 1);

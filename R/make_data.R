@@ -213,10 +213,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   dots_local <- list(...)
   if (isFALSE(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- TRUE
-    use_vectorised <- isTRUE(dots_local$use_vectorised)
   } else if (!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
-    use_vectorised <- isTRUE(dots_local$use_vectorised)
   }
   return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
   if('kernel_output_codes' %in% names(dots_local)) {
@@ -229,17 +227,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- add_constants(pars,design$constants)
   if(simulate_unconditional_on_data) {
-    if(use_vectorised) {
-      res <- make_data_unconditional_vectorised(data=data, pars=pars, design=design, model=model,
-                                                return_trialwise_parameters, kernel_output_codes)
-    } else {
-      res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                     return_trialwise_parameters, kernel_output_codes, optionals=optionals)
+    res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
+                                   return_trialwise_parameters, kernel_output_codes, optionals=optionals)
 
-    }
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
-  } else{
+  } else {
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,

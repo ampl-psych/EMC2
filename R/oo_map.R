@@ -26,8 +26,11 @@
     }
 
     expanded <- design_mat[expand_idx, , drop = FALSE]
+    attr(expanded, "parameter_design") <- attr(design_mat, "parameter_design")
+
     if (!is.null(row_idx)) {
       expanded <- expanded[row_idx, , drop = FALSE]
+      attr(expanded, "parameter_design") <- attr(design_mat, "parameter_design")
     }
     expanded
   })
@@ -165,11 +168,12 @@ get_pars_oo <- function(p, dadm, model,
   for (i in seq_along(used_subjects)) {
     row_idx <- dadm$subjects == used_subjects[i]
     row_ids[[i]] <- which(row_idx)
-    pieces[[i]] <- call_one(
-      cur_particles = particle_matrix[i, , drop = FALSE],
-      cur_dadm = dadm[row_idx, , drop = FALSE],
-      row_idx = row_idx
-    )
+    cur_dadm <- dadm[row_idx, , drop = FALSE]
+    cm <- attr(dadm, "covariate_maps")
+    if (!is.null(cm)) {
+      attr(cur_dadm, "covariate_maps") <- lapply(cm, function(m) m[row_idx, , drop = FALSE])
+    }
+    pieces[[i]] <- call_one(cur_particles = particle_matrix[i, , drop = FALSE], cur_dadm = cur_dadm, row_idx = row_idx)
   }
 
   out <- matrix(NA_real_, nrow = nrow(dadm), ncol = ncol(pieces[[1]]))
@@ -180,9 +184,9 @@ get_pars_oo <- function(p, dadm, model,
   out
 }
 
-get_pars_matrix_oo <- function(p_vector, dadm, model) {
+get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE) {
   model_list <- .oo_model_list(model)
-  pars <- get_pars_oo(p_vector, dadm, model_list)
+  pars <- get_pars_oo(p_vector, dadm, model_list, return_all_pars=return_all_pars)
   pars <- model_list$Ttransform(pars, dadm)
   pars <- add_bound(pars, model_list$bound, dadm$lR)
   .oo_reorder_public_pars(pars, model_list)

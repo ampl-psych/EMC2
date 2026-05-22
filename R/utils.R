@@ -1,3 +1,12 @@
+#' Print EMC2 build configuration
+#'
+#' Prints the compiler flags and options that were active when the package
+#' was installed. Useful for debugging performance or numerical issues.
+#'
+#' @export
+emc2_build_info <- function() invisible(.emc2_build_info())
+
+
 # Last observation carried forward
 # Replaces NA values with the last non-NA value
 # Mimics zoo::na.locf behavior (vectorized for speed)

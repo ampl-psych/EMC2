@@ -72,19 +72,39 @@ Rcpp::NumericMatrix add_constants_columns(Rcpp::NumericMatrix p_matrix,
 
   // copy existing data
   for (int j = 0; j < p_old; ++j) {
+    const double* src = &p_matrix(0, j);
+    double* dst = &out(0, j);
+
+    #pragma omp simd  // can be vectorised
     for (int i = 0; i < n_rows; ++i) {
-      out(i, j) = p_matrix(i, j);
+      dst[i] = src[i];
     }
   }
+  // for (int j = 0; j < p_old; ++j) {
+  //   for (int i = 0; i < n_rows; ++i) {
+  //     out(i, j) = p_matrix(i, j);
+  //   }
+  // }
 
   // fill new columns with constants (same value for all rows)
   for (int k = 0; k < p_add; ++k) {
     double val = constants[k];
     int j = p_old + k;
+
+    double* col_ptr = &out(0, j);
+
+    #pragma omp simd
     for (int i = 0; i < n_rows; ++i) {
-      out(i, j) = val;
+      col_ptr[i] = val;
     }
   }
+  // for (int k = 0; k < p_add; ++k) {
+  //   double val = constants[k];
+  //   int j = p_old + k;
+  //   for (int i = 0; i < n_rows; ++i) {
+  //     out(i, j) = val;
+  //   }
+  // }
 
   // set column names: old names + names(constants)
   Rcpp::CharacterVector old_names = colnames(p_matrix);

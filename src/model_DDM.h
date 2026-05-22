@@ -8,7 +8,7 @@ using namespace Rcpp;
 #include "fncs_seven.h"
 #include "tools.h"
 
-NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, LogicalVector is_ok){
+NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, std::vector<int> is_ok){
   int Epsflag = 1;
   double eps = 5e-3;
   int K = 0;
@@ -18,7 +18,7 @@ NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars
   int N = rts.length();
   NumericVector out(N);
   for(int i = 0; i < N; i++){
-    if(is_ok[i] == FALSE){
+    if (!is_ok[i]) {
       out[i] = R_NegInf;
     } else{
       // we divide v, a and sv by s to introduce the scaling parameter s

@@ -16,7 +16,9 @@ make_trend(
   at = "lR",
   maps = NULL,
   custom_trend = NULL,
-  ffill_na = NULL
+  ffill_na = NULL,
+  kernel_args = NULL,
+  per_covariate_pars = NULL
 )
 }
 \arguments{
@@ -48,6 +50,16 @@ corresponding to the first level of that factor, and fed forward to the other le
 If \code{TRUE}, missing values are forward-filled using the last known non-\code{NA} value after
 applying the kernel. If \code{FALSE}, trials with missing covariates contribute \code{0} instead.
 The default (NULL) is interpreted as \code{TRUE} for delta-rule models and \code{FALSE} otherwise.}
+
+\item{kernel_args}{Optional named list of kernel-specific arguments, aligned with \code{par_names}.
+Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
+Currently supported arguments:
+\describe{
+\item{\code{q_reset_column}}{For delta-family kernels (\code{"delta"}, \code{"delta2kernel"},
+\code{"delta2lr"}) only. Name of a logical or integer column in \code{data} indicating
+trials on which the Q-value should be reset to \code{q0} before the prediction error
+is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
+}}
 }
 \value{
 A list containing the trend specifications for each parameter

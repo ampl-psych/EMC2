@@ -1,2 +1,0 @@
-PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include
-PKG_LIBS     = $(RCPP_ARMA_LIBS)
