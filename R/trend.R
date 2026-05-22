@@ -1510,6 +1510,18 @@ pointer_reset_wrapper <- function(sub_emc, emc){
   }
 }
 
+##' Reset pointers of custom C++ trend kernels to an emc object
+##'
+##' When an emc object is loaded from disk, or returned by forked processes, the pointers to custom kernels
+##' need to be re-created. This is a convenience function to do this.
+##'
+##' @param emc A target emc object with missing pointers
+##' @param pointer_source Either a trend object with correct pointers or another emc object with correct pointers
+##' @return An emc object with the custom pointers re-instated.
+##' @export
+fix_custom_kernel_pointers <- function(emc, pointer_source) {
+  return(set_custom_kernel_pointers(emc, get_custom_kernel_pointers(pointer_source)))
+}
 
 ## utility function
 normalize_maps <- function(maps, par_names) {
