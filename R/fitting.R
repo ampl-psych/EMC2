@@ -468,12 +468,6 @@ create_eff_proposals <- function(emc, n_cores){
   samples_merged <- merge_chains(emc)
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc))
 
-  # SM: Find group-level parameters, remove from theta_mu
-  group_pars <- sapply(emc[[1]]$group_designs, function(x) dimnames(x)[[2]])
-  group_pars <- group_pars[!group_pars %in% emc[[1]]$par_names]
-  test_samples$theta_mu <- test_samples$theta_mu[!dimnames(test_samples$theta_mu)[[1]] %in% group_pars,,drop=FALSE]
-  # end SM
-
   type <- emc[[1]]$type
   components <- attr(emc[[1]]$data, "components")
   for(i in 1:length(emc)){
@@ -671,12 +665,6 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   n_pars <- sampler$n_pars
   components <- attr(sampler$data, "components")
   nuisance <- sampler$nuisance
-
-  # SM: Find group-level parameters, remove from theta_mu
-  group_pars <- sapply(sampler$group_designs, function(x) dimnames(x)[[2]])
-  group_pars <- group_pars[!group_pars %in% sampler$par_names]
-  test_samples$theta_mu <- test_samples$theta_mu[!dimnames(test_samples$theta_mu)[[1]] %in% group_pars,,drop=FALSE]
-  # end SM
 
   if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
