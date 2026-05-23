@@ -12,7 +12,7 @@ accumulatr_dist_param_names <- function(dist) {
   character(0)
 }
 
-accumulatr_param_profile <- function(param_name, runtime_family) {
+accumulatr_param_profile <- function(param_name, runtime_family, dist = NULL) {
   if (identical(runtime_family, "q")) {
     return(list(
       latent_default = qnorm(0),
@@ -48,6 +48,19 @@ accumulatr_param_profile <- function(param_name, runtime_family) {
       upper = 1,
       bound_min = 0,
       bound_max = 1,
+      exception = 0
+    ))
+  }
+
+  if (identical(tolower(dist %||% ""), "rdm") && identical(param_name, "v")) {
+    return(list(
+      latent_default = 0,
+      actual_default = 1,
+      func = "exp",
+      lower = 0,
+      upper = Inf,
+      bound_min = 0,
+      bound_max = Inf,
       exception = 0
     ))
   }
@@ -201,6 +214,20 @@ accumulatr_internal_runtime_family <- function(model_spec, internal_name) {
   paste0("p", slot_idx)
 }
 
+accumulatr_internal_dist <- function(model_spec, internal_name) {
+  pieces <- strsplit(internal_name, ".", fixed = TRUE)[[1]]
+  if (length(pieces) != 2L) {
+    return(NA_character_)
+  }
+  spec <- accumulatr_model_spec(model_spec)
+  acc_defs <- spec$accumulators %||% list()
+  acc_idx <- match(pieces[[1]], vapply(acc_defs, `[[`, character(1), "id"))
+  if (is.na(acc_idx)) {
+    return(NA_character_)
+  }
+  acc_defs[[acc_idx]]$dist %||% NA_character_
+}
+
 accumulatr_internal_profiles <- function(model_spec, internal_names) {
   runtime_family <- stats::setNames(character(length(internal_names)), internal_names)
   profile <- vector("list", length(internal_names))
@@ -215,7 +242,11 @@ accumulatr_internal_profiles <- function(model_spec, internal_names) {
     if (identical(family, "w")) {
       param_name <- "w"
     }
-    profile[[internal_name]] <- accumulatr_param_profile(param_name, family)
+    profile[[internal_name]] <- accumulatr_param_profile(
+      param_name,
+      family,
+      dist = accumulatr_internal_dist(model_spec, internal_name)
+    )
   }
   list(
     internal_to_runtime = runtime_family,
@@ -259,9 +290,9 @@ AccumulatR_bridge_spec <- function(model_spec) {
     profiles <- target_info$profiles[targets]
     keys <- unique(vapply(profiles, accumulatr_profile_key, character(1)))
     if (length(keys) > 1L) {
-      warning(
+      stop(
         "AccumulatR public parameter '", nm,
-        "' maps to different parameter types; using the first profile",
+        "' maps to incompatible parameter transforms",
         call. = FALSE
       )
     }
@@ -341,7 +372,7 @@ accumulatr_build_runtime_recipe <- function(model_spec, dadm, bridge) {
       runtime_col <- paste0("p", j)
       internal_name <- paste(acc_id, dist_params[[j]], sep = ".")
       profile <- bridge$internal_profiles[[internal_name]] %||%
-        accumulatr_param_profile(dist_params[[j]], runtime_col)
+        accumulatr_param_profile(dist_params[[j]], runtime_col, dist = acc$dist)
       defaults[i, runtime_col] <- acc_params[[dist_params[[j]]]] %||%
         accumulatr_actual_default(profile)
       sources[i, runtime_col] <- accumulatr_internal_source_name(bridge, internal_name)
