@@ -99,6 +99,26 @@ accumulatr_model_spec <- function(model_spec) {
   model_spec$model_spec %||% model_spec
 }
 
+accumulatr_component_ids <- function(model_spec) {
+  components <- accumulatr_model_spec(model_spec)$components %||% list()
+  if (is.data.frame(components)) {
+    return(as.character(components$component_id %||% character(0)))
+  }
+  ids <- vapply(components, function(component) component$id %||% NA_character_, character(1))
+  ids[!is.na(ids) & nzchar(ids)]
+}
+
+accumulatr_observed_data <- function(data, model_spec) {
+  class(data) <- "data.frame"
+  for (attr_name in c("trials_start_rows", "layout_cols", "label_cols", "time_cols", "max_rank")) {
+    attr(data, attr_name) <- NULL
+  }
+  if (length(accumulatr_component_ids(model_spec)) <= 1L) {
+    data$component <- NULL
+  }
+  data
+}
+
 accumulatr_internal_lookup <- function(model_spec) {
   spec <- accumulatr_model_spec(model_spec)
   AccumulatR:::.parameter_name_lookup(spec)
@@ -493,12 +513,12 @@ AccumulatR_model <- function(model_spec){
 
 AccumulatR_expand_data <- function(model_spec, data){
   if(is.null(model_spec)) stop("model_specification needs to be made for AccumulatR models")
-  if(is.data.frame(model_spec$components) && nrow(model_spec$components) > 1){
+  if(length(accumulatr_component_ids(model_spec)) > 1L){
     if(is.null(data$component)){
       warning("The AccumulatR model contains multiple components. Specify the components
               column in your data if you do not want to treat them as mixtures
               marginalized in the likelihood")
-      cat("expected components :", model_spec$components$component_id)
+      cat("expected components :", accumulatr_component_ids(model_spec))
     }
   }
   if(is.null(data$rt)) data$rt <- rnorm(nrow(data))

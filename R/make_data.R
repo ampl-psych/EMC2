@@ -286,6 +286,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
         dropNames <- c(dropNames,names(design$Ffunctions))
       data <- data[,!(names(data) %in% dropNames)]
       for (i in dimnames(res)[[2]]) data[[i]] <- res[,i]
+      data <- accumulatr_observed_data(data, model()$spec)
     } else{
       if (any(names(data)=="RACE")) {
         Rrt <- RACE_rfun(data, pars, model)
