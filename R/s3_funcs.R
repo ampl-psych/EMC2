@@ -263,16 +263,20 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   print(chain_n(emc))
   if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
-    ## allow user to override mfrow or mfcol
-    if(!is.null(dots$mfrow) || !is.null(dots$mfcol) || !is.null(dots$layout)){
-      par_args <- list()
-      if(!is.null(dots$layout)) { par_args$mfrow <- dots$layout; dots$layout <- NULL }
-      if(!is.null(dots$mfrow)) { par_args$mfrow <- dots$mfrow; dots$mfrow <- NULL }
-      if(!is.null(dots$mfcol)) { par_args$mfcol <- dots$mfcol; dots$mfcol <- NULL }
-      do.call(par, par_args)
+    if(isFALSE(dots$set.par)) {
+      dots$set.par <- NULL
     } else {
-      mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection), nplots = 1)
-      par(mfrow = mfrow)
+      ## allow user to override mfrow or mfcol
+      if(!is.null(dots$mfrow) || !is.null(dots$mfcol) || !is.null(dots$layout)){
+        par_args <- list()
+        if(!is.null(dots$layout)) { par_args$mfrow <- dots$layout; dots$layout <- NULL }
+        if(!is.null(dots$mfrow)) { par_args$mfrow <- dots$mfrow; dots$mfrow <- NULL }
+        if(!is.null(dots$mfcol)) { par_args$mfcol <- dots$mfcol; dots$mfcol <- NULL }
+        do.call(par, par_args)
+      } else {
+        mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection), nplots = 1)
+        par(mfrow = mfrow)
+      }
     }
   }
   for(select in selection){
@@ -313,8 +317,8 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
       cur_dots <- add_defaults(cur_dots, xlab = names(MCMCs)[1], ylab = "Highest Rhat parameter")
       do.call(plot, c(list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
                       fix_dots_plot(cur_dots)))
-      legend("topleft",legend=paste0("Rhat : ",round(max_gd,digits)), bty = "n")
-      legend("topright",legend=paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
+     legend("topleft",legend=paste0("Rhat: ",round(max_gd,digits)), x.intersp = 0, bty = "n")
+     legend("topright",legend=paste0("ESS: ", round(ESS[[cur_max]][max_par])), x.intersp = 0, bty = "n")
     }
     out_list[[select]] <- out
   }
@@ -617,10 +621,16 @@ recovery.emc <- function(emc, true_pars,
   }
   # pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(MCMC_samples)),names(MCMC_samples))
   stats_list <- list()
-  if(any(is.na(layout))){
-    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(MCMC_samples),
-                                 nplots = 1))
-  } else{par(mfrow=layout)}
+  if(isFALSE(dots$set.par)) {
+    dots$set.par <- NULL
+  } else {
+    if(any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(MCMC_samples),
+                                   nplots = 1))
+    } else {
+      par(mfrow=layout)
+    }
+  }
   for(i in 1:length(MCMC_samples)){
 
     cur_name <- names(MCMC_samples)[i]
@@ -649,14 +659,14 @@ recovery.emc <- function(emc, true_pars,
       }
     }
     if(correlation == "pearson"){
-      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)),bty="n")
+      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)), x.intersp=0, bty="n")
     } else if(correlation == "spearman"){
-      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)),bty="n")
+      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)), x.intersp=0, bty="n")
     }
     if (stat == "rmse") {
-      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),bty="n")
+      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),x.intersp=0,bty="n")
     } else if(stat == "coverage") {
-      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),bty="n")
+      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),x.intersp=0,bty="n")
     }
     stats <- make_recov_summary(stats)
     stats_list[[cur_name]] <- stats

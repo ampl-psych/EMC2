@@ -262,6 +262,9 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)
+  # allow for setting par outside of this function (needed because par(mfrow=...) always overwrites the cex argument as well)
+  set.par <- !isFALSE(dots$set.par)
+  dots$set.par <- NULL
   type <- emc[[1]]$type
   if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
@@ -298,6 +301,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
 
   n_objects <- length(MCMC_samples)
   contraction_list <- list()
+
   for(i in 1:n_objects){
     cur_mcmc <- MCMC_samples[[i]]
     all_cols <- unique(unlist(lapply(cur_mcmc, colnames)))
@@ -315,10 +319,12 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     n_chains <- length(cur_mcmc)
     n_pars <- ncol(merged)
     cur_contraction <- setNames(numeric(n_pars), colnames(merged))
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = n_chains, Nparms = n_pars, nplots = 1))
-    } else{
-      par(mfrow=layout)
+    if(set.par) {
+      if(any(is.na(layout))){
+        par(mfrow = coda_setmfrow(Nchains = n_chains, Nparms = n_pars, nplots = 1))
+      } else{
+        par(mfrow=layout)
+      }
     }
     for(l in 1:n_pars){
       denses <- lapply(cur_mcmc, function(x){
@@ -600,7 +606,7 @@ plot_trend <- function(input_data, emc, par_name, subject = NULL,
                        ...) {
 
   all_subjects <- names(emc[[1]]$data)
-
+  dots <- list(...)
   # --- Subject validation ---
   if (!is.null(subject)) {
     if (!subject %in% all_subjects) {
@@ -616,23 +622,30 @@ plot_trend <- function(input_data, emc, par_name, subject = NULL,
 
   # --- Layout for multi-subject plot ---
   if (multi) {
-    oldpar <- par(no.readonly = TRUE)
-    on.exit(par(oldpar))
-    if (!is.null(layout)) {
-      par(mfrow = layout)
+    if(isFALSE(dots$set.par)) {
+      dots$set.par <- NULL
     } else {
-      n <- length(subjects_to_plot)
-      ncols <- min(ceiling(sqrt(n)), 3L)
-      nrows <- min(ceiling(n / ncols), 3L)
-      par(mfrow = c(nrows, ncols))
+      oldpar <- par(no.readonly = TRUE)
+      on.exit(par(oldpar))
+      if (!is.null(layout)) {
+        par(mfrow = layout)
+      } else {
+        n <- length(subjects_to_plot)
+        ncols <- min(ceiling(sqrt(n)), 3L)
+        nrows <- min(ceiling(n / ncols), 3L)
+        par(mfrow = c(nrows, ncols))
+      }
     }
   }
 
   # --- Plot loop ---
   for (subj in subjects_to_plot) {
-    .plot_trend_single(input_data = input_data, emc = emc, par_name = par_name,
-                       subject = subj, filter = filter, on_x_axis = on_x_axis,
-                       pp_shaded = pp_shaded, ...)
+    do.call(.plot_trend_single,
+      c(list(input_data = input_data,
+          emc = emc, par_name = par_name,
+          subject = subj, filter = filter,
+          on_x_axis = on_x_axis, pp_shaded = pp_shaded),
+        dots))
   }
 }
 
