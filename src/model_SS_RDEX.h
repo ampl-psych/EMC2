@@ -38,13 +38,12 @@ NumericVector rdex_go_lpdf(
     double dt_i = rt[i] - pars(i, 3);
     double log_d = R_NegInf;
     if (dt_i > 0.) {
-      log_d = std::log(
-        digt(
-          dt_i,
-          (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
-          pars(i, 0) / pars(i, 4),
-          .5 * (pars(i, 2) / pars(i, 4))
-        )
+      log_d = digt(
+        dt_i,
+        (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
+        pars(i, 0) / pars(i, 4),
+        .5 * (pars(i, 2) / pars(i, 4)),
+        true
       );
     }
 
@@ -81,13 +80,12 @@ NumericVector rdex_go_lccdf(
     double dt_i = rt[i] - pars(i, 3);
     double log_s = 0.; // log(1)
     if (dt_i > 0.) {
-      log_s = log1m(
-        pigt(
-          dt_i,
-          (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
-          pars(i, 0) / pars(i, 4),
-          .5 * (pars(i, 2) / pars(i, 4))
-        )
+      log_s = pigt(
+        dt_i,
+        (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
+        pars(i, 0) / pars(i, 4),
+        .5 * (pars(i, 2) / pars(i, 4)),
+        false, true
       );
     }
 
@@ -194,7 +192,7 @@ public:
       double dt_i = (x + SSD) - t0[i];
       double log_s_i = 0.; // log(1)
       if (dt_i > 0.) {
-        log_s_i = log1m(pigt(dt_i, alpha[i], nu[i], gamma[i]));
+        log_s_i = pigt(dt_i, alpha[i], nu[i], gamma[i], false, true);
       }
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
