@@ -1101,16 +1101,8 @@ make_data_unconditional <- function(data, pars, design, model,
 
   # Split parameter_design output rows into cached vs uncached
   # (uncached if any non-zero weight column is a function)
-  cached_pd_pars   <- character(0)
+  cached_pd_pars <- if (!is.null(design$parameter_design)) rownames(design$parameter_design$weights) else character(0)
   uncached_pd_pars <- character(0)
-  if (!is.null(design$parameter_design)) {
-    pd_fun_names <- names(design$parameter_design$functions)
-    pd_uses_fun  <- apply(design$parameter_design$weights, 1, function(row) {
-      any(names(row)[row != 0] %in% pd_fun_names)
-    })
-    cached_pd_pars   <- names(pd_uses_fun)[!pd_uses_fun]
-    uncached_pd_pars <- names(pd_uses_fun)[ pd_uses_fun]
-  }
 
   make_designs_cached <- local({
     cache <- list()
@@ -1124,12 +1116,11 @@ make_data_unconditional <- function(data, pars, design, model,
         )
         pd_cached <- if (length(cached_pd_pars) > 0) {
           expand_parameter_design(
-            list(weights     = design$parameter_design$weights[cached_pd_pars, , drop = FALSE],
-                 functions   = design$parameter_design$functions,
-                 expand_over = design$parameter_design$expand_over),
+            list(weights = design$parameter_design$weights[cached_pd_pars, , drop = FALSE]),
             dadm_slice, compress_dms = FALSE
           )
         } else list()
+
         cache[[key]] <<- c(regular, pd_cached)
       }
 
@@ -1142,17 +1133,8 @@ make_data_unconditional <- function(data, pars, design, model,
         )
       } else list()
 
-      fresh_pd <- if (length(uncached_pd_pars) > 0) {
-        expand_parameter_design(
-          list(weights     = design$parameter_design$weights[uncached_pd_pars, , drop = FALSE],
-               functions   = design$parameter_design$functions,
-               expand_over = design$parameter_design$expand_over),
-          dadm_slice, compress_dms = FALSE
-        )
-      } else list()
-
-      all_designs <- c(cache[[key]], fresh_regular, fresh_pd)
-      pd_names    <- c(names(fresh_pd), cached_pd_pars)
+      all_designs <- c(cache[[key]], fresh_regular)
+      pd_names    <- cached_pd_pars
       all_designs[c(p_types, pd_names[pd_names %in% names(all_designs)])]
       # message("p_types: ", paste(p_types, collapse=", "))
       # message("names(all_designs): ", paste(names(all_designs), collapse=", "))
