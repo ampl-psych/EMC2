@@ -240,7 +240,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {
       if(!is.null(model()$trend)) {
-        trialwise_parameters <- cbind(
+        trialwise_parameters <- cbind(subjects=data$subjects, trials=data$trials,
           pars,
           get_pars_oo(parameters, data, model(),
                       return_kernel_matrix = TRUE,
