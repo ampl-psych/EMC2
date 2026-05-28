@@ -15,9 +15,9 @@
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' Example: `c("right", "left")`
 #' @param model A function, specifies the model type.
-#' Choose from the drift diffusion model (`DDM()`, `DDMt0natural()`),
+#' Choose from the drift diffusion model`DDM()`,
 #' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
-#' the racing diffusion model (`RDM()`, `RDMt0natural()`), or define your own
+#' the racing diffusion model `RDM()`, or define your own
 #' model functions.
 #' @param data A data frame. `data` can be used to automatically detect
 #'  `factors`, `Rlevels` and `covariates` in a dataset. The variable `R` needs
