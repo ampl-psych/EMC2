@@ -1423,20 +1423,31 @@ make_data_unconditional <- function(data, pars, design, model,
 ##' Extract the pointers so they can be re-added to an emc object after loading it from disk.
 ##'
 ##' @param input_data Either an emc object or a trend list.
-##' @return A list of custom pointers. The list is of the same size as total number of trends; trends without a custom kernel return NULL.
+##' @return A list-of-lists of custom pointers, one sub-list per model. Trends without a
+##'   custom kernel return NULL. Returns NULL if no custom pointers are found.
 get_custom_kernel_pointers <- function(input_data) {
   if(inherits(input_data, 'emc')) {
-    trend <- input_data[[1]]$model()$trend
+    if(is.list(input_data[[1]]$model)) {
+      # joint model: list of model functions
+      trend <- lapply(input_data[[1]]$model, function(x) x()$trend)
+    } else {
+      # single model function — wrap for uniform structure
+      trend <- list(input_data[[1]]$model()$trend)
+    }
   } else {
-    trend <- input_data
+    # raw trend list — wrap for uniform structure
+    trend <- list(input_data)
   }
-  if(is.null(trend)) return(NULL)
 
-  ptrs <- lapply(trend, function(x) attr(x, 'custom_ptr'))
-  if(all(sapply(ptrs, is.null))) return(NULL)
+  if(all(sapply(trend, is.null))) return(NULL)
 
-  return(ptrs)
+  # make list
+  ptr_list <- lapply(trend, function(x) lapply(x, function(y) attr(y, 'custom_ptr')))
+  if(all(sapply(ptr_list, function(ptrs) all(sapply(ptrs, is.null))))) return(NULL)
+
+  return(ptr_list)
 }
+
 
 ##' (Re-)Set pointers of custom C++ trend kernels to an emc object
 ##'
@@ -1448,33 +1459,39 @@ get_custom_kernel_pointers <- function(input_data) {
 ##' @return An emc object with the custom pointers re-instated.
 set_custom_kernel_pointers <- function(emc, ptrs) {
   if(is.null(ptrs)) return(emc)   # nothing to set
-  if(is.null(emc[[1]]$model()$trend)) stop('emc object has no trends, nothing to set...')
-  if(length(ptrs) != length(emc[[1]]$model()$trend)) {
-    stop('List of potential pointers not equal to number of trends')
+
+  # validation
+  if(length(ptrs) != length(emc[[1]]$model)) {
+    stop('List of potential pointers not equal to number of models')
+  }
+  if(!is.list(emc[[1]]$model) && is.null(emc[[1]]$model()$trend)) {
+    stop('emc object has no trends, nothing to set...')
   }
 
-  for(chain_ in 1:length(emc)) {
-    # update model() function in emc
-    if('model' %in% names(emc[[chain_]])) {
-      model_list <- emc[[chain_]]$model()
-      trend <- model_list$trend
-      for(i in 1:length(trend)) {
-        if(!is.null(ptrs[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs[[i]]
-      }
-      model_list$trend <- trend
-      emc[[chain_]]$model <- function() return(model_list)
+  set_ptrs_on_model <- function(model_fn, ptrs_for_model) {
+    if(length(ptrs_for_model) == 0) return(model_fn)  # nothing to change, no ptrs
+    model_list <- model_fn()
+    trend <- model_list$trend
+    for(i in seq_along(trend)) {
+      if(!is.null(ptrs_for_model[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs_for_model[[i]]
     }
-    ## Update model() function hidden in the design hidden in the prior
+    model_list$trend <- trend
+    function() return(model_list)
+  }
+
+  # fix models
+  for(chain_ in seq_along(emc)) {
+    if('model' %in% names(emc[[chain_]])) {
+      for(j in seq_along(emc[[chain_]]$model)) {
+        emc[[chain_]]$model[[j]] <- set_ptrs_on_model(emc[[chain_]]$model[[j]], ptrs[[j]])
+      }
+    }
+    # fix models hidden in priors
     if('prior' %in% names(emc[[chain_]])) {
-      for(design_n in 1:length(attr(emc[[chain_]]$prior, 'design'))) {
+      for(design_n in seq_along(attr(emc[[chain_]]$prior, 'design'))) {
         if('model' %in% names(attr(emc[[chain_]]$prior, 'design')[[design_n]])) {
-          model_list <- attr(emc[[chain_]]$prior, 'design')[[design_n]]$model()
-          trend <- model_list$trend
-          for(i in 1:length(trend)) {
-            if(!is.null(ptrs[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs[[i]]
-          }
-          model_list$trend <- trend
-          attr(emc[[chain_]]$prior, 'design')[[design_n]]$model <- function() return(model_list)
+          # only 1 model here by definition - priors are per submodel
+          attr(emc[[chain_]]$prior, 'design')[[design_n]]$model <- set_ptrs_on_model(attr(emc[[chain_]]$prior, 'design')[[design_n]]$model, ptrs[[design_n]])
         }
       }
     }
@@ -1482,15 +1499,16 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   return(emc)
 }
 
-pointer_reset_wrapper <- function(sub_emc, emc){
-  # TO FIX, make custom kernel pointers work with joint models
-  # for now just return no updates
-  if(is.list(emc[[1]]$model)){ # Joint model!!
-    return(sub_emc)
-  } else{
-    return(set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc)))
-  }
-}
+
+# pointer_reset_wrapper <- function(sub_emc, emc){
+#   # TO FIX, make custom kernel pointers work with joint models
+#   # for now just return no updates
+#   if(is.list(emc[[1]]$model)){ # Joint model!!
+#     return(sub_emc)
+#   } else{
+#     return(set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc)))
+#   }
+# }
 
 ##' Reset pointers of custom C++ trend kernels to an emc object
 ##'
@@ -1498,11 +1516,21 @@ pointer_reset_wrapper <- function(sub_emc, emc){
 ##' need to be re-created. This is a convenience function to do this.
 ##'
 ##' @param emc A target emc object with missing pointers
-##' @param pointer_source Either a trend object with correct pointers or another emc object with correct pointers
+##' @param pointer_source Either a trend list with correct pointers, or an emc object with correct pointers
+##' @param model_number If `pointer_source` is a raw trend list and `emc` is a joint model, specifies
+##'   which model the trend belongs to. Defaults to 1.
 ##' @return An emc object with the custom pointers re-instated.
 ##' @export
-fix_custom_kernel_pointers <- function(emc, pointer_source) {
-  return(set_custom_kernel_pointers(emc, get_custom_kernel_pointers(pointer_source)))
+fix_custom_kernel_pointers <- function(emc, pointer_source, model_number = 1) {
+  ptrs <- get_custom_kernel_pointers(pointer_source)
+  if(!inherits(pointer_source, 'emc') && is.list(emc[[1]]$model)) {
+    # raw trend list + joint model: slot pointers into the correct position
+    n_models <- length(emc[[1]]$model)
+    ptrs_joint <- vector('list', n_models)
+    ptrs_joint[[model_number]] <- ptrs[[1]]
+    ptrs <- ptrs_joint
+  }
+  return(set_custom_kernel_pointers(emc, ptrs))
 }
 
 ## utility function
