@@ -37,7 +37,8 @@ inline double pigt0(double t, double k, double l)
   const double lambda = k * k;
   const double z1     = std::sqrt(lambda / t) * (1.0 + t / mu);
   const double z2     = std::sqrt(lambda / t) * (1.0 - t / mu);
-  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) + PNORM_STD(z2, false, false);
+  return std::exp(2.0 * lambda / mu + PNORM_STD(z1, false, true)) + PNORM_STD(z2, false, false);
+//  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) + PNORM_STD(z2, false, false);
 }
 
 inline double digt0(double t, double k, double l)
@@ -70,8 +71,11 @@ inline double digt_core(double t, double k, double l, double a)
   const double t1    = inv_sqrt_2pi * (std::exp(t1a) - std::exp(t1b)) * inv_sqt;
 
   // t2 part – same structure/order as in the old code
-  const double arg1 = (-k + a) * inv_sqt + sqt * l;
-  const double arg2 = ( k + a) * inv_sqt - sqt * l;
+  const double sqt_l = sqt * l;
+  const double arg1  = (-k + a) * inv_sqt + sqt_l;
+  const double arg2  = ( k + a) * inv_sqt - sqt_l;
+  // const double arg1 = (-k + a) * inv_sqt + sqt * l;
+  // const double arg2 = ( k + a) * inv_sqt - sqt * l;
 
   const double t2a = 2.0 * PNORM_STD(arg1, /*lower=*/true, /*logp=*/false) - 1.0;
   const double t2b = 2.0 * PNORM_STD(arg2, /*lower=*/true, /*logp=*/false) - 1.0;
@@ -81,9 +85,9 @@ inline double digt_core(double t, double k, double l, double a)
 
   const double sum = t1 + t2;
 
-  if (sum <= 0.0 || !std::isfinite(sum)) {
-    return 0.0;
-  }
+  // if (sum <= 0.0 || !std::isfinite(sum)) {
+  //   return 0.0;
+  // }
 
   double pdf = sum / (2.0 * a);
 
@@ -122,9 +126,10 @@ inline double pigt_core(double t, double k, double l, double a)
   const double t2  = a + (t2b - t2a) / (2.0 * l);
 
   // t4 term – same structure/order as in the old code
-  const double t4a = 2.0 * PNORM_STD((k + a) * inv_sqt - sqt * l,
+  const double sqtl = sqt * l;
+  const double t4a = 2.0 * PNORM_STD((k + a) * inv_sqt - sqtl,
                                      /*lower=*/true, /*logp=*/false) - 1.0;
-  const double t4b = 2.0 * PNORM_STD((k - a) * inv_sqt - sqt * l,
+  const double t4b = 2.0 * PNORM_STD((k - a) * inv_sqt - sqtl,
                                      /*lower=*/true, /*logp=*/false) - 1.0;
   //  equivalent but no pnorm
   // const double t4a = std::erf((k + a - t * l) / (sqt * M_SQRT2));
