@@ -31,28 +31,42 @@ inline void clamp_a_l(double& a, double& l)
 // Asymptotic formulas for a -> 0 (point-mass starting point)
 // ---------------------------------------------------------------------------
 
-inline double pigt0(double t, double k, double l)
+[[gnu::pure]] inline double pigt0(double t, double k, double l)
 {
+  // const double mu     = k / l;
+  // const double lambda = k * k;
+  // const double lambdat = std::sqrt(lambda / t);
+  // const double tmu    = t/mu;
+  // const double z1     = lambdat * (1.0 + tmu);
+  // const double z2     = lambdat * (1.0 - tmu);
+  // return std::exp(2.0 * lambda / mu + PNORM_STD(z1, false, true)) + PNORM_STD(z2, false, false);
+  //  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) + PNORM_STD(z2, false, false);
+
   const double mu     = k / l;
   const double lambda = k * k;
-  const double z1     = std::sqrt(lambda / t) * (1.0 + t / mu);
-  const double z2     = std::sqrt(lambda / t) * (1.0 - t / mu);
-  return std::exp(2.0 * lambda / mu + PNORM_STD(z1, false, true)) + PNORM_STD(z2, false, false);
-//  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) + PNORM_STD(z2, false, false);
+  const double sqlt   = std::sqrt(lambda / t);
+  const double z1     = sqlt * (1.0 + t / mu);
+  const double z2     = sqlt * (1.0 - t / mu);
+  return pnorm_upper(z1) * std::exp(2.0 * lambda / mu) + PNORM_STD(z2, false, false);
 }
 
-inline double digt0(double t, double k, double l)
+[[gnu::pure]] inline double digt0(double t, double k, double l)
 {
-  const double lambda = k * k;
-  const double e = (l == 0.0) ? -0.5 * lambda / t : -(lambda / (2.0 * t)) * ((t * t * l * l) / (k * k) - 2.0 * t * l / k + 1.0);
-  return std::exp(e + 0.5 * std::log(lambda) - 0.5 * std::log(2.0 * t * t * t * M_PI));
+  // const double lambda = k * k;
+  // const double e = (l == 0.0) ? -0.5 * lambda / t : -(lambda / (2.0 * t)) * ((t * t * l * l) / (k * k) - 2.0 * t * l / k + 1.0);
+  // return std::exp(e + 0.5 * std::log(lambda) - 0.5 * std::log(2.0 * t * t * t * M_PI));
+
+  // SM: Faster implementation, no logs, no branch
+  const double tl_k  = t * l / k;
+  const double e     = -0.5 * (k / t) * (tl_k - 1.0) * (tl_k - 1.0);
+  return std::exp(e) * std::sqrt(k * k / (2.0 * M_PI * t * t * t));
 }
 
 // ---------------------------------------------------------------------------
 // Core scalar functions — assume t > 0, a >= A_EPS, |l| >= L_EPS
 // ---------------------------------------------------------------------------
 
-inline double digt_core(double t, double k, double l, double a)
+[[gnu::pure]] inline double digt_core(double t, double k, double l, double a)
 {
   if (t <= 0.0) {
     return 0.0;
@@ -97,7 +111,7 @@ inline double digt_core(double t, double k, double l, double a)
   return pdf;
 }
 
-inline double pigt_core(double t, double k, double l, double a)
+[[gnu::pure]] inline double pigt_core(double t, double k, double l, double a)
 {
   if (t <= 0.0) {
     return 0.0;
@@ -393,6 +407,75 @@ void drdm_prdm_fast(const NumericVector& rts,
     double k = sc_B[j]       * inv_s + a;
     clamp_a_l(a, l);
     sc_out[j] = pigt_core(sc_teff[j], k, l, a);
+  }
+
+  // --- Losers: scatter ---
+  // fill in 1-CDF - survival!
+  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = 1-sc_out[j];
+}
+
+void drdm_prdm_noA_fast(const NumericVector& rts,
+                        const ParamTable& pt,
+                        const RaceSpec& spec,
+                        const std::vector<int>& idx_win,
+                        const std::vector<int>& idx_los,
+                        double* __restrict__ ll_row,
+                        RaceScratch& scratch)
+{
+  const double* __restrict__ rt = rts.begin();
+  const double* __restrict__ v  = &pt.base(0, spec.col_v);
+  const double* __restrict__ B  = &pt.base(0, spec.col_B);
+  const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+  const double* __restrict__ s  = &pt.base(0, spec.col_s);
+
+  const int n_win = (int)idx_win.size();
+  const int n_los = (int)idx_los.size();
+
+  // Restrict-qualified pointers into scratch — lets clang prove no aliasing
+  // with the input arrays during gather.
+  double* __restrict__ sc_teff = scratch.t_eff.data();
+  double* __restrict__ sc_v    = scratch.v.data();
+  double* __restrict__ sc_B    = scratch.B.data();
+  double* __restrict__ sc_s    = scratch.s.data();
+  double* __restrict__ sc_out  = scratch.out.data();
+
+  // --- Winners: gather ---
+  for (int j = 0; j < n_win; ++j) {
+    const int i  = idx_win[j];
+    sc_teff[j]   = rt[i] - t0[i];
+    sc_v[j]      = v[i];
+    sc_B[j]      = B[i];
+    sc_s[j]      = s[i];
+  }
+
+  // --- Winners: compute (contiguous — faster on x86; ARM64 doesn't seem to care) ---
+#pragma omp simd
+  for (int j = 0; j < n_win; ++j) {
+    const double inv_s = 1.0 / sc_s[j];
+    double l = sc_v[j] * inv_s;
+    double k = sc_B[j] * inv_s;
+    sc_out[j] = digt0(sc_teff[j], k, l);
+  }
+
+  // --- Winners: scatter ---
+  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = sc_out[j];
+
+  // --- Losers: gather ---
+  for (int j = 0; j < n_los; ++j) {
+    const int i  = idx_los[j];
+    sc_teff[j]   = rt[i] - t0[i];
+    sc_v[j]      = v[i];
+    sc_B[j]      = B[i];
+    sc_s[j]      = s[i];
+  }
+
+  // --- Losers: compute (contiguous — faster on x86; ARM64 doesn't seem to care) ---
+#pragma omp simd
+  for (int j = 0; j < n_los; ++j) {
+    const double inv_s = 1.0 / sc_s[j];
+    double l = sc_v[j] * inv_s;
+    double k = sc_B[j] * inv_s;
+    sc_out[j] = pigt0(sc_teff[j], k, l);
   }
 
   // --- Losers: scatter ---

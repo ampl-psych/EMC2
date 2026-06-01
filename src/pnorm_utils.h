@@ -204,4 +204,17 @@ inline double fast_dlnorm(double t, double m, double s)
 #define PLNORM(t, m, s) PNORM_STD((std::log(t) - (m)) / (s), true, false)
 #define DLNORM(t, m, s) pnorm_detail::fast_dlnorm((t), (m), (s))
 
+
+// Upper tail phi(x) = 1 - phi(x), without log. Used by pigt0 to avoid log(pnorm).
+inline double pnorm_upper(double x)
+{
+#if   PNORM_MODE == 2
+  return 1.0 - pnorm_detail::as7126::phi(x);
+#elif PNORM_MODE == 1
+  return pnorm_detail::hart::phi(-x);   // phi(-x) == upper tail
+#else
+  return R::pnorm(x, 0.0, 1.0, false, false);
+#endif
+}
+
 #endif // PNORM_UTILS_H

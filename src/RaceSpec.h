@@ -14,12 +14,13 @@ struct RaceSpec {
 };
 
 struct RaceScratch {
-  std::vector<double> t_eff, v, B, A, s, sv, m, out;
+  std::vector<double> t_eff, v, B, A, s, sv, m, out, k, l, a;
+  std::vector<int> win0, win1, los0, los1;
 
   void reserve(int n) {
     t_eff.resize(n); v.resize(n); B.resize(n);
     A.resize(n);     s.resize(n); out.resize(n);
-    sv.resize(n);    m.resize(n);
+    sv.resize(n);    m.resize(n); k.resize(n); l.resize(n); a.resize(n);
   }
 };
 

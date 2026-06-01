@@ -31,6 +31,7 @@ PKG_CXXFLAGS = -O3 -march=native
 #
 # Vectorisation report — GCC:
 #PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
+#               -fopt-info-vec-optimized -fopt-info-vec-missed \
 #               -fopt-info-vec=/tmp/vec_report.txt
 
 # Uncomment to force C++11 (rarely needed):
