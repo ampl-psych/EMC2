@@ -50,7 +50,7 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
 {
   RaceModelSetup s;
 
-  if (type == "RDM") {
+  if (type == "RDM" || type == "RDM-A0") {
     s.spec.col_v        = pt.base_index_for("v");
     s.spec.col_B        = pt.base_index_for("B");
     s.spec.col_A        = pt.base_index_for("A");
@@ -59,12 +59,13 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.fill_pdf          = drdm_fast;
     s.fill_cdf          = prdm_fast;
     s.fill_both         = drdm_prdm_fast;
-  } else if(type == "RDM-A0") {
-    s.spec.col_v        = pt.base_index_for("v");
-    s.spec.col_B        = pt.base_index_for("B");
-    s.spec.col_t0       = pt.base_index_for("t0");
-    s.spec.col_s        = pt.base_index_for("s");
-    s.fill_both         = drdm_prdm_noA_fast;
+  // } else if(type == "RDM-A0") {
+  //   s.spec.col_v        = pt.base_index_for("v");
+  //   s.spec.col_B        = pt.base_index_for("B");
+  //   s.spec.col_t0       = pt.base_index_for("t0");
+  //   s.spec.col_A        = pt.base_index_for("A");
+  //   s.spec.col_s        = pt.base_index_for("s");
+  //   s.fill_both         = drdm_prdm_noA_fast;
   } else if (type == "LBA") {
     s.spec.col_v        = pt.base_index_for("v");
     s.spec.col_sv       = pt.base_index_for("sv");

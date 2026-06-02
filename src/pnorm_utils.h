@@ -90,7 +90,7 @@ constexpr double M5 = 16.064177579207;
 constexpr double M6 = 1.75566716318264;
 constexpr double M7 = 8.83883476483184e-02;
 
-inline double phi(double x)
+[[gnu::always_inline]] inline double phi(double x)
 {
   const double z = std::fabs(x);
   double c = 0.0;
@@ -130,7 +130,7 @@ inline double hart_pnorm_std(double x, bool lower, bool logp)
 #if PNORM_MODE == 2
 namespace as7126 {
 
-inline double fast_erf(double x)
+[[gnu::always_inline]] inline double fast_erf(double x)
 {
   constexpr double p  = 0.3275911;
   constexpr double a1 =  0.254829592;
@@ -146,7 +146,7 @@ inline double fast_erf(double x)
   return std::copysign(1.0 - poly * e, x);
 }
 
-inline double phi(double x)
+[[gnu::always_inline]] inline double phi(double x)
 {
   constexpr double inv_sqrt2 = 0.70710678118654752440;
   return 0.5 * (1.0 + fast_erf(x * inv_sqrt2));
