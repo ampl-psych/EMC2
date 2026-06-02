@@ -33,6 +33,7 @@ inline void clamp_a_l(double& a, double& l)
 
 [[gnu::always_inline]] inline double pigt0(double t, double k, double l)
 {
+  // CDF when A==0 (no between trial variability in start point)
   const double lambda = k * k;
   const double mu     = k / l;
   const double sqlt   = std::sqrt(lambda / t);   // shared
@@ -44,6 +45,7 @@ inline void clamp_a_l(double& a, double& l)
 
 [[gnu::always_inline]] inline double digt0(double t, double k, double l)
 {
+  // PDF when A==0 (no between trial variability in start point)
   const double lambda = k * k;
   const double tl_k = t * l / k;
   const double e = -0.5 * (lambda / t) * (tl_k - 1.0) * (tl_k - 1.0);
@@ -56,6 +58,7 @@ inline void clamp_a_l(double& a, double& l)
 
 [[gnu::always_inline]] inline double digt_core(double t, double k, double l, double a)
 {
+  // PDF when A>0
   const double sqt      = std::sqrt(t);
   const double inv_sqt  = 1.0 / sqt;
   const double inv_t    = 1.0 / t;
@@ -86,6 +89,7 @@ inline void clamp_a_l(double& a, double& l)
 
 [[gnu::always_inline]] inline double pigt_core(double t, double k, double l, double a)
 {
+  // CDF when A > 0
   const double sqt      = std::sqrt(t);
   const double inv_sqt  = 1.0 / sqt;
   const double inv_t    = 1.0 / t;
@@ -123,81 +127,30 @@ inline void clamp_a_l(double& a, double& l)
   return cdf;
 }
 
-// ---------------------------------------------------------------------------
-// Scalar wrappers — used by legacy matrix-based functions and R exports.
-// Use asymptotic fallback for small a, matching original behaviour exactly.
-// ---------------------------------------------------------------------------
 
-constexpr double A_ASYMPTOTIC = 1e-10;
+// ---------------------------------------------------------------------------
+// Scalar wrappers — used by R exports.
+// Use asymptotic fallback for small a.
+// ---------------------------------------------------------------------------
 
 inline double digt(double t, double k, double l, double a)
 {
   if (t <= 0.0) return 0.0;
-  if (a < A_ASYMPTOTIC) return digt0(t, k, l);
+  if (a < A_EPS) return digt0(t, k, l);
   clamp_a_l(a, l);
-  return digt_core(t, k, l, a);
+  double pdf = digt_core(t, k, l, a);
+  return (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
 }
 
 inline double pigt(double t, double k, double l, double a)
 {
   if (t <= 0.0) return 0.0;
-  if (a < A_ASYMPTOTIC) return pigt0(t, k, l);
+  if (a < A_EPS) return pigt0(t, k, l);
   clamp_a_l(a, l);
-  return pigt_core(t, k, l, a);
-}
-
-// ---------------------------------------------------------------------------
-// Legacy matrix-based functions
-// ---------------------------------------------------------------------------
-
-NumericVector drdm_c(NumericVector rts, NumericMatrix pars,
-                     LogicalVector idx, double min_ll, LogicalVector is_ok)
-{
-  // v=0, B=1, A=2, t0=3, s=4
-  NumericVector out(sum(idx));
-  int k = 0;
-  for (int i = 0; i < rts.length(); i++) {
-    if (idx[i]) {
-      if (NumericVector::is_na(pars(i, 0))) {
-        out[k] = 0.0;
-      } else if ((rts[i] - pars(i, 3) > 0) && is_ok[i]) {
-        double inv_s = 1.0 / pars(i, 4);
-        out[k] = digt(rts[i] - pars(i, 3),
-                      pars(i, 1) * inv_s + 0.5 * pars(i, 2) * inv_s,
-                      pars(i, 0) * inv_s,
-                      0.5 * pars(i, 2) * inv_s);
-      } else {
-        out[k] = min_ll;
-      }
-      k++;
-    }
-  }
-  return out;
-}
-
-NumericVector prdm_c(NumericVector rts, NumericMatrix pars,
-                     LogicalVector idx, double min_ll, LogicalVector is_ok)
-{
-  // v=0, B=1, A=2, t0=3, s=4
-  NumericVector out(sum(idx));
-  int k = 0;
-  for (int i = 0; i < rts.length(); i++) {
-    if (idx[i]) {
-      if (NumericVector::is_na(pars(i, 0))) {
-        out[k] = 0.0;
-      } else if ((rts[i] - pars(i, 3) > 0) && is_ok[i]) {
-        double inv_s = 1.0 / pars(i, 4);
-        out[k] = pigt(rts[i] - pars(i, 3),
-                      pars(i, 1) * inv_s + 0.5 * pars(i, 2) * inv_s,
-                      pars(i, 0) * inv_s,
-                      0.5 * pars(i, 2) * inv_s);
-      } else {
-        out[k] = min_ll;
-      }
-      k++;
-    }
-  }
-  return out;
+  double cdf = pigt_core(t, k, l, a);
+  if (!std::isfinite(cdf) || cdf < 0.0) return 0.0;
+  if (cdf > 1.0) return 1.0;
+  return cdf;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +183,11 @@ NumericVector pWald(NumericVector t, NumericVector v,
   return cdf;
 }
 
+
 // ---------------------------------------------------------------------------
 // Fast ParamTable-based functions
 // ---------------------------------------------------------------------------
+
 
 void drdm_fast(const NumericVector& rts,
                const ParamTable& pt,
@@ -251,18 +206,27 @@ void drdm_fast(const NumericVector& rts,
 
   int* win_ptr = LOGICAL(winner);
 
-#pragma omp simd
   for (int i = 0; i < N; ++i) {
     if (!win_ptr[i]) continue;
 
     const double t_eff = rt[i] - t0[i];
-    const double inv_s = 1.0 / s[i];
-    double a = 0.5 * A[i] * inv_s;
-    double l = v[i] * inv_s;
-    double k = B[i] * inv_s + a;
+    if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
 
-    clamp_a_l(a, l);
-    ll_row[i] = digt_core(t_eff, k, l, a);
+    const double inv_s = 1.0 / s[i];
+    double pdf;
+    if (A[i] < A_EPS) {
+      double l = v[i] * inv_s;
+      double k = B[i] * inv_s;
+      if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+      pdf = digt0(t_eff, k, l);
+    } else {
+      double a = 0.5 * A[i] * inv_s;
+      double l = v[i] * inv_s;
+      double k = B[i] * inv_s + a;
+      clamp_a_l(a, l);
+      pdf = digt_core(t_eff, k, l, a);
+    }
+    ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
   }
 }
 
@@ -283,18 +247,29 @@ void prdm_fast(const NumericVector& rts,
 
   int* win_ptr = LOGICAL(winner);
 
-#pragma omp simd
   for (int i = 0; i < N; ++i) {
     if (win_ptr[i]) continue;
 
     const double t_eff = rt[i] - t0[i];
-    const double inv_s = 1.0 / s[i];
-    double a = 0.5 * A[i] * inv_s;
-    double l = v[i] * inv_s;
-    double k = B[i] * inv_s + a;
+    if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
 
-    clamp_a_l(a, l);
-    ll_row[i] = pigt_core(t_eff, k, l, a);
+    const double inv_s = 1.0 / s[i];
+    double cdf;
+    if (A[i] < A_EPS) {
+      double l = v[i] * inv_s;
+      double k = B[i] * inv_s;
+      if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+      cdf = pigt0(t_eff, k, l);
+    } else {
+      double a = 0.5 * A[i] * inv_s;
+      double l = v[i] * inv_s;
+      double k = B[i] * inv_s + a;
+      clamp_a_l(a, l);
+      cdf = pigt_core(t_eff, k, l, a);
+    }
+    if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+    else if (cdf > 1.0)                    cdf = 1.0;
+    ll_row[i] = cdf;
   }
 }
 
@@ -308,6 +283,7 @@ void drdm_prdm_fast(const NumericVector& rts,
                     double* __restrict__ ll_row,
                     RaceScratch& scratch)
 {
+  // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
   const double* __restrict__ rt = rts.begin();
   const double* __restrict__ v  = &pt.base(0, spec.col_v);
   const double* __restrict__ B  = &pt.base(0, spec.col_B);
@@ -349,7 +325,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
 
     // Check whether A equals 0
-    if (A[i] < A_ASYMPTOTIC) {
+    if (A[i] < A_EPS) {
       sc_teff[n_win_noA] = teff;
       sc_v   [n_win_noA] = v[i];
       sc_B   [n_win_noA] = B[i];
@@ -417,7 +393,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
 
     // fill scratch depending on whether we have A tiny or not
-    if (A[i] < A_ASYMPTOTIC) {
+    if (A[i] < A_EPS) {
       sc_teff[n_los_noA] = teff;
       sc_v   [n_los_noA] = v[i];
       sc_B   [n_los_noA] = B[i];

@@ -217,4 +217,28 @@ inline double pnorm_upper(double x)
 #endif
 }
 
+
+// ---------------------------------------------------------------------------
+// fast_dnorm — standard normal PDF and general normal PDF
+// Exact formula; no R API needed.
+// ---------------------------------------------------------------------------
+
+namespace pnorm_detail {
+
+[[gnu::always_inline]] inline double fast_dnorm_std(double x)
+{
+  constexpr double INV_SQRT_2PI = 0.3989422804014327;
+  return INV_SQRT_2PI * std::exp(-0.5 * x * x);
+}
+
+[[gnu::always_inline]] inline double fast_dnorm(double x, double mean, double sd)
+{
+  return fast_dnorm_std((x - mean) / sd) / sd;
+}
+
+} // namespace pnorm_detail
+
+#define DNORM_STD(x)          pnorm_detail::fast_dnorm_std((x))
+#define DNORM(x, mean, sd)    pnorm_detail::fast_dnorm((x), (mean), (sd))
+
 #endif // PNORM_UTILS_H
