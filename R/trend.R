@@ -1482,8 +1482,12 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   # fix models
   for(chain_ in seq_along(emc)) {
     if('model' %in% names(emc[[chain_]])) {
-      for(j in seq_along(emc[[chain_]]$model)) {
-        emc[[chain_]]$model[[j]] <- set_ptrs_on_model(emc[[chain_]]$model[[j]], ptrs[[j]])
+      if(is.list(emc[[chain_]]$model)) {
+        for(j in seq_along(emc[[chain_]]$model)) {
+          emc[[chain_]]$model[[j]] <- set_ptrs_on_model(emc[[chain_]]$model[[j]], ptrs[[j]])
+        }
+      } else {
+        emc[[chain_]]$model <- set_ptrs_on_model(emc[[chain_]]$model, ptrs[[1]])
       }
     }
     # fix models hidden in priors
