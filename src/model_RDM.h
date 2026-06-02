@@ -21,6 +21,11 @@ using namespace Rcpp;
 constexpr double A_EPS = 1e-4;
 constexpr double L_EPS = 1e-4;
 
+inline void clamp_l(double& l)
+{
+  l = (l > -L_EPS && l < L_EPS) ? (l >= 0.0 ? L_EPS : -L_EPS) : l;
+}
+
 inline void clamp_a_l(double& a, double& l)
 {
   a = (a < A_EPS) ? A_EPS : a;
@@ -217,7 +222,7 @@ void drdm_fast(const NumericVector& rts,
     if (A[i] < A_EPS) {
       double l = v[i] * inv_s;
       double k = B[i] * inv_s;
-      if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+      clamp_l(l);
       pdf = digt0(t_eff, k, l);
     } else {
       double a = 0.5 * A[i] * inv_s;
@@ -258,7 +263,7 @@ void prdm_fast(const NumericVector& rts,
     if (A[i] < A_EPS) {
       double l = v[i] * inv_s;
       double k = B[i] * inv_s;
-      if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+      clamp_l(l);
       cdf = pigt0(t_eff, k, l);
     } else {
       double a = 0.5 * A[i] * inv_s;
@@ -349,7 +354,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     const double inv_s = 1.0 / sc_s[j];
     double l = sc_v[j] * inv_s;
     double k = sc_B[j] * inv_s;
-    if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);  // still guard l
+    clamp_l(l);
     sc_out[j] = digt0(sc_teff[j], k, l);
   }
 
@@ -417,7 +422,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     const double inv_s = 1.0 / sc_s[j];
     double l = sc_v[j] * inv_s;
     double k = sc_B[j] * inv_s;
-    if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+    clamp_l(l);
     sc_out[j] = pigt0(sc_teff[j], k, l);
   }
 
