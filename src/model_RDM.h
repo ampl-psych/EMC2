@@ -20,6 +20,7 @@ using namespace Rcpp;
 
 constexpr double A_EPS = 1e-4;
 constexpr double L_EPS = 1e-4;
+constexpr double K_MAX = 1e6;  // upper limit for threshold/noise ratio.
 
 inline void clamp_l(double& l)
 {
@@ -331,6 +332,8 @@ void drdm_prdm_fast(const NumericVector& rts,
 
     // Check whether A equals 0
     if (A[i] < A_EPS) {
+      const double k = B[i] / s[i];
+      if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }  // degenerate
       sc_teff[n_win_noA] = teff;
       sc_v   [n_win_noA] = v[i];
       sc_B   [n_win_noA] = B[i];
@@ -399,6 +402,8 @@ void drdm_prdm_fast(const NumericVector& rts,
 
     // fill scratch depending on whether we have A tiny or not
     if (A[i] < A_EPS) {
+      const double k = B[i] / s[i];
+      if (k > K_MAX || k < 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
       sc_teff[n_los_noA] = teff;
       sc_v   [n_los_noA] = v[i];
       sc_B   [n_los_noA] = B[i];
