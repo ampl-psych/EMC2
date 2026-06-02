@@ -1469,14 +1469,16 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   }
 
   set_ptrs_on_model <- function(model_fn, ptrs_for_model) {
-    if(length(ptrs_for_model) == 0) return(model_fn)  # nothing to change, no ptrs
+    if(length(ptrs_for_model) == 0) return(model_fn)
     model_list <- model_fn()
     trend <- model_list$trend
     for(i in seq_along(trend)) {
       if(!is.null(ptrs_for_model[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs_for_model[[i]]
     }
     model_list$trend <- trend
-    function() return(model_list)
+    # Modify the existing closure environment in-place rather than creating a new closure
+    environment(model_fn)$model_list <- model_list
+    return(model_fn)
   }
 
   # fix models
