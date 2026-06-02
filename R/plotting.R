@@ -685,7 +685,7 @@ plot_trend <- function(input_data, emc, par_name,
       n_subj <- length(emc[[1]]$data)
       if(!isTRUE(nrow(input_data)==n_subj)) stop("For group aggregates, provide either posterior predictives or a parameter matrix with the same number of rows as subjects")
 
-      updated <- do.call(rbind, lapply(1:nrow(input_data), function(i) get_pars_matrix_oo(p_mat[i,,drop=FALSE], emc[[1]]$data[[i]], model = emc[[1]]$model())))
+      updated <- do.call(rbind, lapply(1:nrow(input_data), function(i) get_pars_matrix_oo(input_data[i,,drop=FALSE], emc[[1]]$data[[i]], model = emc[[1]]$model())))
 
       # get dadm
       dadm_all <- do.call(rbind, emc[[1]]$data)
