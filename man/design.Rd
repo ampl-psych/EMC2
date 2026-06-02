@@ -91,17 +91,9 @@ reparameterised model parameter and each column is either a sampled
 parameter name or the name of a function in \code{functions}. The row names
 become the names of the reparameterised model parameters. The value in
 each cell is the weight applied to that column's contribution.}
-\item{\code{functions}}{An optional named list of functions, each taking
-\verb{(da, covariate)} as arguments and returning a numeric vector of
-weights (one per accumulator row). These allow trial-varying
-reparameterisations, e.g. based on which option was chosen on the
-previous trial.}
-\item{\code{expand_over}}{An optional character vector of model parameter
-names. If supplied, each row of \code{weights} is expanded into one
-reparameterised parameter per element, named \verb{<row>.<element>}.}
 }
 
-Example — a static reparameterisation of \code{v} into mean and difference
+Example — a static reparameterisation of \code{alphaPos} and \code{alphaNeg} into mean and difference
 components:
 \preformatted{
   parameter_design = list(

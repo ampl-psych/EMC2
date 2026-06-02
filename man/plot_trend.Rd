@@ -8,63 +8,55 @@ plot_trend(
   input_data,
   emc,
   par_name,
+  true_trajectories = NULL,
   subject = NULL,
   filter = NULL,
   on_x_axis = "trials",
   pp_shaded = TRUE,
+  group_average = FALSE,
   layout = NULL,
   ...
 )
 }
 \arguments{
-\item{input_data}{a p_vector or posterior predictives compatible with the provided emc object}
+\item{input_data}{A p_vector or posterior predictives compatible with the provided emc object.
+If posterior predictives, should be the output of \code{predict(..., return_trialwise_parameters = TRUE)}.}
 
-\item{emc}{An emc object}
+\item{emc}{An emc object.}
 
-\item{par_name}{Parameter name (or covariate name) to plot}
+\item{par_name}{Parameter name (or covariate name) to plot.}
 
-\item{subject}{Subject number to plot. If NULL, plots all subjects separately.}
+\item{true_trajectories}{Optional. A data frame with columns \code{subjects}, the column named
+by \code{on_x_axis}, and at least \code{par_name}. If supplied, the true trajectory is
+overlaid as a dashed black line, and \code{ylim} expands to include it.}
 
-\item{filter}{Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot}
+\item{subject}{Subject to plot. If NULL, plots all subjects separately.
+Ignored when \code{group_average = TRUE}.}
 
-\item{on_x_axis}{Column name in the \code{dadm} to plot on the x-axis. By default 'trials'.}
+\item{filter}{Optional function that takes a data frame and returns a logical vector
+indicating which rows to include. For race models, should select one accumulator,
+e.g. \code{function(d) d$lR == 'left'}.}
 
-\item{pp_shaded}{Boolean. If \code{TRUE} will plot 95\% credible interval as a shaded area. Otherwise plots separate lines for each iteration of the posterior predictives. Only applicable if \code{input_data} are posterior predictives.}
+\item{on_x_axis}{Column name to plot on the x-axis. Default \code{'trials'}.}
 
-\item{layout}{Optional integer vector of length 2 (e.g. \code{c(2, 3)}) to override the automatic mfrow layout when plotting all subjects.}
+\item{pp_shaded}{Logical. If TRUE, plots 95\% credible interval as a shaded area.
+Otherwise plots separate lines for each posterior predictive iteration.
+Only applicable when \code{input_data} is posterior predictives.}
 
-\item{...}{Optional arguments that can be passed to \code{plots}.}
+\item{group_average}{Logical. If TRUE, plots a single panel averaged across subjects
+rather than one panel per subject.}
+
+\item{layout}{Optional integer vector of length 2 to override the automatic mfrow layout.
+Ignored when \code{group_average = TRUE}.}
+
+\item{...}{Optional arguments passed to \code{plot()}.}
 }
 \value{
-A trend plot
+Invisibly returns the credible interval data frame when \code{input_data} is
+posterior predictives, otherwise NULL.
 }
 \description{
-Plots the trend for selected parameters of a model. Can be used either with a p_vector, or trial-wise parameters or covariates obtained
-from predict()
-}
-\examples{
-dat <- EMC2:::add_trials(forstmann)
-dat$trials2 <- dat$trials/1000
-
-lin_trend <- make_trend(cov_names='trials2',
-                        kernels = 'exp_incr',
-                        par_names='B',
-                        bases='lin',
-                        phase = "premap")
-
-design_RDM_lin_B <- design(model=RDM,
-                           data=dat,
-                           covariates='trials2',   # specify relevant covariate columns
-                           matchfun=function(d) d$S==d$lR,
-                           transform=list(func=c('B'='identity')),
-                           formula=list(B ~ 1, v ~ lM, t0 ~ 1),
-                           trend=lin_trend)       # add trend
-
-emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
-p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
-
-# Visualize trend
-plot_trend(p_vector, emc=emc,
-           par_name='B', subject='as1t',
-           filter=function(d) d$lR=='right', main='Threshold for right')
+Plots the trend for selected parameters of a model. Can be used either with a p_vector,
+or trial-wise parameters or covariates obtained from predict(). Optionally overlays
+a ground-truth trajectory for recovery evaluation.
 }

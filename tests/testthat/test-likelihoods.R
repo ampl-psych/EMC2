@@ -17,6 +17,13 @@ calc_lls <- function(emc, n_particles=1e3) {
 
   p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
   colnames(p_mat) <- p_types
+  ## always set t0 to log(runif(0, min(dadm$rt))) to ensure there's actual density
+  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt)))
+
+  ## if the model is an RDM, set half of the A-values to 0 to ensure both pathways (digt0/pigt0 and digt_core/pigt_core) are tested
+  if(model$c_name == 'RDM') {
+    p_mat[1:(nrow(p_mat)/2),'A'] <- log(0)
+  }
 
   lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
                             model$bound, model$transform, model$pre_transform, p_types = p_types,
