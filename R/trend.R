@@ -66,6 +66,9 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'       trials on which the Q-value should be reset to \code{q0} before the prediction error
 #'       is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
 #'   }
+#' @param per_covariate_pars Optional character vector, or list aligned with
+#'   \code{par_names}, naming trend parameters that should be duplicated per
+#'   covariate.
 #'
 #' @return A list containing the trend specifications for each parameter
 #' @export
@@ -1504,7 +1507,7 @@ make_data_unconditional <- function(data, pars, design, model,
             list(weights     = design$parameter_design$weights[cached_pd_pars, , drop = FALSE],
                  functions   = design$parameter_design$functions,
                  expand_over = design$parameter_design$expand_over),
-            dadm_slice, compress = FALSE
+            dadm_slice, compress_dms = FALSE
           )
         } else list()
         cache[[key]] <<- c(regular, pd_cached)
@@ -1524,7 +1527,7 @@ make_data_unconditional <- function(data, pars, design, model,
           list(weights     = design$parameter_design$weights[uncached_pd_pars, , drop = FALSE],
                functions   = design$parameter_design$functions,
                expand_over = design$parameter_design$expand_over),
-          dadm_slice, compress = FALSE
+          dadm_slice, compress_dms = FALSE
         )
       } else list()
 
@@ -2057,4 +2060,3 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
   colnames(out) <- trend$covariate
   out
 }
-

@@ -17,12 +17,7 @@
 PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
 FAST_MATH=no        # fast-math disabled by default (use --enable-fast-math)
 VEC_REPORT=no       # vectorisation report disabled by default
-# Default --native based on whether we're on CRAN
-if [ "${NOT_CRAN:-false}" = "true" ]; then
-  ENABLE_NATIVE=yes
-else
-  ENABLE_NATIVE=no
-fi
+ENABLE_NATIVE=no    # native optimizations disabled by default
 
 # --------------------------------------------------------------------------- #
 #  Argument parsing                                                            #

@@ -811,7 +811,7 @@ parse_parameter_design_block <- function(block) {
   # --- 1. Build small data frame, one row per output parameter --------------
   # contrast-derived columns get their actual values; trial_vars get placeholder 1
   par_factor <- factor(bare_parameters, levels = bare_parameters)
-  contrasts(par_factor) <- par_contrast
+  attr(par_factor, "contrasts") <- par_contrast
   meta_df <- as.data.frame(model.matrix(~ par_factor)[, -1, drop = FALSE])  # drop intercept
   colnames(meta_df) <- colnames(par_contrast)  # use contrast column names directly
 
@@ -856,7 +856,7 @@ make_trial_var_function <- function(tv, tv_contrast) {
     if (!is.null(tv_contrast)) {
       vals <- factor(vals, levels = rownames(tv_contrast))
       tmp  <- data.frame(x = vals)
-      contrasts(tmp$x) <- tv_contrast
+      attr(tmp$x, "contrasts") <- tv_contrast
       as.numeric(model.matrix(~ x, tmp)[, -1, drop = TRUE])
     } else {
       as.numeric(vals)
