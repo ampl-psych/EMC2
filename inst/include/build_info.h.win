@@ -1,0 +1,10 @@
+#ifndef EMC2_BUILD_INFO_H
+#define EMC2_BUILD_INFO_H
+
+#define EMC2_PNORM_MODE     1
+#define EMC2_FAST_MATH      "no"
+#define EMC2_ENABLE_NATIVE  "no"
+#define EMC2_EXTRA_CXXFLAGS ""
+#define EMC2_ACCELERATE     ""
+
+#endif

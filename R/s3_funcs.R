@@ -263,8 +263,21 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   print(chain_n(emc))
   if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
-    mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
-    par(mfrow = mfrow)
+    if(isFALSE(dots$set.par)) {
+      dots$set.par <- NULL
+    } else {
+      ## allow user to override mfrow or mfcol
+      if(!is.null(dots$mfrow) || !is.null(dots$mfcol) || !is.null(dots$layout)){
+        par_args <- list()
+        if(!is.null(dots$layout)) { par_args$mfrow <- dots$layout; dots$layout <- NULL }
+        if(!is.null(dots$mfrow)) { par_args$mfrow <- dots$mfrow; dots$mfrow <- NULL }
+        if(!is.null(dots$mfcol)) { par_args$mfcol <- dots$mfcol; dots$mfcol <- NULL }
+        do.call(par, par_args)
+      } else {
+        mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection), nplots = 1)
+        par(mfrow = mfrow)
+      }
+    }
   }
   for(select in selection){
     dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
@@ -304,8 +317,8 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
       cur_dots <- add_defaults(cur_dots, xlab = names(MCMCs)[1], ylab = "Highest Rhat parameter")
       do.call(plot, c(list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
                       fix_dots_plot(cur_dots)))
-      legend("topleft",legend=paste0("Rhat : ",round(max_gd,digits)), bty = "n")
-      legend("topright",legend=paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
+     legend("topleft",legend=paste0("Rhat: ",round(max_gd,digits)), x.intersp = 0, bty = "n")
+     legend("topright",legend=paste0("ESS: ", round(ESS[[cur_max]][max_par])), x.intersp = 0, bty = "n")
     }
     out_list[[select]] <- out
   }
@@ -420,7 +433,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
                        trim = TRUE, r_cores = 1)
-  start_time <- Sys.time()
+  t_start <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
     stop_criteria[["sample"]] <- stop_criteria
@@ -456,7 +469,40 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
                    r_cores = dots$r_cores)
   }
-  if (verbose) print(Sys.time()-start_time)
+  if (verbose) {
+    # Re-use check_progress to get final Rhat and ESS for the sample stage,
+    # with verbose = FALSE so it doesn't print anything itself
+    final_progress <- check_progress(
+      emc, stage = "sample",
+      iter       = stop_criteria[["sample"]][["iter"]],
+      stop_criteria = stop_criteria[["sample"]],
+      max_tries  = max_tries,
+      step_size  = step_size,
+      n_cores    = cores_per_chain * cores_for_chains,
+      verbose    = FALSE,
+      progress   = NULL,
+      n_blocks   = dots$n_blocks
+    )
+
+    gd      <- final_progress$gd$gd
+    gd_final <- NULL
+    if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+
+    ess_message <- if (!is.null(final_progress$curr_min_es)) {
+      sprintf("min ESS=%d", round(final_progress$curr_min_es))
+    } else NULL
+
+    final_iters <- chain_n(emc)[1, "sample"]
+
+    message(sprintf(
+      "Sampling stopped | iters=%d%s%s | Total duration: %s",
+      final_iters,
+      ifelse(!is.null(gd_final),   paste0(" | ", gd_final),   ""),
+      ifelse(!is.null(ess_message), paste0(" | ", ess_message), ""),
+      format_duration(Sys.time() - t_start)
+    ))
+  }
   return(emc)
 }
 
@@ -575,10 +621,16 @@ recovery.emc <- function(emc, true_pars,
   }
   # pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(MCMC_samples)),names(MCMC_samples))
   stats_list <- list()
-  if(any(is.na(layout))){
-    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(MCMC_samples),
-                                 nplots = 1))
-  } else{par(mfrow=layout)}
+  if(isFALSE(dots$set.par)) {
+    dots$set.par <- NULL
+  } else {
+    if(any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(MCMC_samples),
+                                   nplots = 1))
+    } else {
+      par(mfrow=layout)
+    }
+  }
   for(i in 1:length(MCMC_samples)){
 
     cur_name <- names(MCMC_samples)[i]
@@ -607,14 +659,14 @@ recovery.emc <- function(emc, true_pars,
       }
     }
     if(correlation == "pearson"){
-      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)),bty="n")
+      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)), x.intersp=0, bty="n")
     } else if(correlation == "spearman"){
-      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)),bty="n")
+      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)), x.intersp=0, bty="n")
     }
     if (stat == "rmse") {
-      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),bty="n")
+      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),x.intersp=0,bty="n")
     } else if(stat == "coverage") {
-      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),bty="n")
+      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),x.intersp=0,bty="n")
     }
     stats <- make_recov_summary(stats)
     stats_list[[cur_name]] <- stats

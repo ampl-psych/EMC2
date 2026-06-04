@@ -55,17 +55,9 @@
 #'       parameter name or the name of a function in `functions`. The row names
 #'       become the names of the reparameterised model parameters. The value in
 #'       each cell is the weight applied to that column's contribution.}
-#'     \item{`functions`}{An optional named list of functions, each taking
-#'       `(da, covariate)` as arguments and returning a numeric vector of
-#'       weights (one per accumulator row). These allow trial-varying
-#'       reparameterisations, e.g. based on which option was chosen on the
-#'       previous trial.}
-#'     \item{`expand_over`}{An optional character vector of model parameter
-#'       names. If supplied, each row of `weights` is expanded into one
-#'       reparameterised parameter per element, named `<row>.<element>`.}
 #'   }
 #'
-#'   Example — a static reparameterisation of `v` into mean and difference
+#'   Example — a static reparameterisation of `alphaPos` and `alphaNeg` into mean and difference
 #'   components:
 #'   \preformatted{
 #'   parameter_design = list(
@@ -174,15 +166,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
     # parameter_design output parameters don't need to be in formula
     if (!is.null(parameter_design)) {
-      expand_over <- parameter_design$expand_over
-      pd_targets <- if (!is.null(expand_over)) {
-        as.vector(outer(rownames(parameter_design$weights), expand_over, paste, sep = "."))
-      } else {
-        rownames(parameter_design$weights)
-      }
+      pd_targets <- rownames(parameter_design$weights)
       not_specified <- not_specified[!not_specified %in% pd_targets]
     }
-
     sampled_by_default <- intersect(not_specified, model_sampled_by_default(model()))
     assumed_constant <- setdiff(not_specified, sampled_by_default)
     if (length(assumed_constant) > 0) {
@@ -231,10 +217,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   # Check that all formula LHS terms are valid model p_types or parameter_design sources
   if (!is.null(formula) && !all(lhs_terms %in% names(model()$p_types))) {
-    pd_sources <- if (!is.null(parameter_design)) {
-      colnames(parameter_design$weights)[!colnames(parameter_design$weights) %in% names(parameter_design$functions)]
+    if(!is.null(parameter_design)) {
+      pd_sources <- colnames(parameter_design$weights)
     } else {
-      character(0)
+      pd_sources <- character(0)
     }
     invalid_terms <- lhs_terms[!lhs_terms %in% c(names(model()$p_types), pd_sources)]
     if (length(invalid_terms) > 0) {
@@ -647,6 +633,20 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
+  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
+  if(!is.null(model_info$trend)) {
+    trend_list <- model_info$trend
+    for(i in 1:length(trend_list)) {
+      current_trend <- trend_list[[i]]
+      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+        # check if any NAs exist in the covariate
+        for(covariate in current_trend$covariate) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        }
+      }
+    }
+  }
+
   if (is.null(model_info$p_types) | is.null(model_info$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
@@ -774,148 +774,31 @@ design_model <- function(data,design,model=NULL,
 
 
 
-# Parse parameter_design: handles both new (list of blocks) and old (weights/functions) formats
-#
-# @param parameter_design A list, either in the new block format or old internal format
-# @return parameter_design in the internal format (weights, functions, expand_over)
+# Parse parameter_design: now only accepts weights matrix format
 parse_parameter_design <- function(parameter_design) {
-  if (is.matrix(parameter_design$weights)) return(parameter_design)  # old format passthrough
-
-  parsed <- lapply(parameter_design, parse_parameter_design_block)
-  list(
-    weights     = do.call(rbind, lapply(parsed, `[[`, "weights")),
-    functions   = do.call(c,     lapply(parsed, `[[`, "functions")),
-    expand_over = parsed[[1]]$expand_over
-  )
-}
-
-
-# Parse a single parameter_design block into the internal representation
-#
-# @param block A list with:
-#   - parameters:  character vector, e.g. c('v.alphaPos', 'v.alphaNeg')
-#   - contrasts:   named list of contrast matrices; 'parameters' for the output
-#                  parameter contrast, one entry per trial_var for factor trial_vars
-#   - formula:     one-sided formula over contrast column names and trial_var names
-#   - expand_over: character vector of covariate names
-parse_parameter_design_block <- function(block) {
-  parameters  <- block$parameters
-  formula     <- block$formula
-  expand_over <- block$expand_over
-  par_contrast  <- block$contrasts[["parameters"]]
-  trial_var_contrasts <- block$contrasts[names(block$contrasts) != "parameters"]
-
-  prefix          <- get_common_prefix(parameters)
-  bare_parameters <- sub(paste0("^", prefix), "", parameters)
-
-  # --- 1. Build small data frame, one row per output parameter --------------
-  # contrast-derived columns get their actual values; trial_vars get placeholder 1
-  par_factor <- factor(bare_parameters, levels = bare_parameters)
-  attr(par_factor, "contrasts") <- par_contrast
-  meta_df <- as.data.frame(model.matrix(~ par_factor)[, -1, drop = FALSE])  # drop intercept
-  colnames(meta_df) <- colnames(par_contrast)  # use contrast column names directly
-
-  trial_var_names <- all.vars(formula)[!all.vars(formula) %in% colnames(meta_df)]
-  for (tv in trial_var_names) meta_df[[tv]] <- 1.0  # placeholder; structure only
-
-  # --- 2. model.matrix gives us the weight matrix directly ------------------
-  weight_mat <- model.matrix(formula, meta_df)
-  rownames(weight_mat) <- parameters
-  colnames(weight_mat) <- paste0(prefix, colnames(weight_mat))
-  colnames(weight_mat)[colnames(weight_mat) == paste0(prefix, "(Intercept)")] <- paste0(prefix, "mean")
-
-  # --- 3. Build functions list for trial-varying columns --------------------
-  # A column is dynamic if it involves any trial_var
-  is_dynamic <- vapply(colnames(weight_mat), function(col)
-    any(vapply(trial_var_names, function(tv) grepl(tv, col, fixed=TRUE), logical(1))),
-    logical(1))
-
-  functions_list <- lapply(
-    setNames(names(is_dynamic)[is_dynamic], names(is_dynamic)[is_dynamic]),
-    function(col) {
-      tv <- trial_var_names[vapply(trial_var_names,
-                                   function(tv) grepl(tv, col, fixed=TRUE), logical(1))][1]
-      make_trial_var_function(tv, trial_var_contrasts[[tv]])
-    }
-  )
-
-  list(weights = weight_mat, functions = functions_list, expand_over = expand_over)
-}
-
-
-# Build a function(da, covariate) that looks up <trial_var>.<covariate> in da
-# and applies an optional contrast matrix
-make_trial_var_function <- function(tv, tv_contrast) {
-  force(tv); force(tv_contrast)
-  function(da, covariate) {
-    col_name <- paste0(tv, ".", covariate)
-    if (!col_name %in% names(da))
-      stop("Column '", col_name, "' not found in da. ",
-           "Supply functions = list(", col_name, " = ...) to design().")
-    vals <- da[[col_name]]
-    if (!is.null(tv_contrast)) {
-      vals <- factor(vals, levels = rownames(tv_contrast))
-      tmp  <- data.frame(x = vals)
-      attr(tmp$x, "contrasts") <- tv_contrast
-      as.numeric(model.matrix(~ x, tmp)[, -1, drop = TRUE])
-    } else {
-      as.numeric(vals)
-    }
-  }
-}
-
-
-# Extract common prefix up to and including the last '.'
-# e.g. c('v.alphaPos', 'v.alphaNeg') -> 'v.'
-get_common_prefix <- function(x) {
-  chars  <- strsplit(x, "")
-  common <- Reduce(function(a, b) {
-    n <- min(length(a), which(a != b)[1] - 1L)
-    a[seq_len(n)]
-  }, chars)
-  prefix <- paste(common, collapse = "")
-  m <- regmatches(prefix, regexpr("^.*\\.", prefix))
-  if (length(m)) m else ""
+  if (!is.matrix(parameter_design$weights))
+    stop("parameter_design must contain a 'weights' matrix")
+  parameter_design
 }
 
 
 # Check and update formula list for parameter_design
-#
-# @param parameter_design A list with elements:
-#   - weights: matrix with rownames = output parameters, colnames = sampled parameters + function names
-#   - functions: named list of functions(da, covariate) for trial-varying columns
-#   - expand_over: character vector of covariate names to expand over
-# @param formula List of formulas (LHS = model parameter names)
-# @param constants Named vector/list of constants, or NULL
-# @return Updated formula list with source parameters added as intercept-only formulas where missing
 check_parameter_design <- function(parameter_design, formula, constants = NULL) {
   if (is.null(parameter_design)) return(formula)
 
   weights     <- parameter_design$weights
-  functions   <- parameter_design$functions
-  expand_over <- parameter_design$expand_over
-
-  # Source parameters: colnames of weights that are NOT in functions
-  fun_names    <- names(functions)
-  source_pars  <- colnames(weights)[!colnames(weights) %in% fun_names]
-
-  # Target parameters: rownames x expand_over (or just rownames if no expand_over)
-  if (!is.null(expand_over)) {
-    target_pars <- as.vector(outer(rownames(weights), expand_over, paste, sep = "."))
-  } else {
-    target_pars <- rownames(weights)
-  }
+  source_pars <- colnames(weights)
+  target_pars <- rownames(weights)
 
   # --- 1. Error if any target parameter is in constants ----------------------
   if (!is.null(constants)) {
     bad_constants <- target_pars[target_pars %in% names(constants)]
-    if (length(bad_constants) > 0) {
+    if (length(bad_constants) > 0)
       stop(paste0(
         "Parameter(s) ", paste(bad_constants, collapse = ", "),
         " appear in both `parameter_design` targets and `constants`. ",
         "parameter_design output parameters cannot be constants."
       ))
-    }
   }
 
   # --- 2. Extract current LHS terms from formula -----------------------------
@@ -923,13 +806,12 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 
   # --- 3. Error if any target parameter appears as a formula LHS -------------
   bad_formula <- target_pars[target_pars %in% lhs_terms]
-  if (length(bad_formula) > 0) {
+  if (length(bad_formula) > 0)
     stop(paste0(
       "Parameter(s) ", paste(bad_formula, collapse = ", "),
       " appear in both `parameter_design` targets and `formula`. ",
       "parameter_design output parameters should not have their own formula."
     ))
-  }
 
   # --- 4. Auto-add intercept formulas for source parameters not yet in formula
   missing_sources <- source_pars[!source_pars %in% lhs_terms]
@@ -946,78 +828,40 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 }
 
 
-# Expand a parameter_design into a named list of n_trials design matrices
-#
-# @param parameter_design A list with elements weights, functions, expand_over
-# @param da The augmented data frame (n_trials rows)
-# @param compress_dms Return compressed design matrix?
-# @return Named list of n_trials x ncol(weights) matrices, one per output parameter,
-#   each flagged with attr(x, "parameter_design") = TRUE
-expand_parameter_design <- function(parameter_design, da, compress_dms=TRUE) {
-  weights     <- parameter_design$weights
-  functions   <- parameter_design$functions
-  expand_over <- parameter_design$expand_over
-  fun_names   <- names(functions)
-  n_trials    <- nrow(da)
+# Expand a parameter_design weights matrix into a named list of design matrices,
+# one per output parameter (row of weights)
+expand_parameter_design <- function(parameter_design, da, compress_dms = TRUE) {
+  weights  <- parameter_design$weights
+  n_trials <- nrow(da)
+  out      <- list()
 
-  # DEBUG
-  # message("weight colnames: ", paste(colnames(weights), collapse = ", "))
-  # message("fun_names: ", paste(fun_names, collapse = ", "))
-  # message("expand_over: ", paste(expand_over, collapse = ", "))
-  # message("da cols matching isChosen: ", paste(grep("isChosen", names(da), value=TRUE), collapse = ", "))
+  for (par in rownames(weights)) {
+    # Each output parameter gets a constant design matrix (one unique row)
+    dm <- matrix(
+      weights[par, ],
+      nrow = 1L,
+      ncol = ncol(weights),
+      dimnames = list(NULL, colnames(weights))
+    )
 
-  # If no expand_over, use a single dummy covariate with name NULL
-  if (is.null(expand_over)) expand_over <- list(NULL)
-
-  out <- list()
-
-  for (cov in expand_over) {
-    # Build the trial-varying columns for this covariate
-    # Each column of weights is either a function (trial-varying) or a scalar (constant)
-    col_matrices <- lapply(colnames(weights), function(col) {
-      if (col %in% fun_names) {
-        # Call the function with (da, covariate) to get trial-varying vector
-        vec <- functions[[col]](da, cov)
-        as.numeric(vec)
-      } else {
-        # Scalar sampled parameter column — will be multiplied by weight per row
-        # Return a column of 1s; weight is applied per row below
-        rep(1, n_trials)
-      }
-    })
-    names(col_matrices) <- colnames(weights)
-
-    for (par in rownames(weights)) {
-      # Build n_trials x ncol(weights) matrix for this output parameter
-      dm <- matrix(0, nrow = n_trials, ncol = ncol(weights),
-                   dimnames = list(NULL, colnames(weights)))
-
-      for (col in colnames(weights)) {
-        dm[, col] <- weights[par, col] * col_matrices[[col]]
-      }
-
-      # Name the output parameter
-      out_name <- if (!is.null(cov)) paste(par, cov, sep = ".") else par
-
-      if (compress_dms) {
-        # Compress: keep only unique rows, store expand index
-        cells <- apply(dm, 1, paste, collapse = "_")
-        dm_compressed <- dm[!duplicated(cells), , drop = FALSE]
-        attr(dm_compressed, "expand") <- as.numeric(factor(cells, levels = unique(cells)))
-        attr(dm_compressed, "parameter_design") <- TRUE
-        attr(dm_compressed, "assign") <- rep(0L, ncol(dm_compressed))
-      } else {
-        attr(dm, "expand") <- seq_len(nrow(dm))
-        attr(dm, "parameter_design") <- TRUE
-        attr(dm, "assign") <- rep(0L, ncol(dm))
-        dm_compressed <- dm
-      }
-      out[[out_name]] <- dm_compressed
+    if (compress_dms) {
+      attr(dm, "expand")           <- rep(1L, n_trials)
+      attr(dm, "parameter_design") <- TRUE
+      attr(dm, "assign")           <- rep(0L, ncol(dm))
+    } else {
+      dm <- dm[rep(1L, n_trials), , drop = FALSE]
+      attr(dm, "expand")           <- seq_len(n_trials)
+      attr(dm, "parameter_design") <- TRUE
+      attr(dm, "assign")           <- rep(0L, ncol(dm))
     }
+
+    out[[par]] <- dm
   }
 
   return(out)
 }
+
+
 
 
 fast_mm <- function(form, Clist = NULL, da) {
@@ -1198,11 +1042,8 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
       out <- out_dm
       attr(out, "assign") <- ass
     }
-
-    attr(out, "expand")    <- as.numeric(factor(cells, levels = unique(cells)))
-    # attr(out, "assign")    <- ass
-    attr(out, "contrasts") <- contr
-
+    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
+    attr(out,"contrasts") <- contr
     out
   }
   out <- make_full_dm(form, Clist, da)
@@ -1287,8 +1128,15 @@ dm_list <- function(dadm)
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
-      attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      attr(dl[[i]],"reparam_designs") <- sub_design(reparam_designs, isin)
+      if (!is.null(attr(dadm, "design_pool"))) {
+        pool <- attr(dadm, "design_pool")
+        attr(dl[[i]], "design_pool") <- pool[isin, , drop = FALSE]
+        attr(dl[[i]], "design_pool_map") <- attr(dadm, "design_pool_map")
+        attr(dl[[i]], "designs") <- NULL
+      } else {
+        attr(dl[[i]],"designs") <- sub_design(designs,isin)
+        attr(dl[[i]],"reparam_designs") <- sub_design(reparam_designs, isin)
+      }
       # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL

@@ -209,7 +209,7 @@ trend_delta <- make_trend(
 trend_delta2 <- make_trend(
   par_names = "v",
   cov_names = "trial_nr",
-  kernels = "delta2kernel"
+  kernels = "delta2lr"
 )
 ```
 
@@ -396,7 +396,7 @@ In custom kernels, the user needs to handle `NA` values (e.g., it is good practi
 <!-- This behavior makes trends robust when covariates are intermittently missing (as exercised in tests that set some covariate entries to `NA`). -->
 
 ### Trial‑wise evaluation and conditional covariates
-- Delta‑rule kernels (`delta`, `delta2kernel`, `delta2lr`) are sequential by construction; they update across trials within a subject.
+- Delta‑rule kernels (`delta`, `delta2lr`) are sequential by construction; they update across trials within a subject.
 - Using behavioral covariates (e.g., `rt`, response `R`, or outputs of functions in the design) can force a trial‑wise evaluation path so that data generation is not conditional on the observed data, but rather on the simulated outcomes. 
 
 ```{r}

@@ -90,7 +90,7 @@ constexpr double M5 = 16.064177579207;
 constexpr double M6 = 1.75566716318264;
 constexpr double M7 = 8.83883476483184e-02;
 
-inline double phi(double x)
+[[gnu::always_inline]] inline double phi(double x)
 {
   const double z = std::fabs(x);
   double c = 0.0;
@@ -130,7 +130,7 @@ inline double hart_pnorm_std(double x, bool lower, bool logp)
 #if PNORM_MODE == 2
 namespace as7126 {
 
-inline double fast_erf(double x)
+[[gnu::always_inline]] inline double fast_erf(double x)
 {
   constexpr double p  = 0.3275911;
   constexpr double a1 =  0.254829592;
@@ -146,7 +146,7 @@ inline double fast_erf(double x)
   return std::copysign(1.0 - poly * e, x);
 }
 
-inline double phi(double x)
+[[gnu::always_inline]] inline double phi(double x)
 {
   constexpr double inv_sqrt2 = 0.70710678118654752440;
   return 0.5 * (1.0 + fast_erf(x * inv_sqrt2));
@@ -203,5 +203,42 @@ inline double fast_dlnorm(double t, double m, double s)
 
 #define PLNORM(t, m, s) PNORM_STD((std::log(t) - (m)) / (s), true, false)
 #define DLNORM(t, m, s) pnorm_detail::fast_dlnorm((t), (m), (s))
+
+
+// Upper tail phi(x) = 1 - phi(x), without log. Used by pigt0 to avoid log(pnorm).
+inline double pnorm_upper(double x)
+{
+#if   PNORM_MODE == 2
+  return 1.0 - pnorm_detail::as7126::phi(x);
+#elif PNORM_MODE == 1
+  return pnorm_detail::hart::phi(-x);   // phi(-x) == upper tail
+#else
+  return R::pnorm(x, 0.0, 1.0, false, false);
+#endif
+}
+
+
+// ---------------------------------------------------------------------------
+// fast_dnorm — standard normal PDF and general normal PDF
+// Exact formula; no R API needed.
+// ---------------------------------------------------------------------------
+
+namespace pnorm_detail {
+
+[[gnu::always_inline]] inline double fast_dnorm_std(double x)
+{
+  constexpr double INV_SQRT_2PI = 0.3989422804014327;
+  return INV_SQRT_2PI * std::exp(-0.5 * x * x);
+}
+
+[[gnu::always_inline]] inline double fast_dnorm(double x, double mean, double sd)
+{
+  return fast_dnorm_std((x - mean) / sd) / sd;
+}
+
+} // namespace pnorm_detail
+
+#define DNORM_STD(x)          pnorm_detail::fast_dnorm_std((x))
+#define DNORM(x, mean, sd)    pnorm_detail::fast_dnorm((x), (mean), (sd))
 
 #endif // PNORM_UTILS_H

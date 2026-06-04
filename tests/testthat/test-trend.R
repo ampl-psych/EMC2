@@ -11,8 +11,7 @@ n_trials <- 10
 
 covariate1 <- rnorm(n_trials*2)
 covariate2 <- rnorm(n_trials*2)
-# Ensure that NAs are handled correctly in trend
-covariate2[1:5] <- NA
+covariate2[1:5] <- 0
 
 trend <- make_trend(par_names = "m",
                     cov_names = list(c("covariate1", "covariate2")),
@@ -312,7 +311,7 @@ trend_mult <- make_trend(
 design_mult <- design(
   factors = list(subjects = 1, S = 1:2),
   Rlevels = 1:2,
-  covariates = c("trial2", "trial3"),
+  covariates = c("covariate1", "covariate2"),
   matchfun = matchfun,
   trend = trend_mult,
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
@@ -331,7 +330,7 @@ test_that("trend_multiple", {
 
 # covariate maps
 trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
-                    kernels = "delta", ffill_na=TRUE,
+                    kernels = "delta",
                     maps=list('map1'=function(dadm, covs) {
                       d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
                       colnames(d) <- covs

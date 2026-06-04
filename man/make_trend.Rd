@@ -16,7 +16,6 @@ make_trend(
   at = "lR",
   maps = NULL,
   custom_trend = NULL,
-  ffill_na = NULL,
   kernel_args = NULL,
   per_covariate_pars = NULL
 )
@@ -46,11 +45,6 @@ corresponding to the first level of that factor, and fed forward to the other le
 
 \item{custom_trend}{A trend registered with \code{register_trend}}
 
-\item{ffill_na}{Determines how missing covariate values are handled.
-If \code{TRUE}, missing values are forward-filled using the last known non-\code{NA} value after
-applying the kernel. If \code{FALSE}, trials with missing covariates contribute \code{0} instead.
-The default (NULL) is interpreted as \code{TRUE} for delta-rule models and \code{FALSE} otherwise.}
-
 \item{kernel_args}{Optional named list of kernel-specific arguments, aligned with \code{par_names}.
 Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
 Currently supported arguments:
@@ -61,9 +55,7 @@ trials on which the Q-value should be reset to \code{q0} before the prediction e
 is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
 }}
 
-\item{per_covariate_pars}{Optional character vector, or list aligned with
-\code{par_names}, naming trend parameters that should be duplicated per
-covariate.}
+\item{per_covariate_pars}{Optional vector of parameter names that should be estimated separately for each covariate}
 }
 \value{
 A list containing the trend specifications for each parameter

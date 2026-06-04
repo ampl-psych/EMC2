@@ -509,14 +509,21 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
         par(mfrow = layout)
       }
       for (j in 1:ncol(MCMC_samples[[i]][[1]])) {
-        do.call(robust_hist, c(
-          list(MCMC_samples[[i]][[1]][, j], dots$breaks, dots$cut_off, dots$prob),
-          fix_dots_plot(add_defaults(dots,
-            ylab = "Density", xlab = xlab,
-            main = colnames(MCMC_samples[[i]][[1]])[j],
-            cex.lab = 1.25, cex.main = 1.5
-          ))
-        ))
+        plot_args <- c(list(ps=MCMC_samples[[i]][[1]][,j], breaks=dots$breaks, cutoff=dots$cut_off, prob=dots$prob),
+          fix_dots_plot(add_defaults(dots, ylab = if (isTRUE(dots$prob)) "Density" else "Counts",
+                                     xlab = xlab, main = colnames(MCMC_samples[[i]][[1]])[j]#,
+                                     #cex.lab = 1.25, cex.main = 1.5  # SM: turn this off, use global par() or explicitly inherit
+                                     )))
+        do.call(robust_hist, plot_args)
+        #
+        # do.call(robust_hist, c(
+        #   list(MCMC_samples[[i]][[1]][, j], dots$breaks, dots$cut_off, dots$prob),
+        #   fix_dots_plot(add_defaults(dots,
+        #     ylab = "Density", xlab = xlab,
+        #     main = colnames(MCMC_samples[[i]][[1]])[j],
+        #     cex.lab = 1.25, cex.main = 1.5
+        #   ))
+        # ))
       }
     }
   }

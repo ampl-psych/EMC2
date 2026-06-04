@@ -146,7 +146,8 @@ get_designs_expanded <- function(dadm, model = NULL, order = c("model", "stored"
     if (is.null(x)) return(NULL)
     exp <- attr(x, "expand")
     if (is.null(exp)) return(x)
-    x[exp, , drop = FALSE]
+    x_exp <- x[exp, , drop = FALSE]
+    attr(x_exp, "parameter_design") <- attr(x, "parameter_design")
   })
   names(out) <- names(designs)
   return(out)
