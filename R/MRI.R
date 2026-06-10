@@ -1,4 +1,4 @@
-apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE) {
+apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE, levels = NULL) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
 
@@ -7,16 +7,17 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
     if(is.matrix(contrast)){
       if(!is.null(rownames(contrast))){
         events[[factor_name]] <- factor(events[[factor_name]], levels = rownames(contrast))
-      } else{
-        events[[factor_name]] <- factor(events[[factor_name]])
+      } else {
+        ## use levels provided
+        events[[factor_name]] <- factor(events[[factor_name]], levels = levels)
       }
       stats::contrasts(events[[factor_name]], how.many = ncol(contrast)) <- contrast
     } else {
-      events[[factor_name]] <- factor(events[[factor_name]])
+      events[[factor_name]] <- factor(events[[factor_name]], levels = levels)
       stats::contrasts(events[[factor_name]]) <- do.call(contrast, list(n = length(unique(events[[factor_name]]))))
     }
   } else {
-    events[[factor_name]] <- factor(events[[factor_name]])
+    events[[factor_name]] <- factor(events[[factor_name]], levels = levels)
     # R's default contrasts will be used.
   }
 
@@ -249,12 +250,14 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
 
       for(fact in names(factors)){
         idx <- ev_run$event_type %in% factors[[fact]]
+        if(!any(idx)) next
         ev_run$factor[idx] <- fact
         tmp <- ev_run[idx, ]
         new_tmp <- apply_contrasts(tmp, contrast = contrasts[[fact]],
-                                   cell_coding = fact %in% cell_coding)
+                                   cell_coding = fact %in% cell_coding,
+                                   levels = factors[[fact]])
         rownames(new_tmp) <- NULL
-        new_tmp <- cbind(event_type = ev_run$event_type[idx], new_tmp)
+        new_tmp <- cbind(event_type = new_tmp$regressor, new_tmp)
         ev_tmp <- rbind(ev_tmp, new_tmp)
       }
 
@@ -297,11 +300,22 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
       if(add_constant) dm$constant <- 1
       dms_sub[[as.character(run)]] <- dm
     }
+    dms_sub <- Filter(Negate(is.null), dms_sub)
+    dm_cols <- unique(unlist(lapply(dms_sub, colnames), use.names = FALSE))
+    dms_sub <- lapply(dms_sub, function(dm) {
+      for(col in setdiff(dm_cols, colnames(dm))) dm[[col]] <- 0
+      dm[, dm_cols, drop = FALSE]
+    })
     dms_sub <- do.call(rbind, dms_sub)
     dms_sub[abs(dms_sub) < cut_off] <- 0
     rownames(dms_sub) <- NULL
     all_dms[[as.character(subject)]] <- dms_sub
   }
+  dm_cols <- unique(unlist(lapply(all_dms, colnames), use.names = FALSE))
+  all_dms <- lapply(all_dms, function(dm) {
+    for(col in setdiff(dm_cols, colnames(dm))) dm[[col]] <- 0
+    dm[, dm_cols, drop = FALSE]
+  })
   if(scale){
     full_dm <- do.call(rbind, all_dms)
     maxs <- apply(full_dm, 2, max)

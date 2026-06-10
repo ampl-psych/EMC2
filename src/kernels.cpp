@@ -15,6 +15,7 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   if (k == "poly3")        return KernelType::Poly3;
   if (k == "poly4")        return KernelType::Poly4;
   if (k == "custom")       return KernelType::Custom;
+  if (k == "rescorlawagner")       return KernelType::RescorlaWagner;
 
   Rcpp::stop("Unknown kernel type");
 }
@@ -36,6 +37,7 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   case KernelType::Poly2:       return std::unique_ptr<BaseKernel>(new Poly2Kernel());
   case KernelType::Poly3:       return std::unique_ptr<BaseKernel>(new Poly3Kernel());
   case KernelType::Poly4:       return std::unique_ptr<BaseKernel>(new Poly4Kernel());
+  case KernelType::RescorlaWagner:       return std::unique_ptr<BaseKernel>(new RescorlaWagnerKernel());
 
   case KernelType::Custom:
     if (custom_fun == R_NilValue) {

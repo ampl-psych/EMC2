@@ -20,6 +20,7 @@ design(
   trend = NULL,
   transform = NULL,
   bound = NULL,
+  parameter_design = NULL,
   ...
 )
 }
@@ -38,9 +39,9 @@ Example: \code{list(subjects=levels(dat$subjects), condition=levels(dat$conditio
 Example: \code{c("right", "left")}}
 
 \item{model}{A function, specifies the model type.
-Choose from the drift diffusion model (\code{DDM()}, \code{DDMt0natural()}),
+Choose from the drift diffusion model\code{DDM()},
 the log-normal race model (\code{LNR()}), the linear ballistic model (\code{LBA()}),
-the racing diffusion model (\code{RDM()}, \code{RDMt0natural()}), or define your own
+the racing diffusion model \code{RDM()}, or define your own
 model functions.}
 
 \item{data}{A data frame. \code{data} can be used to automatically detect
@@ -81,6 +82,30 @@ See \code{DDM()} for an example of such transformations}
 if the conventional bound aren't desired.
 see \code{DDM()} for an example of such bounds. Bounds are used to set limits to
 the likelihood landscape that cannot reasonable be achieved with \code{transform}}
+
+\item{parameter_design}{A list specifying linear reparameterisations of model
+parameters in terms of sampled parameters. It must contain:
+\describe{
+\item{\code{weights}}{A named numeric matrix where each row defines one
+reparameterised model parameter and each column is either a sampled
+parameter name or the name of a function in \code{functions}. The row names
+become the names of the reparameterised model parameters. The value in
+each cell is the weight applied to that column's contribution.}
+}
+
+Example — a static reparameterisation of \code{alphaPos} and \code{alphaNeg} into mean and difference
+components:
+\preformatted{
+  parameter_design = list(
+    weights = matrix(
+      c(1,  0.5,
+        1, -0.5),
+      nrow = 2, byrow = TRUE,
+      dimnames = list(c("alphaPos", "alphaNeg"),
+                      c("alphaMean", "alphaDiff"))
+    )
+  )
+  }}
 
 \item{...}{Additional, optional arguments}
 }

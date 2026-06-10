@@ -1,0 +1,13 @@
+#!/bin/sh
+
+echo "Running cleanup..."
+
+# Remove configure-generated files
+rm -f src/Makevars
+rm -f src/Makevars.tmp
+rm -f config.status config.log config.cache
+
+# Autoconf leftovers
+rm -rf autom4te.cache
+
+echo "Cleanup complete."

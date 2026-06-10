@@ -1,0 +1,137 @@
+#!/bin/sh
+# configure — build-time options for EMC2
+# Generated from configure (hand-written).
+#
+# Usage:
+#   R CMD INSTALL .
+#   R CMD INSTALL --configure-args="[OPTIONS]" .
+#
+# In R:
+#   devtools::install(args = c("--configure-args='[OPTIONS]'"))
+#
+# Run ./configure --help for available options.
+
+# --------------------------------------------------------------------------- #
+#  Defaults                                                                    #
+# --------------------------------------------------------------------------- #
+PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
+FAST_MATH=no        # fast-math disabled by default (use --enable-fast-math)
+VEC_REPORT=no       # vectorisation report disabled by default
+ENABLE_NATIVE=no    # native optimizations disabled by default
+
+# --------------------------------------------------------------------------- #
+#  Argument parsing                                                            #
+# --------------------------------------------------------------------------- #
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h)
+      cat <<EOF
+
+configure options for EMC2:
+
+  --with-pnorm-mode=N     Select pnorm implementation (default: 1):
+                            0  R::pnorm        exact, not thread-safe and slow
+                            1  Hart (1968)     near-double precision (~1.2e-15),
+                                               thread-safe  [default]
+                            2  A&S 7.1.26      single-precision quality (~1.5e-7),
+                                               thread-safe, best vectorisability
+
+  --enable-fast-math      Add -ffast-math -fno-math-errno (default: disabled).
+                          Improves speed but may affect floating-point semantics.
+                          Recommended only with --with-pnorm-mode=1 or =2.
+
+  --native                Add --march=native (default: disabled).
+                          Improves speed by applying more aggressive optimizations.
+                          Disabled by default for CRAN compatibility.
+
+  --help, -h              Show this help message and exit.
+
+Examples:
+  R CMD INSTALL .
+  R CMD INSTALL --configure-args="--with-pnorm-mode=1 --enable-fast-math --native" .
+
+EOF
+      exit 0
+      ;;
+    --with-pnorm-mode=*)
+      PNORM_MODE="${arg#*=}"
+      case "$PNORM_MODE" in
+        0|1|2) ;;
+        *)
+          echo "configure: error: --with-pnorm-mode must be 0, 1, or 2 (got '$PNORM_MODE')" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    --enable-fast-math)
+      FAST_MATH=yes
+      ;;
+    --disable-fast-math)
+      FAST_MATH=no
+      ;;
+    --native)
+      ENABLE_NATIVE=yes
+      ;;
+    *)
+      echo "configure: warning: unrecognised option '$arg' (ignored)" >&2
+      ;;
+  esac
+done
+
+# --------------------------------------------------------------------------- #
+#  Derived flags                                                               #
+# --------------------------------------------------------------------------- #
+FAST_MATH_FLAGS=""
+if [ "$FAST_MATH" = "yes" ]; then
+  FAST_MATH_FLAGS="-ffast-math -fno-math-errno"
+fi
+
+# --------------------------------------------------------------------------- #
+#  Platform detection — Accelerate framework (macOS only)                     #
+# --------------------------------------------------------------------------- #
+ACCELERATE_LIBS=""
+case "$(uname)" in
+  Darwin) ACCELERATE_LIBS="-framework Accelerate" ;;
+esac
+
+# Optimization flags - need to be disabled by default for CRAN compatibility
+EXTRA_CXXFLAGS=""
+if [ "$FAST_MATH" = "yes" ]; then
+  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
+fi
+
+# Only enable aggressive optimization flags if explicitly requested
+if [ "$ENABLE_NATIVE" = "yes" ]; then
+  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -O3 -march=native"
+fi
+
+# --------------------------------------------------------------------------- #
+#  Summary                                                                     #
+# --------------------------------------------------------------------------- #
+echo "configure: EMC2 build configuration"
+echo "  PNORM_MODE    : $PNORM_MODE"
+echo "  fast-math     : $FAST_MATH"
+echo "  native        : $ENABLE_NATIVE"
+echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
+
+# --------------------------------------------------------------------------- #
+#  Write src/Makevars from src/Makevars.in                                    #
+# --------------------------------------------------------------------------- #
+sed \
+  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
+  -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
+  -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
+  src/Makevars.in > src/Makevars
+
+echo "configure: src/Makevars written"
+
+## Also write into build_info.h.in, so that we can print how it was built from within emc
+sed \
+  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
+  -e "s|@FAST_MATH@|${FAST_MATH}|g" \
+  -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
+  -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
+  -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
+  inst/include/build_info.h.in > inst/include/build_info.h
+
+echo "configure: inst/include/build_info.h written"

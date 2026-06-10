@@ -1249,15 +1249,21 @@ plot_cdf <- function(input,
   # -------------------------------------------------------------------
   # 3) SECOND BIG LOOP: Plot one panel per group_key
   # -------------------------------------------------------------------
-  if(!is.null(layout)){
-    oldpar <- par(no.readonly = TRUE)
-    on.exit(par(oldpar))
+  set.par <- !isFALSE(dots$set.par)  # NULL or TRUE defaults to setting par
+  dots$set.par <- NULL
+  if(!is.null(layout)) {
+    if(set.par) {
+      oldpar <- par(no.readonly = TRUE)
+      on.exit(par(oldpar))
+    }
   }
   # layout
-  if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
-  } else {
-    par(mfrow = layout)
+  if(set.par) {
+    if (any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
+    } else {
+      par(mfrow = layout)
+    }
   }
 
   # define a global y-limit (with a bit of headroom)

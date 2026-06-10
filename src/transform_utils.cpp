@@ -1,5 +1,7 @@
 // transform_utils.cpp
+#include "math_utils.h"
 #include "transform_utils.h"
+#include "pnorm_utils.h"
 
 using namespace Rcpp;
 using std::string;
@@ -173,39 +175,69 @@ NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<Transf
 }
 
 
-Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
-                                  const std::vector<BoundSpec>& specs)
+// void, pass result to avoid repeated allocation
+void c_do_bound_pt(const ParamTable& pt,
+                   const std::vector<BoundSpec>& specs,
+                   std::vector<int>& result)
 {
-  using Rcpp::LogicalVector;
-  using Rcpp::NumericMatrix;
-
-  const NumericMatrix& base = pt.base;
+  const Rcpp::NumericMatrix& base = pt.base;
   const int nrows = base.nrow();
 
-  LogicalVector result(nrows, true);
+  std::fill(result.begin(), result.begin() + nrows, 1);
+  int* res = result.data();
 
-  for (std::size_t j = 0; j < specs.size(); ++j) {
-    const BoundSpec& bs = specs[j];
-    const int col_idx   = bs.col_idx;   // MUST be a base-column index
-    const double min_v  = bs.min_val;
-    const double max_v  = bs.max_val;
-    const bool has_exc  = bs.has_exception;
-    const double exc_val= bs.exception_val;
+  for (const BoundSpec& bs : specs) {
+    const int    col_idx = bs.col_idx;
+    const double min_v   = bs.min_val;
+    const double max_v   = bs.max_val;
+    const bool   has_exc = bs.has_exception;
+    const double exc_val = bs.exception_val;
 
+    const double* col = &base(0, col_idx);
+
+#pragma omp simd
     for (int i = 0; i < nrows; ++i) {
-      const double val = base(i, col_idx);
-      bool ok = (val > min_v && val < max_v);
-      if (!ok && has_exc) {
-        ok = (val == exc_val);
-      }
-      if (result[i] && !ok) {
-        result[i] = false;
-      }
+      const double v = col[i];
+      bool ok = (v > min_v && v < max_v);
+      if (has_exc) ok = ok || (v == exc_val);
+      res[i] = res[i] & (ok ? 1 : 0);
     }
   }
-
-  return result;
 }
+
+// Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
+//                                   const std::vector<BoundSpec>& specs)
+// {
+//   using Rcpp::LogicalVector;
+//   using Rcpp::NumericMatrix;
+//
+//   const NumericMatrix& base = pt.base;
+//   const int nrows = base.nrow();
+//
+//   LogicalVector result(nrows, true);
+//
+//   for (std::size_t j = 0; j < specs.size(); ++j) {
+//     const BoundSpec& bs = specs[j];
+//     const int col_idx   = bs.col_idx;   // MUST be a base-column index
+//     const double min_v  = bs.min_val;
+//     const double max_v  = bs.max_val;
+//     const bool has_exc  = bs.has_exception;
+//     const double exc_val= bs.exception_val;
+//
+//     for (int i = 0; i < nrows; ++i) {
+//       const double val = base(i, col_idx);
+//       bool ok = (val > min_v && val < max_v);
+//       if (!ok && has_exc) {
+//         ok = (val == exc_val);
+//       }
+//       if (result[i] && !ok) {
+//         result[i] = false;
+//       }
+//     }
+//   }
+//
+//   return result;
+// }
 
 // ---------------------
 // c_do_transform_pt (ParamTable version)
@@ -223,22 +255,20 @@ void c_do_transform_pt(ParamTable& pt,
     const double lw         = sp.lower;
     const double up         = sp.upper;
 
-    double* col = &pt.base(0, col_idx);
+    double* __restrict__ col = &pt.base(0, col_idx);
 
     switch (c) {
     case EXP: {
-      for (int i = 0; i < nrow; ++i) {
-      col[i] = lw + std::exp(col[i]);
-    }
+      vec_exp_offset(col, nrow, lw);
       break;
     }
     case PNORM: {
-      const double range = up - lw;
-      for (int i = 0; i < nrow; ++i) {
-        col[i] = lw + range *
-          R::pnorm(col[i], 0.0, 1.0, 1, 0);
-      }
-      break;
+    const double range = up - lw;
+    for (int i = 0; i < nrow; ++i) {
+      col[i] = lw + range * PNORM_STD(col[i], true, false);
+      // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
+    }
+    break;
     }
     case IDENTITY:
     default:

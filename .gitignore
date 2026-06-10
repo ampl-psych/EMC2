@@ -9,3 +9,6 @@ docs
 .vscode
 settings.json
 paper
+.positai
+src/Makevars
+inst/include/build_info.h

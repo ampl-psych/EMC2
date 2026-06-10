@@ -94,6 +94,7 @@
 #' @importFrom stats varimax
 #' @importFrom utils combn
 #' @importFrom utils head
+#' @importFrom utils tail
 #' @importFrom WienR dWDM
 #' @importFrom WienR pWDM
 #' @importFrom WienR rWDM

@@ -36,16 +36,18 @@ warning. For some unbalanced designs, this is unavoidable and the warning can be
 }
 \examples{
 # Create subject-level design 
-subj_design <- design(data = forstmann, model = DDM,
-                      formula = list(v ~ S, a ~ E, t0 ~ 1),
-                      contrasts = list(S = contr.helmert))
+subj_design <- design(
+  data = forstmann, model = DDM,
+  formula = list(v ~ S, a ~ E, t0 ~ 1),
+  contrasts = list(S = contr.helmert)
+)
 # Add some age covariate and roughly demeans
 # Demeaning is important to ensure that the interpretation of the group-level intercept
 # is the mean of the group (i.e., 'mu' still represents the group-level mean)
-forstmann$age <- as.numeric(forstmann$subjects) -mean(as.numeric(forstmann$subjects))
+forstmann$age <- as.numeric(forstmann$subjects) - mean(as.numeric(forstmann$subjects))
 # Create fake group column
 forstmann$group <- ifelse(forstmann$subjects \%in\%
-              unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
+  unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
 
 # Create group-level design matrices
 group_des <- group_design(

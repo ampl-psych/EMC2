@@ -8,7 +8,10 @@
 ^pkgdown$
 ^\.RData$
 ^\.json$
+^Rplots[.]pdf$
 ^\.vscode$
 ^paper$
 ^\.settings\.json$
 
+^\.positai$
+^\.claude$

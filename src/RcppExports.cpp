@@ -11,6 +11,15 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// emc2_build_info
+void emc2_build_info();
+RcppExport SEXP _EMC2_emc2_build_info() {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    emc2_build_info();
+    return R_NilValue;
+END_RCPP
+}
 // EMC2_call_custom_trend
 Rcpp::NumericVector EMC2_call_custom_trend(Rcpp::NumericMatrix trend_pars, Rcpp::NumericMatrix input, SEXP funptrSEXP);
 RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
@@ -676,6 +685,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_EMC2_emc2_build_info", (DL_FUNC) &_EMC2_emc2_build_info, 0},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},

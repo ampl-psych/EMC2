@@ -238,10 +238,9 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
   }
 
   df <- data
-  df[colnames(df)] <- lapply(colnames(df), function(v) {
-    f <- df[[v]]
-    factor(paste0(v, f))
-  })
+  for(i in 1:ncol(df)){
+    df[,i] <- factor(paste0(colnames(df)[i], df[,i]))
+  }
   subjects <- unique(data$subjects)
   all_pars <- setNames(vector("list", length(subjects)), subjects)
   for(sub in subjects){
@@ -352,7 +351,7 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     }
 
     rownames(parameters) <- design$Ffactors$subjects
-    pars <- get_pars_matrix_oo(parameters, data, model())
+    pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE)
     if(!add_recalculated){
       base_names <- intersect(names(model()$p_types), colnames(pars))
       pars <- pars[, base_names, drop = FALSE]

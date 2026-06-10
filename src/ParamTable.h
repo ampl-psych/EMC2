@@ -1,4 +1,8 @@
 #pragma once
+#ifndef PARAM_TABLE_H
+#define PARAM_TABLE_H
+
+#pragma once
 
 #include <Rcpp.h>
 #include <unordered_set>
@@ -414,6 +418,8 @@ struct ParamTable {
     }
 
     const int T = n_trials;
+    std::vector<double> self_copy;
+    self_copy.resize(T);
 
     for (int i = 0; i < n_params; ++i) {
       if (!use[i]) continue;
@@ -433,11 +439,9 @@ struct ParamTable {
       const int K = design.ncol();
 
       // Preserve self column if needed
-      std::vector<double> self_copy;
       double* out = &base(0, out_idx);
 
       if (entry.uses_self) {
-        self_copy.resize(T);
         const double* src = out;
         std::copy(src, src + T, self_copy.begin());
       }
@@ -450,27 +454,21 @@ struct ParamTable {
         int cidx = entry.coef_idx[j];
         if (cidx < 0) continue;
 
-        const double* coef =
-          (entry.uses_self && cidx == out_idx)
-          ? self_copy.data()
-            : &base(0, cidx);
+        const double* coef = (entry.uses_self && cidx == out_idx) ? self_copy.data() : &base(0, cidx);
 
         const double* d = &design(0, j);
 
-        // loop over trial rows
+
 #pragma omp simd
         for (int r = 0; r < T; ++r) {
-          double cr = coef[r];   // parameter coefficient
-          double dr = d[r];        // design row value
+          double cr = coef[r];
+          double dr = d[r];
 
           if (dr == 0.0 || cr == 0.0) {
             // contributes 0, do nothing
           } else {
             out[r] += cr * dr;
           }
-          // old code just did this:
-          // double v = coef[r] * d[r];
-          // out[r] += v;
         }
       }
     }
@@ -479,15 +477,29 @@ struct ParamTable {
 
   // Zero the entire base matrix
   void reset_base_to_zero() {
-    const int n = n_trials;
-    const int p = base.ncol();
-    for (int j = 0; j < p; ++j) {
-      double* col = &base(0, j);
-      for (int r = 0; r < n; ++r) {
-        col[r] = 0.0;
-      }
+    // Make use of contiguous memory - extremely fast simd usage.
+    const int T = n_trials;
+    const int P = base.ncol();
+    const int N = T * P;
+
+    double* data = base.begin();  // contiguous pointer to all elements
+
+    #pragma omp simd
+    for (int i = 0; i < N; ++i) {
+      data[i] = 0.0;
     }
   }
+  // void reset_base_to_zero() {
+  //   const int n = n_trials;
+  //   const int p = base.ncol();
+  //   for (int j = 0; j < p; ++j) {
+  //     double* col = &base(0, j);
+  //     #pragma omp simd  // tell compiler to vectorize
+  //     for (int r = 0; r < n; ++r) {
+  //       col[r] = 0.0;
+  //     }
+  //   }
+  // }
 
   // Fill columns corresponding to names(p_vector) with that scalar value
   void fill_from_p_vector(const Rcpp::NumericVector& p_vector) {
@@ -507,6 +519,7 @@ struct ParamTable {
       int j = it->second;
       double val = p_vector[i];
       double* col = &base(0, j);
+      #pragma omp simd  // hint for the compiler
       for (int r = 0; r < n_trials; ++r) {
         col[r] = val;
       }
@@ -530,6 +543,8 @@ struct ParamTable {
       if (base_idx < 0) continue;   // particle has a param we don't use
       double val = particles(row, j);
       double* col = &base(0, base_idx);
+
+      #pragma omp simd  // can be auto-vectorised
       for (int r = 0; r < n_trials; ++r) {
         col[r] = val;
       }
@@ -547,3 +562,5 @@ Rcpp::CharacterVector names_excluding(const Rcpp::CharacterVector& names,
 
 Rcpp::NumericMatrix add_constants_columns(Rcpp::NumericMatrix p_matrix,
                                           Rcpp::NumericVector constants);
+
+#endif

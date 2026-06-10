@@ -15,9 +15,9 @@
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' Example: `c("right", "left")`
 #' @param model A function, specifies the model type.
-#' Choose from the drift diffusion model (`DDM()`, `DDMt0natural()`),
+#' Choose from the drift diffusion model`DDM()`,
 #' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
-#' the racing diffusion model (`RDM()`, `RDMt0natural()`), or define your own
+#' the racing diffusion model `RDM()`, or define your own
 #' model functions.
 #' @param data A data frame. `data` can be used to automatically detect
 #'  `factors`, `Rlevels` and `covariates` in a dataset. The variable `R` needs
@@ -47,6 +47,29 @@
 #' if the conventional bound aren't desired.
 #' see `DDM()` for an example of such bounds. Bounds are used to set limits to
 #' the likelihood landscape that cannot reasonable be achieved with `transform`
+#' @param parameter_design A list specifying linear reparameterisations of model
+#'   parameters in terms of sampled parameters. It must contain:
+#'   \describe{
+#'     \item{`weights`}{A named numeric matrix where each row defines one
+#'       reparameterised model parameter and each column is either a sampled
+#'       parameter name or the name of a function in `functions`. The row names
+#'       become the names of the reparameterised model parameters. The value in
+#'       each cell is the weight applied to that column's contribution.}
+#'   }
+#'
+#'   Example — a static reparameterisation of `alphaPos` and `alphaNeg` into mean and difference
+#'   components:
+#'   \preformatted{
+#'   parameter_design = list(
+#'     weights = matrix(
+#'       c(1,  0.5,
+#'         1, -0.5),
+#'       nrow = 2, byrow = TRUE,
+#'       dimnames = list(c("alphaPos", "alphaNeg"),
+#'                       c("alphaMean", "alphaDiff"))
+#'     )
+#'   )
+#'   }
 #' @param ... Additional, optional arguments
 #'
 #' @return A design list.
@@ -78,14 +101,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                    contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
                    functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
                    trend=NULL,
-                   transform = NULL, bound = NULL, ...){
+                   transform = NULL, bound = NULL, parameter_design=NULL,
+                   ...){
 
   optionals <- list(...)
-  # if(!is.null(optionals$trend)){
-  #   trend <- optionals$trend
-  # } else {
-  #   trend <- NULL
-  # }
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
   } else {
@@ -130,8 +149,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
-  if (!is.null(trend)) {
-    formula <- check_trend(trend,c(names(functions), covariates), model, formula)
+
+  if(!is.null(parameter_design)) {
+    parameter_design <- parse_parameter_design(parameter_design)  # translate once here
+    formula <- check_parameter_design(parameter_design, formula, constants)
+  }
+  if(!is.null(trend)) {
+    formula <- check_trend(trend,c(names(functions), covariates), model, formula, parameter_design)
   }
 
   # Check if all parameters in the model are specified in the formula
@@ -139,6 +163,12 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]
+
+    # parameter_design output parameters don't need to be in formula
+    if (!is.null(parameter_design)) {
+      pd_targets <- rownames(parameter_design$weights)
+      not_specified <- not_specified[!not_specified %in% pd_targets]
+    }
     sampled_by_default <- intersect(not_specified, model_sampled_by_default(model()))
     assumed_constant <- setdiff(not_specified, sampled_by_default)
     if (length(assumed_constant) > 0) {
@@ -169,7 +199,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
-                 Fcovariates=covariates,Ffunctions=functions,model=model)
+                 Fcovariates=covariates,Ffunctions=functions,model=model,
+                 parameter_design=parameter_design)
   class(design) <- "emc.design"
   if (!is.null(trend)) {
     # check for at = 'lR'
@@ -179,17 +210,23 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
     }
     model <- update_model_trend(trend, model)
-    model_list <- model()
-    model <- function(){return(model_list)}
+    design$model <- model
   }
   p_vector <- sampled_pars(design)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
-  # Check if any terms are not in model parameters
+  # Check that all formula LHS terms are valid model p_types or parameter_design sources
   if (!is.null(formula) && !all(lhs_terms %in% names(model()$p_types))) {
-    invalid_terms <- lhs_terms[!lhs_terms %in% names(model()$p_types)]
-    stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
-                " in formula not found in model p_types"))
+    if(!is.null(parameter_design)) {
+      pd_sources <- colnames(parameter_design$weights)
+    } else {
+      pd_sources <- character(0)
+    }
+    invalid_terms <- lhs_terms[!lhs_terms %in% c(names(model()$p_types), pd_sources)]
+    if (length(invalid_terms) > 0) {
+      stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse = ", "),
+                  " in formula not found in model p_types"))
+    }
   }
   model_list <- model()
   model_list$transform <- fill_transform(transform,model)
@@ -399,17 +436,17 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   {
     nacc <- length(unique(da$lR))
     # contract output
-    cells <- paste(
-      apply(do.call(cbind,lapply(designs,function(x){
-        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
+    design_expands <- lapply(designs, function(x) attr(x, "expand"))
+    cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
+    cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
     # Make sure that if row is included for a trial so are other rows
     if (!is.null(Fcov)) {
       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
-      cells <- paste(cells,apply(da[,nFcov,drop=FALSE],1,paste,collapse="+"),sep="+")
+      cov_cells <- do.call(paste, c(da[, nFcov, drop = FALSE], list(sep = "+")))
+      cells <- paste(cells, cov_cells, sep = "+")
     }
     if (!is.null(Ffun))
-      cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+      cells <- paste(cells, do.call(paste, c(da[, Ffun, drop = FALSE], list(sep = "+"))), sep = "+")
 
     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
                                     each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
@@ -417,20 +454,17 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
-    attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
     lR1 <- da$lR==levels(da$lR)[[1]]
-    attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
+    attr(out,"expand_winner") <- as.integer(factor(cells[lR1],levels=unique(cells[lR1])))
     attr(out,"s_expand") <- da$subjects
     attr(out,"designs") <- lapply(designs,function(x){
       attr(x,"expand") <- attr(x,"expand")[contract]; x})
 
     # indices to use to contract further ignoring rt then expand back
-    cells_nort <- paste(
-      apply(do.call(cbind,lapply(designs,function(x){
-        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+    cells_nort <- paste(cells_design, da$subjects, da$R, da$lR, sep = "+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
-    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
+    attr(out,"expand_nort") <- as.integer(factor(cells_nort,levels=unique(cells_nort)))
 
     # cells_nort <- paste(
     #   apply(do.call(cbind,lapply(designs,function(x){
@@ -444,11 +478,9 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # indices to use to contract ignoring rt and response (R), then expand back
-    cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
-      apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-      da$subjects,da$lR,sep="+")[contract]
+    cells_nortR <- paste(cells_design, da$subjects, da$lR, sep = "+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
+    attr(out,"expand_nortR") <- as.integer(factor(cells_nortR,levels=unique(cells_nortR)))
 
     # # indices to use to contract ignoring rt and response (R), then expand back
     # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
@@ -547,7 +579,7 @@ rt_check_function <- function(data){
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
-                         compress_dms=TRUE)
+                         compress_dms=TRUE, memory_saver = FALSE)
 {
   if (is.null(model)) {
     if (is.null(design$model))
@@ -601,6 +633,20 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
+  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
+  if(!is.null(model_info$trend)) {
+    trend_list <- model_info$trend
+    for(i in 1:length(trend_list)) {
+      current_trend <- trend_list[[i]]
+      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+        # check if any NAs exist in the covariate
+        for(covariate in current_trend$covariate) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        }
+      }
+    }
+  }
+
   if (is.null(model_info$p_types) | is.null(model_info$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
@@ -610,11 +656,12 @@ design_model <- function(data,design,model=NULL,
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
   pnames <- names(model_info$p_types)
+
   if (!is.list(design$Clist[[1]])[1]){
-    design$Clist <- stats::setNames(lapply(1:length(pnames),
-                                           function(x)design$Clist),pnames)
+    design$Clist <- stats::setNames(lapply(1:length(nams),
+                                           function(x)design$Clist),nams)
   } else {
-   missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
+   missing_p_types <- nams[!(nams %in% names(design$Clist))]
    if (length(missing_p_types)>0) {
      nok <- length(design$Clist)
       for (i in 1:length(missing_p_types)) {
@@ -623,7 +670,7 @@ design_model <- function(data,design,model=NULL,
       }
     }
   }
-  for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+  for (i in nams) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
   out <- mapply(
     function(form, p_name) {
@@ -642,6 +689,11 @@ design_model <- function(data,design,model=NULL,
     SIMPLIFY = FALSE
   )
   names(out) <- names(design$Flist)
+  if (!is.null(design$parameter_design)) {
+    design$parameter_design <- parse_parameter_design(design$parameter_design)
+    pd_dms <- expand_parameter_design(design$parameter_design, da, compress_dms = compress_dms)
+    out <- c(out, pd_dms)
+  }
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
@@ -654,20 +706,34 @@ design_model <- function(data,design,model=NULL,
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
+    # attr(dadm,"reparam_designs") <- reparam_dms   # SM TO DO: RECREATE FUNCTIONALITY OF LINEAR MAPPING
     attr(dadm,"s_expand") <- da$subjects
     # attr(dadm,"expand_all") <- 1:nrow(dadm)
     if(is.null(dadm$lR)){
-      attr(dadm,"expand") <- 1:nrow(dadm)
+      attr(dadm,"expand") <- seq_len(nrow(dadm))
     } else{
-      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+      attr(dadm,"expand") <- seq_len(nrow(dadm)/length(unique(dadm$lR)))
     }
   }
-  p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
-  bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
-  if (length(bad_constants) > 0)
-    stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
 
-  # Pick out constants
+  #
+  p_names_raw <- unlist(lapply(out, function(x) {
+    ass <- attr(x, "assign")  # use assign to filter out factor columns
+    dimnames(x)[[2]][!is.na(ass)] }), use.names = FALSE)
+
+  # Duplicates are only allowed if they involve parameter_design columns
+  is_pd <- vapply(out, function(x) isTRUE(attr(x, "parameter_design")), logical(1))
+  regular_p_names <- unlist(lapply(out[!is_pd], function(x) {
+    ass <- attr(x, "assign")  # use assign to filter out factor columns
+    dimnames(x)[[2]][!is.na(ass)]}), use.names = FALSE)
+
+  bad_dups <- regular_p_names[duplicated(regular_p_names)]
+  if (length(bad_dups) > 0) {
+    stop("Duplicated parameter names in design matrices: ",
+         paste(bad_dups, collapse = ", "))
+  }
+
+  p_names <- unique(p_names_raw)
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
@@ -680,8 +746,123 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- if (!is.null(data$rt)) is.finite(data$rt) else rep(TRUE, nrow(data))
   attr(dadm,"s_data") <- data$subjects
+  if (memory_saver) {
+    if (!is.null(attr(dadm, "custom_ll"))) {
+      warning("memory_saver not supported for custom likelihoods; ignored")
+      return(dadm)
+    }
+    designs <- attr(dadm, "designs")
+    pool <- build_design_pool(dadm, designs)
+    if (!is.null(pool)) {
+      attr(dadm, "design_pool") <- pool$pool
+      attr(dadm, "design_pool_map") <- pool$map
+      attr(dadm, "designs") <- NULL
+    }
+    model_list <- model()
+    if (!has_trend_map(model_list)) attr(dadm, "covariate_maps") <- NULL
+    keep <- resolve_memory_columns(dadm, model_list)
+    if (length(keep) > 0) {
+      attrs <- attributes(dadm)
+      dadm <- dadm[, keep, drop = FALSE]
+      for (nm in setdiff(names(attrs), c("names", "row.names", "class"))) {
+        attr(dadm, nm) <- attrs[[nm]]
+      }
+    }
+  }
   dadm
 }
+
+
+
+# Parse parameter_design: now only accepts weights matrix format
+parse_parameter_design <- function(parameter_design) {
+  if (!is.matrix(parameter_design$weights))
+    stop("parameter_design must contain a 'weights' matrix")
+  parameter_design
+}
+
+
+# Check and update formula list for parameter_design
+check_parameter_design <- function(parameter_design, formula, constants = NULL) {
+  if (is.null(parameter_design)) return(formula)
+
+  weights     <- parameter_design$weights
+  source_pars <- colnames(weights)
+  target_pars <- rownames(weights)
+
+  # --- 1. Error if any target parameter is in constants ----------------------
+  if (!is.null(constants)) {
+    bad_constants <- target_pars[target_pars %in% names(constants)]
+    if (length(bad_constants) > 0)
+      stop(paste0(
+        "Parameter(s) ", paste(bad_constants, collapse = ", "),
+        " appear in both `parameter_design` targets and `constants`. ",
+        "parameter_design output parameters cannot be constants."
+      ))
+  }
+
+  # --- 2. Extract current LHS terms from formula -----------------------------
+  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+
+  # --- 3. Error if any target parameter appears as a formula LHS -------------
+  bad_formula <- target_pars[target_pars %in% lhs_terms]
+  if (length(bad_formula) > 0)
+    stop(paste0(
+      "Parameter(s) ", paste(bad_formula, collapse = ", "),
+      " appear in both `parameter_design` targets and `formula`. ",
+      "parameter_design output parameters should not have their own formula."
+    ))
+
+  # --- 4. Auto-add intercept formulas for source parameters not yet in formula
+  missing_sources <- source_pars[!source_pars %in% lhs_terms]
+  if (length(missing_sources) > 0) {
+    message(paste0(
+      "Intercept formula added for parameter_design source parameter(s): ",
+      paste(missing_sources, collapse = ", ")
+    ))
+    new_formulas <- lapply(missing_sources, function(p) stats::as.formula(paste0(p, " ~ 1")))
+    formula <- c(formula, new_formulas)
+  }
+
+  return(formula)
+}
+
+
+# Expand a parameter_design weights matrix into a named list of design matrices,
+# one per output parameter (row of weights)
+expand_parameter_design <- function(parameter_design, da, compress_dms = TRUE) {
+  weights  <- parameter_design$weights
+  n_trials <- nrow(da)
+  out      <- list()
+
+  for (par in rownames(weights)) {
+    # Each output parameter gets a constant design matrix (one unique row)
+    dm <- matrix(
+      weights[par, ],
+      nrow = 1L,
+      ncol = ncol(weights),
+      dimnames = list(NULL, colnames(weights))
+    )
+
+    if (compress_dms) {
+      attr(dm, "expand")           <- rep(1L, n_trials)
+      attr(dm, "parameter_design") <- TRUE
+      attr(dm, "assign")           <- rep(0L, ncol(dm))
+    } else {
+      dm <- dm[rep(1L, n_trials), , drop = FALSE]
+      attr(dm, "expand")           <- seq_len(n_trials)
+      attr(dm, "parameter_design") <- TRUE
+      attr(dm, "assign")           <- rep(0L, ncol(dm))
+    }
+
+    out[[par]] <- dm
+  }
+
+  return(out)
+}
+
+
+
 
 fast_mm <- function(form, Clist = NULL, da) {
   # 1. Get Clist from form if needed
@@ -853,18 +1034,16 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
     out_dm <- dm[!dups, , drop = FALSE]
 
     if (!is.null(da) && !all_cells_dm && nrow(da) != 0) {
-      out <- cbind(
-        da[!dups, colnames(da) != "subjects", drop = FALSE],
-        out_dm
-      )
+      da_cols <- da[!dups, colnames(da) != "subjects", drop = FALSE]
+      out <- cbind(da_cols, out_dm)
+      # Prepend NA to assign for each prepended da column
+      attr(out, "assign") <- c(rep(NA_integer_, ncol(da_cols)), ass)
     } else {
       out <- out_dm
+      attr(out, "assign") <- ass
     }
-
-    attr(out, "expand")    <- as.numeric(factor(cells, levels = unique(cells)))
-    attr(out, "assign")    <- ass
-    attr(out, "contrasts") <- contr
-
+    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
+    attr(out,"contrasts") <- contr
     out
   }
   out <- make_full_dm(form, Clist, da)
@@ -909,6 +1088,7 @@ dm_list <- function(dadm)
   p_names <- attr(dadm,"p_names")
   sampled_p_names <- attr(dadm,"sampled_p_names")
   designs <- attr(dadm,"designs")
+  reparam_designs <- attr(dadm, "reparam_designs")
   expand <- attr(dadm,"expand")
   s_expand <- attr(dadm,"s_expand")
   unique_nort <- attr(dadm,"unique_nort")
@@ -943,12 +1123,20 @@ dm_list <- function(dadm)
       isin1 <- s_expand==i             # da
       isin2 <- attr(dadm,"s_data")==i  # data
       if(length(isin2) > 0){
-        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+        attr(dl[[i]],"expand") <- as.integer(expand_winner[isin2]-min(expand_winner[isin2]) + 1)
       }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
-      attr(dl[[i]],"designs") <- sub_design(designs,isin)
+      if (!is.null(attr(dadm, "design_pool"))) {
+        pool <- attr(dadm, "design_pool")
+        attr(dl[[i]], "design_pool") <- pool[isin, , drop = FALSE]
+        attr(dl[[i]], "design_pool_map") <- attr(dadm, "design_pool_map")
+        attr(dl[[i]], "designs") <- NULL
+      } else {
+        attr(dl[[i]],"designs") <- sub_design(designs,isin)
+        attr(dl[[i]],"reparam_designs") <- sub_design(reparam_designs, isin)
+      }
       # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL

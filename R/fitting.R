@@ -124,9 +124,9 @@ run_emc <- function(emc, stage, stop_criteria,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-    if(getOption("emc2.print_iteration_duration", TRUE)) { print(Sys.time()-t0) }
+
     class(sub_emc) <- "emc"
-    if(cores_for_chains > 1) sub_emc <- pointer_reset_wrapper(sub_emc, emc)
+    if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)
@@ -150,7 +150,37 @@ run_emc <- function(emc, stage, stop_criteria,
       save(emc, file = fileName)
       emc <- restore_duplicates(emc)
     }
+
+    elapsed <- Sys.time() - t0
+    if (verbose) {
+      # get Gelman's diagnostic
+      gd <- progress$gd$gd
+      gd_message <- NULL
+      if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
+      # get min effective sample size (ESS)
+      ess_message <- NULL
+      if(stage == 'sample' & !is.null(progress$curr_min_es)) {
+        ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
+      }
+      # Get current iteration count for the sample stage
+      current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
+      target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
+
+      # this one is still a little buggy, should fix
+      rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
+                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
+
+      message(sprintf("[%s | try=%d | iters=%d%s%s] Duration: %s - ETA: %s-%s",
+                      stage, progress$trys, progress$total_iters,
+                      ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
+                      ifelse(!is.null(ess_message), ess_message, ""),
+                      format_duration(elapsed),
+                      format_duration(rem$min_time),
+                      format_duration(rem$max_time)))
+    }
   }
+
   emc <- strip_duplicates(emc)
   class(emc) <- "emc"
   return(emc)
@@ -211,10 +241,11 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   else {
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
-    if (verbose)
-      message(trys, ": Iterations ", stage, " = ", total_iters_stage)
+    # use more informative message
+    # if (verbose)
+    #   message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
-  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose,
+  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose=FALSE,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
                  n_blocks)
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
@@ -227,8 +258,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
       curr_min_es <- min(c(ess_summary(emc, selection = select,
                                                 stage = stage, stat_only = TRUE), curr_min_es))
     }
-    if (verbose)
-      message("Smallest effective size = ", round(curr_min_es))
+    # if (verbose)
+    #   message("Smallest effective size = ", round(curr_min_es))
     es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es >
                         min_es)
   }
@@ -263,7 +294,9 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, n_blocks = gd$n_blocks))
+              trys = trys, n_blocks = gd$n_blocks, gd=gd,
+              total_iters_stage=total_iters_stage,
+              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
@@ -373,6 +406,7 @@ set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
 create_eff_proposals <- function(emc, n_cores){
   samples_merged <- merge_chains(emc)
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc))
+
   type <- emc[[1]]$type
   components <- attr(emc[[1]]$data, "components")
   for(i in 1:length(emc)){
@@ -570,6 +604,7 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   n_pars <- sampler$n_pars
   components <- attr(sampler$data, "components")
   nuisance <- sampler$nuisance
+
   if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
       message("Enough unique values detected: ", min_unique)
@@ -632,6 +667,7 @@ loadRData <- function(fileName){
 #' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
+#' @param memory_saver A Boolean. If `TRUE`, store a pooled design representation and drop per-parameter designs from data to reduce memory usage.
 #' @param ... Additional, optional arguments.
 #' @return An uninitialized emc object
 #' @examples dat <- forstmann
@@ -666,7 +702,7 @@ make_emc <- function(data,design,model=NULL,
                     type="standard",
                     n_chains=3,compress=TRUE,rt_resolution=1/60,
                     prior_list = NULL, group_design = NULL,
-                    par_groups=NULL, ...){
+                    par_groups=NULL, memory_saver = FALSE, ...){
   # arguments for future compatibility
   n_factors <- NULL
   nuisance <- NULL
@@ -736,6 +772,7 @@ make_emc <- function(data,design,model=NULL,
   if(compress_passed & any(has_delta_rule)) {
     if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
     else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
+    rt_resolution <- 0.001   # no need to downsample resolution when not compressing
   }
   ## SM END
 
@@ -745,9 +782,13 @@ make_emc <- function(data,design,model=NULL,
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i])
+                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i],
+                                     memory_saver = memory_saver)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
+      if (memory_saver) {
+        warning("memory_saver not supported for custom likelihoods; ignored")
+      }
       dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
                                                design = design[[i]],model=model[[i]])
       sampled_p_names <- attr(design[[i]],"sampled_p_names")
@@ -834,6 +875,7 @@ fix_fileName <- function(x){
 
 check_duplicate_designs <- function(out){
   if(is.data.frame(out$data[[1]])) return(out)
+  if(!is.null(attr(out$data[[1]][[1]], "design_pool"))) return(out)
   for(i in 1:length(out$data)){ # loop over subjects
     designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
     duplicacy <- duplicated(designs)

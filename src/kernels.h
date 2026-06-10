@@ -1,14 +1,37 @@
+#ifndef KERNELS_H
+#define KERNELS_H
+
 #include <unordered_map>
 #include <memory>
 #include <array>
 #include <vector>     //
 #include <Rcpp.h>    //
+#include "nan_check.h"
 #include "EMC2/userfun.hpp"
 
 // View
 struct KernelParsView {
   int n_rows;
   std::vector<const double*> cols;  // cols[k][row] = value for param k at trial row
+};
+
+// Struct for optional kernel arguments. Currently only "q-value resetting" is supported.
+struct KernelArgs {
+  const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
+  // Future extensible fields go here, e.g.:
+  // const double* some_other_col = nullptr;
+};
+
+// Struct for outputs. Outputs sometimes have 1 column, sometimes multiple. Pure C++ (for future threadsafe ops)
+struct KernelOutput {
+  const double* data = nullptr;  // raw pointer into kernel-owned storage
+  int n_rows = 0;
+  int n_cols = 1;                // 1 for all current kernels, N for RescorlaWagner
+
+  // Convenience: element access (column-major, matches R matrix layout)
+  double operator()(int r, int col) const {
+    return data[col * n_rows + r];
+  }
 };
 
 // ---- Types ----
@@ -27,7 +50,8 @@ enum class KernelType {
   Poly2,
   Poly3,
   Poly4,
-  Custom
+  Custom,
+  RescorlaWagner
 };
 
 // Some meta-data for kernels -- mostly for the future
@@ -53,6 +77,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::Poly4:
     return {1, true};   // all current kernels: 1D input, grouping allowed
   case KernelType::Custom: return{1, false};
+  case KernelType::RescorlaWagner: return{-1, false};  // N columns allowed
   }
 
   // default future behaviour: 1D, but no grouping
@@ -69,8 +94,16 @@ protected:
   std::vector<int> expand_idx_;   // 1-based indices
   bool has_expand_idx_ = false;
 
+  // Two separate transpose buffers, one per stream family.
+  // stream_buf_[0] is used for stream code 1 (Q / primary output)
+  // stream_buf_[1] is used for stream code 2 (PE / secondary output)
+  // Subclasses that need more streams can add further buffers explicitly.
+  mutable std::vector<double> stream_buf_[2];
+
 public:
   virtual ~BaseKernel() {}
+
+  virtual void set_kernel_args(const KernelArgs& /*args*/) {}
 
   virtual void run(const KernelParsView& kernel_pars,
                    const Rcpp::NumericMatrix& covariate,
@@ -78,46 +111,24 @@ public:
 
   virtual void reset() {
     out_.clear();
+    stream_buf_[0].clear();
+    stream_buf_[1].clear();
     has_run_ = false;
     expand_idx_.clear();
     has_expand_idx_ = false;
   }
 
+
   bool has_run() const { return has_run_; }
 
-  const std::vector<double>& get_output() const { return out_; }
+  // const std::vector<double>& get_output() const { return out_; }
 
   void set_expand_idx(const std::vector<int>& idx) {
     expand_idx_ = idx;
     has_expand_idx_ = !expand_idx_.empty();
   }
-
   const std::vector<int>& expand_idx() const { return expand_idx_; }
   bool has_expand_idx() const { return has_expand_idx_; }
-
-  void forward_fill_missing_outputs(const Rcpp::NumericMatrix& input,
-                                    const std::vector<int>& comp_idx) {
-    if (input.ncol() < 1) return;
-    if ((int)out_.size() != (int)comp_idx.size()) {
-      Rcpp::stop("BaseKernel::forward_fill_missing_outputs: output length mismatch");
-    }
-
-    for (int j = 0; j < (int)comp_idx.size(); ++j) {
-      int r = comp_idx[j];
-      if (ISNAN(input(r, 0))) {
-        out_[j] = NA_REAL;
-      }
-    }
-
-    double last = NA_REAL;
-    for (int j = 0; j < (int)out_.size(); ++j) {
-      if (ISNAN(out_[j])) {
-        out_[j] = last;
-      } else {
-        last = out_[j];
-      }
-    }
-  }
 
   // Expand compressed out_ (length n_comp) into full length using expand_idx
   void do_expand(const std::vector<int>& expand_idx) {
@@ -136,15 +147,30 @@ public:
     return (code == 1);  // default: only main trajectory
   }
 
-  // single-stream getter, code=1 for main trajectory by default. code=2 for pes in delta, code=3 for xx in new kernels
-  virtual Rcpp::NumericVector get_output_stream(int code) const {
-    using namespace Rcpp;
+  // Returns a KernelOutput view into kernel-owned storage.
+  // For single-column kernels: points directly into out_ (zero-copy).
+  // For multi-column kernels (RescorlaWagner): points into col_major_buf_
+  // which is populated lazily on first call.
+  virtual KernelOutput get_output_stream(int code) const {
     if (code != 1) {
-      stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
+      Rcpp::stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
     }
-    // out_ is already full-length at this point
-    return wrap(out_);  // copies to NumericVector
+    KernelOutput ko;
+    ko.data   = out_.data();
+    ko.n_rows = static_cast<int>(out_.size());
+    ko.n_cols = 1;
+    return ko;
   }
+
+  // // single-stream getter, code=1 for main trajectory by default. code=2 for pes in delta, code=3 for xx in new kernels
+  // virtual Rcpp::NumericVector get_output_stream(int code) const {
+  //   using namespace Rcpp;
+  //   if (code != 1) {
+  //     stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
+  //   }
+  //   // out_ is already full-length at this point
+  //   return wrap(out_);  // copies to NumericVector
+  // }
 
   // Optional: name for each stream
   virtual std::string output_stream_name(int code) const {
@@ -235,51 +261,80 @@ protected:
   double q_ = NA_REAL;             // latest value
   double pe_ = NA_REAL;            // latest PE
   std::vector<double> pes_;        // PE per trial
+  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
 
 public:
   virtual ~DeltaKernel() {}
 
-  const std::vector<double>& get_pes() const {
-    return pes_;
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
   }
+
+  // const std::vector<double>& get_pes() const {
+  //   return pes_;
+  // }
 
   bool has_output_stream(int code) const override {
     return (code >= 1 && code <= 2);
   }
 
-  Rcpp::NumericVector get_output_stream(int code) const override {
-    using namespace Rcpp;
-
+  KernelOutput get_output_stream(int code) const override {
     const int n_full = static_cast<int>(out_.size());
 
     if (code == 1) {
-      // main trajectory: already full-length
-      return wrap(out_);
+      return KernelOutput{ out_.data(), n_full, 1 };
     }
 
     if (code == 2) {
-      NumericVector res(n_full);
-
+      stream_buf_[1].resize(n_full);
       if (!has_expand_idx_) {
-        // no 'at': one-to-one
         if ((int)pes_.size() != n_full)
-          stop("DeltaKernel: pes_ length mismatch");
-        for (int i = 0; i < n_full; ++i) res[i] = pes_[i];
+          Rcpp::stop("DeltaKernel: pes_ length mismatch");
+        for (int i = 0; i < n_full; ++i) stream_buf_[1][i] = pes_[i];
       } else {
-        // with 'at': expand from compressed index
         const auto& idx = expand_idx_;
-        if ((int)idx.size() != n_full)
-          stop("DeltaKernel: expand_idx length mismatch");
-        for (int i = 0; i < n_full; ++i) {
-          int k = idx[i] - 1;  // compressed index
-          res[i] = pes_[k];
-        }
+        for (int i = 0; i < n_full; ++i) stream_buf_[1][i] = pes_[idx[i] - 1];
       }
-      return res;
+      return KernelOutput{ stream_buf_[1].data(), n_full, 1 };
     }
 
-    stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
+    Rcpp::stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
   }
+
+
+  // Rcpp::NumericVector get_output_stream(int code) const override {
+  //   using namespace Rcpp;
+  //
+  //   const int n_full = static_cast<int>(out_.size());
+  //
+  //   if (code == 1) {
+  //     // main trajectory: already full-length
+  //     return wrap(out_);
+  //   }
+  //
+  //   if (code == 2) {
+  //     NumericVector res(n_full);
+  //
+  //     if (!has_expand_idx_) {
+  //       // no 'at': one-to-one
+  //       if ((int)pes_.size() != n_full)
+  //         stop("DeltaKernel: pes_ length mismatch");
+  //       for (int i = 0; i < n_full; ++i) res[i] = pes_[i];
+  //     } else {
+  //       // with 'at': expand from compressed index
+  //       const auto& idx = expand_idx_;
+  //       if ((int)idx.size() != n_full)
+  //         stop("DeltaKernel: expand_idx length mismatch");
+  //       for (int i = 0; i < n_full; ++i) {
+  //         int k = idx[i] - 1;  // compressed index
+  //         res[i] = pes_[k];
+  //       }
+  //     }
+  //     return res;
+  //   }
+  //
+  //   stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
+  // }
 
   std::string output_stream_name(int code) const override {
     if (code == 1) return "Qvalue";
@@ -303,7 +358,7 @@ struct LinIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  out_[j] = x;  // compressed index
                }
              }
@@ -325,7 +380,7 @@ struct LinDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  out_[j] = -x;
                }
                // out_[j] = last;
@@ -353,7 +408,7 @@ struct ExpDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
                }
@@ -382,7 +437,7 @@ struct ExpIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
                }
@@ -411,7 +466,7 @@ struct PowDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
                }
@@ -440,7 +495,7 @@ struct PowIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
                }
@@ -470,7 +525,7 @@ struct Poly2Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
@@ -503,7 +558,7 @@ struct Poly3Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -539,7 +594,7 @@ struct Poly4Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -570,8 +625,6 @@ struct SimpleDelta : DeltaKernel {
                           (int)kernel_pars.cols.size());
              }
 
-             using namespace Rcpp;
-
              const int n_comp = static_cast<int>(comp_idx.size());
              if (n_comp <= 0) {
                out_.clear();
@@ -580,44 +633,38 @@ struct SimpleDelta : DeltaKernel {
                return;
              }
 
-             out_.assign(n_comp, NA_REAL);
-             pes_.assign(n_comp, NA_REAL);
+             // slightly faster -- no-op size check, no need to write anything
+             out_.resize(n_comp);
+             pes_.resize(n_comp);
+             pes_[n_comp - 1] = NA_REAL;
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
+             const double* cov_ptr   = covariate.begin();
 
-             // Initial compressed element
-             int row0 = comp_idx[0];             // full-data row index
-             if (row0 < 0 || row0 >= covariate.size()) {
-               stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
-                    row0, covariate.size());
-             }
+             int row0 = comp_idx[0];
+             q_       = q0_col[row0];
+             out_[0]  = q_;
 
-             q_      = q0_col[row0];
-             out_[0] = q_;
-
-             double pe = NA_REAL;
-
-             // j runs over COMPRESSED indices: 0..n_comp-2
              for (int j = 0; j < n_comp - 1; ++j) {
-               int r = comp_idx[j];            // full-data row index
-               if (r < 0 || r >= covariate.size()) {
-                 stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
-                      j, r, covariate.size());
+               int r    = comp_idx[j];
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
                }
 
-               double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               double x = cov_ptr[r];
+
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
-                 pe = x - q_;
-                 q_ += alpha * pe;
+                 double pe    = x - q_;
+                 pes_[j]      = pe;
+                 q_          += alpha * pe;
                } else {
-                 pe = NA_REAL;
+                 pes_[j] = NA_REAL;
                }
-               pes_[j] = pe;                   // compressed index
-
-               int next_j = j + 1;
-               out_[next_j] = q_;
+               out_[j + 1] = q_;
              }
 
              mark_run_complete();
@@ -650,8 +697,15 @@ struct Delta2LR : DeltaKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
+
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alphaPos = alphaPos_col[r];
                  double alphaNeg = alphaNeg_col[r];
                  pe = x - q_;
@@ -670,16 +724,30 @@ struct Delta2LR : DeltaKernel {
 };
 
 // 2D PE kernel: separate from DeltaKernel
+// to-do - deprecate this, it doesn't work and is annoying to maintain...
 struct Delta2Kernel : SequentialKernel {
   double qFast_ = NA_REAL;
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
+  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
+
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
+  }
 
   // [compressed trial][0 = fast PE, 1 = slow PE]
   std::vector<double> pes_fast_;
   std::vector<double> pes_slow_;
   std::vector<double> q_fast_;
   std::vector<double> q_slow_;
+
+  // One dedicated transpose buffer per secondary stream code.
+  // Indexed as: secondary_buf_[code - 2], i.e.:
+  //   code 2 (Qfast)   -> secondary_buf_[0]
+  //   code 3 (Qslow)   -> secondary_buf_[1]
+  //   code 4 (PEfast)  -> secondary_buf_[2]
+  //   code 5 (PEslow)  -> secondary_buf_[3]
+  mutable std::vector<double> secondary_buf_[4];
 
   Delta2Kernel() {}
 
@@ -708,11 +776,18 @@ struct Delta2Kernel : SequentialKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
+
+               // --- RESET (before PE): both trackers reset to q0 ---
+               if (q_reset_ && q_reset_[r]) {
+                 qFast_ = qSlow_ = q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
                double x = covariate(r,0);
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
 
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alphaFast = alphaFast_col[r];
                  double propSlow  = propSlow_col[r];
                  double dSwitch   = dSwitch_col[r];
@@ -742,62 +817,34 @@ struct Delta2Kernel : SequentialKernel {
     return (code >= 1 && code <= 5);
   }
 
-  Rcpp::NumericVector get_output_stream(int code) const override {
-    using namespace Rcpp;
-
+  KernelOutput get_output_stream(int code) const override {
     const int n_full = static_cast<int>(out_.size());
 
     if (code == 1) {
-      // main trajectory: already full-length
-      return wrap(out_);
+      return KernelOutput{ out_.data(), n_full, 1 };
     }
 
-    // For other codes, choose the compressed source vector
     const std::vector<double>* src = nullptr;
-    if (code == 2) {            // Qfast
-      src = &q_fast_;
-    } else if (code == 3) {     // Qslow
-      src = &q_slow_;
-    } else if (code == 4) {     // PEfast
-      src = &pes_fast_;
-    } else if (code == 5) {     // PEslow
-      src = &pes_slow_;
-    } else {
-      stop("Delta2Kernel::get_output_stream: unsupported code %d "
-             "(1=Q,2=Qfast,3=Qslow,4=PEfast,5=PEslow)", code);
-    }
+    if      (code == 2) src = &q_fast_;
+    else if (code == 3) src = &q_slow_;
+    else if (code == 4) src = &pes_fast_;
+    else if (code == 5) src = &pes_slow_;
+    else Rcpp::stop("Delta2Kernel::get_output_stream: unsupported code %d "
+                      "(1=Q, 2=Qfast, 3=Qslow, 4=PEfast, 5=PEslow)", code);
 
-    NumericVector res(n_full);
+    std::vector<double>& buf = secondary_buf_[code - 2];
+    buf.resize(n_full);
 
     if (!has_expand_idx_) {
-      // no 'at': compressed and full coincide
-      if ((int)src->size() != n_full) {
-        stop("Delta2Kernel::get_output_stream: source length (%d) != n_full (%d)",
-             (int)src->size(), n_full);
-      }
-      for (int i = 0; i < n_full; ++i) {
-        res[i] = (*src)[i];
-      }
+      if ((int)src->size() != n_full)
+        Rcpp::stop("Delta2Kernel::get_output_stream: source length mismatch");
+      for (int i = 0; i < n_full; ++i) buf[i] = (*src)[i];
     } else {
-      // with 'at': expand from compressed to full using expand_idx_
       const auto& idx = expand_idx_;
-      if ((int)idx.size() != n_full) {
-        stop("Delta2Kernel::get_output_stream: expand_idx length (%d) != n_full (%d)",
-             (int)idx.size(), n_full);
-      }
-      const int n_comp = static_cast<int>(src->size());
-      for (int i = 0; i < n_full; ++i) {
-        int k = idx[i] - 1;  // 1-based -> 0-based compressed index
-        if (k < 0 || k >= n_comp) {
-          stop("Delta2Kernel::get_output_stream: index %d out of range [0,%d)", k, n_comp);
-        }
-        res[i] = (*src)[k];
-      }
-
-      return res;
+      for (int i = 0; i < n_full; ++i) buf[i] = (*src)[idx[i] - 1];
     }
 
-    stop("Delta2Kernel::get_output_stream: unsupported code %d (1=Q,2=Qfast,3=Qslow,4=PEfast,5=PEslow)", code);
+    return KernelOutput{ buf.data(), n_full, 1 };
   }
 
   std::string output_stream_name(int code) const override {
@@ -810,6 +857,168 @@ struct Delta2Kernel : SequentialKernel {
   }
 };
 
+
+struct RescorlaWagnerKernel : SequentialKernel {
+private:
+  // Row-major internal storage: index as [r * n_covs_ + col]
+  int n_covs_ = 0;
+  std::vector<double> q_mat_;   // [n_comp * n_covs_]: Q-value per trial per covariate
+  std::vector<double> pe_mat_;  // [n_comp * n_covs_]: compound PE for active covariates, NA otherwise
+
+  const int* q_reset_ = nullptr;
+
+public:
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
+  }
+
+  void reset() override {
+    BaseKernel::reset();
+    q_mat_.clear();
+    pe_mat_.clear();
+    n_covs_ = 0;
+  }
+
+  void run(const KernelParsView& kernel_pars,
+           const Rcpp::NumericMatrix& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 2) {
+               Rcpp::stop("RescorlaWagnerKernel expects 2 parameter columns (q0, alpha), got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             const int n_comp = static_cast<int>(comp_idx.size());
+             n_covs_          = covariate.ncol();
+
+             if (n_comp == 0 || n_covs_ == 0) {
+               q_mat_.clear();
+               pe_mat_.clear();
+               mark_run_complete();
+               return;
+             }
+
+             const double* q0_col    = kernel_pars.cols[0];
+             const double* alpha_col = kernel_pars.cols[1];
+
+             q_mat_.assign(n_comp * n_covs_, NA_REAL);
+             pe_mat_.assign(n_comp * n_covs_, NA_REAL);
+
+             // Initialise: all covariates start at q0 of first trial
+             int row0       = comp_idx[0];
+             double q0_init = q0_col[row0];
+
+             std::vector<double> q_cur(n_covs_, q0_init);
+
+             // Write Q-values entering trial 0
+             for (int c = 0; c < n_covs_; ++c) {
+               q_mat_[0 * n_covs_ + c] = q_cur[c];
+             }
+
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];
+
+               // Reset before PE: overwrite q_cur and the already-written q_mat_[j]
+               if (q_reset_ && q_reset_[r]) {
+                 double q0_r = q0_col[r];
+                 for (int c = 0; c < n_covs_; ++c) {
+                   q_cur[c]                  = q0_r;
+                   q_mat_[j * n_covs_ + c]  = q0_r;  // overwrite entering Q for this trial
+                 }
+               }
+
+               // Identify active covariates and accumulate compound Q
+               double reward    = NA_REAL;
+               double q_active  = 0.0;
+               bool   any_active = false;
+
+               for (int c = 0; c < n_covs_; ++c) {
+                 double x = covariate(r, c);
+                 if (!is_nan(x)) {
+                   reward     = x;   // reward is the same across all active columns
+                   q_active  += q_cur[c];
+                   any_active = true;
+                 }
+               }
+
+               if (any_active && !is_nan(reward)) {
+                 double alpha       = alpha_col[r];
+                 double compound_pe = reward - q_active;
+
+                 for (int c = 0; c < n_covs_; ++c) {
+                   double x = covariate(r, c);
+                   if (!is_nan(x)) {
+                     pe_mat_[j * n_covs_ + c] = compound_pe;
+                     q_cur[c] += alpha * compound_pe;
+                   }
+                   // inactive: pe_mat_ stays NA, q_cur[c] unchanged
+                 }
+               }
+
+               // Write Q-values entering trial j+1
+               for (int c = 0; c < n_covs_; ++c) {
+                 q_mat_[(j + 1) * n_covs_ + c] = q_cur[c];
+               }
+               // Rprintf("n_covs_=%d n_comp=%d\n", n_covs_, n_comp);
+             }
+
+             // pe_mat_ for the last trial stays NA (no outcome consumed yet),
+             // mirroring SimpleDelta's pes_[n_comp - 1] = NA_REAL
+
+             mark_run_complete();
+           }
+
+  bool has_output_stream(int code) const override {
+    return (code == 1 || code == 2);
+  }
+
+  // Stream 1: Q-matrix (n_rows x n_covs_), column-major
+  // Stream 2: PE-matrix (n_rows x n_covs_), column-major
+  KernelOutput get_output_stream(int code) const override {
+    if (code != 1 && code != 2) {
+      Rcpp::stop("RescorlaWagnerKernel::get_output_stream: unsupported code %d "
+                   "(1=Qmatrix, 2=PEmatrix)", code);
+    }
+
+    const std::vector<double>& src = (code == 1) ? q_mat_ : pe_mat_;
+    const int n_comp  = static_cast<int>(src.size()) / n_covs_;
+    std::vector<double>& buf = stream_buf_[code - 1];
+
+    if (has_expand_idx_) {
+      // Expand compact [n_comp x n_covs_] to full [n_trials x n_covs_],
+      // then transpose to column-major for R.
+      const int n_full = static_cast<int>(expand_idx_.size());
+      buf.resize(n_full * n_covs_);
+
+      for (int c = 0; c < n_covs_; ++c) {
+        for (int i = 0; i < n_full; ++i) {
+          int comp_row = expand_idx_[i] - 1;  // 1-based -> 0-based
+          buf[c * n_full + i] = src[comp_row * n_covs_ + c];
+        }
+      }
+
+      return KernelOutput{ buf.data(), n_full, n_covs_ };
+
+    } else {
+      // No expand: just transpose row-major [n_comp x n_covs_] to column-major
+      buf.resize(n_comp * n_covs_);
+
+      for (int c = 0; c < n_covs_; ++c) {
+        for (int r = 0; r < n_comp; ++r) {
+          buf[c * n_comp + r] = src[r * n_covs_ + c];
+        }
+      }
+
+      return KernelOutput{ buf.data(), n_comp, n_covs_ };
+    }
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qmatrix";
+    if (code == 2) return "PEmatrix";
+    throw std::runtime_error("RescorlaWagnerKernel::output_stream_name: unsupported code");
+  }
+};
 
 // // 2kernel adjusted
 // struct Delta2Kernel2 : Delta2Kernel {
@@ -894,4 +1103,7 @@ KernelType to_kernel_type(const Rcpp::String& k);
 
 std::unique_ptr<BaseKernel> make_kernel(KernelType kt,
                                         SEXP custom_fun = R_NilValue);
+
+
+#endif // KERNELS_H
 
