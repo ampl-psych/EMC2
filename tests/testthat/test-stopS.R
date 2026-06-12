@@ -53,6 +53,54 @@ test_that("exG", {
   expect_true(is.finite(samples$subj_ll[1, 1]))
 })
 
+test_that("SSEXG mapped_pars supplies internal SSD and hides bookkeeping columns", {
+  mapped <- mapped_pars(designSSexG, p_vector)
+
+  expect_s3_class(mapped, "data.frame")
+  expect_false("SSD" %in% names(mapped))
+  expect_false("lI" %in% names(mapped))
+  expect_true(all(c("S", "lR", "lM", "mu", "sigma", "tau", "muS", "sigmaS", "tauS", "gf", "tf") %in% names(mapped)))
+})
+
+test_that("SSEXG mapped_pars supports the R reference model path", {
+  SSEXG_R <- function() {
+    model <- SSEXG()
+    model$c_name <- NULL
+    model
+  }
+  design_R <- design(model = SSEXG_R,
+                     factors = list(subjects = 1, S = c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+                     formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
+                                    muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                                    gf ~ 1, tf ~ 1))
+
+  mapped <- mapped_pars(design_R, p_vector)
+
+  expect_s3_class(mapped, "data.frame")
+  expect_false("SSD" %in% names(mapped))
+  expect_false("lI" %in% names(mapped))
+})
+
+test_that("SSEXG mapped_pars keeps lI when it varies by accumulator", {
+  design_lI <- design(model = SSEXG,
+                      factors = list(subjects = 1, S = c("left", "right"), lI = 1:2),
+                      Rlevels = c("left", "right"),
+                      matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+                      formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
+                                     muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                                     gf ~ 1, tf ~ 1))
+  p_lI <- p_vector
+  names(p_lI) <- names(sampled_pars(design_lI, doMap = FALSE))
+
+  mapped <- mapped_pars(design_lI, p_lI)
+
+  expect_false("SSD" %in% names(mapped))
+  expect_true("lI" %in% names(mapped))
+  expect_equal(sort(unique(as.numeric(as.character(mapped$lI)))), c(1, 2))
+})
+
 
 
 test_that("staircase resets per subject", {

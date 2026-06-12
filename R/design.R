@@ -1368,16 +1368,43 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
       Fcovariates <- covariates
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
+  model_info <- model()
+  model_p_types <- names(model_info$p_types)
+  is_stop_signal_name <- !is.null(model_info$c_name) &&
+    model_info$c_name %in% c("SSEXG", "SSRDEX")
+  is_stop_signal_params <- !is.null(model_p_types) &&
+    all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+  is_stop_signal <- is_stop_signal_name || is_stop_signal_params
+  if (is_stop_signal) {
+    Fcovariates <- setdiff(Fcovariates, "SSD")
+    design$Fcovariates <- setdiff(design$Fcovariates, "SSD")
+  }
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
   dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
                                       do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
-  ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
+  if (is_stop_signal && is.null(dadm$SSD)) {
+    dadm$SSD <- Inf
+  }
+  hidden_if_constant <- function(x, col) {
+    if (!col %in% colnames(x)) return(character(0))
+    vals <- unique(x[, col])
+    vals <- vals[!is.na(vals)]
+    if (length(vals) <= 1) col else character(0)
+  }
+  hidden_data_cols <- c("subjects","trials","R","rt","winner")
+  if (is_stop_signal) {
+    hidden_data_cols <- c(hidden_data_cols, "SSD", hidden_if_constant(dadm, "lI"))
+  }
+  ok <- !(names(dadm) %in% hidden_data_cols)
+  mapped_values <- round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits)
+  hidden_mapped_cols <- if (is_stop_signal) c("SSD", "lI") else character(0)
+  mapped_values <- mapped_values[, !(colnames(mapped_values) %in% hidden_mapped_cols), drop = FALSE]
+  out <- cbind(dadm[,ok, drop = F], mapped_values)
   if (is_ordered_response_type(model()))
     out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
-  if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
+  if (model_info$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
 
