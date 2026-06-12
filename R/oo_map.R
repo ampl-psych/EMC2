@@ -184,9 +184,21 @@ get_pars_oo <- function(p, dadm, model,
   out
 }
 
-get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE) {
+get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE,
+                               allow_missing_ssd = FALSE) {
   model_list <- .oo_model_list(model)
   pars <- get_pars_oo(p_vector, dadm, model_list, return_all_pars=return_all_pars)
+  if (allow_missing_ssd) {
+    model_p_types <- names(model_list$p_types)
+    is_stop_signal_name <- identical(model_list$c_name, "SSEXG") ||
+      identical(model_list$c_name, "SSRDEX")
+    is_stop_signal_params <- isTRUE(
+      all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+    )
+    if ((is_stop_signal_name || is_stop_signal_params) && is.null(dadm$SSD)) {
+      dadm$SSD <- Inf
+    }
+  }
   pars <- model_list$Ttransform(pars, dadm)
   pars <- add_bound(pars, model_list$bound, dadm$lR)
   .oo_reorder_public_pars(pars, model_list)

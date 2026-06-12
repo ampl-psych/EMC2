@@ -307,6 +307,17 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
                          group_design = NULL,...){
   design <- design
   model <- design$model
+  model_info <- if (!is.null(model)) model() else NULL
+  model_p_types <- names(model_info$p_types)
+  is_stop_signal_name <- identical(model_info$c_name, "SSEXG") ||
+    identical(model_info$c_name, "SSRDEX")
+  is_stop_signal_params <- isTRUE(
+    all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+  )
+  is_stop_signal <- is_stop_signal_name || is_stop_signal_params
+  if (is_stop_signal) {
+    design$Fcovariates <- setdiff(design$Fcovariates, "SSD")
+  }
   if ( is.null(data) ) {
     design$Ffactors$subjects <- colnames(par_mcmc)
     if ( is.null(n_trials) )
@@ -339,6 +350,9 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
+  if (is_stop_signal && is.null(data$SSD)) {
+    data$SSD <- Inf
+  }
 
   n_mcmc <- dim(par_mcmc)[3]
   n_pars <- dim(par_mcmc)[1]
@@ -351,7 +365,8 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     }
 
     rownames(parameters) <- design$Ffactors$subjects
-    pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE)
+    pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE,
+                               allow_missing_ssd = TRUE)
     if(!add_recalculated){
       base_names <- intersect(names(model()$p_types), colnames(pars))
       pars <- pars[, base_names, drop = FALSE]

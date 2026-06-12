@@ -1370,10 +1370,11 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     stop("Must specify model as not in design") else model <- design$model
   model_info <- model()
   model_p_types <- names(model_info$p_types)
-  is_stop_signal_name <- !is.null(model_info$c_name) &&
-    model_info$c_name %in% c("SSEXG", "SSRDEX")
-  is_stop_signal_params <- !is.null(model_p_types) &&
+  is_stop_signal_name <- identical(model_info$c_name, "SSEXG") ||
+    identical(model_info$c_name, "SSRDEX")
+  is_stop_signal_params <- isTRUE(
     all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+  )
   is_stop_signal <- is_stop_signal_name || is_stop_signal_params
   if (is_stop_signal) {
     Fcovariates <- setdiff(Fcovariates, "SSD")
@@ -1398,7 +1399,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     hidden_data_cols <- c(hidden_data_cols, "SSD", hidden_if_constant(dadm, "lI"))
   }
   ok <- !(names(dadm) %in% hidden_data_cols)
-  mapped_values <- round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits)
+  mapped_values <- round(get_pars_matrix_oo(p_vector,dadm, design$model(), allow_missing_ssd = TRUE),digits)
   hidden_mapped_cols <- if (is_stop_signal) c("SSD", "lI") else character(0)
   mapped_values <- mapped_values[, !(colnames(mapped_values) %in% hidden_mapped_cols), drop = FALSE]
   out <- cbind(dadm[,ok, drop = F], mapped_values)

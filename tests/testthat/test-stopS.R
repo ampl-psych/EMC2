@@ -101,6 +101,12 @@ test_that("SSEXG mapped_pars keeps lI when it varies by accumulator", {
   expect_equal(sort(unique(as.numeric(as.character(mapped$lI)))), c(1, 2))
 })
 
+test_that("SSEXG mapped prior plotting supplies internal SSD", {
+  prior_SS <- prior(designSSexG, type = "single")
+
+  expect_error(plot(prior_SS, do_plot = FALSE, N = 10), NA)
+})
+
 
 
 test_that("staircase resets per subject", {
