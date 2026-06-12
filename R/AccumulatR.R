@@ -65,7 +65,7 @@ accumulatr_param_profile <- function(param_name, runtime_family, dist = NULL) {
     ))
   }
 
-  exp_params <- c("s", "sigma", "tau", "shape", "rate", "B", "A", "sv")
+  exp_params <- c("mu", "s", "sigma", "tau", "shape", "rate", "B", "A", "sv")
   if (param_name %in% exp_params) {
     return(list(
       latent_default = 0,
