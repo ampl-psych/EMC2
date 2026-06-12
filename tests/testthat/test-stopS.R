@@ -103,8 +103,11 @@ test_that("SSEXG mapped_pars keeps lI when it varies by accumulator", {
 
 test_that("SSEXG mapped prior plotting supplies internal SSD", {
   prior_SS <- prior(designSSexG, type = "single")
+  samples <- get_objects(design = designSSexG, prior = prior_SS, type = "single",
+                         sample_prior = TRUE, selection = "alpha", N = 10)
 
-  expect_error(plot(prior_SS, do_plot = FALSE, N = 10), NA)
+  expect_error(get_pars(samples, selection = "alpha", type = "single",
+                        stage = "sample", map = TRUE), NA)
 })
 
 
