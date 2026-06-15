@@ -219,6 +219,7 @@ pRDM <- function(rt,pars)
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- pWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
+  out[is.infinite(rt) & rt > 0] <- 1
   out
 }
 

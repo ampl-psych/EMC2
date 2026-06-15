@@ -41,6 +41,9 @@ double pigt(double t, double k = 1, double l = 1, double a = .1, double threshol
   if (t <= 0.){
     return 0.;
   }
+  if (t == R_PosInf) {
+    return 1.;
+  }
   if (a < threshold){
     return pigt0(t, k, l);
   }
