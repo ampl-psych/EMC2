@@ -26,8 +26,8 @@ argument of \code{design()}.They can also be accessed with \code{SSEXG()$p_types
    \emph{tauS} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution \cr
    \emph{tf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for stop process ("trigger failure") \cr
    \emph{gf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for go process ("go failure") \cr
-   \emph{exg_lb} \tab - \tab [-Inf, Inf] \tab .05 \tab  \tab Lower bound of ex-Gaussian go finish time distribution \cr
-   \emph{exgS_lb} \tab - \tab [-Inf, Inf] \tab .05 \tab  \tab Lower bound of ex-Gaussian stop finish time distribution \cr
+   \emph{exg_lb} \tab - \tab [-Inf, Inf] \tab 0 \tab  \tab Lower bound of ex-Gaussian go finish time distribution \cr
+   \emph{exgS_lb} \tab - \tab [-Inf, Inf] \tab 0 \tab  \tab Lower bound of ex-Gaussian stop finish time distribution \cr
 }
 
 
@@ -59,7 +59,7 @@ The mean of the ex-Gaussian stop process finish time distribution (\code{muS + t
 
 The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters \code{exg_lb} and \code{exgS_lb}, respectively.
-The default values for these lower bounds are \code{.05}, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+The default values for these lower bounds are \code{0}.
 If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both \code{exg_lb} and \code{exgS_lb} should be set to \code{-Inf}, using the \code{constants} argument of the \code{\link[=design]{design()}} function.
 }
 \references{
