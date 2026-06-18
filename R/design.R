@@ -439,6 +439,9 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     design_expands <- lapply(designs, function(x) attr(x, "expand"))
     cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
     cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
+    if ("SSD" %in% names(da)) {
+      cells <- paste(cells, da$SSD, sep = "+")
+    }
     # Make sure that if row is included for a trial so are other rows
     if (!is.null(Fcov)) {
       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
