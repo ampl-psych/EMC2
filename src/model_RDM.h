@@ -151,6 +151,7 @@ inline double digt(double t, double k, double l, double a)
 inline double pigt(double t, double k, double l, double a)
 {
   if (t <= 0.0) return 0.0;
+  if (t == R_PosInf) return 1.0;
   if (a < A_EPS) return pigt0(t, k, l);
   clamp_a_l(a, l);
   double cdf = pigt_core(t, k, l, a);

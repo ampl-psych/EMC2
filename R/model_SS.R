@@ -635,8 +635,8 @@ pstopTEXG <- function(
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
-#' | *exg_lb*      | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian go finish time distribution           |
-#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
+#' | *exg_lb*      | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian go finish time distribution           |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
 #' Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
@@ -666,7 +666,7 @@ pstopTEXG <- function(
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters `exg_lb` and `exgS_lb`, respectively.
-#' The default values for these lower bounds are `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+#' The default values for these lower bounds are `0`.
 #' If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both `exg_lb` and `exgS_lb` should be set to `-Inf`, using the `constants` argument of the [design()] function.
 #'
 #' @references
@@ -706,7 +706,7 @@ SSEXG <- function() {
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
       tf = qnorm(0), gf = qnorm(0),
-      exg_lb = .05, exgS_lb = .05
+      exg_lb = 0, exgS_lb = 0
     ),
     transform = list(
       func = c(
@@ -1002,7 +1002,7 @@ pstopHybrid <- function(
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
-#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
 #' All parameters are estimated on the log scale, with the exception of `tf` and `gf` which are estimated on the probit scale, and `exgS_lb` which is estimated on the natural scale.
 #'
@@ -1035,7 +1035,7 @@ pstopHybrid <- function(
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter `exgS_lb`.
-#' The default value for this lower bound is `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+#' The default value for this lower bound is `0`.
 #'
 #' @references
 #'
@@ -1055,7 +1055,7 @@ SSRDEX <- function() {
       v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
       tf = qnorm(0), gf = qnorm(0),
-      exgS_lb = .05
+      exgS_lb = 0
     ),
     transform = list(
       func = c(

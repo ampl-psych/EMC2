@@ -28,7 +28,7 @@ argument of \code{design()}.They can also be accessed with \code{SSRDEX()$p_type
    \emph{tauS} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution \cr
    \emph{tf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for stop process ("trigger failure") \cr
    \emph{gf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for go process ("go failure") \cr
-   \emph{exgS_lb} \tab - \tab [-Inf, Inf] \tab .05 \tab  \tab Lower bound of ex-Gaussian stop finish time distribution \cr
+   \emph{exgS_lb} \tab - \tab [-Inf, Inf] \tab 0 \tab  \tab Lower bound of ex-Gaussian stop finish time distribution \cr
 }
 
 
@@ -63,7 +63,7 @@ The mean of the ex-Gaussian stop distribution (\code{muS + tauS}) is taken as th
 
 The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter \code{exgS_lb}.
-The default value for this lower bound is \code{.05}, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+The default value for this lower bound is \code{0}.
 }
 \references{
 Matzke, D., & Wagenmakers, E. J. (2009). Psychological interpretation of the ex-Gaussian and shifted Wald parameters: A diffusion model analysis. \emph{Psychonomic Bulletin & Review}, \emph{16}, 798-817. \doi{10.3758/PBR.16.5.798}
