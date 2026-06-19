@@ -458,11 +458,11 @@ NumericVector dWald_RDEX_old(NumericVector t, double v,
   int n = t.size();
   NumericVector pdf(n);
   for (int i = 0; i < n; i++){
-    t[i] = t[i] - t0;
-    if (t[i] <= 0){
+    double t_eff = t[i] - t0;
+    if (t_eff <= 0){
       pdf[i] = 0.;
     } else {
-      pdf[i] = digt(t[i], B + .5 * A, v, .5 * A);
+      pdf[i] = digt(t_eff, B + .5 * A, v, .5 * A);
     }
   }
   return pdf;
@@ -476,10 +476,10 @@ NumericVector dWald_RDEX(
   int n = t.size();
   NumericVector pdf(n);
   for (int i = 0; i < n; i++) {
-    t[i] = t[i] - t0;
+    double t_eff = t[i] - t0;
     pdf[i] = 0.;
-    if (t[i] > 0.) {
-      pdf[i] = digt(t[i], (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
+    if (t_eff > 0.) {
+      pdf[i] = digt(t_eff, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
     }
   }
   return pdf;
@@ -492,11 +492,11 @@ NumericVector pWald_RDEX_old(NumericVector t, double v,
   int n = t.size();
   NumericVector cdf(n);
   for (int i = 0; i < n; i++){
-    t[i] = t[i] - t0;
-    if (t[i] <= 0){
+    double t_eff = t[i] - t0;
+    if (t_eff <= 0){
       cdf[i] = 0.;
     } else {
-      cdf[i] = pigt(t[i], B + .5 * A, v, .5 * A);
+      cdf[i] = pigt(t_eff, B + .5 * A, v, .5 * A);
     }
   }
   return cdf;
@@ -510,10 +510,10 @@ NumericVector pWald_RDEX(
   int n = t.size();
   NumericVector cdf(n);
   for (int i = 0; i < n; i++) {
-    t[i] = t[i] - t0;
+    double t_eff = t[i] - t0;
     cdf[i] = 0.;
-    if (t[i] > 0.) {
-      cdf[i] = pigt(t[i], (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
+    if (t_eff > 0.) {
+      cdf[i] = pigt(t_eff, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
     }
   }
   return cdf;
