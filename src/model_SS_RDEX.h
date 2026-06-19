@@ -347,7 +347,7 @@ NumericVector ss_rdex_lpdf(
           stop_success_integral = ss_rdex_stop_success_lpdf(
             SSD[start_row],
                pars(Range(start_row, end_row), _),
-               min_ll, R_PosInf, 50, 1e-6, 1e-5, 8.0, 16.0
+               min_ll, R_PosInf, 50, 1e-7, 1e-6, 8.0, 16.0
           );
           stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
           // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
