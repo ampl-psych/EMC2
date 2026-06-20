@@ -16,6 +16,11 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   if (k == "poly4")        return KernelType::Poly4;
   if (k == "custom")       return KernelType::Custom;
   if (k == "rescorlawagner")       return KernelType::RescorlaWagner;
+  if (k == "beta_binomial")       return KernelType::BetaBinomial;
+  if (k == "beta_binomial_decay") return KernelType::BetaBinomialDecay;
+  if (k == "beta_binomial_window")return KernelType::BetaBinomialWindow;
+  if (k == "dbm")                 return KernelType::DBM;
+  if (k == "tpm")                 return KernelType::TPM;
 
   Rcpp::stop("Unknown kernel type");
 }
@@ -37,7 +42,12 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   case KernelType::Poly2:       return std::unique_ptr<BaseKernel>(new Poly2Kernel());
   case KernelType::Poly3:       return std::unique_ptr<BaseKernel>(new Poly3Kernel());
   case KernelType::Poly4:       return std::unique_ptr<BaseKernel>(new Poly4Kernel());
-  case KernelType::RescorlaWagner:       return std::unique_ptr<BaseKernel>(new RescorlaWagnerKernel());
+  case KernelType::RescorlaWagner:     return std::unique_ptr<BaseKernel>(new RescorlaWagnerKernel());
+  case KernelType::BetaBinomial:       return std::make_unique<BetaBinomialKernel>();
+  case KernelType::BetaBinomialDecay:  return std::make_unique<BetaBinomialDecayKernel>();
+  case KernelType::BetaBinomialWindow: return std::make_unique<BetaBinomialWindowKernel>();
+  case KernelType::DBM:                return std::make_unique<DBMKernel>();
+  case KernelType::TPM:                return std::make_unique<TPMKernel>();
 
   case KernelType::Custom:
     if (custom_fun == R_NilValue) {
