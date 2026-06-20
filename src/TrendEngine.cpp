@@ -155,6 +155,10 @@ static void build_kernel_args(KernelSpec& ks,
         Rf_error("kernel_args$q_reset_column: wrong length");
     }
   }
+  if (ka.containsElementNamed("grid_res")) {
+    SEXP gr = ka["grid_res"];
+    if (!Rf_isNull(gr)) ks.kernel_args.grid_res = Rcpp::as<int>(gr);
+  }
   ks.build_kernel_args();
 }
 

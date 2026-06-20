@@ -1041,7 +1041,47 @@ get_kernels <- function() {
               transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
                                             "propSlow" = "pnorm", "dSwitch" = "pnorm")),
               bases = base_2p,
-              experimental=TRUE)
+              experimental=TRUE),
+  beta_binomial = list(
+    description  = "Beta-Binomial ideal observer: tracks binary observations.",
+    default_pars = c("a0", "b0"),
+    transforms   = list(func = list("a0" = "exp", "b0" = "exp")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE),
+  beta_binomial_decay = list(
+    description  = "Beta-Binomial with exponential decay on accumulated counts.",
+    default_pars = c("a0", "b0", "decay"),
+    transforms   = list(func = list("a0" = "exp", "b0" = "exp", "decay" = "exp")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE),
+  beta_binomial_window = list(
+    description  = "Beta-Binomial with fixed sliding window.",
+    default_pars = c("a0", "b0", "window"),
+    transforms   = list(func = list("a0" = "exp", "b0" = "exp", "window" = "exp")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE),
+  dbm = list(
+    description  = "Dynamic Belief Model (Yu & Cohen 2008).",
+    default_pars = c("cp", "mu0", "s0"),
+    transforms   = list(func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE),
+  tpm = list(
+    description  = "Transition Probability Model (Yu & Cohen 2008).",
+    default_pars = c("cp", "a0", "b0"),
+    transforms   = list(func = list("cp" = "pnorm", "a0" = "exp", "b0" = "exp")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE)
   # delta2kernel2 = list(description = paste(
   #               "Steven fucking around with the delta2kernel. You shouldn't see this! Dual kernel delta rule: k = q[i].\n",
   #               "         Combines fast and slow learning rates\n",
