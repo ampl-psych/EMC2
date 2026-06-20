@@ -29,6 +29,7 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
 p_vector <- sampled_pars(design_base, doMap = FALSE)
 p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
 
+set.seed(123)
 dat <- make_data(p_vector, design_base, n_trials = n_trials,
                  covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2))
 
@@ -370,6 +371,7 @@ covariate2 <- rnorm(n_trials*2)
 p_vector <- sampled_pars(design_base, doMap = FALSE)
 p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
 
+set.seed(123)
 dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2))
 
 LNR_covmap <- make_emc(dat, design_base, compress = FALSE, n_chains = 1, type = "single")
