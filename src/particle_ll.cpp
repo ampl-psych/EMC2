@@ -149,9 +149,9 @@ PipelineContext make_pipeline_context(
 
   // 5. Trend objects and keep_names
   if (!trend.isNull()) {
-    ctx.trend_plan.reset(new TrendPlan(trend, data));
+    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data));
     ctx.trend_runtime.reset(new TrendRuntime(*ctx.trend_plan));
-    ctx.trend_runtime->bind_all_ops_to_paramtable(ctx.param_table);
+    ctx.trend_runtime->bind_all_to_paramtable(ctx.param_table);
 
     Rcpp::CharacterVector dnames = designs.names();
     const auto& trend_params = ctx.trend_runtime->all_trend_params();
@@ -204,8 +204,8 @@ void run_pars_pipeline(ParamTable& param_table,
     if (!cache.premap_specs.empty()) {
       c_do_transform_pt(param_table, cache.premap_specs);
     }
-    for (TrendOpRuntime& op : trend_runtime->premap_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->premap_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 
@@ -218,8 +218,8 @@ void run_pars_pipeline(ParamTable& param_table,
     if (!cache.pretransform_specs.empty()) {
       c_do_transform_pt(param_table, cache.pretransform_specs);
     }
-    for (TrendOpRuntime& op : trend_runtime->pretransform_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->pretransform_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 
@@ -228,8 +228,8 @@ void run_pars_pipeline(ParamTable& param_table,
 
   // 5) Posttransform trends
   if (trend_runtime && trend_runtime->has_posttransform()) {
-    for (TrendOpRuntime& op : trend_runtime->posttransform_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->posttransform_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 }

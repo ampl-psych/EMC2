@@ -202,12 +202,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
                  parameter_design=parameter_design)
   class(design) <- "emc.design"
+
+  # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model
   if (!is.null(trend)) {
     # check for at = 'lR'
-    if(any(sapply(trend, function(x) x$at) == 'lR') &&
+    if(any(vapply(trend$kernels, function(k) identical(k$at, "lR"), logical(1))) &&
        !is_choice_accumulator_type(model())) {
       warning('A trend has `at="lR"`, but this model does not use accumulator rows. Setting `at` to NULL')
-      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+      for(kernel_id in names(trend$kernels)) if(identical(trend$kernels[[kernel_id]]$at, "lR")) trend$kernels[[kernel_id]]$at <- NULL
     }
     model <- update_model_trend(trend, model)
     design$model <- model
@@ -617,31 +619,28 @@ design_model <- function(data,design,model=NULL,
     da[,i] <- newF
   }
 
-  # Add covariate_map as attribute to da
+  # Trend checks to apply now that we have the data
   if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      if(!is.null(trend_list[[i]]$map)) {
+    trend <- model_info$trend
+
+    # loop over bases to find covariate maps
+    for(base in trend$bases) {
+      if(!is.null(base$maps)) {
+        ## look up covariate names
         if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
-        covariate_map_names <- names(trend_list[[i]]$map)
-        covariate_map_functions <- trend_list[[i]]$map
-        for(map_n in 1:length(covariate_map_names)) {
-          covs <- trend_list[[i]]$covariate
-          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+        covs <- trend$kernels[[base$kernel_id]]$cov_names
+        for(map_name in names(base$maps)) {
+          attr(da, 'covariate_maps')[[map_name]] <- attr(da, 'covariate_maps')[[map_name]] <- base$maps[[map_name]](dadm = da, covs)
         }
       }
     }
-  }
 
-  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
-  if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      current_trend <- trend_list[[i]]
-      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+    # loop over kernels to check for NAs in data
+    for(kernel in trend$kernels) {
+      if(!isTRUE(kernel$sequential)) {
         # check if any NAs exist in the covariate
-        for(covariate in current_trend$covariate) {
-          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        for(covariate in kernel$cov_names) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', kernel$kernel, ' kernel.'))
         }
       }
     }
