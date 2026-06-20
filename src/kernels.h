@@ -8,6 +8,7 @@
 #include <Rcpp.h>    //
 #include "nan_check.h"
 #include "EMC2/userfun.hpp"
+#include "Mat.h"
 
 // View
 struct KernelParsView {
@@ -106,7 +107,7 @@ public:
   virtual void set_kernel_args(const KernelArgs& /*args*/) {}
 
   virtual void run(const KernelParsView& kernel_pars,
-                   const Rcpp::NumericMatrix& covariate,
+                   const Mat& covariate,
                    const std::vector<int>& comp_idx) = 0;
 
   virtual void reset() {
@@ -199,12 +200,12 @@ public:
   }
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& input,
+           const Mat& input,
            const std::vector<int>& comp_idx) override {
 
              const int n_comp   = static_cast<int>(comp_idx.size());
              const int n_pars   = static_cast<int>(kernel_pars.cols.size());
-             const int n_inputs = input.ncol();
+             const int n_inputs = input.ncol;
 
              if (n_comp == 0) {
                out_.clear();
@@ -349,7 +350,7 @@ public:
 
 struct LinIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -370,7 +371,7 @@ struct LinIncrKernel : BaseKernel {
 
 struct LinDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -392,7 +393,7 @@ struct LinDecrKernel : BaseKernel {
 
 struct ExpDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -421,7 +422,7 @@ struct ExpDecrKernel : BaseKernel {
 
 struct ExpIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -450,7 +451,7 @@ struct ExpIncrKernel : BaseKernel {
 
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -479,7 +480,7 @@ struct PowDecrKernel : BaseKernel {
 
 struct PowIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -508,7 +509,7 @@ struct PowIncrKernel : BaseKernel {
 
 struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("Poly2Kernel expects 2 parameter columns, got %d",
@@ -540,7 +541,7 @@ struct Poly2Kernel : BaseKernel {
 
 struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Poly3Kernel expects 3 parameter columns, got %d",
@@ -575,7 +576,7 @@ struct Poly3Kernel : BaseKernel {
 
 struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Poly4Kernel expects 4 parameter columns, got %d",
@@ -618,7 +619,7 @@ struct SimpleDelta : DeltaKernel {
   SimpleDelta() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
@@ -640,7 +641,7 @@ struct SimpleDelta : DeltaKernel {
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
-             const double* cov_ptr   = covariate.begin();
+             const double* cov_ptr   = covariate.colptr(0);
 
              int row0 = comp_idx[0];
              q_       = q0_col[row0];
@@ -675,7 +676,7 @@ struct Delta2LR : DeltaKernel {
   Delta2LR() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Delta2LR expects 3 parameter columns, got %d",
@@ -724,12 +725,11 @@ struct Delta2LR : DeltaKernel {
 };
 
 // 2D PE kernel: separate from DeltaKernel
-// to-do - deprecate this, it doesn't work and is annoying to maintain...
 struct Delta2Kernel : SequentialKernel {
   double qFast_ = NA_REAL;
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
-  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
+  const int* q_reset_ = nullptr;
 
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
@@ -752,7 +752,7 @@ struct Delta2Kernel : SequentialKernel {
   Delta2Kernel() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
@@ -880,7 +880,7 @@ public:
   }
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 2) {
@@ -889,7 +889,7 @@ public:
              }
 
              const int n_comp = static_cast<int>(comp_idx.size());
-             n_covs_          = covariate.ncol();
+             n_covs_          = covariate.ncol;
 
              if (n_comp == 0 || n_covs_ == 0) {
                q_mat_.clear();
@@ -1019,6 +1019,10 @@ public:
     throw std::runtime_error("RescorlaWagnerKernel::output_stream_name: unsupported code");
   }
 };
+
+
+
+
 
 // // 2kernel adjusted
 // struct Delta2Kernel2 : Delta2Kernel {
