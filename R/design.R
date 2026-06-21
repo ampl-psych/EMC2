@@ -625,12 +625,12 @@ design_model <- function(data,design,model=NULL,
 
     # loop over bases to find covariate maps
     for(base in trend$bases) {
-      if(!is.null(base$maps)) {
+      if(!is.null(base$coding)) {
         ## look up covariate names
-        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
+        if(!'covariate_coding' %in% names(attributes(da))) attr(da, 'covariate_coding') <- list()
         covs <- trend$kernels[[base$kernel_id]]$cov_names
-        for(map_name in names(base$maps)) {
-          attr(da, 'covariate_maps')[[map_name]] <- attr(da, 'covariate_maps')[[map_name]] <- base$maps[[map_name]](dadm = da, covs)
+        for(scheme_name in names(base$coding)) {
+          attr(da, 'covariate_coding')[[scheme_name]] <- attr(da, 'covariate_coding')[[scheme_name]] <- base$coding[[scheme_name]](dadm = da, covs)
         }
       }
     }
@@ -758,7 +758,7 @@ design_model <- function(data,design,model=NULL,
       attr(dadm, "designs") <- NULL
     }
     model_list <- model()
-    if (!has_trend_map(model_list)) attr(dadm, "covariate_maps") <- NULL
+    if (!has_trend_coding(model_list)) attr(dadm, "covariate_coding") <- NULL
     keep <- resolve_memory_columns(dadm, model_list)
     if (length(keep) > 0) {
       attrs <- attributes(dadm)
@@ -1111,10 +1111,10 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
 
-    if(!is.null(attr(dadm, 'covariate_maps'))) {
-      covariate_maps <- attr(dadm, 'covariate_maps')
-      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
-      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    if(!is.null(attr(dadm, 'covariate_coding'))) {
+      covariate_coding <- attr(dadm, 'covariate_coding')
+      for(ii in 1:length(covariate_coding)) covariate_coding[[ii]] <- covariate_coding[[ii]][isin,]
+      attr(dl[[i]], 'covariate_coding') <- covariate_coding
     }
 
     if(is.null(attr(dadm, "custom_ll"))){

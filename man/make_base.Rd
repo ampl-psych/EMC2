@@ -9,7 +9,7 @@ make_base(
   type,
   kernel,
   kernel_output = 1L,
-  maps = NULL,
+  coding = NULL,
   phase = "premap"
 )
 }
@@ -28,12 +28,11 @@ Non-sequential kernels always have one output (\code{1L}). Sequential kernels
 (delta family) may have more; use \code{\link[=trend_help]{trend_help()}} to see available outputs.
 Defaults to \code{1L}.}
 
-\item{maps}{Optional named list of functions that translate trial-level
+\item{coding}{Optional named list of functions that translate trial-level
 covariates into accumulator-specific predictors. Each function must accept
 \verb{(dadm, cov_names)} and return a matrix of size
 \verb{(nrow(dadm), length(cov_names))}, coding how each covariate contributes
-to each accumulator on each trial. Each map introduces one additional base
-parameter (e.g. \code{v.w_differences}, \code{v.w_sums}). See Details and Examples.}
+to each accumulator on each trial.}
 
 \item{phase}{Character string; one of \code{"premap"}, \code{"pretransform"},
 \code{"posttransform"}. Controls when the trend is applied in the parameter
@@ -46,14 +45,14 @@ An object of class \code{emc2_base}.
 Create a base specification linking a kernel output to a model parameter
 }
 \details{
-\subsection{Covariate maps}{
+\subsection{Coding}{
 
-The \code{maps} argument allows you to specify how trial-by-trial covariates
+The \code{coding} argument allows you to specify how trial-by-trial covariates
 influence model parameters for each accumulator. This is useful when the
 same covariate enters different accumulators with different signs or weights
 (e.g. an advantage coding for RL-DDM or RL-ARD models).
 
-A map function must have the signature \verb{function(dadm, cov_names)} and
+A coding function must have the signature \verb{function(dadm, cov_names)} and
 return a numeric matrix with \code{nrow(dadm)} rows and \code{length(cov_names)}
 columns. The matrix codes how each covariate contributes to the current
 accumulator on each trial.
@@ -68,13 +67,6 @@ as +1 and the unchosen accumulator as -1:
   minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
   plus + minus
 \}
-}\if{html}{\out{</div>}}
-
-When multiple maps are supplied, the model creates one base parameter per
-map. The resulting covariate maps for each participant are stored as an
-attribute on the \code{dadm}:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{attr(emc[[1]]$data[[1]], "covariate_maps")
 }\if{html}{\out{</div>}}
 }
 }
@@ -102,7 +94,7 @@ advantage_map <- function(dadm, cov_names) {
 
 k <- make_kernel(cov_names=c("cov1", "cov2", "cov3", "cov4"), type="delta", at="lR")
 b <- make_base(target_parameter="v", type="lin", kernel=k,
-               maps = list(differences = advantage_map))
+               coding = list(differences = advantage_map))
 trend <- make_trend(b)
 
 design_RDM <- design(
@@ -113,10 +105,10 @@ design_RDM <- design(
 )
 
 emc <- make_emc(data, design_RDM, type = "single")
-attr(emc[[1]]$data[[1]], "covariate_maps")
+attr(emc[[1]]$data[[1]], "covariate_coding")
 
 
-# --- Multiple covariate maps (advantage + sum, for RL-ARD models) ---
+# --- Multiple covariate coding (advantage + sum, for RL-ARD models) ---
 
 sum_map <- function(dadm, cov_names) {
   lS      <- paste0("cov", ifelse(dadm$lR == "left",  dadm$cov_left,  dadm$cov_right))
@@ -127,8 +119,8 @@ sum_map <- function(dadm, cov_names) {
 }
 
 b2 <- make_base(target_parameter = "v", type="lin", kernel = k,
-                maps = list(differences = advantage_map, sums = sum_map))
-trend2 <- make_trend(b2)
+                coding = list(sums = sum_map))
+trend2 <- make_trend(b, b2)
 
 # The model now includes two base parameters (e.g. v.w_differences, v.w_sums)
 get_trend_pnames(trend2)
@@ -141,7 +133,7 @@ design_RDM2 <- design(
 )
 
 emc2 <- make_emc(data, design_RDM2, type = "single")
-attr(emc2[[1]]$data[[1]], "covariate_maps")
+attr(emc2[[1]]$data[[1]], "covariate_coding")
 
 }
 \seealso{

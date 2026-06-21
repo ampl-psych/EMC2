@@ -162,51 +162,49 @@ static void build_kernel_args(KernelSpec& ks,
   ks.build_kernel_args();
 }
 
-static void build_covariate_maps(BaseSpec& bs,
-                                 const Rcpp::List& b_lst,
-                                 const Rcpp::DataFrame& data,
-                                 const Rcpp::List& data_covmaps)
+static void build_covariate_coding(BaseSpec& bs,
+                                   const Rcpp::List& b_lst,
+                                   const Rcpp::DataFrame& data,
+                                   const Rcpp::List& data_covcoding)
 {
-  bs.has_covariate_maps = false;
-  bs.covariate_maps.clear();
+  bs.has_covariate_coding = false;
+  bs.covariate_coding.clear();
 
-  if (!b_lst.containsElementNamed("maps") || Rf_isNull(b_lst["maps"])) return;
-  if (data_covmaps.size() == 0)
-    Rf_error("BaseSpec '%s': 'maps' specified but data has no 'covariate_maps' attribute",
+  if (!b_lst.containsElementNamed("coding") || Rf_isNull(b_lst["coding"])) return;
+  if (data_covcoding.size() == 0)
+    Rf_error("BaseSpec '%s': 'coding' specified but data has no 'covariate_coding' attribute",
              bs.target_parameter.c_str());
 
-  Rcpp::List maps_spec(b_lst["maps"]);
-  Rcpp::CharacterVector map_names = maps_spec.names();
-  if (map_names.size() != maps_spec.size())
-    Rf_error("BaseSpec '%s': 'maps' list must be named", bs.target_parameter.c_str());
+  Rcpp::List coding_spec(b_lst["coding"]);
+  Rcpp::CharacterVector coding_names = coding_spec.names();
+  if (coding_names.size() != coding_spec.size())
+    Rf_error("BaseSpec '%s': 'coding' list must be named", bs.target_parameter.c_str());
+  if (coding_spec.size() != 1)
+    Rf_error("BaseSpec '%s': 'coding' must contain exactly one entry",
+             bs.target_parameter.c_str());
 
-  Rcpp::CharacterVector data_map_names = data_covmaps.names();
-  const int M = maps_spec.size();
+  Rcpp::CharacterVector data_coding_names = data_covcoding.names();
   const int T = data.nrows();
 
-  bs.covariate_maps.reserve(M);
-  for (int m = 0; m < M; ++m) {
-    std::string map_nm = Rcpp::as<std::string>(map_names[m]);
+  std::string coding_nm = Rcpp::as<std::string>(coding_names[0]);
 
-    int idx = -1;
-    for (int j = 0; j < data_map_names.size(); ++j)
-      if (Rcpp::as<std::string>(data_map_names[j]) == map_nm) { idx = j; break; }
-    if (idx < 0)
-      Rf_error("BaseSpec '%s': covariate_map '%s' not found in data",
-               bs.target_parameter.c_str(), map_nm.c_str());
+  int idx = -1;
+  for (int j = 0; j < data_coding_names.size(); ++j)
+    if (Rcpp::as<std::string>(data_coding_names[j]) == coding_nm) { idx = j; break; }
+  if (idx < 0)
+    Rf_error("BaseSpec '%s': covariate_coding '%s' not found in data",
+             bs.target_parameter.c_str(), coding_nm.c_str());
 
-    SEXP mat_sexp = data_covmaps[idx];
-    if (Rf_ncols(mat_sexp) == 0)
-      Rf_error("BaseSpec '%s': covariate_maps[['%s']] has zero columns",
-               bs.target_parameter.c_str(), map_nm.c_str());
-    if (Rf_nrows(mat_sexp) != T)
-      Rf_error("BaseSpec '%s': covariate_maps[['%s']] has wrong nrow",
-               bs.target_parameter.c_str(), map_nm.c_str());
+  SEXP mat_sexp = data_covcoding[idx];
+  if (Rf_ncols(mat_sexp) == 0)
+    Rf_error("BaseSpec '%s': covariate_coding['%s'] has zero columns",
+             bs.target_parameter.c_str(), coding_nm.c_str());
+  if (Rf_nrows(mat_sexp) != T)
+    Rf_error("BaseSpec '%s': covariate_coding['%s'] has wrong nrow",
+             bs.target_parameter.c_str(), coding_nm.c_str());
 
-    bs.covariate_maps.push_back(Mat::from_sexp(mat_sexp));
-  }
-
-  bs.has_covariate_maps = true;
+  bs.covariate_coding.push_back(Mat::from_sexp(mat_sexp));
+  bs.has_covariate_coding = true;
 }
 
 // =============================================================================
@@ -215,11 +213,11 @@ static void build_covariate_maps(BaseSpec& bs,
 
 TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
 {
-  // covariate_maps attribute on data
-  Rcpp::List data_covmaps;
-  if (data.hasAttribute("covariate_maps")) {
-    SEXP cm = data.attr("covariate_maps");
-    if (!Rf_isNull(cm)) data_covmaps = Rcpp::List(cm);
+  // covariate_coding attribute on data
+  Rcpp::List data_covcoding;
+  if (data.hasAttribute("covariate_coding")) {
+    SEXP cm = data.attr("covariate_coding");
+    if (!Rf_isNull(cm)) data_covcoding = Rcpp::List(cm);
   }
 
   // ------------------------------------------------------------------
@@ -299,7 +297,7 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
       Rf_error("BaseSpec '%s': kernel_id '%s' not found",
                bs.target_parameter.c_str(), bs.kernel_id.c_str());
 
-    build_covariate_maps(bs, b_lst, data, data_covmaps);
+    build_covariate_coding(bs, b_lst, data, data_covcoding);
 
     for (const auto& pn : bs.pnames) {
       all_trend_params.insert(pn);
@@ -524,8 +522,8 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
   const bool variadic = k_rt.is_variadic();
   const int  n_slots  = k_rt.n_slots();
 
-  const bool has_map = bs.has_covariate_maps && !bs.covariate_maps.empty();
-  const Mat* map     = has_map ? &bs.covariate_maps[0] : nullptr;
+  const bool has_coding = bs.has_covariate_coding && !bs.covariate_coding.empty();
+  const Mat* coding     = has_coding ? &bs.covariate_coding[0] : nullptr;
 
   // -----------------------------------------------------------------------
   // Variadic kernel: single kernel, output is [n x n_cols]
@@ -533,10 +531,10 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
   if (variadic) {
     KernelOutput ko = k_rt.kernel_ptrs[0]->get_output_stream(bs.kernel_output);
 
-    if (has_map && needs_base_par) {
+    if (has_coding && needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
         const double* q_col = ko.data + col * ko.n_rows;
-        const double* m_col = map->colptr(col < map->ncol ? col : 0);
+        const double* m_col = coding->colptr(col < coding->ncol ? col : 0);
 #pragma omp simd
         for (int r = 0; r < n; ++r) {
           double q = q_col[r] - center_offset;
@@ -577,8 +575,8 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
       KernelOutput  ko    = k_rt.kernel_ptrs[s]->get_output_stream(bs.kernel_output);
       const double* q_col = ko.data;
 
-      if (has_map && needs_base_par) {
-        const double* m_col = map->colptr(s);
+      if (has_coding && needs_base_par) {
+        const double* m_col = coding->colptr(s);
 #pragma omp simd
         for (int r = 0; r < n; ++r) {
           double q = q_col[r] - center_offset;

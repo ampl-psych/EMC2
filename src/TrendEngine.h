@@ -88,10 +88,10 @@ struct BaseSpec {
 
   std::vector<std::string> pnames;
 
-  // covariate maps: always matrices (column-major, n_trials x n_covs)
-  // one Mat per named map entry; empty if no maps
-  bool             has_covariate_maps = false;
-  std::vector<Mat> covariate_maps;
+  // covariate coding: always matrices (column-major, n_trials x n_covs)
+  // one Mat per named map entry; empty if no coding schemes
+  bool             has_covariate_coding = false;
+  std::vector<Mat> covariate_coding;
 };
 
 // =============================================================================
