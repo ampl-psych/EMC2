@@ -132,12 +132,11 @@ make_kernel <- function(cov_names,
 #'   Non-sequential kernels always have one output (`1L`). Sequential kernels
 #'   (delta family) may have more; use [trend_help()] to see available outputs.
 #'   Defaults to `1L`.
-#' @param maps Optional named list of functions that translate trial-level
+#' @param coding Optional named list of functions that translate trial-level
 #'   covariates into accumulator-specific predictors. Each function must accept
 #'   `(dadm, cov_names)` and return a matrix of size
 #'   `(nrow(dadm), length(cov_names))`, coding how each covariate contributes
-#'   to each accumulator on each trial. Each map introduces one additional base
-#'   parameter (e.g. `v.w_differences`, `v.w_sums`). See Details and Examples.
+#'   to each accumulator on each trial.
 #' @param phase Character string; one of `"premap"`, `"pretransform"`,
 #'   `"posttransform"`. Controls when the trend is applied in the parameter
 #'   computation pipeline. Defaults to `"premap"`.
@@ -145,14 +144,14 @@ make_kernel <- function(cov_names,
 #' @return An object of class `emc2_base`.
 #'
 #' @details
-#' ## Covariate maps
+#' ## Coding
 #'
-#' The `maps` argument allows you to specify how trial-by-trial covariates
+#' The `coding` argument allows you to specify how trial-by-trial covariates
 #' influence model parameters for each accumulator. This is useful when the
 #' same covariate enters different accumulators with different signs or weights
 #' (e.g. an advantage coding for RL-DDM or RL-ARD models).
 #'
-#' A map function must have the signature `function(dadm, cov_names)` and
+#' A coding function must have the signature `function(dadm, cov_names)` and
 #' return a numeric matrix with `nrow(dadm)` rows and `length(cov_names)`
 #' columns. The matrix codes how each covariate contributes to the current
 #' accumulator on each trial.
@@ -168,13 +167,6 @@ make_kernel <- function(cov_names,
 #'   minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
 #'   plus + minus
 #' }
-#' ```
-#'
-#' When multiple maps are supplied, the model creates one base parameter per
-#' map. The resulting covariate maps for each participant are stored as an
-#' attribute on the `dadm`:
-#' ```r
-#' attr(emc[[1]]$data[[1]], "covariate_maps")
 #' ```
 #'
 #' @examples
@@ -201,7 +193,7 @@ make_kernel <- function(cov_names,
 #'
 #' k <- make_kernel(cov_names=c("cov1", "cov2", "cov3", "cov4"), type="delta", at="lR")
 #' b <- make_base(target_parameter="v", type="lin", kernel=k,
-#'                maps = list(differences = advantage_map))
+#'                coding = list(differences = advantage_map))
 #' trend <- make_trend(b)
 #'
 #' design_RDM <- design(
@@ -212,10 +204,10 @@ make_kernel <- function(cov_names,
 #' )
 #'
 #' emc <- make_emc(data, design_RDM, type = "single")
-#' attr(emc[[1]]$data[[1]], "covariate_maps")
+#' attr(emc[[1]]$data[[1]], "covariate_coding")
 #'
 #'
-#' # --- Multiple covariate maps (advantage + sum, for RL-ARD models) ---
+#' # --- Multiple covariate coding (advantage + sum, for RL-ARD models) ---
 #'
 #' sum_map <- function(dadm, cov_names) {
 #'   lS      <- paste0("cov", ifelse(dadm$lR == "left",  dadm$cov_left,  dadm$cov_right))
@@ -226,8 +218,8 @@ make_kernel <- function(cov_names,
 #' }
 #'
 #' b2 <- make_base(target_parameter = "v", type="lin", kernel = k,
-#'                 maps = list(differences = advantage_map, sums = sum_map))
-#' trend2 <- make_trend(b2)
+#'                 coding = list(sums = sum_map))
+#' trend2 <- make_trend(b, b2)
 #'
 #' # The model now includes two base parameters (e.g. v.w_differences, v.w_sums)
 #' get_trend_pnames(trend2)
@@ -240,7 +232,7 @@ make_kernel <- function(cov_names,
 #' )
 #'
 #' emc2 <- make_emc(data, design_RDM2, type = "single")
-#' attr(emc2[[1]]$data[[1]], "covariate_maps")
+#' attr(emc2[[1]]$data[[1]], "covariate_coding")
 #'
 #' @seealso [make_kernel()], [make_trend()], [trend_help()]
 #' @export
@@ -248,7 +240,7 @@ make_base <- function(target_parameter,
                       type,
                       kernel,
                       kernel_output = 1L,
-                      maps          = NULL,
+                      coding        = NULL,
                       phase         = "premap") {
 
   # ---- validate ----
@@ -264,18 +256,19 @@ make_base <- function(target_parameter,
 
   kernel_output <- as.integer(kernel_output)
 
-  # ---- validate maps ----
-  if (!is.null(maps)) {
-    if (!is.list(maps) || !all(vapply(maps, is.function, logical(1))))
-      stop("maps must be a named list of functions.")
-    if (is.null(names(maps)) || any(names(maps) == ""))
-      stop("All entries in maps must be named.")
-    if (identical(type, "identity") && length(maps) > 1)
-      stop("Cannot use multiple maps with type = 'identity'.")
+  # ---- validate coding ----
+  if (!is.null(coding)) {
+    if (!is.list(coding) || !all(vapply(coding, is.function, logical(1))))
+      stop("coding must be a named list of functions.")
+    if (is.null(names(coding)) || any(names(coding) == ""))
+      stop("All entries in coding must be named.")
+    if (length(coding) > 1)
+      stop("coding must contain exactly one entry. To use multiple coding schemes, ",
+           "create one make_base() per scheme and combine them in make_trend().")
   }
 
   # ---- generic base parameter names and transforms (no prefix yet) ----
-  binfo              <- trend_help(base = type, do_return = TRUE, maps = maps)
+  binfo              <- trend_help(base = type, do_return = TRUE, coding = coding)
   generic_pnames     <- binfo$default_pars %||% character(0)
   raw_tf             <- binfo$transforms$func %||% list()
   generic_transforms <- stats::setNames(
@@ -289,7 +282,7 @@ make_base <- function(target_parameter,
       target_parameter   = target_parameter,
       kernel_id          = kernel$kernel_id,
       kernel_output      = kernel_output,
-      maps               = maps,
+      coding             = coding,
       phase              = phase,
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
@@ -603,10 +596,10 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
     }
     if (!is.null(base)) {
       if(dots$do_return) {
-        if(!is.null(dots$maps) & base != 'add') {
+        if(!is.null(dots$coding) & base != 'add') {
           # Update default parameters
           old_base_pars <- bases[[base]]$default_pars
-          suffixes <- names(dots$maps)
+          suffixes <- names(dots$coding)
           new_base_pars <- paste0(old_base_pars, "_", suffixes)
 
           bases[[base]]$default_pars <- new_base_pars
@@ -891,9 +884,9 @@ get_trend_pnames <- function(trend) {
   # c(non_shared, shared_names)
 }
 
-has_trend_map <- function(model) {
+has_trend_coding <- function(model) {
   if (is.null(model) || is.function(model) || is.null(model$trend)) return(FALSE)
-  any(vapply(model$trend$bases, function(x) !is.null(x$maps) && length(x$maps) > 0, logical(1)))
+  any(vapply(model$trend$bases, function(x) !is.null(x$coding) && length(x$coding) > 0, logical(1)))
 }
 
 has_conditional_covariates <- function(design) {
@@ -1443,15 +1436,15 @@ make_data_unconditional <- function(data, pars, design, model,
   })
 
 
-  # Identify whether any trend has covariate maps
+  # Identify whether any trend has covariate coding
   trend        <- model_list$trend  # list(kernels = list(...), bases = list(...))
   has_trend    <- !is.null(trend)
 
-  # Step 5: covariate maps — collect all bases that have maps
-  bases_with_maps <- if (has_trend) {
-    Filter(function(b) !is.null(b$maps), trend$bases)
+  # Step 5: covariate coding — collect all bases that have coding schemes
+  bases_with_coding <- if (has_trend) {
+    Filter(function(b) !is.null(b$coding), trend$bases)
   } else list()
-  has_covariate_maps <- length(bases_with_maps) > 0
+  has_covariate_coding <- length(bases_with_coding) > 0
 
   # Step 9: feedback — collect all kernels that have feedback functions
   kernels_with_feedback <- if (has_trend) {
@@ -1505,22 +1498,22 @@ make_data_unconditional <- function(data, pars, design, model,
       out
     })
 
-    # Pre-allocate covariate_maps_prefix: bootstrap structure from trial 1
-    if (has_covariate_maps) {
+    # Pre-allocate covariate_coding_prefix: bootstrap structure from trial 1
+    if (has_covariate_coding) {
       idx_t1  <- idx_by_trial[[1]]
       dadm_t1 <- dadm_subj[idx_t1, , drop = FALSE]
 
-      covariate_maps_prefix <- list()
-      for (base in bases_with_maps) {
+      covariate_coding_prefix <- list()
+      for (base in bases_with_coding) {
         kernel    <- trend$kernels[[base$kernel_id]]
         cov_names <- kernel$cov_names
-        for (map_name in names(base$maps)) {
-          trial1_result <- base$maps[[map_name]](dadm = dadm_t1, cov_names)
+        for (map_name in names(base$coding)) {
+          trial1_result <- base$coding[[map_name]](dadm = dadm_t1, cov_names)
           if (is.null(dim(trial1_result))) {
             trial1_result <- matrix(trial1_result, nrow = 1,
                                     dimnames = list(NULL, names(trial1_result)))
           }
-          covariate_maps_prefix[[map_name]] <- matrix(
+          covariate_coding_prefix[[map_name]] <- matrix(
             0,
             nrow = n_rows_subj,
             ncol = ncol(trial1_result),
@@ -1590,17 +1583,17 @@ make_data_unconditional <- function(data, pars, design, model,
         designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
       }
 
-      # 5. Compute covariate maps for current trial only, write into buffer
-      if (has_covariate_maps) {
-        for (base in bases_with_maps) {
+      # 5. Compute covariate coding for current trial only, write into buffer
+      if (has_covariate_coding) {
+        for (base in bases_with_coding) {
           kernel    <- trend$kernels[[base$kernel_id]]
           cov_names <- kernel$cov_names
-          for (map_name in names(base$maps)) {
-            result <- base$maps[[map_name]](dadm = dadm_current, cov_names)
-            covariate_maps_prefix[[map_name]][idx_curr, ] <- as.matrix(result)
+          for (scheme_name in names(base$coding)) {
+            result <- base$coding[[scheme_name]](dadm = dadm_current, cov_names)
+            covariate_coding_prefix[[scheme_name]][idx_curr, ] <- as.matrix(result)
           }
         }
-        attr(dadm_subj_df, "covariate_maps") <- covariate_maps_prefix
+        attr(dadm_subj_df, "covariate_coding") <- covariate_coding_prefix
       }
 
       # 6. Get parameter matrix for full subject buffer
@@ -1775,589 +1768,3 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL) {
   colnames(out) <- trend$kernels[[1]]$covariate
   out
 }
-
-
-#' #' #' Create a trend specification for model parameters
-#' #'
-#' #' @param par_names Character vector specifying which parameters to apply trend to
-#' #' @param cov_names Character vector specifying which covariates to use for each trend
-#' #' @param kernels Character vector specifying which kernel function to use for each trend
-#' #' @param bases Optional character vector specifying which base function to use for each trend
-#' #' @param shared Named list with entries the parameter names to be shared and the names the new names of the shared parameter.
-#' #' @param trend_pnames Optional character vector specifying custom parameter names
-#' #' @param phase Character vector (length 1 or `length(par_names)`) specifying the phase for each trend entry;
-#' #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
-#' #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
-#' #' @param at If NULL, trend is applied to every row in the `dadm`. If a factor name (e.g., "lR"), trend is applied only to entries
-#' #'        corresponding to the first level of that factor, and fed forward to the other levels of that factor. Defaults to "lR". For DDMs, `at` should be set to NULL.
-#' #' @param maps List of functions that create matrices with which to multiply the covariates before applying the base. See details.
-#' #' @param custom_trend A trend registered with `register_trend`
-#' #' @param kernel_args Optional named list of kernel-specific arguments, aligned with \code{par_names}.
-#' #'   Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
-#' #'   Currently supported arguments:
-#' #'   \describe{
-#' #'     \item{\code{q_reset_column}}{For delta-family kernels (\code{"delta"}, \code{"delta2kernel"},
-#' #'       \code{"delta2lr"}) only. Name of a logical or integer column in \code{data} indicating
-#' #'       trials on which the Q-value should be reset to \code{q0} before the prediction error
-#' #'       is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
-#' #'   }
-#' #' @param per_covariate_pars Optional vector of parameter names that should be estimated separately for each covariate
-#' #' @return A list containing the trend specifications for each parameter
-#' #' @export
-#' #'
-#' #' @details
-#' #' The `maps` argument accepts one or more functions that translate trial-level
-#' #' covariates into accumulator-specific predictors.
-#' #'
-#' #' Example of a minimal map function:
-#' #'
-#' #' ```r
-#' #' advantage_map <- function(dadm, cov_names) {
-#' #'   lS      <- paste0('cov', ifelse(dadm$lR == 'left',  dadm$cov_left,  dadm$cov_right))
-#' #'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left,  dadm$cov_right))
-#' #'   plus  <- sapply(cov_names, function(x) ifelse(lS      == x,  1, 0))
-#' #'   minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
-#' #'   plus + minus
-#' #' }
-#' #' ```
-#' #'
-#' #' Multiple maps may be supplied, in which case the model will create a separate
-#' #' base parameter for each map. See more examples below.
-#' #
-#' #'
-#' #' @examples
-#' #' # Put trend on B and v parameters
-#' #' trend <- make_trend(
-#' #'   par_names = c("B", "v"),
-#' #'   cov_names = "strial",
-#' #'   kernels = c("exp_incr", "poly3"),
-#' #'   phase = "premap",
-#' #'   shared = list(shrd = list("B.B0", "v.d1"))
-#' #' )
-#' #' get_trend_pnames(trend)
-#' #'
-#' #'
-#' #' # Using covariate maps
-#' #'
-#' #' # Covariate maps allow you to specify how trial-by-trial covariates influence
-#' #' # model parameters for each accumulator. The example below uses a simple data
-#' #' # frame with two trials. `cov_left` and `cov_right` specify which covariates
-#' #' # correspond to the left and right accumulators on each trial. `S` indicates the
-#' #' # correct response, and `cov1`–`cov4` contain the actual covariate values.
-#' #'
-#' #' data <- data.frame(
-#' #'   subjects = rep(1, 2),
-#' #'   S        = c('left', 'right'),
-#' #'   cov_left = c('1', '4'),
-#' #'   cov_right= c('3', '2'),
-#' #'   rt       = c(1.2, 0.8),
-#' #'   R        = factor(c('left', 'right')),
-#' #'   cov1     = c(1, NA),
-#' #'   cov2     = c(NA, 1),
-#' #'   cov3     = c(NA, 1),
-#' #'   cov4     = c(1, 1)
-#' #' )
-#' #'
-#' #' # A covariate map function must take `dadm` and `cov_names` as inputs and return
-#' #' # a matrix of size (nrow(dadm), length(cov_names)), coding how each covariate
-#' #' # contributes to each accumulator.
-#' #'
-#' #' advantage_map <- function(dadm, cov_names) {
-#' #'
-#' #'   # Which stimulus does the accumulator correspond to on each trial?
-#' #'   lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
-#' #'
-#' #'   # Which stimulus does the *other* accumulator correspond to?
-#' #'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
-#' #'
-#' #'   # Build indicator matrices
-#' #'   map_plus1 <- sapply(cov_names, function(col) ifelse(lS     == col,  1, 0))
-#' #'   map_minus1<- sapply(cov_names, function(col) ifelse(lSother == col, -1, 0))
-#' #'
-#' #'   map_plus1 + map_minus1
-#' #' }
-#' #'
-#' #' # A covariate map function can be supplied to make_trend(), which creates the mapping
-#' #' # specification for the model for each participant. Here, a single map ('differences') is provided.
-#' #'
-#' #' trend <- make_trend(
-#' #'   par_names = 'v',
-#' #'   kernels   = 'delta',
-#' #'   bases     = 'lin',
-#' #'   cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
-#' #'   maps      = list('differences' = advantage_map),
-#' #'   at        = 'lR'
-#' #' )
-#' #'
-#' #' design_RDM <- design(
-#' #'   model  = RDM,
-#' #'   data   = data,
-#' #'   formula= list(B ~ 1, v ~ 1, t0 ~ 1),
-#' #'   trend  = trend
-#' #' )
-#' #'
-#' #' emc <- make_emc(data, design_RDM, type = 'single')
-#' #'
-#' #' # The resulting covariate maps for each subject are attached to the `dadm`:
-#' #' attr(emc[[1]]$data[[1]], 'covariate_maps')
-#' #' # And to confirm that this mapping is correct, compare with the corresponding `dadm`
-#' #' emc[[1]]$data[[1]]
-#' #'
-#' #' # You can also provide multiple covariate maps. Each additional map introduces
-#' #' # a separate base parameter. For example, the following `sum_map` is suitable
-#' #' # for RL-ARD–type models:
-#' #'
-#' #' sum_map <- function(dadm, cov_names) {
-#' #'   # Which stimulus does the accumulator correspond to on each trial?
-#' #'   lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
-#' #'   # Which stimulus does the *other* accumulator correspond to?
-#' #'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
-#' #'
-#' #'   # Indicator matrices (note: both are added rather than subtracted)
-#' #'   map_this  <- sapply(cov_names, function(col) ifelse(lS      == col, 1, 0))
-#' #'   map_other <- sapply(cov_names, function(col) ifelse(lSother == col, 1, 0))
-#' #'
-#' #'   map_this + map_other
-#' #' }
-#' #'
-#' #' trend <- make_trend(
-#' #'   par_names = 'v',
-#' #'   kernels   = 'delta',
-#' #'   bases     = 'lin',
-#' #'   cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
-#' #'   maps      = list('differences' = advantage_map,
-#' #'                    'sums'        = sum_map),
-#' #'   at        = 'lR'
-#' #' )
-#' #'
-#' #' design_RDM <- design(
-#' #'   model  = RDM,
-#' #'   data   = data,
-#' #'   formula= list(B ~ 1, v ~ 1, t0 ~ 1),
-#' #'   trend  = trend
-#' #' )
-#' #'
-#' #' emc <- make_emc(data, design_RDM, type = 'single')
-#' #'
-#' #' # Now the dadm contains two covariate maps, and the model includes two
-#' #' # corresponding base parameters (e.g., v.w1 and v.w2):
-#' #' attr(emc[[1]]$data[[1]], 'covariate_maps')
-#' #'
-#' #'
-#' make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
-#'                        shared = NULL, trend_pnames = NULL,
-#'                        phase = "premap",
-#'                        par_input = NULL, at = 'lR',
-#'                        maps = NULL,
-#'                        custom_trend = NULL,
-#'                        kernel_args = NULL,
-#'                        per_covariate_pars = NULL){
-#'   if(!(length(par_names) == length(kernels))){
-#'     stop("Make sure that par_names and kernels have the same length")
-#'   }
-#'   if (is.null(cov_names)) {
-#'     cov_names <- rep(list(character(0)), length(par_names))
-#'   } else if(length(cov_names) != length(par_names)){
-#'     if(length(cov_names) == 1){
-#'       cov_names <- rep(cov_names, length(par_names))
-#'     } else{
-#'       stop("Make sure that cov_names and par_names have the same length")
-#'     }
-#'   }
-#'   # normalize par_input to align with par_names (each entry vector of names or character(0))
-#'   if (is.null(par_input)) {
-#'     par_input <- rep(list(character(0)), length(par_names))
-#'   } else if (length(par_input) != length(par_names)) {
-#'     if (length(par_input) == 1) {
-#'       par_input <- rep(par_input, length(par_names))
-#'     } else {
-#'       stop("Make sure that par_input and par_names have the same length or par_input is NULL/length 1")
-#'     }
-#'   }
-#'   # normalize phase
-#'   if (length(phase) != length(par_names)) phase <- rep(phase, length(par_names))
-#'   if (!all(phase %in% c("premap","pretransform","posttransform"))) {
-#'     stop("phase must be one of 'premap', 'pretransform', 'posttransform'")
-#'   }
-#'   if(!is.null(bases)){
-#'     if(length(kernels) != length(bases)){
-#'       stop("If bases not is NULL make sure you specify as many bases as kernels")
-#'     }
-#'   }
-#'   # Normalize custom_trend to a per-parameter list if provided
-#'   if (!is.null(custom_trend)) {
-#'     if (inherits(custom_trend, "emc2_custom_trend")) {
-#'       custom_trend <- rep(list(custom_trend), length(par_names))
-#'     } else if (is.list(custom_trend)) {
-#'       if (length(custom_trend) == 1) custom_trend <- rep(custom_trend, length(par_names))
-#'       if (length(custom_trend) != length(par_names))
-#'         stop("custom_trend must be a single registered trend or a list aligned with par_names")
-#'       if (!all(vapply(custom_trend, inherits, logical(1), what = "emc2_custom_trend")))
-#'         stop("Items in custom_trend must be created by register_trend()")
-#'     } else {
-#'       stop("custom_trend must be NULL, a single registered trend, or a list of them")
-#'     }
-#'   }
-#'
-#'   # normalize maps. Maps is either a list with list(name1=function1, name2=function2) or a list of such lists
-#'   if(length(maps) > 0) {
-#'     maps <- normalize_maps(maps, par_names)
-#'   }
-#'
-#'   # Normalize kernel_args
-#'   if (is.null(kernel_args)) {
-#'     kernel_args <- rep(list(NULL), length(par_names))
-#'   } else if (!is.list(kernel_args)) {
-#'     stop("kernel_args must be NULL or a list")
-#'   } else {
-#'     # Distinguish list(q_reset_column='x')  [flat, single-kernel args]
-#'     # from           list(list(...), list(...))  [already per-kernel]
-#'     # Heuristic: if the top-level list has any named non-list elements,
-#'     # or all elements are named and none are lists, treat as a single entry.
-#'     is_flat <- !is.null(names(kernel_args)) && !any(vapply(kernel_args, is.list, logical(1)))
-#'     if (is_flat) {
-#'       kernel_args <- rep(list(kernel_args), length(par_names))
-#'     } else if (length(kernel_args) != length(par_names)) {
-#'       stop("kernel_args must be NULL, a single named list, or a list of lists aligned with par_names")
-#'     }
-#'   }
-#'
-#'   if (is.null(per_covariate_pars)) {
-#'     per_covariate_pars <- rep(list(NULL), length(par_names))
-#'   } else if (is.character(per_covariate_pars)) {
-#'     # Single character vector: apply to all par_names
-#'     per_covariate_pars <- rep(list(per_covariate_pars), length(par_names))
-#'   } else if (is.list(per_covariate_pars)) {
-#'     if (length(per_covariate_pars) == 1) {
-#'       per_covariate_pars <- rep(per_covariate_pars, length(par_names))
-#'     } else if (length(per_covariate_pars) != length(par_names)) {
-#'       stop("per_covariate_pars must be NULL, a character vector, or a list aligned with par_names")
-#'     }
-#'   } else {
-#'     stop("per_covariate_pars must be NULL, a character vector, or a list of character vectors")
-#'   }
-#'
-#'   # ---- Validate kernel_args entries for known kernels ----
-#'   delta_kernels <- c("delta", "delta2kernel", "delta2lr", 'rescorlawagner')
-#'   for (i in seq_along(par_names)) {
-#'     ka <- kernel_args[[i]]
-#'     if (is.null(ka)) next
-#'     if (!is.list(ka)) stop("Each kernel_args entry must be a named list or NULL")
-#'
-#'     # q_reset_column is only meaningful for delta-family kernels
-#'     if (!is.null(ka$q_reset_column) && !(kernels[i] %in% delta_kernels)) {
-#'       warning(sprintf(
-#'         "kernel_args$q_reset_column specified for par '%s' but kernel '%s' is not a delta kernel; ignored.",
-#'         par_names[i], kernels[i]
-#'       ))
-#'       kernel_args[[i]]$q_reset_column <- NULL
-#'     }
-#'   }
-#'
-#'
-#'   trends_out <- list()
-#'   all_trend_pnames <- c()
-#'   for(i in 1:length(par_names)){
-#'     trend <- list()
-#'     # Kernel
-#'     if(!kernels[i] %in% names(trend_help(kernels[i], return_types = TRUE)$kernels)){
-#'       stop("Kernel type not support see `trend_help()`")
-#'     } else  {
-#'       trend$kernel <- kernels[i]
-#'       trend$at <- at
-#'     }
-#'
-#'     # base
-#'     if (is.null(bases)) {
-#'       if (identical(kernels[i], "custom")) {
-#'         if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
-#'         ct <- custom_trend[[i]]
-#'         trend$base <- ct$base
-#'       } else {
-#'         trend$base <- trend_help(kernels[i], do_return = TRUE)$bases[1]
-#'       }
-#'     } else {
-#'       if (identical(kernels[i], "custom")) {
-#'         # For custom kernels, accept any of the standard bases the user specifies.
-#'         base_ok <- c("lin","centered","add","identity")
-#'         if (!(bases[i] %in% base_ok)) stop("Unknown base '", bases[i], "' for custom kernel. Pick one of ", paste(base_ok, collapse = ", "))
-#'         trend$base <- bases[i]
-#'       } else {
-#'         if(bases[i] %in% names(trend_help(kernels[i], do_return = TRUE)$bases)){
-#'           stop("base type not supported with kernel, see `trend_help(<kernel>)`")
-#'         }
-#'         trend$base <- bases[i]
-#'       }
-#'     }
-#'     # add par names
-#'     user_trend_pnames <- trend_pnames[[i]]
-#'     if(length(maps[[i]]) > 1 & trend$base == 'identity') stop('Cannot use multiple maps in combination with an identity kernel (which map should be used..?)')
-#'     default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE, maps=maps[[i]])$default_pars
-#'     # Kernel parameter names:
-#'     if (identical(kernels[i], "custom")) {
-#'       if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
-#'       ct <- custom_trend[[i]]
-#'       default_trend_pnames <- c(default_trend_pnames, ct$trend_pnames)
-#'       # Attach the external pointer and optional transforms to this trend entry
-#'       attr(trend, "custom_ptr") <- attr(ct, "custom_ptr")
-#'       if (!is.null(attr(ct, "custom_transforms"))) {
-#'         # ensure order matches ct$trend_pnames
-#'         ctf <- attr(ct, "custom_transforms")
-#'         if (!is.null(names(ctf))) ctf <- ctf[ct$trend_pnames]
-#'         attr(trend, "custom_transforms") <- unname(ctf)
-#'       }
-#'     } else {
-#'       default_trend_pnames <- c(default_trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
-#'     }
-#'     if(!is.null(user_trend_pnames)) {
-#'       if(length(user_trend_pnames) != length(default_trend_pnames)) {
-#'         msg <- paste0("For trend ", i, ", you provided ", length(user_trend_pnames), " parameter names, while ", length(default_trend_pnames), " are needed. The default parameter names would be: ")
-#'         msg <- paste0(msg, paste0(default_trend_pnames, collapse = ', '))
-#'         stop(msg)
-#'       } else {
-#'         final_trend_pnames <- user_trend_pnames
-#'       }
-#'     } else {
-#'       final_trend_pnames <- default_trend_pnames
-#'     }
-#'
-#'     cur_trend_pnames <- paste0(par_names[i], ".", final_trend_pnames)
-#'     if(any(cur_trend_pnames %in% all_trend_pnames)){
-#'       cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames] <- paste0(cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames], ".", trend$kernel)
-#'     }
-#'
-#'     # ---- Build kernel_pnames data frame ----
-#'     # rows = covariate/par_input slots, cols = generic parameter names,
-#'     # values = actual (possibly covariate-expanded) parameter names.
-#'     # Must be done before deduplication so prefixed_generic is still the
-#'     # canonical form before any kernel-suffix patching.
-#'     cur_covs         <- unlist(cov_names[i])
-#'     cur_parinp       <- unlist(par_input[[i]])
-#'     slot_names       <- c(cur_covs, cur_parinp)
-#'     cur_per_cov_pars <- per_covariate_pars[[i]]  # generic names, e.g. c("alphaPos", "alphaNeg")
-#'     prefixed_generic <- paste0(par_names[i], ".", final_trend_pnames)
-#'
-#'     if (length(slot_names) > 1 && !is.null(cur_per_cov_pars) && length(cur_per_cov_pars) > 0) {
-#'
-#'       # Validate: all requested names must exist in final_trend_pnames
-#'       unknown <- cur_per_cov_pars[!cur_per_cov_pars %in% final_trend_pnames]
-#'       if (length(unknown) > 0) {
-#'         stop("per_covariate_pars for '", par_names[i], "' contains names not found in trend parameters: ",
-#'              paste(unknown, collapse = ", "),
-#'              ". Available: ", paste(final_trend_pnames, collapse = ", "))
-#'       }
-#'
-#'       # For each slot x generic param, resolve the actual parameter name
-#'       kp_mat <- do.call(rbind, lapply(slot_names, function(slot_nm) {
-#'         vapply(seq_along(final_trend_pnames), function(j) {
-#'           gp       <- final_trend_pnames[j]
-#'           prefixed <- prefixed_generic[j]
-#'           if (gp %in% cur_per_cov_pars) paste0(prefixed, ".", slot_nm) else prefixed
-#'         }, character(1))
-#'       }))
-#'
-#'     } else {
-#'       # All slots share the same parameter names
-#'       kp_mat <- do.call(rbind, lapply(slot_names, function(slot_nm) prefixed_generic))
-#'     }
-#'
-#'     if (length(slot_names) > 0) {
-#'       rownames(kp_mat) <- slot_names
-#'       colnames(kp_mat) <- final_trend_pnames
-#'       kernel_pnames_df <- as.data.frame(kp_mat, stringsAsFactors = FALSE)
-#'     } else {
-#'       kernel_pnames_df <- data.frame()
-#'     }
-#'
-#'     # trend_pnames = unique actual parameter names across all slots
-#'     cur_trend_pnames <- unique(unlist(kernel_pnames_df, use.names = FALSE))
-#'     # If no slots (e.g. no covariates and no par_input), fall back to prefixed_generic
-#'     if (length(cur_trend_pnames) == 0) cur_trend_pnames <- prefixed_generic
-#'
-#'     # Deduplicate against previously seen trend pnames (append kernel suffix if needed)
-#'     dups <- cur_trend_pnames %in% all_trend_pnames
-#'     if (any(dups)) {
-#'       new_names <- ifelse(dups,
-#'                           paste0(cur_trend_pnames, ".", trend$kernel),
-#'                           cur_trend_pnames)
-#'       # Patch kernel_pnames_df to match
-#'       if (nrow(kernel_pnames_df) > 0) {
-#'         kernel_pnames_df[] <- lapply(kernel_pnames_df, function(col) {
-#'           ifelse(col %in% cur_trend_pnames[dups],
-#'                  paste0(col, ".", trend$kernel),
-#'                  col)
-#'         })
-#'       }
-#'       cur_trend_pnames <- new_names
-#'     }
-#'
-#'     all_trend_pnames    <- c(all_trend_pnames, cur_trend_pnames)
-#'     trend$trend_pnames  <- cur_trend_pnames
-#'     trend$kernel_pnames <- kernel_pnames_df
-#'     trend$covariate     <- unlist(cov_names[i])
-#'     trend$par_input     <- unlist(par_input[[i]])
-#'     trend$phase         <- phase[i]
-#'     trend$kernel_args   <- kernel_args[[i]]
-#'     trend$map <- maps[[i]]
-#'     trends_out[[i]] <- trend
-#'   }
-#'   names(trends_out) <- par_names
-#'   if(!is.null(shared)){
-#'     for (main_par in names(shared)) {
-#'       to_replace <- shared[[main_par]]
-#'       for (trend_n in 1:length(trends_out)) {
-#'         # Patch trend_pnames
-#'         curr_pnames <- trends_out[[trend_n]]$trend_pnames
-#'         curr_pnames[curr_pnames %in% to_replace] <- main_par
-#'         trends_out[[trend_n]]$trend_pnames <- curr_pnames
-#'
-#'         # Patch kernel_pnames data frame
-#'         kp <- trends_out[[trend_n]]$kernel_pnames
-#'         if (nrow(kp) > 0) {
-#'           kp[] <- lapply(kp, function(col) {
-#'             col[col %in% to_replace] <- main_par
-#'             col
-#'           })
-#'           trends_out[[trend_n]]$kernel_pnames <- kp
-#'         }
-#'       }
-#'     }
-#'   }
-#'   attr(trends_out, "shared") <- shared
-#'   attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2kernel", "delta2lr"))
-#'
-#'   return(trends_out)
-#' }
-#'
-#'
-#' #' Get parameter types from trend object
-#' #'
-#' #' @param trend A trend object created by make_trend()
-#' #' @return A character vector of parameter names used in the trend
-#' #' @export
-#' #' @examples
-#' #' trend <- make_trend(par_names = "v", cov_names = "trial", kernels = "exp_incr")
-#' #' get_trend_pnames(trend)
-#' #'
-#' get_trend_pnames <- function(trend){
-#'   out <- unlist(lapply(trend, function(x) x$trend_pnames))
-#'   names(out) <- NULL
-#'   if(!is.null(attr(trend, "shared"))){
-#'     shared <- attr(trend, "shared")
-#'     out <- out[!out %in% names(shared)] # Gets rid of duplicates
-#'     out <- c(out, names(shared))
-#'   }
-#'   return(out)
-#' }
-
-
-
-
-
-#' #' Check and update formula list for trend parameters
-#' #'
-#' #' @param trend A trend list, as made by make_trend
-#' #' @param covariates Names of covariates, or NULL
-#' #' @param model A model function, or NULL
-#' #' @param formula List of formulas, or NULL
-#' #' @param parameter_design A parameter_design list, or NULL
-#' #' @return Updated formula list with intercept formulas added for missing trend parameters
-#' check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL,
-#'                         parameter_design = NULL) {
-#'   if (!is.null(model)) {
-#'     # non-premap trend targets must be model parameters
-#'     tnames <- names(trend)
-#'     ok <- vapply(seq_along(trend), function(i) {
-#'       if (identical(trend[[i]]$phase, "premap")) return(TRUE)
-#'       tnames[i] %in% names(model()$p_types)
-#'     }, logical(1))
-#'     if (!all(ok)) stop("pretransform/posttransform trend has a parameter name not in the model")
-#'   }
-#'   if (is.null(covariates)) stop("must specify covariates when using trend")
-#'   covnames <- unlist(lapply(trend, function(x) x$covariate))
-#'
-#'   trend_pnames <- get_trend_pnames(trend)
-#'   if (!is.null(formula)) {
-#'     # Don't auto-add intercepts for parameter_design output parameters
-#'     pd_targets <- NULL
-#'     if (!is.null(parameter_design)) {
-#'       expand_over <- parameter_design$expand_over
-#'       if (!is.null(expand_over)) {
-#'         pd_targets <- as.vector(outer(rownames(parameter_design$weights), expand_over, paste, sep = "."))
-#'       } else {
-#'         pd_targets <- rownames(parameter_design$weights)
-#'       }
-#'     }
-#'     isin <- trend_pnames %in% unlist(lapply(formula, function(x) all.vars(x)[1]))
-#'     # don't auto-add intercepts for parameter_design output parameters
-#'     isin <- isin | (trend_pnames %in% pd_targets)
-#'     if (any(!isin)) {
-#'       formula <- c(formula, lapply(trend_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
-#'       message("Intercept formula added for trend_pars: ", paste(trend_pnames[!isin], collapse = ", "))
-#'     }
-#'   }
-#'   return(formula)
-#' }
-#'
-#'
-#' # update_model_trend <- function(trend, model) {
-#   model_list <- model()
-#
-#   tnames <- names(trend)
-#   for (i in seq_along(trend)) {
-#     par       <- tnames[i]
-#     cur_trend <- trend[[i]]
-#
-#     # Get transforms for base and kernel, keyed by generic parameter name
-#     base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE,
-#                                   maps = cur_trend$map)$transforms
-#     if (identical(cur_trend$kernel, "custom")) {
-#       ctf <- attr(cur_trend, "custom_transforms")
-#       kernel_transforms <- if (is.null(ctf)) NULL else list(func = ctf)
-#     } else {
-#       kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
-#     }
-#
-#     if (!is.null(kernel_transforms) || !is.null(base_transforms)) {
-#       generic_transforms <- c(base_transforms$func, kernel_transforms$func)
-#
-#       if (nrow(cur_trend$kernel_pnames) > 0) {
-#         # colnames(kernel_pnames) are the generic parameter names — no string
-#         # stripping needed. Length must match generic_transforms.
-#         names(generic_transforms) <- colnames(cur_trend$kernel_pnames)
-#
-#         # For each unique actual parameter name in trend_pnames, find which
-#         # generic column it came from and inherit that transform.
-#         expanded_transforms <- vapply(cur_trend$trend_pnames, function(nm) {
-#           col_idx <- which(vapply(cur_trend$kernel_pnames,
-#                                   function(col) any(col == nm),
-#                                   logical(1)))[1]
-#           if (is.na(col_idx)) {
-#             "identity"  # safety fallback; should not occur
-#           } else {
-#             generic_transforms[[ colnames(cur_trend$kernel_pnames)[col_idx] ]]
-#           }
-#         }, character(1))
-#       } else {
-#         # No slots (no covariates, no par_input): trend_pnames maps 1-1 to
-#         # generic_transforms by position
-#         names(generic_transforms) <- cur_trend$trend_pnames
-#         expanded_transforms <- generic_transforms
-#       }
-#
-#       model_list$transform$func <- c(model_list$transform$func, expanded_transforms)
-#     }
-#
-#     model_list$p_types <- c(
-#       model_list$p_types,
-#       stats::setNames(numeric(length(cur_trend$trend_pnames)), cur_trend$trend_pnames)
-#     )
-#   }
-#
-#   # Remove duplicate p_types entries (e.g. from shared parameters)
-#   model_list$p_types <- model_list$p_types[unique(names(model_list$p_types))]
-#   model_list$trend   <- trend
-#   model <- function() { return(model_list) }
-#   return(model)
-# }
-

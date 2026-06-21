@@ -318,19 +318,19 @@ test_that("trend_multiple", {
 
 k1 <- make_kernel(type='delta', c('covariate1', 'covariate2'))
 trend <- make_trend(make_base(type='lin', 'm', kernel=k1,
-                              maps=list('map1'=function(dadm, covs) {
+                              coding=list('map1'=function(dadm, covs) {
                                 d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
                                 colnames(d) <- covs
                                 d
                               })),
                     make_base(type='lin', 'm', kernel=k1,
-                              maps=list('map2'=function(dadm, covs) {
+                              coding=list('map2'=function(dadm, covs) {
                                 d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
                                 colnames(d) <- covs
                                 d
                               })))
 
-# covariate maps
+# covariate coding
 design_base <- design(factors = list(subjects = 1, S = 1:2),
                       Rlevels = 1:2,
                       covariates = c('covariate1', 'covariate2'),
