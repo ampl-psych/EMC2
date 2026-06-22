@@ -1376,7 +1376,8 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   is_stop_signal_name <- identical(model_info$c_name, "SSEXG") ||
     identical(model_info$c_name, "SSRDEX")
   is_stop_signal_params <- isTRUE(
-    all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+    all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types) ||
+      all(c("meanlogS", "sdlogS", "tf", "gf") %in% model_p_types)
   )
   is_stop_signal <- is_stop_signal_name || is_stop_signal_params
   if (is_stop_signal) {
