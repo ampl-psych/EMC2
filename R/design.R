@@ -636,11 +636,12 @@ design_model <- function(data,design,model=NULL,
     }
 
     # loop over kernels to check for NAs in data
+    all_kernels <- get_kernels()
     for(kernel in trend$kernels) {
-      if(!isTRUE(kernel$sequential)) {
+      if(!isTRUE(all_kernels[[kernel$type]]$NA_allowed)) {
         # check if any NAs exist in the covariate
         for(covariate in kernel$cov_names) {
-          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', kernel$kernel, ' kernel.'))
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', kernel$type, ' kernel type.'))
         }
       }
     }
