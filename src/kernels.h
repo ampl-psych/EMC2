@@ -372,9 +372,10 @@ struct LinIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
-                 out_[j] = x;  // compressed index
-               }
+               out_[j] = x;
+               // if (!is_nan(x)) {
+               //   out_[j] = x;  // compressed index
+               // }
              }
 
              mark_run_complete();
@@ -394,9 +395,10 @@ struct LinDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
-                 out_[j] = -x;
-               }
+               out_[j] = -x;
+               // if (!is_nan(x)) {
+               //   out_[j] = -x;
+               // }
                // out_[j] = last;
              }
 
@@ -422,10 +424,10 @@ struct ExpDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -451,10 +453,10 @@ struct ExpIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -480,10 +482,10 @@ struct PowDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -509,10 +511,10 @@ struct PowIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -539,12 +541,12 @@ struct Poly2Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
                  out_[j] = a1 * x + a2 * x2;
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -572,14 +574,14 @@ struct Poly3Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
                  double x2 = x * x;
                  double x3 = x2 * x;
                  out_[j] = a1 * x + a2 * x2 + a3 * x3;
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -608,7 +610,7 @@ struct Poly4Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -618,7 +620,7 @@ struct Poly4Kernel : BaseKernel {
                  double x3 = x2 * x;
                  double x4 = x2 * x2;
                  out_[j] = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
-               }
+               // }
                // out_[j] = last;
              }
 
