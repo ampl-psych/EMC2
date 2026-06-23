@@ -42,6 +42,7 @@ struct KernelOutput {
 enum class KernelType {
   SimpleDelta,
   Delta2Kernel,
+  DeltaDecoupled,
   // Delta2Kernel2,
   Delta2LR,
   LinIncr,
@@ -71,8 +72,8 @@ struct KernelMeta {
 inline KernelMeta kernel_meta(KernelType kt) {
   switch (kt) {
   case KernelType::SimpleDelta:
+  case KernelType::DeltaDecoupled:
   case KernelType::Delta2Kernel:
-  // case KernelType::Delta2Kernel2:
   case KernelType::Delta2LR:
   case KernelType::LinIncr:
   case KernelType::LinDecr:
@@ -83,7 +84,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::Poly2:
   case KernelType::Poly3:
   case KernelType::Poly4:
-    return {1, true};   // all current kernels: 1D input, grouping allowed
+    return {1, true};   // all above kernels: 1D input, grouping allowed
   case KernelType::Custom: return{1, false};
   case KernelType::RescorlaWagner: return{-1, false};  // N columns allowed
   case KernelType::BetaBinomial:
@@ -677,6 +678,69 @@ struct SimpleDelta : DeltaKernel {
                  double pe    = x - q_;
                  pes_[j]      = pe;
                  q_          += alpha * pe;
+               } else {
+                 pes_[j] = NA_REAL;
+               }
+               out_[j + 1] = q_;
+             }
+
+             mark_run_complete();
+           }
+};
+
+// Delta rule reparametrised to decouple the movement towards the outcome from the decay towards 0
+struct DeltaDecoupled : DeltaKernel {
+  DeltaDecoupled() {}
+
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 3) {
+               Rcpp::stop("DeltaDecoupled expects 3 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             const int n_comp = static_cast<int>(comp_idx.size());
+             if (n_comp <= 0) {
+               out_.clear();
+               pes_.clear();
+               mark_run_complete();
+               return;
+             }
+
+             // slightly faster -- no-op size check, no need to write anything
+             out_.resize(n_comp);
+             pes_.resize(n_comp);
+             pes_[n_comp - 1] = NA_REAL;
+
+             const double* q0_col    = kernel_pars.cols[0];
+             const double* alpha_col = kernel_pars.cols[1];
+             const double* lambda_col = kernel_pars.cols[2];
+             const double* cov_ptr   = covariate.colptr(0);
+
+             int row0 = comp_idx[0];
+             q_       = q0_col[row0];
+             out_[0]  = q_;
+
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r    = comp_idx[j];
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
+               double x = cov_ptr[r];
+
+               if (!is_nan(x)) {
+                 double alpha  = alpha_col[r];
+                 double lambda = lambda_col[r];
+                 double term1 = alpha*x;
+                 double term2 = lambda*q_;
+                 q_ += term1 - term2;
+                 double pe    = x - q_;  // bit questionable what the RPE is in this case though
+                 pes_[j]      = pe;
+                 // q_          += alpha * pe;
                } else {
                  pes_[j] = NA_REAL;
                }

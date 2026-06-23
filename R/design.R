@@ -815,6 +815,15 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 
   # --- 4. Auto-add intercept formulas for source parameters not yet in formula
   missing_sources <- source_pars[!source_pars %in% lhs_terms]
+
+  # Don't add intercept if source will already be generated as a column
+  # of an existing formula (e.g. "B_lRd.alpha_errorFALSE" from "B_lRd.alpha")
+  missing_sources <- missing_sources[!vapply(missing_sources, function(src) {
+    any(vapply(lhs_terms, function(lhs) {
+      startsWith(src, paste0(lhs, "_"))
+    }, logical(1)))
+  }, logical(1))]
+
   if (length(missing_sources) > 0) {
     message(paste0(
       "Intercept formula added for parameter_design source parameter(s): ",
