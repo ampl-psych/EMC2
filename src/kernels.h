@@ -1409,7 +1409,7 @@ public:
                const double b   = (1.0 - mu0) * s0;
                const double x   = cov_ptr[r];
 
-               // degenerate: cp ≈ 1 — beliefs driven by fixed prior only
+               // degenerate: cp ~ 1 — beliefs driven by fixed prior only
                if ((1.0 - cp) < cp_eps) {
                  pred_mean_[j] = beta_mean(a, b);
                  pred_mode_[j] = beta_mode(a, b);
