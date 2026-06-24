@@ -365,6 +365,62 @@ ss_lnormal_stop_spec <- function() {
 }
 
 
+#### Stop Single Weibull ----
+dweibullS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::dweibull(
+    st[ok],
+    shape = pars[ok, "shapeS"],
+    scale = pars[ok, "scaleS"]
+  )
+  out
+}
+
+
+pweibullS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  out[is.infinite(st) & st > 0] <- 1
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::pweibull(
+    st[ok],
+    shape = pars[ok, "shapeS"],
+    scale = pars[ok, "scaleS"]
+  )
+  out
+}
+
+
+ss_weibull_stop_spec <- function() {
+  list(
+    name = "weibull",
+    p_types = c(shapeS = log(2), scaleS = log(.25)),
+    transform = c(shapeS = "exp", scaleS = "exp"),
+    minmax = cbind(shapeS = c(1e-4, Inf), scaleS = c(1e-4, Inf)),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c("shapeS", "scaleS", "SSD"), drop = FALSE]
+      dweibullS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c("shapeS", "scaleS", "SSD"), drop = FALSE]
+      pweibullS(rt, parsS)
+    },
+    rfun = function(n, stop_pars) {
+      stats::rweibull(n, shape = stop_pars[, "shapeS"], scale = stop_pars[, "scaleS"])
+    },
+    mean = function(pars) {
+      pars[, "scaleS"] * gamma(1 + 1 / pars[, "shapeS"])
+    }
+  )
+}
+
+
 #### ExG Race function ----
 
 # Following functions moved to C++ model_SS_EXG.cpp
@@ -730,6 +786,58 @@ rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
+stopfn_weibull_texg <- function(t, mu, sigma, tau, lb, shapeS, scaleS, SSD) {
+  out <- stats::dweibull(t, shape = shapeS, scale = scaleS)
+  for (i in seq_along(mu)) {
+    pars_i <- cbind(
+      mu = rep(mu[i], length(t)),
+      sigma = rep(sigma[i], length(t)),
+      tau = rep(tau[i], length(t)),
+      exg_lb = rep(lb[i], length(t))
+    )
+    out <- out * (1 - ptexGaussian(t + SSD, pars_i))
+  }
+  out
+}
+
+
+pstopWeibullTEXG <- function(
+    parstop, n_acc, upper = Inf,
+    gpars = c("mu", "sigma", "tau", "exg_lb"), spars = c("shapeS", "scaleS")
+) {
+  sindex <- seq(1, nrow(parstop), by = n_acc)
+  ps <- parstop[sindex, spars, drop = FALSE]
+  SSDs <- parstop[sindex, "SSD", drop = FALSE]
+  ntrials <- length(SSDs)
+  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
+  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
+               dimnames = list(NULL, NULL, gpars))
+  cells <- apply(
+    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
+    1, paste, collapse = ""
+  )
+  uniq <- !duplicated(cells)
+  ups <- sapply(which(uniq), function(i) {
+    my.integrate(
+      f = stopfn_weibull_texg, lower = 0, SSD = SSDs[i], upper = upper[i],
+      mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
+      lb = pgo[, i, "exg_lb"],
+      shapeS = ps[i, "shapeS"], scaleS = ps[i, "scaleS"]
+    )
+  })
+  ups[as.numeric(factor(cells, levels = cells[uniq]))]
+}
+
+
+rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_weibull_stop_spec()
+  rSSexGaussian(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
 #' The ex-Gaussian race model of the stop signal task
 #'
 #' Model file to estimate the ex-Gaussian race model of stop signal task data in EMC2.
@@ -945,6 +1053,72 @@ SSLNORM <- function() {
     },
     rfun = function(data = NULL, pars) {
       return(rSSexGaussianLNormal(data, pars, ok = attr(pars, "ok")))
+    },
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+    }
+  )
+}
+
+
+#' The ex-Gaussian / Weibull race model of the stop signal task
+#'
+#' Prototype model with ex-Gaussian go finish times and Weibull stop finish
+#' times. This model currently uses the R likelihood path.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @export
+SSWEIBULL <- function() {
+  stop_spec <- ss_weibull_stop_spec()
+  list(
+    type = "RACE",
+    c_name = NULL,
+    p_types = c(
+      mu = log(.4), sigma = log(.05), tau = log(.1),
+      stop_spec$p_types,
+      tf = qnorm(0), gf = qnorm(0),
+      exg_lb = .05
+    ),
+    transform = list(
+      func = c(
+        mu = "exp", sigma = "exp", tau = "exp",
+        stop_spec$transform,
+        tf = "pnorm", gf = "pnorm",
+        exg_lb = "identity"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
+        stop_spec$minmax,
+        tf = c(.001, .999), gf = c(.001, .999),
+        exg_lb = c(-Inf, Inf)
+      ),
+      exception = c(
+        tf = 0, gf = 0,
+        exg_lb = -Inf
+      )
+    ),
+    Ttransform = function(pars, dadm) {
+      if (is.null(dadm$SSD)) {
+        stop("SSWEIBULL requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
+      }
+      if (is.null(dadm$lI)) {
+        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
+      }
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))
+      return(pars)
+    },
+    dfunG = function(rt, pars) return(dtexGaussianG(rt, pars)),
+    pfunG = function(rt, pars) return(ptexGaussianG(rt, pars)),
+    dfunS = stop_spec$dfun,
+    pfunS = stop_spec$pfun,
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopWeibullTEXG(pars, n_acc, upper = upper))
+    },
+    rfun = function(data = NULL, pars) {
+      return(rSSexGaussianWeibull(data, pars, ok = attr(pars, "ok")))
     },
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
       return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
@@ -1217,6 +1391,56 @@ rSShybridLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
+stopfn_weibull_rdex <- function(
+    t, n_acc, shapeS, scaleS, v, B, A, t0, s, SSD
+) {
+  out <- stats::dweibull(t, shape = shapeS, scale = scaleS)
+  for (i in seq_len(n_acc)) {
+    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
+  }
+  out
+}
+
+
+pstopWeibullHybrid <- function(
+    parstop, n_acc, upper = Inf,
+    gpars = c("v", "B", "A", "t0", "s"), spars = c("shapeS", "scaleS")
+) {
+  sindex <- seq(1, nrow(parstop), by = n_acc)
+  ps <- parstop[sindex, spars, drop = FALSE]
+  SSDs <- parstop[sindex, "SSD", drop = FALSE]
+  ntrials <- length(SSDs)
+  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
+  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
+               dimnames = list(NULL, NULL, gpars))
+  cells <- apply(
+    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
+    1, paste, collapse = ""
+  )
+  uniq <- !duplicated(cells)
+  ups <- sapply(which(uniq), function(i) {
+    my.integrate(
+      f = stopfn_weibull_rdex, lower = 0, upper = upper[i],
+      n_acc = n_acc,
+      shapeS = ps[i, "shapeS"], scaleS = ps[i, "scaleS"],
+      v = pgo[, i, "v"], B = pgo[, i, "B"], A = pgo[, i, "A"],
+      t0 = pgo[, i, "t0"], s = pgo[, i, "s"],
+      SSD = SSDs[i]
+    )
+  })
+  ups[as.numeric(factor(cells, levels = cells[uniq]))]
+}
+
+
+rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_weibull_stop_spec()
+  rSShybrid(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
 #### RDEX model list ----
 
 #' The hybrid Wald / ex-Gaussian race model of the stop signal task
@@ -1425,6 +1649,74 @@ SSRDLNORM <- function() {
     },
     rfun = function(data = NULL, pars) {
       return(rSShybridLNormal(data, pars, ok = attr(pars, "ok")))
+    },
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+    }
+  )
+}
+
+
+#' The hybrid Wald / Weibull race model of the stop signal task
+#'
+#' Prototype model with Wald/RDEX go finish times and Weibull stop finish
+#' times. This model currently uses the R likelihood path.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @export
+SSRDWEIBULL <- function() {
+  stop_spec <- ss_weibull_stop_spec()
+  list(
+    type = "RACE",
+    c_name = NULL,
+    p_types = c(
+      v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
+      stop_spec$p_types,
+      tf = qnorm(0), gf = qnorm(0)
+    ),
+    transform = list(
+      func = c(
+        v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp",
+        stop_spec$transform,
+        tf = "pnorm", gf = "pnorm"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf), t0 = c(0.05, Inf), s = c(0, Inf),
+        stop_spec$minmax,
+        tf = c(.001, .999), gf = c(.001, .999)
+      ),
+      exception = c(
+        v = 0, A = 0,
+        tf = 0, gf = 0
+      )
+    ),
+    Ttransform = function(pars, dadm) {
+      if (is.null(dadm$SSD)) {
+        stop("SSRDWEIBULL requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
+      }
+      if (is.null(dadm$lI)) {
+        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
+      }
+      pars <- cbind(pars, b = pars[, "B"] + pars[, "A"])
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))
+      return(pars)
+    },
+    dfunG = function(rt, pars) {
+      return(dRDM(rt, pars))
+    },
+    pfunG = function(rt, pars) {
+      return(pRDM(rt, pars))
+    },
+    dfunS = stop_spec$dfun,
+    pfunS = stop_spec$pfun,
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopWeibullHybrid(pars, n_acc, upper = upper))
+    },
+    rfun = function(data = NULL, pars) {
+      return(rSShybridWeibull(data, pars, ok = attr(pars, "ok")))
     },
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
       return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
