@@ -338,7 +338,7 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
                       trend = trend,
                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
                       contrasts = list(lM = ADmat),
-                      model = LNR, report_p_vector=FALSE)
+                      model = LNR, report_p_vector = FALSE)
 set.seed(123)
 covariate1 <- rnorm(n_trials*2)
 covariate2 <- rnorm(n_trials*2)
@@ -379,7 +379,7 @@ test_that("trend_covmap", {
 #                       trend = trend,
 #                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
 #                       contrasts = list(lM = ADmat),
-#                       model = LNR)
+#                       model = LNR, report_p_vector=FALSE)
 # covariate1 <- rep(1, n_trials*2)
 # covariate2 <- rep(0.25, n_trials*2)
 #
@@ -403,5 +403,4 @@ test_that("trend_covmap", {
 # m[LNR_covmap[[1]]$data[[1]]$lM==TRUE] <- m[LNR_covmap[[1]]$data[[1]]$lM==TRUE] + 0.5*p_vector[[2]]
 # m[LNR_covmap[[1]]$data[[1]]$lM==FALSE] <- m[LNR_covmap[[1]]$data[[1]]$lM==FALSE] - 0.5*p_vector[[2]]
 # all(round(m,5) == round(trpars[,1], 5))
-#
 #

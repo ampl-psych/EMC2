@@ -10,7 +10,7 @@ designSSexG <- design(model=SSexG,
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
                       functions=list(lI=lIfun, SSD = mySSD_function),
-                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)#, report_p_vector=FALSE
+                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1), report_p_vector=FALSE
 )
 
 p_vector <- sampled_pars(designSSexG,doMap = FALSE)

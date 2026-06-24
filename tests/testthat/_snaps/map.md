@@ -5,12 +5,12 @@
     Output
       $v 
         covariate           E         
-       -0.513716908811104  speed     : v - 0.514 * v_covariate
-       0.601813121611908   neutral   : v + 0.602 * v_covariate + v_Eneutral + 0.602 * v_covariate:Eneutral
-       -1.54982186331112   accuracy  : v - 1.55 * v_covariate + v_Eaccuracy - 1.55 * v_covariate:Eaccuracy
-       -1.70962282511647   speed     : v - 1.71 * v_covariate
-       0.7701488026301     neutral   : v + 0.77 * v_covariate + v_Eneutral + 0.77 * v_covariate:Eneutral
-       -0.716873043602934  accuracy  : v - 0.717 * v_covariate + v_Eaccuracy - 0.717 * v_covariate:Eaccuracy
+       -0.968592726552943  speed     : v - 0.969 * v_covariate
+       0.706109077785223   neutral   : v + 0.706 * v_covariate + v_Eneutral + 0.706 * v_covariate:Eneutral
+       1.48902132366997    accuracy  : v + 1.49 * v_covariate + v_Eaccuracy + 1.49 * v_covariate:Eaccuracy
+       -1.81509255136049   speed     : v - 1.82 * v_covariate
+       0.330409581768214   neutral   : v + 0.33 * v_covariate + v_Eneutral + 0.33 * v_covariate:Eneutral
+       -1.14215571117096   accuracy  : v - 1.14 * v_covariate + v_Eaccuracy - 1.14 * v_covariate:Eaccuracy
       
       $B 
         E         
@@ -29,38 +29,38 @@
     Code
       mapped_pars(des, p_vector = rnorm(length(sampled_pars(des))))
     Output
-                E     S   covariate    lR      v sv     B A    t0     b
-      1     speed  left -0.29797771  left  1.637  1 3.048 0 0.292 3.048
-      2     speed  left -0.29797771 right  1.637  1 3.048 0 0.292 3.048
-      3   neutral  left  0.34063680  left  0.805  1 1.793 0 0.292 1.793
-      4   neutral  left  0.34063680 right  0.805  1 1.793 0 0.292 1.793
-      5  accuracy  left  0.13373072  left -0.213  1 3.051 0 0.292 3.051
-      6  accuracy  left  0.13373072 right -0.213  1 3.051 0 0.292 3.051
-      7     speed right  0.86266186  left  0.057  1 3.048 0 0.189 3.048
-      8     speed right  0.86266186 right  0.057  1 3.048 0 0.189 3.048
-      9   neutral right  0.05063779  left  0.895  1 1.793 0 0.189 1.793
-      10  neutral right  0.05063779 right  0.895  1 1.793 0 0.189 1.793
-      11 accuracy right  1.22458533  left -2.828  1 3.051 0 0.189 3.051
-      12 accuracy right  1.22458533 right -2.828  1 3.051 0 0.189 3.051
+                E     S  covariate    lR      v sv     B A    t0     b
+      1     speed  left -0.2721696  left  0.029  1 0.721 0 1.013 0.721
+      2     speed  left -0.2721696 right  0.029  1 0.721 0 1.013 0.721
+      3   neutral  left  1.2311057  left -3.677  1 1.071 0 1.013 1.071
+      4   neutral  left  1.2311057 right -3.677  1 1.071 0 1.013 1.071
+      5  accuracy  left -1.3606844  left  2.111  1 0.422 0 1.013 0.422
+      6  accuracy  left -1.3606844 right  2.111  1 0.422 0 1.013 0.422
+      7     speed right -0.3208495  left  0.098  1 0.721 0 0.535 0.721
+      8     speed right -0.3208495 right  0.098  1 0.721 0 0.535 0.721
+      9   neutral right -1.1235776  left -2.022  1 1.071 0 0.535 1.071
+      10  neutral right -1.1235776 right -2.022  1 1.071 0 0.535 1.071
+      11 accuracy right  1.0520209  left  2.864  1 0.422 0 0.535 0.422
+      12 accuracy right  1.0520209 right  2.864  1 0.422 0 0.535 0.422
 
 ---
 
     Code
       mapped_pars(prior(des, mu_mean = c(v_covariate = 1)))
     Output
-                E     S   covariate    lR      v sv B A t0 b
-      1     speed  left -0.09534976  left -0.095  1 1 0  1 1
-      2     speed  left -0.09534976 right -0.095  1 1 0  1 1
-      3   neutral  left -0.54328498  left -0.543  1 1 0  1 1
-      4   neutral  left -0.54328498 right -0.543  1 1 0  1 1
-      5  accuracy  left -2.15286166  left -2.153  1 1 0  1 1
-      6  accuracy  left -2.15286166 right -2.153  1 1 0  1 1
-      7     speed right -1.12658056  left -1.127  1 1 0  1 1
-      8     speed right -1.12658056 right -1.127  1 1 0  1 1
-      9   neutral right  0.67546458  left  0.675  1 1 0  1 1
-      10  neutral right  0.67546458 right  0.675  1 1 0  1 1
-      11 accuracy right -0.08025789  left -0.080  1 1 0  1 1
-      12 accuracy right -0.08025789 right -0.080  1 1 0  1 1
+                E     S  covariate    lR      v sv B A t0 b
+      1     speed  left -0.9865591  left -0.987  1 1 0  1 1
+      2     speed  left -0.9865591 right -0.987  1 1 0  1 1
+      3   neutral  left  0.8184259  left  0.818  1 1 0  1 1
+      4   neutral  left  0.8184259 right  0.818  1 1 0  1 1
+      5  accuracy  left -0.7822744  left -0.782  1 1 0  1 1
+      6  accuracy  left -0.7822744 right -0.782  1 1 0  1 1
+      7     speed right -0.5559056  left -0.556  1 1 0  1 1
+      8     speed right -0.5559056 right -0.556  1 1 0  1 1
+      9   neutral right -0.8314149  left -0.831  1 1 0  1 1
+      10  neutral right -0.8314149 right -0.831  1 1 0  1 1
+      11 accuracy right -1.9219137  left -1.922  1 1 0  1 1
+      12 accuracy right -1.9219137 right -1.922  1 1 0  1 1
 
 ---
 
