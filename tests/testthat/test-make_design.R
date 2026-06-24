@@ -5,14 +5,14 @@ design_data <- design(data = data.frame(forstmann, CO = 1:nrow(forstmann)),
             constants=c(sv=log(1)),
             functions = list(
               E2 = function(d) factor(d$E!="speed",labels=c("speed","nonspeed"))
-            ))
+            ), report_p_vector=FALSE)
 
 
 design_custom <- design(factors = list(S = c("left", "right"),
                                          subjects = 1:3),
                           Rlevels = c("left", "right"), model = LNR,
                           formula =list(m~0+S,s~1, t0~1),
-                          constants=c(s=log(1)))
+                          constants=c(s=log(1)), report_p_vector=FALSE)
 
 test_that("design", {
   expect_snapshot(

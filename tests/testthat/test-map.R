@@ -5,8 +5,9 @@ dat <- forstmann
 dat$covariate <- 1:nrow(forstmann)
 
 des <- design(data = dat, formula = list(v ~ covariate*E, B ~ E, t0 ~ S),
-              model = LBA)
+              model = LBA, report_p_vector=FALSE)
 
+set.seed(123)
 test_that("mapped_pars", {
   expect_snapshot(mapped_pars(des))
   expect_snapshot(mapped_pars(des, p_vector= rnorm(length(sampled_pars(des)))))

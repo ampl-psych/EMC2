@@ -6,7 +6,7 @@ make_tiny_design <- function(trend, ...) {
   return(design(factors = list(subjects = 1, S = 1), Rlevels = 1,
                 covariates = cov_names, matchfun = function(x) x$S==x$R, trend = trend,
                 formula = list(m ~ 1, s ~ 1, t0 ~ 1),
-                model = LNR))
+                model = LNR, report_p_vector = FALSE))
 }
 
 make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5, ...) {

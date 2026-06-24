@@ -8,7 +8,7 @@ designLBA <- design(
   Rlevels=c("left","right","pm"),
   matchfun=matchfun,
   model=LBA,constants=c(v_RACE3=0),
-  formula=list(v~RACE*lM,B~1,t0~1,A~1),
+  formula=list(v~RACE*lM,B~1,t0~1,A~1), report_p_vector=FALSE
 )
 
 p_vector <- sampled_pars(designLBA,doMap = FALSE)

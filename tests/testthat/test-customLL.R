@@ -12,7 +12,7 @@ library(EMC2)
 pars <- c("muL", "muR", "sdL", "sdR")
 
 
-design <- design(model = custom_ll, custom_p_vector = pars)
+design <- design(model = custom_ll, custom_p_vector = pars, report_p_vector = FALSE)
 
 # using nuisance = 3:4
 custom_emc <- make_emc(get_data(samples_LNR), design, type = "standard", nuisance_non_hyper = 3:4)

@@ -5,7 +5,7 @@ set.seed(123)
 # Create subject-level design
 subj_design <- design(data = forstmann, model = DDM,
                       formula = list(v ~ S, a ~ E, t0 ~ 1),
-                      contrasts = list(S = contr.helmert))
+                      contrasts = list(S = contr.helmert), report_p_vector=FALSE)
 # Add some age covariate and roughly demean
 # Demeaning is important to ensure that the interpretation of the group-level intercept
 # is the mean of the group (i.e., 'mu' still represents the group-level mean)
