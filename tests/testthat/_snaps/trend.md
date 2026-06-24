@@ -456,11 +456,7 @@
       
       $subj_ll
              [,1]
-<<<<<<< HEAD
-      1 -15.04154
-=======
-      1 -22.74891
->>>>>>> 4d1e27b7 (trend API refactor. Additionally - apply_base no longer guards for is_nan. If a kernel returns NA/NaN/infinite, it should be propagated and lead to min.ll in the likelihood.)
+      1 -23.19228
       
       $idx
       [1] 1
