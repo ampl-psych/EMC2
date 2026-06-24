@@ -269,10 +269,19 @@ NumericMatrix get_covariate_matrix(ParamTable& param_table,
 double c_log_likelihood_race(ParamTable& pt,
                              const RaceModelSetup& setup,
                              const NumericVector& rts,
-                             const LogicalVector& winner,
                              const std::vector<int>& is_ok,
-                             const std::vector<int>& idx_win,
-                             const std::vector<int>& idx_los,
+                             const std::vector<int>& idx_win,   // winners
+                             const std::vector<int>& idx_los,   // losers
+
+                             // arguments for censoring -- to do: combine in censor spec
+                             const std::vector<int>& idx_censorU,   // rows that require upper censoring
+                             const std::vector<int>& idx_censorL,   // rows that require lower censoring
+                             const std::vector<int>& idx_censorB,   // rows that require upper & lower censoring
+                             const std::vector<double>& censor_LC,
+                             const std::vector<double>& censor_UC,
+
+                             // arguments for truncation here
+
                              const IntegerVector& expand,
                              double min_ll,
                              int n_acc,
@@ -294,9 +303,18 @@ double c_log_likelihood_race(ParamTable& pt,
   //
   //   // setup.fill_both() refers to gather-scatter implementations.
   //   // on linux/x86, this is significantly faster. macOS/arm64 doesn't care
-
   setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, ll_row_ptr, scratch);
+
+  // to do  -- dynamically dispatches the correct survivor function that fills in ll_row_ptr on the indices declared by the idx vectors. No-op if empty.
+  // setup.fill_censor(censor_LC, censor_UC, pt, idx_censorL, idx_censorU, idx_censorB, ll_row_ptr);
+
+  // bulk log over ll_row_ptr
   vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
+
+  // truncation here - additional row-wise ll vector that will be *subtracted*
+  // do_truncate(normalize_truncate, pt, LT, UT) // doenst care about indices, needs to be applied to all rows... I think. Actually, not sure?
+  // vec_log(normalize_truncate, normalize_truncate.size())  // log-conversion
+  // ll_row = ll_row - normalize_truncate;  // after log, we can subtract the truncation normalizer and continue as normal
 
   // 2) Per-trial log-likelihood into ll_trial.
   //    ll_row now contains log(pdf) at winner indices, log(1-cdf) at loser indices.
@@ -640,6 +658,60 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     }
     const int n_winners = (int)idx_win.size();
 
+
+    // Pre-compute index lists for censored trials (always applies survivor with LC/UC limits)
+    const bool has_LC_col = (sum(contains(data.names(), "LC")) == 1);
+    const bool has_UC_col = (sum(contains(data.names(), "UC")) == 1);
+    std::vector<int>    idx_censorL, idx_censorU, idx_censorB;
+    std::vector<double> censor_LC, censor_UC;
+
+    const double* lc_ptr = nullptr;
+    const double* uc_ptr = nullptr;
+    const int* missingness_ptr = nullptr;
+
+    const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
+    IntegerVector missingness_tmp;
+    NumericVector lc_tmp, uc_tmp;
+
+    // Identify LC, UC
+    if (has_missingness) {
+      missingness_tmp = data["missingness"];
+      missingness_ptr = INTEGER(missingness_tmp);
+      if (has_LC_col) {
+        lc_tmp = data["LC"];
+        lc_ptr = REAL(lc_tmp);
+        idx_censorL.reserve(n_trials);
+        censor_LC.assign(lc_ptr, lc_ptr + n_trials);
+      }  // optionally add default LC here?
+      if (has_UC_col) {
+        uc_tmp = data["UC"];
+        uc_ptr = REAL(uc_tmp);
+        idx_censorU.reserve(n_trials);
+        idx_censorB.reserve(n_trials);
+        censor_UC.assign(uc_ptr, uc_ptr + n_trials);
+      }  // optionally add default UC here?
+    }
+
+    // Populate index vectors
+    for (int i = 0; i < n_trials; ++i) {
+      if (win_flag[i]) {
+        idx_win.push_back(i);
+      } else {
+        if (has_race_col && lR[i] > atoi(vals_NACC[NACC[i] - 1])) continue;
+        idx_los.push_back(i);
+      }
+
+      if (missingness_ptr) {
+        switch (missingness_ptr[i]) {
+        case 1: idx_censorL.push_back(i); break;
+        case 2: idx_censorU.push_back(i); break;
+        case 3: idx_censorB.push_back(i); break;
+        // other cases go here
+        default: break;
+        }
+      }
+    }
+
     // Scratch buffers (reused across particles)
     NumericVector ll_row(n_trials);  // stores (log)likelihood of row in dadm
     NumericVector ll_trial(n_winners); // stores (log)likelihood of trials
@@ -660,8 +732,11 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       std::fill(ll_row.begin(), ll_row.end(), 1.0);
       lls[i] = c_log_likelihood_race(
         ctx.param_table, setup,  // operates directly on param_table - no need for param extraction
-        rts, winner, is_ok,
-        idx_win, idx_los, expand,
+        rts, is_ok,
+        idx_win, idx_los,
+        idx_censorL, idx_censorU, idx_censorB,
+        censorLC, censorUC,
+        expand,
         min_ll, n_acc, ll_row, ll_trial,
         scratch);
     }
