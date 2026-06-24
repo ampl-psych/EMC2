@@ -7,6 +7,7 @@
 #include "math_utils.h"
 #include "pnorm_utils.h"
 #include "ParamTable.h"
+#include "CensorSpec.h"
 
 using namespace Rcpp;
 
@@ -56,88 +57,88 @@ constexpr double LBA_A_ASYMPTOTIC = 1e-10;
   return PNORM_STD((b / t - v) / sv, /*lower=*/false, /*logp=*/false) / denom;
 }
 
-// Old pipeline, not sure whether to keep this (probably useful for censoring/truncation)
-void plba_fast(const NumericVector& rts,
-               const ParamTable& pt,
-               const RaceSpec& spec,
-               const LogicalVector& winner,
-               double* ll_row)
-{
-  const int N = rts.size();
-
-  const double* rt  = rts.begin();
-  const double* v   = &pt.base(0, spec.col_v);
-  const double* sv  = &pt.base(0, spec.col_sv);
-  const double* B   = &pt.base(0, spec.col_B);
-  const double* A   = &pt.base(0, spec.col_A);
-  const double* t0  = &pt.base(0, spec.col_t0);
-
-  int* win_ptr = LOGICAL(winner);
-
-#pragma omp simd
-  for (int i = 0; i < N; ++i) {
-    if (win_ptr[i]) continue;
-
-    if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
-
-    const double t_eff = rt[i] - t0[i];
-    if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
-
-    double denom = PNORM_STD(v[i] / sv[i], /*lower=*/true, /*logp=*/false);
-    if (denom < 1e-10) denom = 1e-10;
-
-    const double A_i = A[i];
-    const double b_i = B[i] + A_i;
-
-    // use no-A branch or A branch?
-    double cdf = (A_i > LBA_A_ASYMPTOTIC) ? plba_core(t_eff, A_i, b_i, v[i], sv[i], denom) : plba_noA (t_eff,      b_i, v[i], sv[i], denom);
-
-    if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-    else if (cdf > 1.0)                         cdf = 1.0;
-
-    ll_row[i] = cdf;
-  }
-}
-
-// Old pipeline, not sure whether to keep this (probably useful for censoring/truncation)
-void dlba_fast(const NumericVector& rts,
-               const ParamTable& pt,
-               const RaceSpec& spec,
-               const LogicalVector& winner,
-               double* ll_row)
-{
-  const int N = rts.size();
-
-  const double* rt  = rts.begin();
-  const double* v   = &pt.base(0, spec.col_v);
-  const double* sv  = &pt.base(0, spec.col_sv);
-  const double* B   = &pt.base(0, spec.col_B);
-  const double* A   = &pt.base(0, spec.col_A);
-  const double* t0  = &pt.base(0, spec.col_t0);
-
-  int* win_ptr = LOGICAL(winner);
-
-#pragma omp simd
-  for (int i = 0; i < N; ++i) {
-    if (!win_ptr[i]) continue;
-
-    if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
-
-    const double t_eff = rt[i] - t0[i];
-    if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
-
-    double denom = PNORM_STD(v[i] / sv[i], /*lower=*/true, /*logp=*/false);
-    if (denom < 1e-10) denom = 1e-10;
-
-    const double A_i = A[i];
-    const double b_i = B[i] + A_i;
-
-    // use no-A branch or A branch?
-    double pdf = (A_i > LBA_A_ASYMPTOTIC) ? dlba_core(t_eff, A_i, b_i, v[i], sv[i], denom) : dlba_noA (t_eff,      b_i, v[i], sv[i], denom);
-
-    ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
-  }
-}
+// // Old pipeline, not sure whether to keep this (probably useful for censoring/truncation)
+// void plba_fast(const NumericVector& rts,
+//                const ParamTable& pt,
+//                const RaceSpec& spec,
+//                const LogicalVector& winner,
+//                double* ll_row)
+// {
+//   const int N = rts.size();
+//
+//   const double* rt  = rts.begin();
+//   const double* v   = &pt.base(0, spec.col_v);
+//   const double* sv  = &pt.base(0, spec.col_sv);
+//   const double* B   = &pt.base(0, spec.col_B);
+//   const double* A   = &pt.base(0, spec.col_A);
+//   const double* t0  = &pt.base(0, spec.col_t0);
+//
+//   int* win_ptr = LOGICAL(winner);
+//
+// #pragma omp simd
+//   for (int i = 0; i < N; ++i) {
+//     if (win_ptr[i]) continue;
+//
+//     if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
+//
+//     const double t_eff = rt[i] - t0[i];
+//     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
+//
+//     double denom = PNORM_STD(v[i] / sv[i], /*lower=*/true, /*logp=*/false);
+//     if (denom < 1e-10) denom = 1e-10;
+//
+//     const double A_i = A[i];
+//     const double b_i = B[i] + A_i;
+//
+//     // use no-A branch or A branch?
+//     double cdf = (A_i > LBA_A_ASYMPTOTIC) ? plba_core(t_eff, A_i, b_i, v[i], sv[i], denom) : plba_noA (t_eff,      b_i, v[i], sv[i], denom);
+//
+//     if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+//     else if (cdf > 1.0)                         cdf = 1.0;
+//
+//     ll_row[i] = cdf;
+//   }
+// }
+//
+// // Old pipeline, not sure whether to keep this (probably useful for censoring/truncation)
+// void dlba_fast(const NumericVector& rts,
+//                const ParamTable& pt,
+//                const RaceSpec& spec,
+//                const LogicalVector& winner,
+//                double* ll_row)
+// {
+//   const int N = rts.size();
+//
+//   const double* rt  = rts.begin();
+//   const double* v   = &pt.base(0, spec.col_v);
+//   const double* sv  = &pt.base(0, spec.col_sv);
+//   const double* B   = &pt.base(0, spec.col_B);
+//   const double* A   = &pt.base(0, spec.col_A);
+//   const double* t0  = &pt.base(0, spec.col_t0);
+//
+//   int* win_ptr = LOGICAL(winner);
+//
+// #pragma omp simd
+//   for (int i = 0; i < N; ++i) {
+//     if (!win_ptr[i]) continue;
+//
+//     if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
+//
+//     const double t_eff = rt[i] - t0[i];
+//     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
+//
+//     double denom = PNORM_STD(v[i] / sv[i], /*lower=*/true, /*logp=*/false);
+//     if (denom < 1e-10) denom = 1e-10;
+//
+//     const double A_i = A[i];
+//     const double b_i = B[i] + A_i;
+//
+//     // use no-A branch or A branch?
+//     double pdf = (A_i > LBA_A_ASYMPTOTIC) ? dlba_core(t_eff, A_i, b_i, v[i], sv[i], denom) : dlba_noA (t_eff,      b_i, v[i], sv[i], denom);
+//
+//     ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
+//   }
+// }
 
 
 
@@ -335,6 +336,77 @@ NumericVector plba(NumericVector t,
   }
   return cdf;
 }
+
+
+static inline double lba_cdf(double t_eff,
+                             double v, double sv, double B, double A)
+{
+  if (std::isnan(v) || t_eff <= 0.0) return 0.0;
+
+  double denom = PNORM_STD(v / sv, /*lower=*/true, /*logp=*/false);
+  if (denom < 1e-10) denom = 1e-10;
+
+  const double b = B + A;
+  double cdf = (A > LBA_A_ASYMPTOTIC) ? plba_core(t_eff, A, b, v, sv, denom)
+    : plba_noA (t_eff,    b, v, sv, denom);
+
+  if (!std::isfinite(cdf) || cdf < 0.0) return 0.0;
+  if (cdf > 1.0)                         return 1.0;
+  return cdf;
+}
+
+void plba_fast(const NumericVector& rts,
+               const ParamTable& pt,
+               const RaceSpec& spec,
+               const std::vector<int>& idx,
+               double* __restrict__ ll_row)
+{
+  const double* __restrict__ rt  = rts.begin();
+  const double* __restrict__ v   = &pt.base(0, spec.col_v);
+  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+  const double* __restrict__ B   = &pt.base(0, spec.col_B);
+  const double* __restrict__ A   = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+
+  for (int j = 0; j < (int)idx.size(); ++j) {
+    const int i = idx[j];
+    ll_row[i] = 1.0 - lba_cdf(rt[i] - t0[i], v[i], sv[i], B[i], A[i]);
+  }
+}
+
+// Censored likelihood contributions using LC/UC bounds (both in RT space, t0 subtracted).
+//
+//   idx_L (lower-censored):  ll_row[i] = CDF(LC[i] - t0[i])
+//   idx_U (upper-censored):  ll_row[i] = 1 - CDF(UC[i] - t0[i])
+//   idx_B (both-censored):   ll_row[i] = CDF(LC[i] - t0[i]) + 1 - CDF(UC[i] - t0[i])
+void lba_censor(const CensorSpec& censor,
+                const ParamTable& pt,
+                const RaceSpec& spec,
+                double* __restrict__ ll_row)
+{
+  const double* __restrict__ v   = &pt.base(0, spec.col_v);
+  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+  const double* __restrict__ B   = &pt.base(0, spec.col_B);
+  const double* __restrict__ A   = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+
+  for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
+    const int i = censor.idx_L[j];
+    ll_row[i] = lba_cdf(censor.LC[i] - t0[i], v[i], sv[i], B[i], A[i]);
+  }
+
+  for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
+    const int i = censor.idx_U[j];
+    ll_row[i] = 1.0 - lba_cdf(censor.UC[i] - t0[i], v[i], sv[i], B[i], A[i]);
+  }
+
+  for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
+    const int i = censor.idx_B[j];
+    ll_row[i] = lba_cdf(censor.LC[i] - t0[i], v[i], sv[i], B[i], A[i])
+      + 1.0 - lba_cdf(censor.UC[i] - t0[i], v[i], sv[i], B[i], A[i]);
+  }
+}
+
 
 
 

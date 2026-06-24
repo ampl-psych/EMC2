@@ -8,6 +8,7 @@
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
 #include "ParamTable.h"
+#include "CensorSpec.h"
 
 using namespace Rcpp;
 
@@ -198,22 +199,18 @@ NumericVector pWald(NumericVector t, NumericVector v,
 void drdm_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
-               const LogicalVector& winner,
-               double* ll_row)
+               const std::vector<int>& idx,
+               double* __restrict__ ll_row)
 {
-  const int N = rts.size();
+  const double* __restrict__ rt = rts.begin();
+  const double* __restrict__ v  = &pt.base(0, spec.col_v);
+  const double* __restrict__ B  = &pt.base(0, spec.col_B);
+  const double* __restrict__ A  = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+  const double* __restrict__ s  = &pt.base(0, spec.col_s);
 
-  const double* rt = rts.begin();
-  const double* v  = &pt.base(0, spec.col_v);
-  const double* B  = &pt.base(0, spec.col_B);
-  const double* A  = &pt.base(0, spec.col_A);
-  const double* t0 = &pt.base(0, spec.col_t0);
-  const double* s  = &pt.base(0, spec.col_s);
-
-  int* win_ptr = LOGICAL(winner);
-
-  for (int i = 0; i < N; ++i) {
-    if (!win_ptr[i]) continue;
+  for (int j = 0; j < (int)idx.size(); ++j) {
+    const int i = idx[j];
 
     const double t_eff = rt[i] - t0[i];
     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
@@ -236,48 +233,86 @@ void drdm_fast(const NumericVector& rts,
   }
 }
 
+static inline double rdm_cdf(double t_eff,
+                             double v, double B, double A, double s)
+{
+  if (t_eff <= 0.0) return 0.0;
+  const double inv_s = 1.0 / s;
+  double cdf;
+  if (A < A_EPS) {
+    double l = v * inv_s;
+    double k = B * inv_s;
+    clamp_l(l);
+    cdf = pigt0(t_eff, k, l);
+  } else {
+    double a = 0.5 * A * inv_s;
+    double l = v * inv_s;
+    double k = B * inv_s + a;
+    clamp_a_l(a, l);
+    cdf = pigt_core(t_eff, k, l, a);
+  }
+  if (!std::isfinite(cdf) || cdf < 0.0) return 0.0;
+  if (cdf > 1.0)                        return 1.0;
+  return cdf;
+}
+
 void prdm_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
-               const LogicalVector& winner,
-               double* ll_row)
+               const std::vector<int>& idx,
+               double* __restrict__ ll_row)
 {
-  const int N = rts.size();
+  const double* __restrict__ rt = rts.begin();
+  const double* __restrict__ v  = &pt.base(0, spec.col_v);
+  const double* __restrict__ B  = &pt.base(0, spec.col_B);
+  const double* __restrict__ A  = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+  const double* __restrict__ s  = &pt.base(0, spec.col_s);
 
-  const double* rt = rts.begin();
-  const double* v  = &pt.base(0, spec.col_v);
-  const double* B  = &pt.base(0, spec.col_B);
-  const double* A  = &pt.base(0, spec.col_A);
-  const double* t0 = &pt.base(0, spec.col_t0);
-  const double* s  = &pt.base(0, spec.col_s);
-
-  int* win_ptr = LOGICAL(winner);
-
-  for (int i = 0; i < N; ++i) {
-    if (win_ptr[i]) continue;
-
-    const double t_eff = rt[i] - t0[i];
-    if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
-
-    const double inv_s = 1.0 / s[i];
-    double cdf;
-    if (A[i] < A_EPS) {
-      double l = v[i] * inv_s;
-      double k = B[i] * inv_s;
-      clamp_l(l);
-      cdf = pigt0(t_eff, k, l);
-    } else {
-      double a = 0.5 * A[i] * inv_s;
-      double l = v[i] * inv_s;
-      double k = B[i] * inv_s + a;
-      clamp_a_l(a, l);
-      cdf = pigt_core(t_eff, k, l, a);
-    }
-    if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-    else if (cdf > 1.0)                    cdf = 1.0;
-    ll_row[i] = cdf;
+  for (int j = 0; j < (int)idx.size(); ++j) {
+    const int i = idx[j];
+    ll_row[i] = 1.0 - rdm_cdf(rt[i] - t0[i], v[i], B[i], A[i], s[i]);
   }
 }
+
+// void prdm_fast(const NumericVector& rts,
+//                const ParamTable& pt,
+//                const RaceSpec& spec,
+//                const std::vector<int>& idx,
+//                double* __restrict__ ll_row)
+// {
+//   const double* __restrict__ rt = rts.begin();
+//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
+//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
+//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
+//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
+//
+//   for (int j = 0; j < (int)idx.size(); ++j) {
+//     const int i = idx[j];
+//
+//     const double t_eff = rt[i] - t0[i];
+//     if (t_eff <= 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
+//
+//     const double inv_s = 1.0 / s[i];
+//     double cdf;
+//     if (A[i] < A_EPS) {
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s;
+//       clamp_l(l);
+//       cdf = pigt0(t_eff, k, l);
+//     } else {
+//       double a = 0.5 * A[i] * inv_s;
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s + a;
+//       clamp_a_l(a, l);
+//       cdf = pigt_core(t_eff, k, l, a);
+//     }
+//     if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+//     else if (cdf > 1.0)                    cdf = 1.0;
+//     ll_row[i] = 1.0 - cdf;  // survival
+//   }
+// }
 
 
 // This new filling function checks whether A==0, if so --> runs digt0 and pigt0
@@ -460,256 +495,40 @@ void drdm_prdm_fast(const NumericVector& rts,
 }
 
 
+// Censoring
+// Computes CDF(bound[i] - t0[i]) for each censored trial and writes the
+// appropriate censored likelihood contribution to ll_row:
+//
+//   idx_L (lower-censored):  ll_row[i] = CDF(LC[i] - t0[i])         // response is in the left tail
+//   idx_U (upper-censored):  ll_row[i] = 1 - CDF(UC[i] - t0[i])     // response is in the right tail
+//   idx_B (both-censored):   ll_row[i] = CDF(LC[i] - t0[i]) + 1 - CDF(UC[i] - t0[i])  // response is in either tail
+//   ToDo: cases where response is known. In that case, integration is probably needed?
+void rdm_censor(const CensorSpec& censor,
+                const ParamTable& pt,
+                const RaceSpec& spec,
+                double* __restrict__ ll_row)
+{
+  const double* __restrict__ v  = &pt.base(0, spec.col_v);
+  const double* __restrict__ B  = &pt.base(0, spec.col_B);
+  const double* __restrict__ A  = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+  const double* __restrict__ s  = &pt.base(0, spec.col_s);
 
-// void drdm_prdm_fast(const NumericVector& rts,
-//                     const ParamTable& pt,
-//                     const RaceSpec& spec,
-//                     const std::vector<int>& idx_win,
-//                     const std::vector<int>& idx_los,
-//                     double* __restrict__ ll_row,
-//                     RaceScratch& scratch)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   const int n_win = (int)idx_win.size();
-//   const int n_los = (int)idx_los.size();
-//
-//   double* __restrict__ sc_teff = scratch.t_eff.data();
-//   double* __restrict__ sc_v    = scratch.v.data();
-//   double* __restrict__ sc_B    = scratch.B.data();
-//   double* __restrict__ sc_A    = scratch.A.data();
-//   double* __restrict__ sc_s    = scratch.s.data();
-//   double* __restrict__ sc_out  = scratch.out.data();
-//   int*    __restrict__ sc_idx  = scratch.idx_win0.data();
-//
-//   // --- Winners: gather (filter t_eff <= 0) ---
-//   int n_win_valid = 0;
-//   for (int j = 0; j < n_win; ++j) {
-//     const int i       = idx_win[j];
-//     const double teff = rt[i] - t0[i];
-//     if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
-//     sc_teff[n_win_valid] = teff;
-//     sc_v   [n_win_valid] = v[i];
-//     sc_B   [n_win_valid] = B[i];
-//     sc_A   [n_win_valid] = A[i];
-//     sc_s   [n_win_valid] = s[i];
-//     sc_idx [n_win_valid] = i;
-//     n_win_valid++;
-//   }
-//
-//   // --- Winners: compute ---
-// #pragma omp simd
-//   for (int j = 0; j < n_win_valid; ++j) {
-//     const double inv_s = 1.0 / sc_s[j];
-//     double a = 0.5 * sc_A[j] * inv_s;
-//     double l = sc_v[j]       * inv_s;
-//     double k = sc_B[j]       * inv_s + a;
-//     clamp_a_l(a, l);
-//     sc_out[j] = digt_core(sc_teff[j], k, l, a);
-//   }
-//
-//   // --- Winners: scatter and guard---
-//   for (int j = 0; j < n_win_valid; ++j) {
-//     const double v = sc_out[j];
-//     ll_row[sc_idx[j]] = (std::isfinite(v) && v >= 0.0) ? v : 0.0;   // guard against division by 0
-//   }
-//
-//   sc_idx = scratch.idx_los0.data();
-//
-//   // --- Losers: gather (filter t_eff <= 0) ---
-//   int n_los_valid = 0;
-//   for (int j = 0; j < n_los; ++j) {
-//     const int i       = idx_los[j];
-//     const double teff = rt[i] - t0[i];
-//     if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
-//     sc_teff[n_los_valid] = teff;
-//     sc_v   [n_los_valid] = v[i];
-//     sc_B   [n_los_valid] = B[i];
-//     sc_A   [n_los_valid] = A[i];
-//     sc_s   [n_los_valid] = s[i];
-//     sc_idx [n_los_valid] = i;
-//     n_los_valid++;
-//   }
-//
-//   // --- Losers: compute ---
-// #pragma omp simd
-//   for (int j = 0; j < n_los_valid; ++j) {
-//     const double inv_s = 1.0 / sc_s[j];
-//     double a = 0.5 * sc_A[j] * inv_s;
-//     double l = sc_v[j]       * inv_s;
-//     double k = sc_B[j]       * inv_s + a;
-//     clamp_a_l(a, l);
-//     sc_out[j] = pigt_core(sc_teff[j], k, l, a);
-//   }
-//
-//   // --- Losers: scatter ---
-//   for (int j = 0; j < n_los_valid; ++j) {
-//     double v = sc_out[j];
-//     if (!std::isfinite(v) || v < 0.0) v = 0.0;
-//     else if (v > 1.0)                  v = 1.0;
-//     ll_row[sc_idx[j]] = 1.0 - v;
-//   }
-// }
-//
-// void drdm_prdm_noA_fast(const NumericVector& rts,
-//                         const ParamTable& pt,
-//                         const RaceSpec& spec,
-//                         const std::vector<int>& idx_win,
-//                         const std::vector<int>& idx_los,
-//                         double* __restrict__ ll_row,
-//                         RaceScratch& scratch)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   const int n_win = (int)idx_win.size();
-//   const int n_los = (int)idx_los.size();
-//
-//   double* __restrict__ sc_teff = scratch.t_eff.data();
-//   double* __restrict__ sc_v    = scratch.v.data();
-//   double* __restrict__ sc_B    = scratch.B.data();
-//   double* __restrict__ sc_s    = scratch.s.data();
-//   double* __restrict__ sc_out  = scratch.out.data();
-//   int*    __restrict__ sc_idx  = scratch.idx_win0.data();
-//
-//   // --- Winners: gather (filter t_eff <= 0) ---
-//   int n_win_valid = 0;
-//   for (int j = 0; j < n_win; ++j) {
-//     const int i       = idx_win[j];
-//     const double teff = rt[i] - t0[i];
-//     if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
-//     sc_teff[n_win_valid] = teff;
-//     sc_v   [n_win_valid] = v[i];
-//     sc_B   [n_win_valid] = B[i];
-//     sc_s   [n_win_valid] = s[i];
-//     sc_idx [n_win_valid] = i;
-//     n_win_valid++;
-//   }
-//
-//   // --- Winners: compute ---
-// #pragma omp simd
-//   for (int j = 0; j < n_win_valid; ++j) {
-//     const double inv_s = 1.0 / sc_s[j];
-//     double l = sc_v[j] * inv_s;
-//     double k = sc_B[j] * inv_s;
-//     if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);   // guard against division by 0
-//     sc_out[j] = digt0(sc_teff[j], k, l);
-//   }
-//
-//   // --- Winners: scatter ---
-//   for (int j = 0; j < n_win_valid; ++j) {
-//     const double v = sc_out[j];
-//     ll_row[sc_idx[j]] = (std::isfinite(v) && v >= 0.0) ? v : 0.0;
-//   }
-//
-//   sc_idx = scratch.idx_los0.data();
-//
-//   // --- Losers: gather (filter t_eff <= 0) ---
-//   int n_los_valid = 0;
-//   for (int j = 0; j < n_los; ++j) {
-//     const int i       = idx_los[j];
-//     const double teff = rt[i] - t0[i];
-//     if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
-//     sc_teff[n_los_valid] = teff;
-//     sc_v   [n_los_valid] = v[i];
-//     sc_B   [n_los_valid] = B[i];
-//     sc_s   [n_los_valid] = s[i];
-//     sc_idx [n_los_valid] = i;
-//     n_los_valid++;
-//   }
-//
-//   // --- Losers: compute ---
-// #pragma omp simd
-//   for (int j = 0; j < n_los_valid; ++j) {
-//     const double inv_s = 1.0 / sc_s[j];
-//     double l = sc_v[j] * inv_s;
-//     double k = sc_B[j] * inv_s;
-//     if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);   // guard against division by 0
-//     sc_out[j] = pigt0(sc_teff[j], k, l);
-//   }
-//
-//   // --- Losers: scatter ---
-//   for (int j = 0; j < n_los_valid; ++j) {
-//     double v = sc_out[j];
-//     if (!std::isfinite(v) || v < 0.0) v = 0.0;
-//     else if (v > 1.0)                 v = 1.0;
-//     ll_row[sc_idx[j]] = 1.0 - v;
-//   }
-// }
+  for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
+    const int i = censor.idx_L[j];
+    ll_row[i] = rdm_cdf(censor.LC[i] - t0[i], v[i], B[i], A[i], s[i]);
+  }
 
+  for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
+    const int i = censor.idx_U[j];
+    ll_row[i] = 1.0 - rdm_cdf(censor.UC[i] - t0[i], v[i], B[i], A[i], s[i]);
+  }
 
-
-
-
-// // [[Rcpp::export]]
-// double bench_digt_core_vec(Rcpp::NumericVector t,
-//                            Rcpp::NumericVector k,
-//                            Rcpp::NumericVector l,
-//                            Rcpp::NumericVector a)
-// {
-//   const int n = t.size();
-//   // For safety, use the smallest length of the inputs
-//   const int N = std::min(std::min(k.size(), l.size()), a.size());
-//
-//   double acc = 0.0;
-//   for (int i = 0; i < N; ++i) {
-//     acc += digt_core(t[i], k[i], l[i], a[i]);
-//   }
-//   return acc;
-// }
-//
-// // [[Rcpp::export]]
-// double bench_digt0_vec(Rcpp::NumericVector t,
-//                        Rcpp::NumericVector k,
-//                        Rcpp::NumericVector l)
-// {
-//   const int n = t.size();
-//   const int N = std::min(k.size(), l.size());
-//
-//   double acc = 0.0;
-//   for (int i = 0; i < N; ++i) {
-//     acc += digt0(t[i], k[i], l[i]);
-//   }
-//   return acc;
-// }
-//
-// // [[Rcpp::export]]
-// double bench_pigt_core_vec(Rcpp::NumericVector t,
-//                            Rcpp::NumericVector k,
-//                            Rcpp::NumericVector l,
-//                            Rcpp::NumericVector a)
-// {
-//   const int n = t.size();
-//   const int N = std::min(std::min(k.size(), l.size()), a.size());
-//
-//   double acc = 0.0;
-//   for (int i = 0; i < N; ++i) {
-//     acc += pigt_core(t[i], k[i], l[i], a[i]);
-//   }
-//   return acc;
-// }
-//
-// // [[Rcpp::export]]
-// double bench_pigt0_vec(Rcpp::NumericVector t,
-//                        Rcpp::NumericVector k,
-//                        Rcpp::NumericVector l)
-// {
-//   const int n = t.size();
-//   const int N = std::min(k.size(), l.size());
-//
-//   double acc = 0.0;
-//   for (int i = 0; i < N; ++i) {
-//     acc += pigt0(t[i], k[i], l[i]);
-//   }
-//   return acc;
-// }
+  for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
+    const int i = censor.idx_B[j];
+    ll_row[i] = rdm_cdf(censor.LC[i] - t0[i], v[i], B[i], A[i], s[i])
+      + 1.0 - rdm_cdf(censor.UC[i] - t0[i], v[i], B[i], A[i], s[i]);
+  }
+}
 
 #endif // rdm_h

@@ -70,6 +70,10 @@
 #'     )
 #'   )
 #'   }
+#' @param LC Lower censoring limit. Either a scalar or a vector of length
+#' @param UC Upper censoring limit. Either a scalar or a vector of length nrow(data)
+#' @param LT Lower truncation limit. Either a scalar or a vector of length nrow(data)
+#' @param UT Upper truncation limit. Either a scalar or a vector of length nrow(data)
 #' @param ... Additional, optional arguments
 #'
 #' @return A design list.
@@ -102,6 +106,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                    functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
                    trend=NULL,
                    transform = NULL, bound = NULL, parameter_design=NULL,
+                   LT=NULL, LC=NULL, UC=NULL, UT=NULL,
                    ...){
 
   optionals <- list(...)
@@ -147,6 +152,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       # covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
+    # From ZH's branch -- not sure again how we want to code LC/UC/LT/UT. Attributes?
+    if(is.null(LT)){if("LT"%in%colnames(data)) LT=data$LT else{LT <- attr(data,"LT")}}; if (is.null(LT)) LT <- 0
+    if(is.null(UT)){if("UT"%in%colnames(data)) UT=data$UT else{UT <- attr(data,"UT")}}; if (is.null(UT)) UT <- Inf
+    if(is.null(LC)){if("LC"%in%colnames(data)) LC=data$LC else{LC <- attr(data,"LC")}}; if (is.null(LC)) LC <- 0
+    if(is.null(UC)){if("UC"%in%colnames(data)) UC=data$UC else{UC <- attr(data,"UC")}}; if (is.null(UC)) UC <- Inf
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
 
@@ -200,7 +210,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
-                 parameter_design=parameter_design)
+                 parameter_design=parameter_design, LC=LC, UC=UC, LT=LT, UT=UT)
   class(design) <- "emc.design"
 
   # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model
@@ -432,85 +442,147 @@ design_model_custom_ll <- function(data, design, model){
 }
 
 
+# SM: From Zach's branch
 compress_dadm <- function(da,designs,Fcov,Ffun)
-    # out keeps only unique rows in terms of all parameters design matrices
-    # R, lR and rt (at given resolution) from full data set
-  {
-    nacc <- length(unique(da$lR))
-    # contract output
-    design_expands <- lapply(designs, function(x) attr(x, "expand"))
-    cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
-    cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
-    # Make sure that if row is included for a trial so are other rows
-    if (!is.null(Fcov)) {
-      if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
-      cov_cells <- do.call(paste, c(da[, nFcov, drop = FALSE], list(sep = "+")))
-      cells <- paste(cells, cov_cells, sep = "+")
-    }
-    if (!is.null(Ffun))
-      cells <- paste(cells, do.call(paste, c(da[, Ffun, drop = FALSE], list(sep = "+"))), sep = "+")
+  # out keeps only unique rows in terms of all parameters design matrices
+  # R, lR and rt (at given resolution) from full data set
+{
+  if("LT"%in%colnames(da)) LT=da$LT else{LT <- attr(da,"LT")}; if (is.null(LT)) LT <- 0
+  if("UT"%in%colnames(da)) UT=da$UT else{UT <- attr(da,"UT")}; if (is.null(UT)) UT <- Inf
+  if("LC"%in%colnames(da)) LC=da$LC else{LC <- attr(da,"LC")}; if (is.null(LC)) LC <- 0
+  if("UC"%in%colnames(da)) UC=da$UC else{UC <- attr(da,"UC")}; if (is.null(UC)) UC <- Inf
+  nacc <- length(unique(da$lR))
+  # contract output
+  design_cells_list <- lapply(designs, function(x) {
+    do.call(paste, c(unname(as.data.frame(x[attr(x, "expand"), , drop = FALSE])), sep = "_"))
+  })
+  design_cells <- do.call(paste, c(design_cells_list, sep = "+"))
 
-    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-                                    each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+  cells <- paste(design_cells,
+                 da$subjects, da$R, da$lR, da$rt,
+                 LT, UT, LC, UC,  # <--- ZH Added these columns
+                 sep="+"
+  )
+  # Make sure that if row is included for a trial so are other rows
+  if (!is.null(Fcov)) {
+    if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
+    cells <- paste(cells, do.call(paste, c(unname(as.data.frame(da[, nFcov, drop = FALSE])), sep = "+")), sep = "+")
+  }
+  if (!is.null(Ffun))
+    cells <- paste(cells, do.call(paste, c(unname(as.data.frame(da[, Ffun, drop = FALSE])), sep = "+")), sep = "+")
 
-    contract <- !duplicated(cells)
-    out <- da[contract,,drop=FALSE]
-    attr(out,"contract") <- contract
-    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
-    lR1 <- da$lR==levels(da$lR)[[1]]
-    attr(out,"expand_winner") <- as.integer(factor(cells[lR1],levels=unique(cells[lR1])))
-    attr(out,"s_expand") <- da$subjects
-    attr(out,"designs") <- lapply(designs,function(x){
-      attr(x,"expand") <- attr(x,"expand")[contract]; x})
+  if (nacc>1) {
+    cells_mat <- matrix(cells, nrow = nacc)
+    base_cells <- do.call(paste, c(unname(as.data.frame(t(cells_mat))), sep = "_"))
+    cells <- paste0(rep(base_cells, each = nacc), "_", rep(1:nacc, times = length(base_cells)))
+  }
 
-    # indices to use to contract further ignoring rt then expand back
-    cells_nort <- paste(cells_design, da$subjects, da$R, da$lR, sep = "+")[contract]
-    attr(out,"unique_nort") <- !duplicated(cells_nort)
-    attr(out,"expand_nort") <- as.integer(factor(cells_nort,levels=unique(cells_nort)))
+  contract <- !duplicated(cells)
+  out <- da[contract,,drop=FALSE]
+  attr(out,"contract") <- contract
+  attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+  lR1 <- da$lR==levels(da$lR)[[1]]
+  attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
+  attr(out,"s_expand") <- da$subjects
+  attr(out,"designs") <- lapply(designs,function(x){
+    attr(x,"expand") <- attr(x,"expand")[contract]; x})
 
-    # cells_nort <- paste(
-    #   apply(do.call(cbind,lapply(designs,function(x){
-    #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-    #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
-    # attr(out,"unique_nort") <- !duplicated(cells_nort)
-    # # Only first level WHY????
-    # cells <- cells[da$lR==levels(da$lR)[1]]
-    # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
-    # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
-    #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
+  # indices to use to contract further ignoring rt then expand back
+  cells_nort <- paste(
+    design_cells, da$subjects, da$R, da$lR, LT, UT, LC, UC, sep = "+"
+  )[contract]
+  attr(out,"unique_nort") <- !duplicated(cells_nort)
+  attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
 
-    # indices to use to contract ignoring rt and response (R), then expand back
-    cells_nortR <- paste(cells_design, da$subjects, da$lR, sep = "+")[contract]
-    attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    attr(out,"expand_nortR") <- as.integer(factor(cells_nortR,levels=unique(cells_nortR)))
+  # indices to use to contract ignoring rt and response (R), then expand back
+  cells_nortR <- paste(
+    design_cells, da$subjects, LT, UT, LC, UC, sep = "+"
+  )[contract] #  ,da$lR
+  attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+  attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
 
-    # # indices to use to contract ignoring rt and response (R), then expand back
-    # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
-    #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-    #   da$subjects,da$lR,sep="+")[contract]
-    # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    # # Only first level WHY????
-    # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
-    # attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
-    #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
-
-    # Lower censor
-    # if (!any(is.na(out$rt))) { # Not a choice only model
-    #   winner <- out$lR==levels(out$lR)[[1]]
-    #   ok <- out$rt[winner]==-Inf
-    #   if (any(ok)) {
-    #     ok[ok] <- 1:sum(ok)
-    #     attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
-    #   }
-    #   # Upper censor
-    #   ok <- out$rt[winner]==Inf
-    #   if (any(ok)) {
-    #     ok[ok] <- 1:sum(ok)
-    #     attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
-    #   }
-    # }
-    out
+  out
 }
+
+# compress_dadm <- function(da,designs,Fcov,Ffun)
+#     # out keeps only unique rows in terms of all parameters design matrices
+#     # R, lR and rt (at given resolution) from full data set
+#   {
+#     nacc <- length(unique(da$lR))
+#     # contract output
+#     design_expands <- lapply(designs, function(x) attr(x, "expand"))
+#     cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
+#     cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
+#     # Make sure that if row is included for a trial so are other rows
+#     if (!is.null(Fcov)) {
+#       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
+#       cov_cells <- do.call(paste, c(da[, nFcov, drop = FALSE], list(sep = "+")))
+#       cells <- paste(cells, cov_cells, sep = "+")
+#     }
+#     if (!is.null(Ffun))
+#       cells <- paste(cells, do.call(paste, c(da[, Ffun, drop = FALSE], list(sep = "+"))), sep = "+")
+#
+#     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+#                                     each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+#
+#     contract <- !duplicated(cells)
+#     out <- da[contract,,drop=FALSE]
+#     attr(out,"contract") <- contract
+#     attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
+#     lR1 <- da$lR==levels(da$lR)[[1]]
+#     attr(out,"expand_winner") <- as.integer(factor(cells[lR1],levels=unique(cells[lR1])))
+#     attr(out,"s_expand") <- da$subjects
+#     attr(out,"designs") <- lapply(designs,function(x){
+#       attr(x,"expand") <- attr(x,"expand")[contract]; x})
+#
+#     # indices to use to contract further ignoring rt then expand back
+#     cells_nort <- paste(cells_design, da$subjects, da$R, da$lR, sep = "+")[contract]
+#     attr(out,"unique_nort") <- !duplicated(cells_nort)
+#     attr(out,"expand_nort") <- as.integer(factor(cells_nort,levels=unique(cells_nort)))
+#
+#     # cells_nort <- paste(
+#     #   apply(do.call(cbind,lapply(designs,function(x){
+#     #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
+#     #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+#     # attr(out,"unique_nort") <- !duplicated(cells_nort)
+#     # # Only first level WHY????
+#     # cells <- cells[da$lR==levels(da$lR)[1]]
+#     # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
+#     # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
+#     #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
+#
+#     # indices to use to contract ignoring rt and response (R), then expand back
+#     cells_nortR <- paste(cells_design, da$subjects, da$lR, sep = "+")[contract]
+#     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+#     attr(out,"expand_nortR") <- as.integer(factor(cells_nortR,levels=unique(cells_nortR)))
+#
+#     # # indices to use to contract ignoring rt and response (R), then expand back
+#     # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
+#     #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
+#     #   da$subjects,da$lR,sep="+")[contract]
+#     # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+#     # # Only first level WHY????
+#     # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
+#     # attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
+#     #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
+#
+#     # Lower censor
+#     # if (!any(is.na(out$rt))) { # Not a choice only model
+#     #   winner <- out$lR==levels(out$lR)[[1]]
+#     #   ok <- out$rt[winner]==-Inf
+#     #   if (any(ok)) {
+#     #     ok[ok] <- 1:sum(ok)
+#     #     attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
+#     #   }
+#     #   # Upper censor
+#     #   ok <- out$rt[winner]==Inf
+#     #   if (any(ok)) {
+#     #     ok[ok] <- 1:sum(ok)
+#     #     attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
+#     #   }
+#     # }
+#     out
+# }
 
 check_rt <- function(b,d,upper=TRUE)
   # Check bounds respected if present

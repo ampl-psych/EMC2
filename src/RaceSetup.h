@@ -6,6 +6,7 @@
 #include "model_lnr.h"
 #include "model_LBA.h"
 #include "model_RDM.h"
+#include "CensorSpec.h"
 using namespace Rcpp;
 
 // ---------------------------------------------------------------------------
@@ -14,13 +15,6 @@ using namespace Rcpp;
 // ---------------------------------------------------------------------------
 // Dispatcher types
 // ---------------------------------------------------------------------------
-
-// Legacy per-accumulator fill (kept for drdm_fast / prdm_fast etc.)
-typedef void (*race_fast_fn)(const NumericVector& rts,
-              const ParamTable& pt,
-              const RaceSpec& spec,
-              const LogicalVector& winner,
-              double* raw);
 
 // Combined pdf+cdf fill — hot path, takes pre-allocated scratch
 using race_combined_fn = void(*)(const NumericVector&,
@@ -31,15 +25,19 @@ using race_combined_fn = void(*)(const NumericVector&,
                               double* __restrict__ raw,
                               RaceScratch& scratch);
 
+using censor_fn = void(*)(const CensorSpec& censor,
+                          const ParamTable& pt,
+                          const RaceSpec& spec,
+                          double* __restrict__ ll_row);
+
 // ---------------------------------------------------------------------------
 // RaceModelSetup
 // ---------------------------------------------------------------------------
 
 struct RaceModelSetup {
-  RaceSpec         spec;
-  race_fast_fn     fill_pdf;
-  race_fast_fn     fill_cdf;
-  race_combined_fn fill_both;   // single-pass pdf+cdf — use this in hot path
+  RaceSpec          spec;
+  race_combined_fn  fill_both;   // single-pass pdf+cdf — use this in hot path
+  censor_fn         fill_censor; // three loops over censor options
 };
 
 // ---------------------------------------------------------------------------
@@ -56,32 +54,22 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.spec.col_s        = pt.base_index_for("s");
-    s.fill_pdf          = drdm_fast;
-    s.fill_cdf          = prdm_fast;
     s.fill_both         = drdm_prdm_fast;
-  // } else if(type == "RDM-A0") {
-  //   s.spec.col_v        = pt.base_index_for("v");
-  //   s.spec.col_B        = pt.base_index_for("B");
-  //   s.spec.col_t0       = pt.base_index_for("t0");
-  //   s.spec.col_A        = pt.base_index_for("A");
-  //   s.spec.col_s        = pt.base_index_for("s");
-  //   s.fill_both         = drdm_prdm_noA_fast;
+    s.fill_censor       = rdm_censor;
   } else if (type == "LBA") {
     s.spec.col_v        = pt.base_index_for("v");
     s.spec.col_sv       = pt.base_index_for("sv");
     s.spec.col_B        = pt.base_index_for("B");
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.fill_pdf          = dlba_fast;
-    s.fill_cdf          = plba_fast;
     s.fill_both         = dlba_plba_fast;
+    s.fill_censor       = lba_censor;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.fill_pdf          = dlnr_fast;
-    s.fill_cdf          = plnr_fast;
     s.fill_both         = dlnr_plnr_fast;
+    s.fill_censor       = lnr_censor;
   }
 
   return s;
