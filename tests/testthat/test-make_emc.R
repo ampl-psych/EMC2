@@ -5,7 +5,7 @@ ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))
 # specify design
 design_LBABE <- design(data = forstmann,model=LBA,
                 formula=list(v~1,sv~1,B~E+lR,A~1,t0~1),
-                constants=c(sv=log(1)))
+                constants=c(sv=log(1)), report_p_vector=FALSE)
 
 pmean <- c(v=1, B=log(.5),B_Eneutral=log(1.5),
            B_Eaccuracy=log(2),B_lRright=0, A=log(0.25),t0=log(.2))

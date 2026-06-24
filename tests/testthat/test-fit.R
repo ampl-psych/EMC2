@@ -17,7 +17,7 @@ test_that("fit", {
   skip_on_os("windows")
   design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
                        formula=list(m~lM,s~1,t0~1),
-                       contrasts=list(m=list(lM=ADmat)))
+                       contrasts=list(m=list(lM=ADmat)), report_p_vector = FALSE)
 
   LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
 

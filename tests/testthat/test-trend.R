@@ -24,7 +24,7 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
                       trend = trend,
                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
                       contrasts = list(lM = ADmat),
-                      model = LNR)
+                      model = LNR, report_p_vector=FALSE)
 ##mapped_pars(design_base)
 p_vector <- sampled_pars(design_base, doMap = FALSE)
 p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
@@ -53,7 +53,7 @@ design_base_shared <- design(data = dat,
                              formula = list(m ~ lM, s ~ 1, t0 ~ 1),
                              contrasts = list(lM = ADmat),
                              matchfun = matchfun,
-                             model = LNR)
+                             model = LNR, report_p_vector=FALSE)
 
 LNR2cov_shared <- make_emc(dat, design_base_shared, compress = FALSE, n_chains = 1, type = "single")
 
@@ -75,7 +75,7 @@ design_premap <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1, m_lMd.d1 ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_premap)
 
@@ -95,7 +95,7 @@ design_pretrans <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_pretrans)
 
@@ -115,7 +115,7 @@ design_posttrans <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_posttrans)
 
@@ -138,7 +138,7 @@ design_bases <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_bases)
 
@@ -159,7 +159,7 @@ design_poly <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_poly)
 
@@ -185,7 +185,7 @@ design_phases <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 
 LNR_phases <- make_emc(dat, design_phases, compress = FALSE, n_chains = 1, type = "single")
@@ -208,7 +208,7 @@ design_par_input <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 
 LNR_par_input <- make_emc(dat, design_par_input, compress = FALSE, n_chains = 1, type = "single")
@@ -229,7 +229,7 @@ design_shared_premap <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 #mapped_pars(design_shared_premap)
 
@@ -252,7 +252,7 @@ design_shared_posttransform <- design(
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 LNR_shared_posttransform <- make_emc(dat, design_shared_posttransform, compress = FALSE, n_chains = 1, type = "single")
 
@@ -275,7 +275,7 @@ design_cond <- design(
   trend = trend_cond,
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 
 p_vec <- sampled_pars(design_cond, doMap = FALSE)
@@ -306,7 +306,7 @@ design_mult <- design(
   trend = trend_mult,
   formula = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = ADmat),
-  model = LNR
+  model = LNR, report_p_vector=FALSE
 )
 
 LNR_multi <- make_emc(dat, design_mult, compress = FALSE, n_chains = 1, type = "single")
@@ -338,7 +338,8 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
                       trend = trend,
                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
                       contrasts = list(lM = ADmat),
-                      model = LNR)
+                      model = LNR, report_p_vector=FALSE)
+set.seed(123)
 covariate1 <- rnorm(n_trials*2)
 covariate2 <- rnorm(n_trials*2)
 

@@ -5,7 +5,7 @@ dGNG <- design(Rlevels = c("left","right"),
                  Rnogo=function(d)factor(rep("left",nrow(d)),levels=c("left","right")),
                  Rgo=function(d)factor(rep("right",nrow(d)),levels=c("left","right"))),
                formula=list(v~S,a~1, Z~1, t0~1),
-               model=DDMGNG)
+               model=DDMGNG, report_p_vector=FALSE)
 
 p_vector <- sampled_pars(dGNG,doMap=F)
 p_vector[1:5] <- c(0,1,log(1),qnorm(.5),log(.4))

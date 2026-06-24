@@ -40,7 +40,7 @@ dat$subjects <- droplevels(dat$subjects)
 # LNR ---------------------------------------------------------------------
 design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
                      formula=list(m~lM,s~1,t0~1),
-                     contrasts=list(m=list(lM=ADmat)))
+                     contrasts=list(m=list(lM=ADmat)), report_p_vector=FALSE)
 LNR_s1 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 
 test_that("LNR", {
@@ -57,7 +57,7 @@ test_that("LNR compressed", {
 # RDM ----------------------------------------------------------
 design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
                      formula=list(v~lM,s~1,t0~1,A~1,B~1),
-                     contrasts=list(v=list(lM=ADmat)))
+                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
 RDM_s <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 test_that("RDM", {
   expect_snapshot(calc_lls(RDM_s))
@@ -71,7 +71,7 @@ test_that("RDM compressed", {
 # LBA ----------------------------------------------------------
 design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
                      formula=list(v~lM,sv~1,t0~1,A~1,B~1),
-                     contrasts=list(v=list(lM=ADmat)))
+                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
 LBA_s <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 test_that("LBA", {
   expect_snapshot(calc_lls(LBA_s))
@@ -85,7 +85,7 @@ test_that("LBA compressed", {
 # WDM ----------------------------------------------------------
 design_WDM <- design(data = dat, model=DDM,
                      formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-                     constants=c(s=1, sv=log(0), SZ=qnorm(0)))
+                     constants=c(s=1, sv=log(0), SZ=qnorm(0)), report_p_vector=FALSE)
 WDM_s <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2)
 test_that("WDM", {
   expect_snapshot(calc_lls(WDM_s))
@@ -99,7 +99,7 @@ test_that("WDM compressed", {
 # DDM ---
 design_DDM <- design(data = dat,model=DDM,
                      formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0~1),
-                     constants=c(s=1))
+                     constants=c(s=1), report_p_vector=FALSE)
 DDM_s <- make_emc(dat, design_DDM, rt_resolution = 0.05, n_chains = 2)
 test_that("DDM", {
   expect_snapshot(calc_lls(DDM_s))
