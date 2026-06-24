@@ -192,10 +192,7 @@ get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE,
     model_p_types <- names(model_list$p_types)
     is_stop_signal_name <- identical(model_list$c_name, "SSEXG") ||
       identical(model_list$c_name, "SSRDEX")
-    is_stop_signal_params <- isTRUE(
-      all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types) ||
-        all(c("meanlogS", "sdlogS", "tf", "gf") %in% model_p_types)
-    )
+    is_stop_signal_params <- isTRUE(all(c("tf", "gf") %in% model_p_types))
     if ((is_stop_signal_name || is_stop_signal_params) && is.null(dadm$SSD)) {
       dadm$SSD <- Inf
     }
