@@ -451,6 +451,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   if("UT"%in%colnames(da)) UT=da$UT else{UT <- attr(da,"UT")}; if (is.null(UT)) UT <- Inf
   if("LC"%in%colnames(da)) LC=da$LC else{LC <- attr(da,"LC")}; if (is.null(LC)) LC <- 0
   if("UC"%in%colnames(da)) UC=da$UC else{UC <- attr(da,"UC")}; if (is.null(UC)) UC <- Inf
+  if("missingness"%in%colnames(da)) { missingness=da$missingness } else {missingness <- NA}
   nacc <- length(unique(da$lR))
   # contract output
   design_cells_list <- lapply(designs, function(x) {
@@ -460,7 +461,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 
   cells <- paste(design_cells,
                  da$subjects, da$R, da$lR, da$rt,
-                 LT, UT, LC, UC,  # <--- ZH Added these columns
+                 LT, UT, LC, UC, missingness,  # <--- ZH Added these columns
                  sep="+"
   )
   # Make sure that if row is included for a trial so are other rows
@@ -481,6 +482,8 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   out <- da[contract,,drop=FALSE]
   attr(out,"contract") <- contract
   attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+
+  # SM: Censored trials have no
   lR1 <- da$lR==levels(da$lR)[[1]]
   attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
   attr(out,"s_expand") <- da$subjects

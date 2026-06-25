@@ -306,6 +306,7 @@ double c_log_likelihood_race(ParamTable& pt,
   // bulk log over ll_row_ptr
   vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
 
+
   // truncation here - additional row-wise ll vector that will be *subtracted*
   // do_truncate(normalize_truncate, pt, LT, UT) // doenst care about indices, needs to be applied to all rows... I think. Actually, not sure?
   // vec_log(normalize_truncate, normalize_truncate.size())  // log-conversion
@@ -352,6 +353,7 @@ double c_log_likelihood_race(ParamTable& pt,
 
 #pragma omp simd reduction(+:sum_ll)
   for (int i = 0; i < m; ++i) {
+    double to_add = clamp(ll_ptr[exp_ptr[i] - 1]);
     sum_ll += clamp(ll_ptr[exp_ptr[i] - 1]);
   }
   return sum_ll;
@@ -647,9 +649,11 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     }
 
     // Identify which rows in the dadm correspond to winners, to losers, and which should be skipped entirely
+    int total_n_winners = 0;
     for (int i = 0; i < n_trials; ++i) {
-      if (has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
-      if (win_flag[i]) {
+      if(win_flag[i]) total_n_winners += 1;
+      if(has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
+      if(win_flag[i]) {
         idx_win.push_back(i);
       } else {
         // skip phantom accumulators — data-dependent, built once
@@ -664,8 +668,8 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     CensorSpec censor = make_censor_spec(data, n_trials);
 
     // Scratch buffers (reused across particles)
-    NumericVector ll_row(n_trials);  // stores (log)likelihood of row in dadm
-    NumericVector ll_trial(n_winners); // stores (log)likelihood of trials
+    NumericVector ll_row(n_trials);          // stores (log)likelihood of row in dadm
+    NumericVector ll_trial(total_n_winners); // stores (log)likelihood of trials
 
     RaceScratch scratch;
     scratch.reserve(std::max((int)idx_win.size(), (int)idx_los.size()));
@@ -682,13 +686,14 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       lr_all(is_ok, n_acc);
       std::fill(ll_row.begin(), ll_row.end(), 1.0);
       lls[i] = c_log_likelihood_race(
-        ctx.param_table, setup,  // operates directly on param_table - no need for param extraction
+        ctx.param_table, setup,
         rts, is_ok,
         idx_win, idx_los,
         censor,
         expand,
         min_ll, n_acc, ll_row, ll_trial,
         scratch);
+
     }
   }
 
