@@ -27,7 +27,7 @@ expect_ssexg_cr_equal <- function(emc, p_vector, n = 25, proposal_var = 0.0025,
 # Baseline single-subject SSEXG fixture using staircase SSD generation.
 mySSD_function <- make_ssd()
 
-designSSexG <- design(model=SSEXG,
+designSSexG <- design(model = function() stopsignal(go = "exgaussian", stop = "exgaussian"),
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
                       formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)
@@ -64,7 +64,7 @@ test_that("SSEXG mapped_pars supplies internal SSD and hides bookkeeping columns
 
 test_that("SSEXG mapped_pars supports the R reference model path", {
   SSEXG_R <- function() {
-    model <- SSEXG()
+    model <- stopsignal(go = "exgaussian", stop = "exgaussian")
     model$c_name <- NULL
     model
   }
@@ -84,7 +84,7 @@ test_that("SSEXG mapped_pars supports the R reference model path", {
 })
 
 test_that("SSEXG mapped_pars keeps lI when it varies by accumulator", {
-  design_lI <- design(model = SSEXG,
+  design_lI <- design(model = function() stopsignal(go = "exgaussian", stop = "exgaussian"),
                       factors = list(subjects = 1, S = c("left", "right"), lI = 1:2),
                       Rlevels = c("left", "right"),
                       matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
@@ -143,7 +143,7 @@ test_that("stop-signal models disable compression and RT binning", {
 
 test_that("staircase resets per subject", {
   # Each subject-specific staircase should start from the same initial SSD.
-  design_multi <- design(model = SSEXG,
+  design_multi <- design(model = function() stopsignal(go = "exgaussian", stop = "exgaussian"),
                          factors = list(subjects = 1:3, S = c("left", "right")),
                          Rlevels = c("left", "right"),
                          matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
