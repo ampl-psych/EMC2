@@ -21,6 +21,10 @@ design(
   transform = NULL,
   bound = NULL,
   parameter_design = NULL,
+  LT = NULL,
+  LC = NULL,
+  UC = NULL,
+  UT = NULL,
   ...
 )
 }
@@ -106,6 +110,14 @@ components:
     )
   )
   }}
+
+\item{LT}{Lower truncation limit. Either a scalar or a vector of length nrow(data)}
+
+\item{LC}{Lower censoring limit. Either a scalar or a vector of length}
+
+\item{UC}{Upper censoring limit. Either a scalar or a vector of length nrow(data)}
+
+\item{UT}{Upper truncation limit. Either a scalar or a vector of length nrow(data)}
 
 \item{...}{Additional, optional arguments}
 }

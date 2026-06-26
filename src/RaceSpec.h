@@ -23,6 +23,9 @@ struct RaceScratch {
   std::vector<int> idx_win0, idx_win1, idx_los0, idx_los1;
   std::vector<int> idx_win_c, idx_los_c;  // core compacted indices
 
+  // lba precompute a denominator
+  std::vector<double> denom, denom_c;
+
   void reserve(int n) {
     t_eff.resize(n); v.resize(n); B.resize(n);
     A.resize(n);     s.resize(n); out.resize(n);
@@ -34,6 +37,7 @@ struct RaceScratch {
     idx_win0.resize(n); idx_win1.resize(n);
     idx_los0.resize(n); idx_los1.resize(n);
     idx_win_c.resize(n); idx_los_c.resize(n);
+    denom.resize(n); denom_c.resize(n);
   }
 };
 
