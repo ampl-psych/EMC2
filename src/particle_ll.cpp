@@ -299,10 +299,6 @@ double c_log_likelihood_race(ParamTable& pt,
   //  on linux/x86, this is significantly faster. macOS/arm64 doesn't care
   setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, ll_row_ptr, scratch);
 
-  // dynamically dispatches the correct survivor function that fills in
-  // ll_row_ptr on the indices declared by the idx vectors. No-op if empty.
-  if (censor.any()) setup.fill_censor(censor, pt, setup.spec, ll_row_ptr, scratch);
-
   // bulk log over ll_row_ptr
   vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
 
@@ -340,18 +336,15 @@ double c_log_likelihood_race(ParamTable& pt,
     }
   }
 
-  // truncation here - additional trialwise normalization vector
+  // 3) Trialwise truncation correction
   if (trunc.any()) {
     const auto log_Z = trunc.calculate_normalization_constant();
-      // for (int t = 0; t < trunc.n_trials; ++t) {
-      //   Rcpp::Rcout << "t=" << t
-      //               << " log_Z=" << log_Z[t]
-      //               << " ll_before=" << ll_ptr[t]
-      //               << " ll_after="  << ll_ptr[t] - log_Z[t] << "\n";
-      //   ll_ptr[t] -= log_Z[t];
-      // }
      for (int t = 0; t < trunc.n_trials; ++t) ll_ptr[t] -= log_Z[t];
   }
+
+  // 4) Fill in trialwise censor probabilities
+  if (censor.any()) censor.fill_censored_rows(trunc.S_upper, trunc.S_lower, ll_trial, min_ll);
+
 
   // 3) Expand and sum
   const int  m       = expand.size();
@@ -678,7 +671,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     // Race model setup
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
     // Pre-compute index lists for censored and truncated trials
-    CensorSpec censor = make_censor_spec(data, n_rows);
+    CensorSpec censor = make_censor_spec(data, total_n_winners, n_acc, setup, ctx.param_table, scratch);// make_censor_spec(data, n_rows);
     TruncSpec trunc = make_trunc_spec(data, total_n_winners, n_acc, setup, ctx.param_table, scratch);
 
     // Begin particle loop

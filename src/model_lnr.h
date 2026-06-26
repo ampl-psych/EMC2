@@ -7,7 +7,7 @@
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-#include "CensorSpec.h"
+// #include "CensorSpec.h"
 
 using namespace Rcpp;
 
@@ -43,13 +43,12 @@ void plnr_fast(const NumericVector&    rts,
                const std::vector<int>& idx,
                double* __restrict__    ll_row,
                RaceScratch&            scratch);
-
-
-void lnr_censor(const CensorSpec&    censor,
-                const ParamTable&    pt,
-                const RaceSpec&      spec,
-                double* __restrict__ ll_row,
-                RaceScratch&         scratch);
+//
+// void lnr_censor(const CensorSpec&    censor,
+//                 const ParamTable&    pt,
+//                 const RaceSpec&      spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch&         scratch);
 
 void lnr_truncate(const std::vector<int>&     idx,
                   const std::vector<double>&  bound,

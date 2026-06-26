@@ -289,154 +289,154 @@ void plba_fast(const NumericVector&    rts,
 //   idx_U: ll_row[i] = 1 - CDF(UC - t0)
 //   idx_B: ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0)
 // =============================================================================
-void lba_censor(const CensorSpec&    censor,
-                const ParamTable&    pt,
-                const RaceSpec&      spec,
-                double* __restrict__ ll_row,
-                RaceScratch&         scratch)
-{
-  const double* __restrict__ v   = &pt.base(0, spec.col_v);
-  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
-  const double* __restrict__ B   = &pt.base(0, spec.col_B);
-  const double* __restrict__ A   = &pt.base(0, spec.col_A);
-  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
-  const double* __restrict__ LC  = censor.LC.data();
-  const double* __restrict__ UC  = censor.UC.data();
-
-  double* __restrict__ sc_teff   = scratch.t_eff.data();
-  double* __restrict__ sc_v      = scratch.v.data();
-  double* __restrict__ sc_sv     = scratch.sv.data();
-  double* __restrict__ sc_B      = scratch.B.data();
-  double* __restrict__ sc_A      = scratch.A.data();
-  double* __restrict__ sc_denom  = scratch.denom.data();
-  double* __restrict__ sc_out    = scratch.out.data();
-  int*    __restrict__ sc_idx    = scratch.idx_win0.data();
-
-  double* __restrict__ sc_teff_c  = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c     = scratch.v_c.data();
-  double* __restrict__ sc_sv_c    = scratch.s_c.data();
-  double* __restrict__ sc_B_c     = scratch.B_c.data();
-  double* __restrict__ sc_denom_c = scratch.denom_c.data();
-  double* __restrict__ sc_out_c   = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c   = scratch.idx_win_c.data();
-
-  // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
-  {
-    int n_core = 0, n_noA = 0;
-    for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
-      const int i       = censor.idx_L[j];
-      const double teff = LC[i] - t0[i];
-      if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 0.0; continue; }
-      double denom = PNORM_STD(v[i] / sv[i], true, false);
-      if (denom < 1e-10) denom = 1e-10;
-      if (A[i] > LBA_A_ASYMPTOTIC) {
-        sc_teff[n_core] = teff;  sc_v[n_core]      = v[i];  sc_sv[n_core]    = sv[i];
-        sc_B[n_core]    = B[i];  sc_A[n_core]      = A[i];  sc_denom[n_core] = denom;
-        sc_idx[n_core]  = i;     n_core++;
-      } else {
-        sc_teff_c[n_noA]  = teff; sc_v_c[n_noA]    = v[i];  sc_sv_c[n_noA]   = sv[i];
-        sc_B_c[n_noA]     = B[i]; sc_denom_c[n_noA] = denom; sc_idx_c[n_noA] = i;
-        n_noA++;
-      }
-    }
-    for (int j = 0; j < n_core; ++j)
-      sc_out[j] = plba_core(sc_teff[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]);
-    for (int j = 0; j < n_noA; ++j)
-      sc_out_c[j] = plba_noA(sc_teff_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]);
-    for (int j = 0; j < n_core; ++j) {
-      double val = sc_out[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx[j]] = val;
-    }
-    for (int j = 0; j < n_noA; ++j) {
-      double val = sc_out_c[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx_c[j]] = val;
-    }
-  }
-
-  // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
-  {
-    int n_core = 0, n_noA = 0;
-    for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
-      const int i       = censor.idx_U[j];
-      const double teff = UC[i] - t0[i];
-      if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 1.0; continue; }
-      double denom = PNORM_STD(v[i] / sv[i], true, false);
-      if (denom < 1e-10) denom = 1e-10;
-      if (A[i] > LBA_A_ASYMPTOTIC) {
-        sc_teff[n_core] = teff;  sc_v[n_core]      = v[i];  sc_sv[n_core]    = sv[i];
-        sc_B[n_core]    = B[i];  sc_A[n_core]      = A[i];  sc_denom[n_core] = denom;
-        sc_idx[n_core]  = i;     n_core++;
-      } else {
-        sc_teff_c[n_noA]  = teff; sc_v_c[n_noA]    = v[i];  sc_sv_c[n_noA]   = sv[i];
-        sc_B_c[n_noA]     = B[i]; sc_denom_c[n_noA] = denom; sc_idx_c[n_noA] = i;
-        n_noA++;
-      }
-    }
-    for (int j = 0; j < n_core; ++j)
-      sc_out[j] = plba_core(sc_teff[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]);
-    for (int j = 0; j < n_noA; ++j)
-      sc_out_c[j] = plba_noA(sc_teff_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]);
-    for (int j = 0; j < n_core; ++j) {
-      double val = sc_out[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx[j]] = 1.0 - val;
-    }
-    for (int j = 0; j < n_noA; ++j) {
-      double val = sc_out_c[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx_c[j]] = 1.0 - val;
-    }
-  }
-
-  // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
-  // Single gather packs both LC and UC teff; denom computed once per row.
-  {
-    double* __restrict__ sc_teff_UC  = scratch.k.data();
-    double* __restrict__ sc_teff_UC_c = scratch.l.data();
-
-    int n_core = 0, n_noA = 0;
-    for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
-      const int i = censor.idx_B[j];
-      if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
-      double denom = PNORM_STD(v[i] / sv[i], true, false);
-      if (denom < 1e-10) denom = 1e-10;
-      if (A[i] > LBA_A_ASYMPTOTIC) {
-        sc_teff   [n_core] = LC[i] - t0[i]; sc_teff_UC[n_core] = UC[i] - t0[i];
-        sc_v[n_core]       = v[i];           sc_sv[n_core]      = sv[i];
-        sc_B[n_core]       = B[i];           sc_A[n_core]       = A[i];
-        sc_denom[n_core]   = denom;          sc_idx[n_core]     = i;
-        n_core++;
-      } else {
-        sc_teff_c   [n_noA] = LC[i] - t0[i]; sc_teff_UC_c[n_noA] = UC[i] - t0[i];
-        sc_v_c[n_noA]       = v[i];           sc_sv_c[n_noA]      = sv[i];
-        sc_B_c[n_noA]       = B[i];           sc_denom_c[n_noA]   = denom;
-        sc_idx_c[n_noA]     = i;
-        n_noA++;
-      }
-    }
-
-    // Compute CDF(LC) and CDF(UC) — two passes, same params
-    for (int j = 0; j < n_core; ++j) {
-      double cdf_LC = (sc_teff   [j] > 0.0) ? plba_core(sc_teff   [j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]) : 0.0;
-      double cdf_UC = (sc_teff_UC[j] > 0.0) ? plba_core(sc_teff_UC[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]) : 0.0;
-      if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
-      if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
-      sc_out[j] = cdf_LC + 1.0 - cdf_UC;
-    }
-    for (int j = 0; j < n_noA; ++j) {
-      double cdf_LC = (sc_teff_c   [j] > 0.0) ? plba_noA(sc_teff_c   [j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]) : 0.0;
-      double cdf_UC = (sc_teff_UC_c[j] > 0.0) ? plba_noA(sc_teff_UC_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]) : 0.0;
-      if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
-      if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
-      sc_out_c[j] = cdf_LC + 1.0 - cdf_UC;
-    }
-
-    for (int j = 0; j < n_core; ++j) ll_row[sc_idx  [j]] = sc_out  [j];
-    for (int j = 0; j < n_noA;  ++j) ll_row[sc_idx_c [j]] = sc_out_c[j];
-  }
-}
+// void lba_censor(const CensorSpec&    censor,
+//                 const ParamTable&    pt,
+//                 const RaceSpec&      spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch&         scratch)
+// {
+//   const double* __restrict__ v   = &pt.base(0, spec.col_v);
+//   const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+//   const double* __restrict__ B   = &pt.base(0, spec.col_B);
+//   const double* __restrict__ A   = &pt.base(0, spec.col_A);
+//   const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ LC  = censor.LC.data();
+//   const double* __restrict__ UC  = censor.UC.data();
+//
+//   double* __restrict__ sc_teff   = scratch.t_eff.data();
+//   double* __restrict__ sc_v      = scratch.v.data();
+//   double* __restrict__ sc_sv     = scratch.sv.data();
+//   double* __restrict__ sc_B      = scratch.B.data();
+//   double* __restrict__ sc_A      = scratch.A.data();
+//   double* __restrict__ sc_denom  = scratch.denom.data();
+//   double* __restrict__ sc_out    = scratch.out.data();
+//   int*    __restrict__ sc_idx    = scratch.idx_win0.data();
+//
+//   double* __restrict__ sc_teff_c  = scratch.t_eff_c.data();
+//   double* __restrict__ sc_v_c     = scratch.v_c.data();
+//   double* __restrict__ sc_sv_c    = scratch.s_c.data();
+//   double* __restrict__ sc_B_c     = scratch.B_c.data();
+//   double* __restrict__ sc_denom_c = scratch.denom_c.data();
+//   double* __restrict__ sc_out_c   = scratch.out_c.data();
+//   int*    __restrict__ sc_idx_c   = scratch.idx_win_c.data();
+//
+//   // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
+//   {
+//     int n_core = 0, n_noA = 0;
+//     for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
+//       const int i       = censor.idx_L[j];
+//       const double teff = LC[i] - t0[i];
+//       if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 0.0; continue; }
+//       double denom = PNORM_STD(v[i] / sv[i], true, false);
+//       if (denom < 1e-10) denom = 1e-10;
+//       if (A[i] > LBA_A_ASYMPTOTIC) {
+//         sc_teff[n_core] = teff;  sc_v[n_core]      = v[i];  sc_sv[n_core]    = sv[i];
+//         sc_B[n_core]    = B[i];  sc_A[n_core]      = A[i];  sc_denom[n_core] = denom;
+//         sc_idx[n_core]  = i;     n_core++;
+//       } else {
+//         sc_teff_c[n_noA]  = teff; sc_v_c[n_noA]    = v[i];  sc_sv_c[n_noA]   = sv[i];
+//         sc_B_c[n_noA]     = B[i]; sc_denom_c[n_noA] = denom; sc_idx_c[n_noA] = i;
+//         n_noA++;
+//       }
+//     }
+//     for (int j = 0; j < n_core; ++j)
+//       sc_out[j] = plba_core(sc_teff[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]);
+//     for (int j = 0; j < n_noA; ++j)
+//       sc_out_c[j] = plba_noA(sc_teff_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]);
+//     for (int j = 0; j < n_core; ++j) {
+//       double val = sc_out[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx[j]] = val;
+//     }
+//     for (int j = 0; j < n_noA; ++j) {
+//       double val = sc_out_c[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx_c[j]] = val;
+//     }
+//   }
+//
+//   // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
+//   {
+//     int n_core = 0, n_noA = 0;
+//     for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
+//       const int i       = censor.idx_U[j];
+//       const double teff = UC[i] - t0[i];
+//       if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 1.0; continue; }
+//       double denom = PNORM_STD(v[i] / sv[i], true, false);
+//       if (denom < 1e-10) denom = 1e-10;
+//       if (A[i] > LBA_A_ASYMPTOTIC) {
+//         sc_teff[n_core] = teff;  sc_v[n_core]      = v[i];  sc_sv[n_core]    = sv[i];
+//         sc_B[n_core]    = B[i];  sc_A[n_core]      = A[i];  sc_denom[n_core] = denom;
+//         sc_idx[n_core]  = i;     n_core++;
+//       } else {
+//         sc_teff_c[n_noA]  = teff; sc_v_c[n_noA]    = v[i];  sc_sv_c[n_noA]   = sv[i];
+//         sc_B_c[n_noA]     = B[i]; sc_denom_c[n_noA] = denom; sc_idx_c[n_noA] = i;
+//         n_noA++;
+//       }
+//     }
+//     for (int j = 0; j < n_core; ++j)
+//       sc_out[j] = plba_core(sc_teff[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]);
+//     for (int j = 0; j < n_noA; ++j)
+//       sc_out_c[j] = plba_noA(sc_teff_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]);
+//     for (int j = 0; j < n_core; ++j) {
+//       double val = sc_out[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx[j]] = 1.0 - val;
+//     }
+//     for (int j = 0; j < n_noA; ++j) {
+//       double val = sc_out_c[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx_c[j]] = 1.0 - val;
+//     }
+//   }
+//
+//   // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
+//   // Single gather packs both LC and UC teff; denom computed once per row.
+//   {
+//     double* __restrict__ sc_teff_UC  = scratch.k.data();
+//     double* __restrict__ sc_teff_UC_c = scratch.l.data();
+//
+//     int n_core = 0, n_noA = 0;
+//     for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
+//       const int i = censor.idx_B[j];
+//       if (std::isnan(v[i])) { ll_row[i] = 0.0; continue; }
+//       double denom = PNORM_STD(v[i] / sv[i], true, false);
+//       if (denom < 1e-10) denom = 1e-10;
+//       if (A[i] > LBA_A_ASYMPTOTIC) {
+//         sc_teff   [n_core] = LC[i] - t0[i]; sc_teff_UC[n_core] = UC[i] - t0[i];
+//         sc_v[n_core]       = v[i];           sc_sv[n_core]      = sv[i];
+//         sc_B[n_core]       = B[i];           sc_A[n_core]       = A[i];
+//         sc_denom[n_core]   = denom;          sc_idx[n_core]     = i;
+//         n_core++;
+//       } else {
+//         sc_teff_c   [n_noA] = LC[i] - t0[i]; sc_teff_UC_c[n_noA] = UC[i] - t0[i];
+//         sc_v_c[n_noA]       = v[i];           sc_sv_c[n_noA]      = sv[i];
+//         sc_B_c[n_noA]       = B[i];           sc_denom_c[n_noA]   = denom;
+//         sc_idx_c[n_noA]     = i;
+//         n_noA++;
+//       }
+//     }
+//
+//     // Compute CDF(LC) and CDF(UC) — two passes, same params
+//     for (int j = 0; j < n_core; ++j) {
+//       double cdf_LC = (sc_teff   [j] > 0.0) ? plba_core(sc_teff   [j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]) : 0.0;
+//       double cdf_UC = (sc_teff_UC[j] > 0.0) ? plba_core(sc_teff_UC[j], sc_A[j], sc_B[j] + sc_A[j], sc_v[j], sc_sv[j], sc_denom[j]) : 0.0;
+//       if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
+//       if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
+//       sc_out[j] = cdf_LC + 1.0 - cdf_UC;
+//     }
+//     for (int j = 0; j < n_noA; ++j) {
+//       double cdf_LC = (sc_teff_c   [j] > 0.0) ? plba_noA(sc_teff_c   [j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]) : 0.0;
+//       double cdf_UC = (sc_teff_UC_c[j] > 0.0) ? plba_noA(sc_teff_UC_c[j], sc_B_c[j], sc_v_c[j], sc_sv_c[j], sc_denom_c[j]) : 0.0;
+//       if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
+//       if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
+//       sc_out_c[j] = cdf_LC + 1.0 - cdf_UC;
+//     }
+//
+//     for (int j = 0; j < n_core; ++j) ll_row[sc_idx  [j]] = sc_out  [j];
+//     for (int j = 0; j < n_noA;  ++j) ll_row[sc_idx_c [j]] = sc_out_c[j];
+//   }
+// }
 
 
 // =============================================================================

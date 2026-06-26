@@ -220,124 +220,124 @@ void plnr_fast(const NumericVector&    rts,
   }
 }
 
-// =============================================================================
-// lnr_censor — gather-scatter
-// Three passes: lower-censored (idx_L), upper-censored (idx_U), both (idx_B).
+// // =============================================================================
+// // lnr_censor — gather-scatter
+// // Three passes: lower-censored (idx_L), upper-censored (idx_U), both (idx_B).
+// //
+// //   idx_L: ll_row[i] = CDF(LC - t0)
+// //   idx_U: ll_row[i] = 1 - CDF(UC - t0)
+// //   idx_B: ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0)
+// //
+// // For idx_B, LC and UC are gathered into separate scratch buffers (t_eff / k),
+// // two PLNORM passes are run, then combined in the scatter.
+// // =============================================================================
+// void lnr_censor(const CensorSpec&    censor,
+//                 const ParamTable&    pt,
+//                 const RaceSpec&      spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch&         scratch)
+// {
+//   const double* __restrict__ m_  = &pt.base(0, spec.col_m);
+//   const double* __restrict__ s_  = &pt.base(0, spec.col_s);
+//   const double* __restrict__ t0_ = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ LC_ = censor.LC.data();
+//   const double* __restrict__ UC_ = censor.UC.data();
 //
-//   idx_L: ll_row[i] = CDF(LC - t0)
-//   idx_U: ll_row[i] = 1 - CDF(UC - t0)
-//   idx_B: ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0)
+//   double* __restrict__ sc_teff = scratch.t_eff.data();
+//   double* __restrict__ sc_m    = scratch.v.data();
+//   double* __restrict__ sc_s    = scratch.s.data();
+//   double* __restrict__ sc_out  = scratch.out.data();
+//   int*    __restrict__ sc_idx  = scratch.idx_win0.data();
 //
-// For idx_B, LC and UC are gathered into separate scratch buffers (t_eff / k),
-// two PLNORM passes are run, then combined in the scatter.
-// =============================================================================
-void lnr_censor(const CensorSpec&    censor,
-                const ParamTable&    pt,
-                const RaceSpec&      spec,
-                double* __restrict__ ll_row,
-                RaceScratch&         scratch)
-{
-  const double* __restrict__ m_  = &pt.base(0, spec.col_m);
-  const double* __restrict__ s_  = &pt.base(0, spec.col_s);
-  const double* __restrict__ t0_ = &pt.base(0, spec.col_t0);
-  const double* __restrict__ LC_ = censor.LC.data();
-  const double* __restrict__ UC_ = censor.UC.data();
-
-  double* __restrict__ sc_teff = scratch.t_eff.data();
-  double* __restrict__ sc_m    = scratch.v.data();
-  double* __restrict__ sc_s    = scratch.s.data();
-  double* __restrict__ sc_out  = scratch.out.data();
-  int*    __restrict__ sc_idx  = scratch.idx_win0.data();
-
-  // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
-  {
-    int n = 0;
-    for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
-      const int i       = censor.idx_L[j];
-      const double teff = LC_[i] - t0_[i];
-      if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
-      sc_teff[n] = teff;
-      sc_m   [n] = m_[i];
-      sc_s   [n] = s_[i];
-      sc_idx [n] = i;
-      n++;
-    }
-#pragma omp simd
-    for (int j = 0; j < n; ++j)
-      sc_out[j] = PLNORM(sc_teff[j], sc_m[j], sc_s[j]);
-
-    for (int j = 0; j < n; ++j) {
-      double cdf = sc_out[j];
-      if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-      else if (cdf > 1.0)                         cdf = 1.0;
-      ll_row[sc_idx[j]] = cdf;
-    }
-  }
-
-  // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
-  {
-    int n = 0;
-    for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
-      const int i       = censor.idx_U[j];
-      const double teff = UC_[i] - t0_[i];
-      if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
-      sc_teff[n] = teff;
-      sc_m   [n] = m_[i];
-      sc_s   [n] = s_[i];
-      sc_idx [n] = i;
-      n++;
-    }
-#pragma omp simd
-    for (int j = 0; j < n; ++j)
-      sc_out[j] = PLNORM(sc_teff[j], sc_m[j], sc_s[j]);
-
-    for (int j = 0; j < n; ++j) {
-      double cdf = sc_out[j];
-      if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-      else if (cdf > 1.0)                         cdf = 1.0;
-      ll_row[sc_idx[j]] = 1.0 - cdf;
-    }
-  }
-
-  // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
-  // LC and UC gathered into separate time buffers (t_eff and k),
-  // two compute passes, combined in scatter.
-  {
-    double* __restrict__ sc_teff_LC = scratch.t_eff.data();  // LC offsets
-    double* __restrict__ sc_teff_UC = scratch.k.data();      // UC offsets (spare buffer)
-    double* __restrict__ sc_out_LC  = scratch.out.data();
-    double* __restrict__ sc_out_UC  = scratch.out_c.data();  // spare output buffer
-
-    int n = 0;
-    for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
-      const int i = censor.idx_B[j];
-      sc_teff_LC[n] = LC_[i] - t0_[i];
-      sc_teff_UC[n] = UC_[i] - t0_[i];
-      sc_m      [n] = m_[i];
-      sc_s      [n] = s_[i];
-      sc_idx    [n] = i;
-      n++;
-    }
-
-#pragma omp simd
-    for (int j = 0; j < n; ++j)
-      sc_out_LC[j] = (sc_teff_LC[j] > 0.0) ? PLNORM(sc_teff_LC[j], sc_m[j], sc_s[j]) : 0.0;
-
-#pragma omp simd
-    for (int j = 0; j < n; ++j)
-      sc_out_UC[j] = (sc_teff_UC[j] > 0.0) ? PLNORM(sc_teff_UC[j], sc_m[j], sc_s[j]) : 0.0;
-
-    for (int j = 0; j < n; ++j) {
-      double cdf_LC = sc_out_LC[j];
-      double cdf_UC = sc_out_UC[j];
-      if      (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0;
-      else if (cdf_LC > 1.0)                            cdf_LC = 1.0;
-      if      (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0;
-      else if (cdf_UC > 1.0)                            cdf_UC = 1.0;
-      ll_row[sc_idx[j]] = cdf_LC + 1.0 - cdf_UC;
-    }
-  }
-}
+//   // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
+//   {
+//     int n = 0;
+//     for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
+//       const int i       = censor.idx_L[j];
+//       const double teff = LC_[i] - t0_[i];
+//       if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
+//       sc_teff[n] = teff;
+//       sc_m   [n] = m_[i];
+//       sc_s   [n] = s_[i];
+//       sc_idx [n] = i;
+//       n++;
+//     }
+// #pragma omp simd
+//     for (int j = 0; j < n; ++j)
+//       sc_out[j] = PLNORM(sc_teff[j], sc_m[j], sc_s[j]);
+//
+//     for (int j = 0; j < n; ++j) {
+//       double cdf = sc_out[j];
+//       if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+//       else if (cdf > 1.0)                        cdf = 1.0;
+//       ll_row[sc_idx[j]] = cdf;
+//     }
+//   }
+//
+//   // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
+//   {
+//     int n = 0;
+//     for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
+//       const int i       = censor.idx_U[j];
+//       const double teff = UC_[i] - t0_[i];
+//       if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
+//       sc_teff[n] = teff;
+//       sc_m   [n] = m_[i];
+//       sc_s   [n] = s_[i];
+//       sc_idx [n] = i;
+//       n++;
+//     }
+// #pragma omp simd
+//     for (int j = 0; j < n; ++j)
+//       sc_out[j] = PLNORM(sc_teff[j], sc_m[j], sc_s[j]);
+//
+//     for (int j = 0; j < n; ++j) {
+//       double cdf = sc_out[j];
+//       if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+//       else if (cdf > 1.0)                         cdf = 1.0;
+//       ll_row[sc_idx[j]] = 1.0 - cdf;
+//     }
+//   }
+//
+//   // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
+//   // LC and UC gathered into separate time buffers (t_eff and k),
+//   // two compute passes, combined in scatter.
+//   {
+//     double* __restrict__ sc_teff_LC = scratch.t_eff.data();  // LC offsets
+//     double* __restrict__ sc_teff_UC = scratch.k.data();      // UC offsets (spare buffer)
+//     double* __restrict__ sc_out_LC  = scratch.out.data();
+//     double* __restrict__ sc_out_UC  = scratch.out_c.data();  // spare output buffer
+//
+//     int n = 0;
+//     for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
+//       const int i = censor.idx_B[j];
+//       sc_teff_LC[n] = LC_[i] - t0_[i];
+//       sc_teff_UC[n] = UC_[i] - t0_[i];
+//       sc_m      [n] = m_[i];
+//       sc_s      [n] = s_[i];
+//       sc_idx    [n] = i;
+//       n++;
+//     }
+//
+// #pragma omp simd
+//     for (int j = 0; j < n; ++j)
+//       sc_out_LC[j] = (sc_teff_LC[j] > 0.0) ? PLNORM(sc_teff_LC[j], sc_m[j], sc_s[j]) : 0.0;
+//
+// #pragma omp simd
+//     for (int j = 0; j < n; ++j)
+//       sc_out_UC[j] = (sc_teff_UC[j] > 0.0) ? PLNORM(sc_teff_UC[j], sc_m[j], sc_s[j]) : 0.0;
+//
+//     for (int j = 0; j < n; ++j) {
+//       double cdf_LC = sc_out_LC[j];
+//       double cdf_UC = sc_out_UC[j];
+//       if      (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0;
+//       else if (cdf_LC > 1.0)                            cdf_LC = 1.0;
+//       if      (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0;
+//       else if (cdf_UC > 1.0)                            cdf_UC = 1.0;
+//       ll_row[sc_idx[j]] = cdf_LC + 1.0 - cdf_UC;
+//     }
+//   }
+// }
 
 
 // =============================================================================
@@ -364,17 +364,6 @@ void lnr_truncate(const std::vector<int>&     idx,
   double* __restrict__ sc_out  = scratch.out.data();
   int*    __restrict__ sc_idx  = scratch.idx_win0.data();
 
-  // // debug
-  // if (!idx.empty()) {
-  //   const int i0 = idx[0];
-  //   Rcpp::Rcout << "fill_truncate: idx[0]=" << i0
-  //               << " bound=" << bound_[i0]
-  //               << " t0="    << t0_[i0]
-  //               << " teff="  << bound_[i0] - t0_[i0] << "\n";
-  // }
-  // //
-
-
   // --- Gather: filter teff <= 0, pack valid rows contiguously ---
   int n = 0;
   for (int j = 0; j < (int)idx.size(); ++j) {
@@ -399,7 +388,7 @@ void lnr_truncate(const std::vector<int>&     idx,
   for (int j = 0; j < n; ++j) {
     double cdf = sc_out[j];
     if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-    else if (cdf > 1.0)                         cdf = 1.0;
+    else if (cdf > 1.0)                        cdf = 1.0;
     out[sc_idx[j]] = 1.0 - cdf;
   }
 }

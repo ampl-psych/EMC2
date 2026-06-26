@@ -8,7 +8,7 @@
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-#include "CensorSpec.h"
+// #include "CensorSpec.h"
 
 using namespace Rcpp;
 
@@ -192,11 +192,11 @@ void drdm_prdm_fast(const NumericVector& rts,
                     double* __restrict__ ll_row,
                     RaceScratch& scratch);
 
-void rdm_censor(const CensorSpec&    censor,
-                const ParamTable&    pt,
-                const RaceSpec&      spec,
-                double* __restrict__ ll_row,
-                RaceScratch&         scratch);
+// void rdm_censor(const CensorSpec&    censor,
+//                 const ParamTable&    pt,
+//                 const RaceSpec&      spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch&         scratch);
 
 void rdm_truncate(const std::vector<int>& idx,
                   const std::vector<double>& bound,

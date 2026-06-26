@@ -24,6 +24,9 @@ struct TruncSpec {
   mutable std::vector<double> p_lower;   // S_k(LT - t0) per accumulator row
   mutable std::vector<double> p_upper;   // S_k(UT - t0) per accumulator row
 
+  mutable std::vector<double> S_lower;   // S_RACE(LT - t0) per trial
+  mutable std::vector<double> S_upper;   // S_RACE(UT - t0) per trial
+
   // References to model objects — set at construction time
   const RaceModelSetup* setup  = nullptr;
   const ParamTable*     pt     = nullptr;

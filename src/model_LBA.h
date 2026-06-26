@@ -7,7 +7,7 @@
 #include "math_utils.h"
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-#include "CensorSpec.h"
+// #include "CensorSpec.h"
 
 constexpr double LBA_A_ASYMPTOTIC = 1e-10;
 
@@ -81,11 +81,11 @@ void plba_fast(const Rcpp::NumericVector& rts,
                double* __restrict__ ll_row,
                RaceScratch& scratch);
 
-void lba_censor(const CensorSpec& censor,
-                const ParamTable& pt,
-                const RaceSpec& spec,
-                double* __restrict__ ll_row,
-                RaceScratch& scratch);
+// void lba_censor(const CensorSpec& censor,
+//                 const ParamTable& pt,
+//                 const RaceSpec& spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch& scratch);
 
 void lba_truncate(const std::vector<int>& idx,
                   const std::vector<double>& bound,

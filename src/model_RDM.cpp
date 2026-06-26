@@ -294,171 +294,171 @@ void drdm_prdm_fast(const NumericVector& rts,
   }
 }
 
-
-// Censoring
-// =============================================================================
-// rdm_censor — gather-scatter, noA/core split
-// Three passes: idx_L, idx_U, idx_B.
 //
-//   idx_L: ll_row[i] = CDF(LC - t0)
-//   idx_U: ll_row[i] = 1 - CDF(UC - t0)
-//   idx_B: ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0)
+// // Censoring
+// // =============================================================================
+// // rdm_censor — gather-scatter, noA/core split
+// // Three passes: idx_L, idx_U, idx_B.
+// //
+// //   idx_L: ll_row[i] = CDF(LC - t0)
+// //   idx_U: ll_row[i] = 1 - CDF(UC - t0)
+// //   idx_B: ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0)
+// //
+// // Scaled params (k, l, a) computed in gather — compute loop is branch-free.
+// // noA path uses primary scratch; core path uses secondary scratch.
+// // =============================================================================
+// void rdm_censor(const CensorSpec&    censor,
+//                 const ParamTable&    pt,
+//                 const RaceSpec&      spec,
+//                 double* __restrict__ ll_row,
+//                 RaceScratch&         scratch)
+// {
+//   const double* __restrict__ v   = &pt.base(0, spec.col_v);
+//   const double* __restrict__ B   = &pt.base(0, spec.col_B);
+//   const double* __restrict__ A   = &pt.base(0, spec.col_A);
+//   const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ s   = &pt.base(0, spec.col_s);
+//   const double* __restrict__ LC  = censor.LC.data();
+//   const double* __restrict__ UC  = censor.UC.data();
 //
-// Scaled params (k, l, a) computed in gather — compute loop is branch-free.
-// noA path uses primary scratch; core path uses secondary scratch.
-// =============================================================================
-void rdm_censor(const CensorSpec&    censor,
-                const ParamTable&    pt,
-                const RaceSpec&      spec,
-                double* __restrict__ ll_row,
-                RaceScratch&         scratch)
-{
-  const double* __restrict__ v   = &pt.base(0, spec.col_v);
-  const double* __restrict__ B   = &pt.base(0, spec.col_B);
-  const double* __restrict__ A   = &pt.base(0, spec.col_A);
-  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
-  const double* __restrict__ s   = &pt.base(0, spec.col_s);
-  const double* __restrict__ LC  = censor.LC.data();
-  const double* __restrict__ UC  = censor.UC.data();
-
-  // noA scratch (primary) — scaled params: k = B/s, l = v/s
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_l     = scratch.v.data();    // l = v/s
-  double* __restrict__ sc_k     = scratch.B.data();    // k = B/s
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
-
-  // core scratch (secondary) — scaled params: k = B/s + a, l = v/s, a = 0.5*A/s
-  double* __restrict__ sc_teff_c = scratch.t_eff_c.data();
-  double* __restrict__ sc_l_c    = scratch.v_c.data();   // l = v/s
-  double* __restrict__ sc_k_c    = scratch.B_c.data();   // k = B/s + a
-  double* __restrict__ sc_a_c    = scratch.A_c.data();   // a = 0.5*A/s
-  double* __restrict__ sc_out_c  = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c  = scratch.idx_win_c.data();
-
-  // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
-  {
-    int n_noA = 0, n_core = 0;
-    for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
-      const int i       = censor.idx_L[j];
-      const double teff = LC[i] - t0[i];
-      if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
-      const double inv_s = 1.0 / s[i];
-      if (A[i] < A_EPS) {
-        double l = v[i] * inv_s;  double k = B[i] * inv_s;
-        if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }
-        clamp_l(l);
-        sc_teff[n_noA] = teff;  sc_l[n_noA] = l;  sc_k[n_noA] = k;
-        sc_idx [n_noA] = i;     n_noA++;
-      } else {
-        double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
-        clamp_a_l(a, l);
-        sc_teff_c[n_core] = teff;  sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;
-        sc_idx_c [n_core] = i;     n_core++;
-      }
-    }
-
-    // compute
-#pragma omp simd
-    for (int j = 0; j < n_noA;  ++j) sc_out  [j] = pigt0     (sc_teff  [j], sc_k  [j], sc_l  [j]);
-#pragma omp simd
-    for (int j = 0; j < n_core; ++j) sc_out_c[j] = pigt_core (sc_teff_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]);
-
-    // scatter
-    for (int j = 0; j < n_noA; ++j) {
-      double val = sc_out[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx[j]] = val;
-    }
-    for (int j = 0; j < n_core; ++j) {
-      double val = sc_out_c[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx_c[j]] = val;
-    }
-  }
-
-  // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
-  {
-    int n_noA = 0, n_core = 0;
-    for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
-      const int i       = censor.idx_U[j];
-      const double teff = UC[i] - t0[i];
-      if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
-      const double inv_s = 1.0 / s[i];
-      if (A[i] < A_EPS) {
-        double l = v[i] * inv_s;  double k = B[i] * inv_s;
-        if (k > K_MAX || k < 0.0) { ll_row[i] = 1.0; continue; }
-        clamp_l(l);
-        sc_teff[n_noA] = teff;  sc_l[n_noA] = l;  sc_k[n_noA] = k;
-        sc_idx [n_noA] = i;     n_noA++;
-      } else {
-        double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
-        clamp_a_l(a, l);
-        sc_teff_c[n_core] = teff;  sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;
-        sc_idx_c [n_core] = i;     n_core++;
-      }
-    }
-
-    // compute
-#pragma omp simd
-    for (int j = 0; j < n_noA;  ++j) sc_out  [j] = pigt0     (sc_teff  [j], sc_k  [j], sc_l  [j]);
-#pragma omp simd
-    for (int j = 0; j < n_core; ++j) sc_out_c[j] = pigt_core (sc_teff_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]);
-
-    // scatter
-    for (int j = 0; j < n_noA; ++j) {
-      double val = sc_out[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx[j]] = 1.0 - val;
-    }
-    for (int j = 0; j < n_core; ++j) {
-      double val = sc_out_c[j];
-      if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
-      ll_row[sc_idx_c[j]] = 1.0 - val;
-    }
-  }
-
-  // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
-  // Single gather packs both LC and UC teff; scaled params computed once per row.
-  {
-    double* __restrict__ sc_teff_UC  = scratch.k.data();   // UC offsets, noA
-    double* __restrict__ sc_teff_UC_c = scratch.l.data();  // UC offsets, core
-
-    int n_noA = 0, n_core = 0;
-    for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
-      const int i        = censor.idx_B[j];
-      const double inv_s = 1.0 / s[i];
-      if (A[i] < A_EPS) {
-        double l = v[i] * inv_s;  double k = B[i] * inv_s;
-        if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }
-        clamp_l(l);
-        sc_teff   [n_noA] = LC[i] - t0[i];  sc_teff_UC[n_noA] = UC[i] - t0[i];
-        sc_l[n_noA] = l;  sc_k[n_noA] = k;  sc_idx[n_noA] = i;
-        n_noA++;
-      } else {
-        double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
-        clamp_a_l(a, l);
-        sc_teff_c   [n_core] = LC[i] - t0[i];  sc_teff_UC_c[n_core] = UC[i] - t0[i];
-        sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;  sc_idx_c[n_core] = i;
-        n_core++;
-      }
-    }
-    for (int j = 0; j < n_noA; ++j) {
-      double cdf_LC = (sc_teff   [j] > 0.0) ? pigt0(sc_teff   [j], sc_k[j], sc_l[j]) : 0.0;
-      double cdf_UC = (sc_teff_UC[j] > 0.0) ? pigt0(sc_teff_UC[j], sc_k[j], sc_l[j]) : 0.0;
-      if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
-      if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
-      ll_row[sc_idx[j]] = cdf_LC + 1.0 - cdf_UC;
-    }
-    for (int j = 0; j < n_core; ++j) {
-      double cdf_LC = (sc_teff_c   [j] > 0.0) ? pigt_core(sc_teff_c   [j], sc_k_c[j], sc_l_c[j], sc_a_c[j]) : 0.0;
-      double cdf_UC = (sc_teff_UC_c[j] > 0.0) ? pigt_core(sc_teff_UC_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]) : 0.0;
-      if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
-      if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
-      ll_row[sc_idx_c[j]] = cdf_LC + 1.0 - cdf_UC;
-    }
-  }
-}
+//   // noA scratch (primary) — scaled params: k = B/s, l = v/s
+//   double* __restrict__ sc_teff  = scratch.t_eff.data();
+//   double* __restrict__ sc_l     = scratch.v.data();    // l = v/s
+//   double* __restrict__ sc_k     = scratch.B.data();    // k = B/s
+//   double* __restrict__ sc_out   = scratch.out.data();
+//   int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+//
+//   // core scratch (secondary) — scaled params: k = B/s + a, l = v/s, a = 0.5*A/s
+//   double* __restrict__ sc_teff_c = scratch.t_eff_c.data();
+//   double* __restrict__ sc_l_c    = scratch.v_c.data();   // l = v/s
+//   double* __restrict__ sc_k_c    = scratch.B_c.data();   // k = B/s + a
+//   double* __restrict__ sc_a_c    = scratch.A_c.data();   // a = 0.5*A/s
+//   double* __restrict__ sc_out_c  = scratch.out_c.data();
+//   int*    __restrict__ sc_idx_c  = scratch.idx_win_c.data();
+//
+//   // ---- Pass 1: lower-censored — ll_row[i] = CDF(LC - t0) ----
+//   {
+//     int n_noA = 0, n_core = 0;
+//     for (int j = 0; j < (int)censor.idx_L.size(); ++j) {
+//       const int i       = censor.idx_L[j];
+//       const double teff = LC[i] - t0[i];
+//       if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
+//       const double inv_s = 1.0 / s[i];
+//       if (A[i] < A_EPS) {
+//         double l = v[i] * inv_s;  double k = B[i] * inv_s;
+//         if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }
+//         clamp_l(l);
+//         sc_teff[n_noA] = teff;  sc_l[n_noA] = l;  sc_k[n_noA] = k;
+//         sc_idx [n_noA] = i;     n_noA++;
+//       } else {
+//         double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
+//         clamp_a_l(a, l);
+//         sc_teff_c[n_core] = teff;  sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;
+//         sc_idx_c [n_core] = i;     n_core++;
+//       }
+//     }
+//
+//     // compute
+// #pragma omp simd
+//     for (int j = 0; j < n_noA;  ++j) sc_out  [j] = pigt0     (sc_teff  [j], sc_k  [j], sc_l  [j]);
+// #pragma omp simd
+//     for (int j = 0; j < n_core; ++j) sc_out_c[j] = pigt_core (sc_teff_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]);
+//
+//     // scatter
+//     for (int j = 0; j < n_noA; ++j) {
+//       double val = sc_out[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx[j]] = val;
+//     }
+//     for (int j = 0; j < n_core; ++j) {
+//       double val = sc_out_c[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx_c[j]] = val;
+//     }
+//   }
+//
+//   // ---- Pass 2: upper-censored — ll_row[i] = 1 - CDF(UC - t0) ----
+//   {
+//     int n_noA = 0, n_core = 0;
+//     for (int j = 0; j < (int)censor.idx_U.size(); ++j) {
+//       const int i       = censor.idx_U[j];
+//       const double teff = UC[i] - t0[i];
+//       if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
+//       const double inv_s = 1.0 / s[i];
+//       if (A[i] < A_EPS) {
+//         double l = v[i] * inv_s;  double k = B[i] * inv_s;
+//         if (k > K_MAX || k < 0.0) { ll_row[i] = 1.0; continue; }
+//         clamp_l(l);
+//         sc_teff[n_noA] = teff;  sc_l[n_noA] = l;  sc_k[n_noA] = k;
+//         sc_idx [n_noA] = i;     n_noA++;
+//       } else {
+//         double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
+//         clamp_a_l(a, l);
+//         sc_teff_c[n_core] = teff;  sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;
+//         sc_idx_c [n_core] = i;     n_core++;
+//       }
+//     }
+//
+//     // compute
+// #pragma omp simd
+//     for (int j = 0; j < n_noA;  ++j) sc_out  [j] = pigt0     (sc_teff  [j], sc_k  [j], sc_l  [j]);
+// #pragma omp simd
+//     for (int j = 0; j < n_core; ++j) sc_out_c[j] = pigt_core (sc_teff_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]);
+//
+//     // scatter
+//     for (int j = 0; j < n_noA; ++j) {
+//       double val = sc_out[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx[j]] = 1.0 - val;
+//     }
+//     for (int j = 0; j < n_core; ++j) {
+//       double val = sc_out_c[j];
+//       if (!std::isfinite(val) || val < 0.0) val = 0.0; else if (val > 1.0) val = 1.0;
+//       ll_row[sc_idx_c[j]] = 1.0 - val;
+//     }
+//   }
+//
+//   // ---- Pass 3: both-censored — ll_row[i] = CDF(LC - t0) + 1 - CDF(UC - t0) ----
+//   // Single gather packs both LC and UC teff; scaled params computed once per row.
+//   {
+//     double* __restrict__ sc_teff_UC  = scratch.k.data();   // UC offsets, noA
+//     double* __restrict__ sc_teff_UC_c = scratch.l.data();  // UC offsets, core
+//
+//     int n_noA = 0, n_core = 0;
+//     for (int j = 0; j < (int)censor.idx_B.size(); ++j) {
+//       const int i        = censor.idx_B[j];
+//       const double inv_s = 1.0 / s[i];
+//       if (A[i] < A_EPS) {
+//         double l = v[i] * inv_s;  double k = B[i] * inv_s;
+//         if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }
+//         clamp_l(l);
+//         sc_teff   [n_noA] = LC[i] - t0[i];  sc_teff_UC[n_noA] = UC[i] - t0[i];
+//         sc_l[n_noA] = l;  sc_k[n_noA] = k;  sc_idx[n_noA] = i;
+//         n_noA++;
+//       } else {
+//         double l = v[i] * inv_s;  double a = 0.5 * A[i] * inv_s;  double k = B[i] * inv_s + a;
+//         clamp_a_l(a, l);
+//         sc_teff_c   [n_core] = LC[i] - t0[i];  sc_teff_UC_c[n_core] = UC[i] - t0[i];
+//         sc_l_c[n_core] = l;  sc_k_c[n_core] = k;  sc_a_c[n_core] = a;  sc_idx_c[n_core] = i;
+//         n_core++;
+//       }
+//     }
+//     for (int j = 0; j < n_noA; ++j) {
+//       double cdf_LC = (sc_teff   [j] > 0.0) ? pigt0(sc_teff   [j], sc_k[j], sc_l[j]) : 0.0;
+//       double cdf_UC = (sc_teff_UC[j] > 0.0) ? pigt0(sc_teff_UC[j], sc_k[j], sc_l[j]) : 0.0;
+//       if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
+//       if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
+//       ll_row[sc_idx[j]] = cdf_LC + 1.0 - cdf_UC;
+//     }
+//     for (int j = 0; j < n_core; ++j) {
+//       double cdf_LC = (sc_teff_c   [j] > 0.0) ? pigt_core(sc_teff_c   [j], sc_k_c[j], sc_l_c[j], sc_a_c[j]) : 0.0;
+//       double cdf_UC = (sc_teff_UC_c[j] > 0.0) ? pigt_core(sc_teff_UC_c[j], sc_k_c[j], sc_l_c[j], sc_a_c[j]) : 0.0;
+//       if (!std::isfinite(cdf_LC) || cdf_LC < 0.0) cdf_LC = 0.0; else if (cdf_LC > 1.0) cdf_LC = 1.0;
+//       if (!std::isfinite(cdf_UC) || cdf_UC < 0.0) cdf_UC = 0.0; else if (cdf_UC > 1.0) cdf_UC = 1.0;
+//       ll_row[sc_idx_c[j]] = cdf_LC + 1.0 - cdf_UC;
+//     }
+//   }
+// }
 
 
 
