@@ -51,11 +51,10 @@ test_that("stopsignal exposes the expected parameter names", {
 test_that("stopsignal routes only existing C++ stop-signal backends", {
   expect_identical(stopsignal(go = "exgaussian", stop = "exgaussian")$c_name, "SSEXG")
   expect_identical(stopsignal(go = "exgaussian", stop = "lognormal")$c_name, "SSLNORM")
+  expect_identical(stopsignal(go = "exgaussian", stop = "weibull")$c_name, "SSWEIBULL")
   expect_identical(stopsignal(go = "racing_diffusion", stop = "exgaussian")$c_name, "SSRDEX")
   expect_identical(stopsignal(go = "racing_diffusion", stop = "lognormal")$c_name, "SSRDLNORM")
-
-  expect_null(stopsignal(go = "exgaussian", stop = "weibull")$c_name)
-  expect_null(stopsignal(go = "racing_diffusion", stop = "weibull")$c_name)
+  expect_identical(stopsignal(go = "racing_diffusion", stop = "weibull")$c_name, "SSRDWEIBULL")
 })
 
 test_that("SSEXG and SSRDEX are compatibility wrappers for stopsignal", {

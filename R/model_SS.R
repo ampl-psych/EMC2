@@ -520,6 +520,10 @@ ss_model_c_name <- function(go_spec, stop_spec) {
       identical(stop_spec$family, "lognormal")) {
     return("SSLNORM")
   }
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "weibull")) {
+    return("SSWEIBULL")
+  }
   if (identical(go_spec$family, "racing_diffusion") &&
       identical(stop_spec$family, "exgaussian")) {
     return("SSRDEX")
@@ -527,6 +531,10 @@ ss_model_c_name <- function(go_spec, stop_spec) {
   if (identical(go_spec$family, "racing_diffusion") &&
       identical(stop_spec$family, "lognormal")) {
     return("SSRDLNORM")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "weibull")) {
+    return("SSRDWEIBULL")
   }
   NULL
 }
