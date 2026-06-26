@@ -18,6 +18,7 @@
 // RaceSetup last — references functions defined in model headers above
 #include "RaceSetup.h"
 #include "CensorSpec.h"
+#include "TruncSpec.h"
 using namespace Rcpp;
 
 
@@ -273,9 +274,8 @@ double c_log_likelihood_race(ParamTable& pt,
                              const std::vector<int>& is_ok,
                              const std::vector<int>& idx_win,   // winners
                              const std::vector<int>& idx_los,   // losers
-                             const CensorSpec censor, // new
-
-                             // arguments for truncation here
+                             const CensorSpec& censor,
+                             const TruncSpec& trunc,
                              const IntegerVector& expand,
                              double min_ll,
                              int n_acc,
@@ -284,7 +284,7 @@ double c_log_likelihood_race(ParamTable& pt,
                              RaceScratch& scratch)
 {
   const int n_winners = (int)idx_win.size();
-
+  // Add at the top of c_log_likelihood_race, before anything else:
   double* ll_row_ptr = ll_row.begin();
   double* ll_ptr  = ll_trial.begin();
   const int* ok_ptr = is_ok.data();
@@ -301,16 +301,10 @@ double c_log_likelihood_race(ParamTable& pt,
 
   // dynamically dispatches the correct survivor function that fills in
   // ll_row_ptr on the indices declared by the idx vectors. No-op if empty.
-  setup.fill_censor(censor, pt, setup.spec, ll_row_ptr);
+  if (censor.any()) setup.fill_censor(censor, pt, setup.spec, ll_row_ptr, scratch);
 
   // bulk log over ll_row_ptr
   vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
-
-
-  // truncation here - additional row-wise ll vector that will be *subtracted*
-  // do_truncate(normalize_truncate, pt, LT, UT) // doenst care about indices, needs to be applied to all rows... I think. Actually, not sure?
-  // vec_log(normalize_truncate, normalize_truncate.size())  // log-conversion
-  // ll_row = ll_row - normalize_truncate;  // after log, we can subtract the truncation normalizer and continue as normal
 
   // 2) Per-trial log-likelihood into ll_trial.
   //    ll_row now contains log(pdf) at winner indices, log(1-cdf) at loser indices.
@@ -346,6 +340,19 @@ double c_log_likelihood_race(ParamTable& pt,
     }
   }
 
+  // truncation here - additional trialwise normalization vector
+  if (trunc.any()) {
+    const auto log_Z = trunc.calculate_normalization_constant();
+      // for (int t = 0; t < trunc.n_trials; ++t) {
+      //   Rcpp::Rcout << "t=" << t
+      //               << " log_Z=" << log_Z[t]
+      //               << " ll_before=" << ll_ptr[t]
+      //               << " ll_after="  << ll_ptr[t] - log_Z[t] << "\n";
+      //   ll_ptr[t] -= log_Z[t];
+      // }
+     for (int t = 0; t < trunc.n_trials; ++t) ll_ptr[t] -= log_Z[t];
+  }
+
   // 3) Expand and sum
   const int  m       = expand.size();
   const int* exp_ptr = expand.begin();
@@ -353,7 +360,6 @@ double c_log_likelihood_race(ParamTable& pt,
 
 #pragma omp simd reduction(+:sum_ll)
   for (int i = 0; i < m; ++i) {
-    double to_add = clamp(ll_ptr[exp_ptr[i] - 1]);
     sum_ll += clamp(ll_ptr[exp_ptr[i] - 1]);
   }
   return sum_ll;
@@ -534,10 +540,10 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue) {
   const int n_particles = particle_matrix.nrow();
-  const int n_trials    = data.nrow();
+  const int n_rows    = data.nrow();
 
   NumericVector  lls(n_particles);
-  std::vector<int> is_ok(n_trials, 1);
+  std::vector<int> is_ok(n_rows, 1);
 
   // Shared setup -- context holds the param_table as well as designs, constants, trend etc
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
@@ -564,7 +570,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
+      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok);
     }
   } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
     IntegerVector expand = data.attr("expand");
@@ -615,8 +621,8 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       // This one still requires a Rcpp::NumericMatrix, can't operate on the param_table directly
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // Do bound in-place
-      lls[i] = is_ar1 ? c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll)
-        : c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
+      lls[i] = is_ar1 ? c_log_likelihood_MRI_white(pars, y, is_ok, n_rows, n_pars, min_ll)
+        : c_log_likelihood_MRI(pars, y, is_ok, n_rows, n_pars, min_ll);
       }
   // -----------------------------------------------------------------------
   // Race models (RDM, LBA, LNR)
@@ -635,8 +641,8 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
     // Precompute winner/loser index lists (once, outside particle loop)
     std::vector<int> idx_win, idx_los;
-    idx_win.reserve(n_trials);
-    idx_los.reserve(n_trials);
+    idx_win.reserve(n_rows);
+    idx_los.reserve(n_rows);
     int* win_flag = LOGICAL(winner);
 
     // Pre-read RACE info needed for phantom filtering
@@ -650,7 +656,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
     // Identify which rows in the dadm correspond to winners, to losers, and which should be skipped entirely
     int total_n_winners = 0;
-    for (int i = 0; i < n_trials; ++i) {
+    for (int i = 0; i < n_rows; ++i) {
       if(win_flag[i]) total_n_winners += 1;
       if(has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
       if(win_flag[i]) {
@@ -661,21 +667,19 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         idx_los.push_back(i);
       }
     }
-    const int n_winners = (int)idx_win.size();
-
-
-    // Pre-compute index lists for censored trials (always applies survivor with LC/UC limits)
-    CensorSpec censor = make_censor_spec(data, n_trials);
 
     // Scratch buffers (reused across particles)
-    NumericVector ll_row(n_trials);          // stores (log)likelihood of row in dadm
-    NumericVector ll_trial(total_n_winners); // stores (log)likelihood of trials
+    NumericVector ll_row(n_rows);                // stores (log)likelihood of row in dadm
+    NumericVector ll_trial(total_n_winners);     // stores (log)likelihood of trials
 
     RaceScratch scratch;
-    scratch.reserve(std::max((int)idx_win.size(), (int)idx_los.size()));
+    scratch.reserve(n_rows);
 
     // Race model setup
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+    // Pre-compute index lists for censored and truncated trials
+    CensorSpec censor = make_censor_spec(data, n_rows);
+    TruncSpec trunc = make_trunc_spec(data, total_n_winners, n_acc, setup, ctx.param_table, scratch);
 
     // Begin particle loop
     for (int i = 0; i < n_particles; ++i) {
@@ -690,6 +694,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         rts, is_ok,
         idx_win, idx_los,
         censor,
+        trunc,
         expand,
         min_ll, n_acc, ll_row, ll_trial,
         scratch);
