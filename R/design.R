@@ -513,6 +513,16 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     out
 }
 
+is_stop_signal_model <- function(model_info) {
+  model_p_types <- names(model_info$p_types)
+  is_stop_signal_name <- identical(model_info$c_name, "SSEXG") ||
+    identical(model_info$c_name, "SSRDEX")
+  is_stop_signal_params <- isTRUE(
+    all(c("muS", "sigmaS", "tauS", "tf", "gf") %in% model_p_types)
+  )
+  is_stop_signal_name || is_stop_signal_params
+}
+
 check_rt <- function(b,d,upper=TRUE)
   # Check bounds respected if present
 {
@@ -590,6 +600,10 @@ design_model <- function(data,design,model=NULL,
     model <- design$model
   }
   model_info <- model()
+  if (compress && is_stop_signal_model(model_info)) {
+    stop("Compression is not supported for stop-signal models (`SSEXG`, `SSRDEX`).")
+  }
+  if (is_stop_signal_model(model_info)) rt_resolution <- NULL
   if (is_choice_only_model_type(model_info)) rt_check <- FALSE
   if(grepl("MRI", model_type(model_info))){
     dadm <- data

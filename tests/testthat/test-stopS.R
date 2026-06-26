@@ -110,6 +110,35 @@ test_that("SSEXG mapped prior plotting supplies internal SSD", {
                         stage = "sample", map = TRUE), NA)
 })
 
+test_that("stop-signal models disable compression and RT binning", {
+  tiny_dat <- data.frame(
+    subjects = factor(c(1, 1)),
+    S = factor(c("left", "left"), levels = c("left", "right")),
+    R = factor(c("left", "left"), levels = c("left", "right")),
+    rt = c(0.123, 0.178),
+    SSD = c(Inf, Inf)
+  )
+
+  expect_error(
+    EMC2:::design_model(
+      tiny_dat, designSSexG,
+      compress = TRUE, verbose = FALSE, rt_check = FALSE
+    ),
+    "Compression is not supported for stop-signal models"
+  )
+
+  expect_message(
+    emc_stop <- make_emc(
+      tiny_dat, designSSexG, type = "single",
+      n_chains = 1, compress = TRUE, rt_resolution = 0.05
+    ),
+    "Stop-signal models do not support compression"
+  )
+
+  winner_rows <- emc_stop[[1]]$data[[1]]$winner
+  expect_equal(emc_stop[[1]]$data[[1]]$rt[winner_rows], tiny_dat$rt)
+})
+
 
 
 test_that("staircase resets per subject", {

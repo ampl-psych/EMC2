@@ -661,7 +661,9 @@ loadRData <- function(fileName){
 #' @param type A string indicating whether to run a `standard` group-level, `blocked`, `diagonal`, `factor`, or `single` (i.e., non-hierarchical) model.
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
+#'   Compression is not supported for stop-signal models (`SSEXG`, `SSRDEX`) and will be turned off automatically.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
+#'   Stop-signal models ignore RT binning and use exact trial-level RTs.
 #' @param group_design A design for group-level mappings, made using `group_design()`.
 #' @param par_groups A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
 #' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
@@ -764,20 +766,27 @@ make_emc <- function(data,design,model=NULL,
   if (length(model)!=length(data))
     model <- rep(model,length(data))
 
-  ## SM: check for delta rules in trend, and override/turn off compression if the user supplied compress=TRUE.
+  ## Compression overrides for model classes that require exact trial-level data.
   compress_passed <- compress
   compress <- rep(compress, length(model))
+  rt_resolution <- rep(rt_resolution, length.out = length(data))
   has_delta_rule <- sapply(model, has_delta_rules)
-  compress[has_delta_rule] <- FALSE
-  if(compress_passed & any(has_delta_rule)) {
-    if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
+  is_stop_signal <- sapply(model, function(x) is_stop_signal_model(x()))
+  compress[has_delta_rule | is_stop_signal] <- FALSE
+  rt_resolution[is_stop_signal] <- 1e-15
+  if (compress_passed & any(has_delta_rule)) {
+    if (length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
     else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
-    rt_resolution <- 0.001   # no need to downsample resolution when not compressing
   }
-  ## SM END
+  if (compress_passed & any(is_stop_signal)) {
+    if (length(model) == 1) {
+      message('Stop-signal models do not support compression; data will not be compressed and RTs will not be binned.')
+    } else {
+      message(paste0('Models ', which(is_stop_signal), ' are stop-signal models; the corresponding data will not be compressed and RTs will not be binned.'))
+    }
+  }
 
   dadm_list <- vector(mode="list",length=length(data))
-  rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
