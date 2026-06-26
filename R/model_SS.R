@@ -602,7 +602,7 @@ ss_model_rfun <- function(go_spec, stop_spec) {
 }
 
 
-make_stopsignal_model <- function(go_spec, stop_spec, model_label = "stopsignal") {
+make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signal") {
   go_tail_default <- NULL
   if (identical(go_spec$family, "exgaussian")) {
     go_tail_default <- c(exg_lb = if (identical(stop_spec$family, "exgaussian")) 0 else .05)
@@ -675,16 +675,16 @@ make_stopsignal_model <- function(go_spec, stop_spec, model_label = "stopsignal"
 #'
 #' @return A model list with all the necessary functions to sample.
 #' @export
-stopsignal <- function(
+stop_signal <- function(
     go = c("exgaussian", "racing_diffusion"),
     stop = c("exgaussian", "lognormal", "weibull")
 ) {
   go <- match.arg(go)
   stop <- match.arg(stop)
-  make_stopsignal_model(
+  make_stop_signal_model(
     ss_go_spec(go),
     ss_stop_spec(stop),
-    model_label = sprintf("stopsignal(go = \"%s\", stop = \"%s\")", go, stop)
+    model_label = sprintf("stop_signal(go = \"%s\", stop = \"%s\")", go, stop)
   )
 }
 
@@ -1191,7 +1191,7 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' @return A model list with all the necessary functions to sample
 #' @export
 SSEXG <- function() {
-  stopsignal(go = "exgaussian", stop = "exgaussian")
+  stop_signal(go = "exgaussian", stop = "exgaussian")
 }
 
 
@@ -1580,7 +1580,7 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' @return A model list with all the necessary functions to sample
 #' @export
 SSRDEX <- function() {
-  stopsignal(go = "racing_diffusion", stop = "exgaussian")
+  stop_signal(go = "racing_diffusion", stop = "exgaussian")
 }
 
 
