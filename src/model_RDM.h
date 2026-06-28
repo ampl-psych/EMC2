@@ -192,13 +192,7 @@ void drdm_prdm_fast(const NumericVector& rts,
                     double* __restrict__ ll_row,
                     RaceScratch& scratch);
 
-// void rdm_censor(const CensorSpec&    censor,
-//                 const ParamTable&    pt,
-//                 const RaceSpec&      spec,
-//                 double* __restrict__ ll_row,
-//                 RaceScratch&         scratch);
-
-void rdm_truncate(const std::vector<int>& idx,
+void rdm_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,
                   const ParamTable& pt,
                   const RaceSpec& spec,

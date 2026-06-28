@@ -43,14 +43,8 @@ void plnr_fast(const NumericVector&    rts,
                const std::vector<int>& idx,
                double* __restrict__    ll_row,
                RaceScratch&            scratch);
-//
-// void lnr_censor(const CensorSpec&    censor,
-//                 const ParamTable&    pt,
-//                 const RaceSpec&      spec,
-//                 double* __restrict__ ll_row,
-//                 RaceScratch&         scratch);
 
-void lnr_truncate(const std::vector<int>&     idx,
+void lnr_survivor(const std::vector<int>&     idx,
                   const std::vector<double>&  bound,
                   const ParamTable&           pt,
                   const RaceSpec&             spec,

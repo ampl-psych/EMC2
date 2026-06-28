@@ -4,51 +4,6 @@
 
 using namespace Rcpp;
 
-// CensorSpec make_censor_spec(const DataFrame& data, int n_trials)
-// {
-//   CensorSpec censor;
-//
-//   std::vector<std::string> names = Rcpp::as<std::vector<std::string>>(data.names());
-//   const bool has_LC_col      = std::find(names.begin(), names.end(), "LC")          != names.end();
-//   const bool has_UC_col      = std::find(names.begin(), names.end(), "UC")          != names.end();
-//   const bool has_missingness = std::find(names.begin(), names.end(), "missingness") != names.end();
-//
-//   if (!has_missingness) return censor;
-//
-//   // Raw pointers — kept alive by the Rcpp wrappers below
-//   IntegerVector missingness_tmp = data["missingness"];
-//   const int* missingness_ptr    = INTEGER(missingness_tmp);
-//
-//   NumericVector lc_tmp, uc_tmp;
-//   if (has_LC_col) {
-//     lc_tmp = data["LC"];
-//     censor.LC.assign(REAL(lc_tmp), REAL(lc_tmp) + n_trials);
-//     censor.idx_L.reserve(n_trials);
-//   }
-//   if (has_UC_col) {
-//     uc_tmp = data["UC"];
-//     censor.UC.assign(REAL(uc_tmp), REAL(uc_tmp) + n_trials);
-//     censor.idx_U.reserve(n_trials);
-//     censor.idx_B.reserve(n_trials);
-//   }
-//
-//   for (int i = 0; i < n_trials; ++i) {
-//     switch (missingness_ptr[i]) {
-//     case 1: censor.idx_L.push_back(i); break;
-//     case 2: censor.idx_U.push_back(i); break;
-//     case 3: censor.idx_B.push_back(i); break;
-//     default: break;
-//     }
-//   }
-//
-//   // Validate consistency
-//   if (!censor.idx_L.empty() && censor.LC.empty())
-//     Rcpp::stop("missingness contains lower-censored rows (1 or 3) but no LC column found in data");
-//   if (!censor.idx_U.empty() && censor.UC.empty())
-//     Rcpp::stop("missingness contains upper-censored rows (2 or 3) but no UC column found in data");
-//
-//   return censor;
-// }
 
 // -----------------------------------------------------------------------------
 // fill_censored_rows()
@@ -69,11 +24,11 @@ void CensorSpec::fill_censored_rows(std::vector<double>& S_race_UT,
 {
   // Fill p_lower: S_k(LC - t0) for active LC rows, 1.0 elsewhere (default -- at t=0, S=1)
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
-  setup->fill_truncate(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch);
+  setup->fill_survivor(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch);
 
   // Fill p_upper: S_k(UC - t0) for active UC rows, 0.0 elsewhere (default -- at t=inf, S=0)
   std::fill(p_upper.begin(), p_upper.end(), 0.0);
-  setup->fill_truncate(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
+  setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
 
   // ToDo: For cases with known responses, fill p_upper and p_lower with integration methods here
 
@@ -114,13 +69,6 @@ void CensorSpec::fill_censored_rows(std::vector<double>& S_race_UT,
     }
     const double p = (1-prod_LC) + prod_UC;        // P(T <= LC || P >= UC) = (1-S_RACE(LC)) + S_RACE(UC)
     ll_trial[row] = std::log(clamp(p));
-    //
-    // Rcpp::Rcout << "trial " << row << ", "
-    //             << " LC = " << LC[row] << ", "
-    //             << " UC = " << UC[row] << ", "
-    //             << " prod(LC) = " << prod_LC << ", "
-    //             << " prod(UC) = " << prod_UC << ", "
-    //             << " p = " << (1-prod_LC) + prod_UC << '\n';
 
   }
 

@@ -23,13 +23,13 @@ std::vector<double> TruncSpec::calculate_normalization_constant() const
   // Fill p_lower: S_k(LT - t0) for active LT rows, 1.0 elsewhere (default)
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
   std::fill(S_lower.begin(), S_lower.end(), 1.0);
-  setup->fill_truncate(idx_LT, LT, *pt, setup->spec, p_lower.data(), *scratch);
+  setup->fill_survivor(idx_LT, LT, *pt, setup->spec, p_lower.data(), *scratch);
 
   // Fill p_upper: S_k(UT - t0) for active UT rows, 0.0 elsewhere (default)
   // Default 0.0 because S(Inf) = 0 — contributes nothing to the product difference
   std::fill(p_upper.begin(), p_upper.end(), 0.0);
   std::fill(S_upper.begin(), S_upper.end(), 0.0);
-  setup->fill_truncate(idx_UT, UT, *pt, setup->spec, p_upper.data(), *scratch);
+  setup->fill_survivor(idx_UT, UT, *pt, setup->spec, p_upper.data(), *scratch);
 
   std::vector<double> log_Z(n_trials);
 
