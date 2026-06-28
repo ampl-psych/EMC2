@@ -81,13 +81,7 @@ void plba_fast(const Rcpp::NumericVector& rts,
                double* __restrict__ ll_row,
                RaceScratch& scratch);
 
-// void lba_censor(const CensorSpec& censor,
-//                 const ParamTable& pt,
-//                 const RaceSpec& spec,
-//                 double* __restrict__ ll_row,
-//                 RaceScratch& scratch);
-
-void lba_truncate(const std::vector<int>& idx,
+void lba_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,
                   const ParamTable& pt,
                   const RaceSpec& spec,
