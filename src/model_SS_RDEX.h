@@ -457,9 +457,8 @@ static inline double ss_rdex_lnormal_stop_success_lpdf(
   rdex_lnormal_stop_success_integrand f(SSD, pars, min_ll);
   double err_est, res;
   int err_code;
-  double meanlogS = pars(0, 5);
-  double sdlogS = pars(0, 6);
-  double ub = std::isfinite(upper) ? upper : std::exp(meanlogS + k_sdlog * sdlogS);
+  (void) k_sdlog;
+  double ub = std::isfinite(upper) ? upper : R_PosInf;
   if (!(ub > 0.0)) ub = 1e-12;
   res = integrate(
     f, 0.0, ub, err_est, err_code, max_subdiv, abs_tol, rel_tol
