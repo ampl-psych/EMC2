@@ -986,7 +986,14 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
                lwd = lwd_map)
       }
     }
+    if (!is.null(dots$ablines)) for (abs in dots$ablines) {
+      if (is.null(attr(abs,"lty"))) lty <- 3 else lty <- attr(abs,"lty")
+      if (names(abs)[1]=="h") abline(h=abs[1],lty=lty) else
+      if (names(abs)[1]=="v") abline(v=abs[1],lty=lty) else
+        abline(coef=abs,lty=lty)
+    }
   }
+  invisible(check)
 }
 
 ###############################################################################
@@ -1318,8 +1325,11 @@ plot_cdf <- function(input,
                 do.call(lines, c(list(x=cmat[,"x"], y=cmat[,"y"]), lines_args))
               }
               if (!is.null(add_percentiles)) {
-                points(cmat[add_percentiles,"x"][],cmat[add_percentiles,"y"],
-                       pch=16,col=lines_args$col[1])
+                points_args <- lines_args
+                if (is.null(points_args$pch)) points_args$pch <- 16
+                points_args$col <- lines_args$col[1]
+                do.call(points, c(list(x = cmat[add_percentiles, "x"][],
+                  y = cmat[add_percentiles, "y"][]), points_args))
               }
               ilev <- ilev+1
             }
@@ -1356,8 +1366,11 @@ plot_cdf <- function(input,
                     border = NA
                   ), poly_args))
                   if (!is.null(add_percentiles)) {
-                     points(x_med[add_percentiles],y_median[add_percentiles],
-                           pch=1,col=lines_args$col[1])
+                    points_args <- lines_args
+                    if (is.null(points_args$pch)) points_args$pch <- 16
+                    points_args$col <- lines_args$col[1]
+                    do.call(points, c(list(x_med[add_percentiles],y_median[add_percentiles]),
+                                      points_args))
                   }
                 }
                 ilev <- ilev+1
