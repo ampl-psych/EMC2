@@ -1603,8 +1603,11 @@ plot_delta <- function(input,
               do.call(lines, c(list(x=cmat[,"x"], y=cmat[,"y"]), lines_args))
             }
             if (!is.null(add_percentiles)) {
-              points(cmat[add_percentiles,"x"][],cmat[add_percentiles,"y"],
-                      pch=16,col=lines_args$col[1])
+              points_args <- lines_args
+              if (is.null(points_args$pch)) points_args$pch <- 16
+              points_args$col <- lines_args$col[1]
+              do.call(points, c(list(x = cmat[add_percentiles, "x"][],
+                y = cmat[add_percentiles, "y"][]), points_args))
             }
             ilev <- ilev+1
           }
@@ -1640,8 +1643,11 @@ plot_delta <- function(input,
                   border = NA
                 ), poly_args))
                 if (!is.null(add_percentiles)) {
-                    points(x_median[add_percentiles],y_median[add_percentiles],
-                         pch=1,col=lines_args$col[1])
+                    points_args <- lines_args
+                    if (is.null(points_args$pch)) points_args$pch <- 16
+                    points_args$col <- lines_args$col[1]
+                    do.call(points, c(list(x_median[add_percentiles],y_median[add_percentiles]),
+                                      points_args))
                 }
               }
             }
