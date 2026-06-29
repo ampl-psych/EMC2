@@ -11,6 +11,12 @@ struct RaceSpec {
   int col_s  = -1;
   int col_sv = -1;
   int col_m  = -1;
+  // DDM-only columns (used by ddm_truncate; ignored by race fills). col_a is the
+  // DDM boundary separation 'a' (distinct from the race start-point range col_A).
+  int col_a   = -1;
+  int col_st0 = -1;
+  int col_Z   = -1;
+  int col_SZ  = -1;
 };
 
 struct RaceScratch {

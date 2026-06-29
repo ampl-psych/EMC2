@@ -358,23 +358,46 @@ double c_log_likelihood_race(ParamTable& pt,
 }
 
 
+// DDM analogue of make_race_setup: installs the ddm_truncate survivor backend
+// into a RaceModelSetup so TruncSpec/CensorSpec can do DDM truncation/censoring.
+// Kept here (not in RaceSetup.h) so model_DDM.h stays a single translation unit.
+static RaceModelSetup make_ddm_setup(const ParamTable& pt)
+{
+  RaceModelSetup s;
+  s.spec.col_v   = pt.base_index_for("v");
+  s.spec.col_a   = pt.base_index_for("a");
+  s.spec.col_sv  = pt.base_index_for("sv");
+  s.spec.col_t0  = pt.base_index_for("t0");
+  s.spec.col_st0 = pt.base_index_for("st0");
+  s.spec.col_s   = pt.base_index_for("s");
+  s.spec.col_Z   = pt.base_index_for("Z");
+  s.spec.col_SZ  = pt.base_index_for("SZ");
+  s.fill_both     = nullptr;          // DDM density handled by c_log_likelihood_DDM
+  s.fill_truncate = ddm_truncate;
+  return s;
+}
+
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                             const int n_trials, IntegerVector expand,
-                            double min_ll, std::vector<int> is_ok){
+                            double min_ll, std::vector<int> is_ok,
+                            TruncSpec& trunc, CensorSpec& censor){
   const int n_out = expand.length();
   NumericVector rts = data["rt"];
   IntegerVector R = data["R"];
   NumericVector lls(n_trials);
-  lls = d_DDM_Wien(rts, R, pars, is_ok);
+  lls = d_DDM_Wien(rts, R, pars, is_ok);   // per-trial log density (R_NegInf if !is_ok)
 
-  // lls_exp = c_expand(lls, expand); // decompress
-  // // lls_exp = lls;
-  // lls_exp[is_na(lls_exp)] = min_ll;
-  // lls_exp[is_infinite(lls_exp)] = min_ll;
-  // lls_exp[lls_exp < min_ll] = min_ll;
-  // return(sum(lls_exp));
-  // More SIMD-friendly == faster
-  // decompress
+  // Truncation: subtract the per-trial log normalizer log(S(LT) - S(UT)).
+  // Same machinery as the race path; the DDM survivor backend (ddm_truncate)
+  // makes the per-trial reduction a pass-through (n_acc = 1).
+  if (trunc.any()) {
+    const std::vector<double> log_Z = trunc.calculate_normalization_constant();
+    for (int t = 0; t < trunc.n_trials; ++t) lls[t] -= log_Z[t];
+  }
+  // Censoring: overwrite censored trials with their interval mass, reusing the
+  // truncation survivors (trunc.S_lower / trunc.S_upper are defaulted when no
+  // truncation columns are present).
+  if (censor.any()) censor.fill_censored_rows(trunc.S_upper, trunc.S_lower, lls, min_ll);
 
   const double* lls_ptr    = lls.begin();
   const int*    expand_ptr = expand.begin();
@@ -565,13 +588,20 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   // -----------------------------------------------------------------------
   if (type == "DDM") {
     IntegerVector expand = data.attr("expand");
+    // Truncation / censoring via the shared spec machinery (DDM has n_acc = 1).
+    // Built once; the DDM survivor backend (ddm_truncate) is installed via setup.
+    RaceScratch ddm_scratch;
+    ddm_scratch.reserve(n_rows);
+    RaceModelSetup ddm_setup = make_ddm_setup(ctx.param_table);
+    CensorSpec censor = make_censor_spec(data, n_rows, 1, ddm_setup, ctx.param_table, ddm_scratch);
+    TruncSpec  trunc  = make_trunc_spec (data, n_rows, 1, ddm_setup, ctx.param_table, ddm_scratch);
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok);
+      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok, trunc, censor);
     }
   } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
     IntegerVector expand = data.attr("expand");
