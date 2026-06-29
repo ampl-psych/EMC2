@@ -175,7 +175,7 @@ static void build_covariate_coding(BaseSpec& bs,
     Rf_error("BaseSpec '%s': 'coding' specified but data has no 'covariate_coding' attribute",
              bs.target_parameter.c_str());
 
-  Rcpp::List coding_spec(b_lst["coding"]);
+  Rcpp::List coding_spec = Rcpp::as<Rcpp::List>(b_lst["coding"]);
   Rcpp::CharacterVector coding_names = coding_spec.names();
   if (coding_names.size() != coding_spec.size())
     Rf_error("BaseSpec '%s': 'coding' list must be named", bs.target_parameter.c_str());
