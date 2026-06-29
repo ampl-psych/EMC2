@@ -2,6 +2,10 @@
 // Chair of Social Psychology, University of Freiburg
 // Authors: Christoph Klauer and Raphael Hartmann
 
+// Rcpp.h must precede any header that pulls in <R.h> (tools.h does). Including
+// R.h first breaks the Intel oneAPI compiler's <complex> on NCI (a hard error
+// there; only a warning under clang/gcc). See RcppCore/Rcpp#1410.
+#include <Rcpp.h>
 #include "cdf_fncs.h"
 #include "tools.h"
 #include "ddm_functions_inline.h"
