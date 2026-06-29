@@ -1428,7 +1428,7 @@ public:
 
 struct DBMKernel : DBMBaseKernel {
 private:
-  int grid_res_ = 100;
+  int grid_res_ = 100; // TODO grid_res_ probably needs to be raised for computing mode
 
 public:
   void set_kernel_args(const KernelArgs& args) override {
@@ -1452,7 +1452,6 @@ public:
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
 
-             const double cp_eps = 1e-10;
              const int    gs     = grid_res_ + 1;
 
              std::vector<double> prob_grid(gs), x_like(gs), y_like(gs);
@@ -1473,26 +1472,17 @@ public:
                const double b   = (1.0 - mu0) * s0;
                const double x   = cov_ptr[r];
 
-               // degenerate: cp ~ 1 — beliefs driven by fixed prior only
-               if ((1.0 - cp) < cp_eps) {
-                 pred_mean_[j] = beta_mean(a, b);
-                 pred_mode_[j] = beta_mode(a, b);
-                 for (int i = 0; i < gs; ++i)
-                   DBM_post[i] = dbeta_val(prob_grid[i], a, b);
-                 normalise_inplace(DBM_post);
-                 continue;
-               }
-
                // compute discretised Beta prior
                for (int i = 0; i < gs; ++i)
                  DBM_prior[i] = dbeta_val(prob_grid[i], a, b);
                normalise_inplace(DBM_prior);
 
                // predictive distribution
-               if (j == 0 || cp < cp_eps) {
-                 // first trial or cp ≈ 0: prior is the predictive
+               if (j == 0) {
+                 // first trial: fixed prior is the predictive
                  DBM_pred = DBM_prior;
                } else {
+                 // otherwise: mixture of fixed prior and most recent posterior
                  const double mix_old = 1.0 - cp;
                  const double mix_new = cp;
                  for (int i = 0; i < gs; ++i)
