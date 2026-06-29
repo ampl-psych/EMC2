@@ -9,6 +9,19 @@
 #include "ParamTable.h"
 using namespace Rcpp;
 
+// ---------------------------------------------------------------------------
+// -ffast-math-safe finite/Inf/NaN checks. Under -ffast-math the compiler may
+// constant-fold std::isinf/std::isfinite and never inspect the bit pattern, so
+// for runtime VALUES we use R's bit-pattern macros (R_FINITE, ISNAN) which the
+// compiler cannot optimise away.
+//   emc2_isfinite(x)  ->  R_FINITE(x)            (0 for Inf AND NaN)
+//   emc2_isinf(x)     ->  !R_FINITE(x) && !ISNAN(x)
+//   emc2_isnan(x)     ->  ISNAN(x)
+// ---------------------------------------------------------------------------
+static inline bool emc2_isfinite(double x) { return (bool)R_FINITE(x); }
+static inline bool emc2_isinf(double x)    { return !R_FINITE(x) && !ISNAN(x); }
+static inline bool emc2_isnan(double x)    { return (bool)ISNAN(x); }
+
 
 // Custom hash for a vector<double>
 struct RowHash {

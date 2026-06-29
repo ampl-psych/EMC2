@@ -397,6 +397,15 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
 }
 
 
+// Test entry point for the defective DDM CDF (p_DDM_Wien lives in model_DDM.h,
+// which compileAttributes does not scan). Returns log P(RT < t, response R).
+// [[Rcpp::export]]
+NumericVector p_DDM_Wien_R(NumericVector rts, IntegerVector Rs, NumericMatrix pars,
+                          LogicalVector is_ok) {
+  return p_DDM_Wien(rts, Rs, pars, is_ok);
+}
+
+
 int c_col_index(const CharacterVector& names, const std::string& target) {
   for (int i = 0; i < names.size(); ++i) {
     if (Rcpp::as<std::string>(names[i]) == target) return i;

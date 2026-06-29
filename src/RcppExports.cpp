@@ -482,6 +482,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// p_DDM_Wien_R
+NumericVector p_DDM_Wien_R(NumericVector rts, IntegerVector Rs, NumericMatrix pars, LogicalVector is_ok);
+RcppExport SEXP _EMC2_p_DDM_Wien_R(SEXP rtsSEXP, SEXP RsSEXP, SEXP parsSEXP, SEXP is_okSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type rts(rtsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type Rs(RsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type is_ok(is_okSEXP);
+    rcpp_result_gen = Rcpp::wrap(p_DDM_Wien_R(rts, Rs, pars, is_ok));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calc_ll
 NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend);
 RcppExport SEXP _EMC2_calc_ll(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
@@ -568,6 +582,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
+    {"_EMC2_p_DDM_Wien_R", (DL_FUNC) &_EMC2_p_DDM_Wien_R, 4},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},

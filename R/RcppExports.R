@@ -121,6 +121,10 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
+p_DDM_Wien_R <- function(rts, Rs, pars, is_ok) {
+    .Call(`_EMC2_p_DDM_Wien_R`, rts, Rs, pars, is_ok)
+}
+
 calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL) {
     .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }

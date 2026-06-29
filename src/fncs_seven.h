@@ -9,12 +9,14 @@
 
 /* dependencies for Wrapper */
 int int_ddiff(unsigned, const double *, void *, unsigned, double *);
+int int_pdiff(unsigned, const double *, void *, unsigned, double *);
 /*-----------------------------------------------*/
 
 
 
 /* Wrapper */
 void ddiff(int, double, int, double, double, double, double, double, double, double, double, int, int, int, double *, double *);
+void pdiff(int, double, int, double, double, double, double, double, double, double, double, int, int, int, double *, double *);
 /*-----------------------------------------------*/
 
 #endif
