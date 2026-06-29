@@ -994,9 +994,36 @@ ess_summary.emc <- function(emc,selection="mu", stat = "min", stat_only = FALSE,
 #' @rdname credint
 #' @export
 credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
-                                  digits = 3, ...){
+                                  digits = 3, plot = FALSE, plot_args = list(), ...){
   out <- get_summary_stat(x, selection, get_posterior_quantiles,
                           probs = probs, digits = digits, ...)
+  if (plot) {
+    dots      <- list(...)
+    stat_nms  <- names(formals(get_pars))
+    plot_dots <- dots[setdiff(names(dots), stat_nms)]
+    map       <- isTRUE(dots$map)
+    quants    <- if (!is.null(plot_args$quants)) plot_args$quants else 1:3
+    pfwd      <- plot_args[names(plot_args) != "quants"]
+    top_nms   <- c("layout", "order", "effect_only", "intercept_only")
+    top_args  <- pfwd[intersect(names(pfwd), top_nms)]
+    pa        <- pfwd[setdiff(names(pfwd), top_nms)]
+    if (selection == "LL") {
+      call_args <- modifyList(plot_dots, pa)
+      if (is.null(call_args$ylab)) call_args$ylab <- "LL"
+      layout_val <- if (!is.null(top_args$layout)) top_args$layout else NA
+      do.call(.plot_cor_panel,
+              c(list(mat = out[[1L]], quants = quants, layout = layout_val), call_args))
+    } else if (length(out) > 1L || !map) {
+      do.call(plot_credints,     c(list(ci = out, quants = quants,
+                                        plot_args = if (length(pa)) pa else NULL), top_args,
+                                    plot_dots))
+    } else {
+      do.call(plot_credints_map, c(list(ci = out, quants = quants,
+                                        plot_args = if (length(pa)) pa else NULL), top_args,
+                                    plot_dots))
+    }
+    return(invisible(out))
+  }
   return(out)
 }
 
@@ -1052,6 +1079,13 @@ ess_summary <- function(emc, ...){
 #' @inheritParams gd_summary.emc
 #' @param x An emc or emc.prior object
 #' @param probs A vector. Indicates which quantiles to return from the posterior.
+#' @param plot Logical. If `TRUE`, the credible intervals are plotted after
+#'   computation. Uses `plot_credints_map()` when `map = TRUE` and the result is
+#'   a single-element list, and `plot_credints()` otherwise (including
+#'   multi-element results such as those from `selection = "correlation"`,
+#'   `"sigma"`, or `"alpha"` with `map = TRUE`).
+#' @param plot_args A named list of arguments forwarded to the plotting function
+#'   (e.g. `quants`, `layout`, `order`, and graphical parameters).
 #' @return A list of posterior quantiles for each parameter group in the selected parameter type.
 #' @export
 #'

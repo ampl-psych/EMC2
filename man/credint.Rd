@@ -13,10 +13,20 @@
   digits = 3,
   N = 1000,
   covariates = NULL,
+  plot = FALSE,
+  plot_args = list(),
   ...
 )
 
-\method{credint}{emc}(x, selection = "mu", probs = c(0.025, 0.5, 0.975), digits = 3, ...)
+\method{credint}{emc}(
+  x,
+  selection = "mu",
+  probs = c(0.025, 0.5, 0.975),
+  digits = 3,
+  plot = FALSE,
+  plot_args = list(),
+  ...
+)
 
 credint(x, ...)
 }
@@ -32,6 +42,15 @@ credint(x, ...)
 \item{N}{An integer. Number of samples to use for the quantile calculation (only for prior.emc objects)}
 
 \item{covariates}{A list of covariates to use for the quantile calculation (only for prior.emc objects)}
+
+\item{plot}{Logical. If \code{TRUE}, the credible intervals are plotted after
+computation. Uses \code{plot_credints_map()} when \code{map = TRUE} and the result is
+a single-element list, and \code{plot_credints()} otherwise (including
+multi-element results such as those from \code{selection = "correlation"},
+\code{"sigma"}, or \code{"alpha"} with \code{map = TRUE}).}
+
+\item{plot_args}{A named list of arguments forwarded to the plotting function
+(e.g. \code{quants}, \code{layout}, \code{order}, and graphical parameters).}
 
 \item{...}{Optional additional arguments that can be passed to \code{get_pars}}
 }

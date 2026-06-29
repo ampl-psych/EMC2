@@ -575,7 +575,8 @@ parameters.emc.prior <- function(x, selection = "mu", N = 1000, covariates = NUL
 #' @param covariates A list of covariates to use for the quantile calculation (only for prior.emc objects)
 #' @export
 credint.emc.prior <- function(x, selection = "mu", probs = c(0.025, .5, .975),
-                              digits = 3, N = 1000, covariates = NULL, ...) {
+                              digits = 3, N = 1000, covariates = NULL,
+                              plot = FALSE, plot_args = list(), ...) {
   prior <- x
   dots <- add_defaults(list(...), by_subject = TRUE, map = TRUE)
   type <- attr(prior, "type")
@@ -587,6 +588,32 @@ credint.emc.prior <- function(x, selection = "mu", probs = c(0.025, .5, .975),
   out <- do.call(get_summary_stat, c(list(samples, selection, get_posterior_quantiles,
     probs = probs, digits = digits, type = type
   ), fix_dots(dots, get_summary_stat)))
+  if (plot) {
+    stat_nms  <- names(formals(get_pars))
+    plot_dots <- dots[setdiff(names(dots), stat_nms)]
+    map       <- isTRUE(dots$map)
+    quants    <- if (!is.null(plot_args$quants)) plot_args$quants else 1:3
+    pfwd      <- plot_args[names(plot_args) != "quants"]
+    top_nms   <- c("layout", "order", "effect_only", "intercept_only")
+    top_args  <- pfwd[intersect(names(pfwd), top_nms)]
+    pa        <- pfwd[setdiff(names(pfwd), top_nms)]
+    if (selection == "LL") {
+      call_args <- modifyList(plot_dots, pa)
+      if (is.null(call_args$ylab)) call_args$ylab <- "LL"
+      layout_val <- if (!is.null(top_args$layout)) top_args$layout else NA
+      do.call(.plot_cor_panel,
+              c(list(mat = out[[1L]], quants = quants, layout = layout_val), call_args))
+    } else if (length(out) > 1L || !map) {
+      do.call(plot_credints,     c(list(ci = out, quants = quants,
+                                        plot_args = if (length(pa)) pa else NULL), top_args,
+                                    plot_dots))
+    } else {
+      do.call(plot_credints_map, c(list(ci = out, quants = quants,
+                                        plot_args = if (length(pa)) pa else NULL), top_args,
+                                    plot_dots))
+    }
+    return(invisible(out))
+  }
   return(out)
 }
 
