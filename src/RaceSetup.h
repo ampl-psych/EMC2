@@ -98,6 +98,7 @@ inline RaceModelSetup make_race_setup(const String& type_in, const ParamTable& p
     s.fill_both         = dlba_plba_fast;
     // s.fill_censor       = lba_censor;
     s.fill_truncate     = lba_truncate;
+    s.gng_withheld      = lba_gng_withheld;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
@@ -105,6 +106,7 @@ inline RaceModelSetup make_race_setup(const String& type_in, const ParamTable& p
     s.fill_both         = dlnr_plnr_fast;
     // s.fill_censor       = lnr_censor;
     s.fill_truncate     = lnr_truncate;
+    s.gng_withheld      = lnr_gng_withheld;
   }
 
   return s;

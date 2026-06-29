@@ -69,6 +69,63 @@ test_that("RDMGNG C++ likelihood matches the dRDM/pRDM reference", {
   }
 })
 
+# Generic race-GNG reference: go trials -> race density; withheld -> integral of
+# f_nogo(t) * prod_go S_go(t) over [0, cap], using the model's own dfun/pfun.
+ref_race_gng_ll <- function(p, dadm, model, dfun, pfun, cap = 30, min_ll = log(1e-10)) {
+  pars <- EMC2:::get_pars_matrix_oo(p, dadm, model)
+  mk <- function(r) matrix(pars[r, ], nrow = 1, dimnames = list(NULL, colnames(pars)))
+  ll <- 0
+  for (tr in unique(dadm$trials)) {
+    idx <- which(dadm$trials == tr); lev <- as.character(dadm$lR[idx])
+    win <- dadm$winner[idx]; rt <- dadm$rt[idx]; miss <- dadm$missingness[idx][1]
+    if (!is.na(miss) && miss == 4) {
+      ng <- which(lev == "nogo")
+      f <- function(tt) vapply(tt, function(t) {
+        d <- dfun(t, mk(idx[ng]))
+        for (g in setdiff(seq_along(idx), ng)) d <- d * (1 - pfun(t, mk(idx[g]))); d
+      }, numeric(1))
+      ll <- ll + max(min_ll, log(max(stats::integrate(f, 0, cap, rel.tol = 1e-8)$value, 0)))
+    } else {
+      wi <- which(win); L <- dfun(rt[wi], mk(idx[wi]))
+      for (g in which(!win)) L <- L * (1 - pfun(rt[g], mk(idx[g])))
+      ll <- ll + max(min_ll, log(max(L, 0)))
+    }
+  }
+  ll
+}
+
+test_that("LBAGNG C++ likelihood matches the dLBA/pLBA reference", {
+  set.seed(7)
+  des <- design(factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("go", "nogo"),
+                formula = list(v ~ lR, B ~ 1, t0 ~ 1, sv ~ 1, A ~ 1),
+                constants = c(sv = log(1)), model = LBA)
+  p <- sampled_pars(des); p[] <- log(1)
+  p["v"] <- 1.5; p["v_lRnogo"] <- -0.5; p["A"] <- log(.3); p["B"] <- log(.4); p["t0"] <- log(.2)
+  dat <- make_data(p, des, n_trials = 60)
+  emc <- make_emc(dat, des, type = "single", compress = FALSE, n_chains = 1)
+  expect_identical(emc[[1]]$model()$c_name, "LBAGNG")
+  expect_gt(sum(emc[[1]]$data[[1]]$missingness == 4, na.rm = TRUE), 0)
+  expect_equal(cpp_ll(emc, p),
+               ref_race_gng_ll(p, emc[[1]]$data[[1]], emc[[1]]$model(),
+                               function(rt, pr) dLBA(rt, pr), function(rt, pr) pLBA(rt, pr)),
+               tolerance = 1e-5)
+})
+
+test_that("LNRGNG C++ likelihood matches the dLNR/pLNR reference", {
+  set.seed(7)
+  des <- design(factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("go", "nogo"),
+                formula = list(m ~ lR, s ~ 1, t0 ~ 1), model = LNR)
+  p <- sampled_pars(des); p[] <- log(1)
+  p["m"] <- -0.7; p["m_lRnogo"] <- 0.4; p["s"] <- log(1); p["t0"] <- log(.2)
+  dat <- make_data(p, des, n_trials = 60)
+  emc <- make_emc(dat, des, type = "single", compress = FALSE, n_chains = 1)
+  expect_identical(emc[[1]]$model()$c_name, "LNRGNG")
+  expect_gt(sum(emc[[1]]$data[[1]]$missingness == 4, na.rm = TRUE), 0)
+  expect_equal(cpp_ll(emc, p),
+               ref_race_gng_ll(p, emc[[1]]$data[[1]], emc[[1]]$model(), dLNR, pLNR),
+               tolerance = 1e-4)
+})
+
 test_that("RDMGNG likelihood is finite and varies with parameters", {
   set.seed(2)
   des <- gng_rdm_design()
