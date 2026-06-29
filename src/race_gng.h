@@ -13,6 +13,14 @@
 #include <cmath>
 #include "model_RDM.h"   // scalar digt() / pigt() + A_EPS
 #include "gauss.h"        // hcubature
+#include "ParamTable.h"
+#include "RaceSpec.h"
+
+// Finite upper bound used when the integration window is unbounded above
+// (no upper truncation). The withheld integrand f_nogo(t) * prod S_go(t) decays
+// to 0 well before this for realistic RT-model parameters, so capping keeps the
+// adaptive integrator on a finite domain with negligible truncation error.
+static const double GNG_UPPER_CAP = 30.0;
 
 // Per-trial RDM accumulator parameters, pre-scaled to the digt/pigt convention:
 //   k = (B + 0.5*A)/s, l = v/s, a = 0.5*A/s, with decision time t - t0.
@@ -66,6 +74,26 @@ inline double rdm_gng_withheld_prob(const double* v, const double* B,
   if (!std::isfinite(val) || val < 0.0) val = 0.0;
   else if (val > 1.0) val = 1.0;
   return val;
+}
+
+// ParamTable-based backend (the generic gng_withheld_fn slot in RaceModelSetup).
+// Gathers the trial's per-accumulator RDM params (rows base_row .. base_row+n_acc-1)
+// from the natural-scale ParamTable and returns P(no-go finishes first in
+// [lower, upper]). nogo is 0-based.
+inline double rdm_gng_withheld(const ParamTable& pt, const RaceSpec& spec,
+                               int base_row, int n_acc, int nogo,
+                               double lower, double upper) {
+  std::vector<double> v(n_acc), B(n_acc), A(n_acc), t0(n_acc), s(n_acc);
+  for (int k = 0; k < n_acc; ++k) {
+    const int r = base_row + k;
+    v[k]  = pt.base(r, spec.col_v);
+    B[k]  = pt.base(r, spec.col_B);
+    A[k]  = pt.base(r, spec.col_A);
+    t0[k] = pt.base(r, spec.col_t0);
+    s[k]  = pt.base(r, spec.col_s);
+  }
+  return rdm_gng_withheld_prob(v.data(), B.data(), A.data(), t0.data(), s.data(),
+                               n_acc, nogo, lower, upper);
 }
 
 #endif // RACE_GNG_H

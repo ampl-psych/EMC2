@@ -124,6 +124,19 @@ void CensorSpec::fill_censored_rows(std::vector<double>& S_race_UT,
 
   }
 
+  // Go/no-go withheld trials: P(no-go accumulator finishes first in the window),
+  // a numerical integral (model-specific) rather than a closed-form survivor
+  // difference. setup->gng_withheld is nullptr for models without a withheld
+  // integrator; nogo_idx < 0 means no "nogo" accumulator was found.
+  if (!idx_G_tr.empty() && setup->gng_withheld != nullptr && nogo_idx >= 0) {
+    for (int row : idx_G_tr) {
+      const int base = row * n_acc;
+      const double p = setup->gng_withheld(*pt, setup->spec, base, n_acc, nogo_idx,
+                                           gng_lower[row], gng_upper[row]);
+      ll_trial[row] = std::log(clamp(p));
+    }
+  }
+
   // additional cases here...
 }
 
@@ -190,7 +203,35 @@ CensorSpec make_censor_spec(const DataFrame& data,
     case 1: censor.idx_L_tr.push_back(i / n_acc); break;
     case 2: censor.idx_U_tr.push_back(i / n_acc); break;
     case 3: censor.idx_B_tr.push_back(i / n_acc); break;
+    case 4: censor.idx_G_tr.push_back(i / n_acc); break;   // go/nogo withheld
     default: break;
+    }
+  }
+
+  // Go/no-go withheld trials need the no-go accumulator index and an integration
+  // window. The accumulator rows within a trial are ordered by the lR factor, so
+  // the no-go accumulator is at the level position of "nogo". The window is
+  // [LT, UT] (defaults [0, Inf)); an infinite upper is capped to keep the
+  // adaptive integrator on a finite domain (the integrand decays to 0).
+  if (!censor.idx_G_tr.empty()) {
+    std::vector<std::string> nms = Rcpp::as<std::vector<std::string>>(data.names());
+    const bool has_lR = std::find(nms.begin(), nms.end(), "lR") != nms.end();
+    if (has_lR) {
+      IntegerVector lR = data["lR"];
+      CharacterVector lev = lR.attr("levels");
+      for (int j = 0; j < lev.size(); ++j)
+        if (Rcpp::as<std::string>(lev[j]) == "nogo") { censor.nogo_idx = j; break; }
+    }
+    NumericVector lt_tmp, ut_tmp, t0_tmp;
+    const double* LT_ptr = nullptr; const double* UT_ptr = nullptr;
+    if (std::find(nms.begin(), nms.end(), "LT") != nms.end()) { lt_tmp = data["LT"]; LT_ptr = REAL(lt_tmp); }
+    if (std::find(nms.begin(), nms.end(), "UT") != nms.end()) { ut_tmp = data["UT"]; UT_ptr = REAL(ut_tmp); }
+    censor.gng_lower.assign(censor.n_trials, 0.0);
+    censor.gng_upper.assign(censor.n_trials, GNG_UPPER_CAP);
+    for (int t = 0; t < censor.n_trials; ++t) {
+      const int row = t * n_acc;
+      if (LT_ptr) censor.gng_lower[t] = LT_ptr[row];
+      if (UT_ptr && std::isfinite(UT_ptr[row])) censor.gng_upper[t] = UT_ptr[row];
     }
   }
 

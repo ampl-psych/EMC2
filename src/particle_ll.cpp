@@ -650,7 +650,14 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     int total_n_winners = 0;
     for (int i = 0; i < n_rows; ++i) {
       if(win_flag[i]) total_n_winners += 1;
-      if(has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
+      // Ordinary censoring (missingness 1/2/3) is handled entirely by CensorSpec,
+      // so those rows are skipped here. Go/no-go withheld trials (missingness 4)
+      // are NOT skipped: they stay in idx_win/idx_los so the per-trial indexing
+      // (base = t*n_acc) remains dense (n_winners == n_trials); their density is
+      // computed at rt = NA (-> min_ll) and then overwritten by the GNG integral
+      // in fill_censored_rows.
+      if(has_missingness && !IntegerVector::is_na(missingness[i]) &&
+         missingness[i] != 4) continue;  // handled by censor
       if(win_flag[i]) {
         idx_win.push_back(i);
       } else {

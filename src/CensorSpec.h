@@ -16,6 +16,13 @@ struct CensorSpec {
   std::vector<int>    idx_U_tr;   // upper-censored trials
   std::vector<int>    idx_B_tr;   // both-censored trials
 
+  // Go/no-go withheld trials (missingness == 4): the likelihood is the integral
+  // P(no-go accumulator finishes first in the window), not a survivor difference.
+  std::vector<int>    idx_G_tr;          // go/nogo withheld trials
+  int                 nogo_idx = -1;     // 0-based no-go accumulator within a trial
+  std::vector<double> gng_lower;         // integration window lower bound (length n_trials)
+  std::vector<double> gng_upper;         // integration window upper bound (length n_trials)
+
   int n_rows    = 0;
   int n_trials  = 0;
   int n_acc     = 0;
@@ -29,7 +36,7 @@ struct CensorSpec {
   const ParamTable*     pt     = nullptr;
   RaceScratch*          scratch = nullptr;
 
-  bool any() const { return !idx_L.empty() || !idx_U.empty(); }
+  bool any() const { return !idx_L.empty() || !idx_U.empty() || !idx_G_tr.empty(); }
   void fill_censored_rows(std::vector<double>& S_race_UT,
                           std::vector<double>& S_race_LT,
                           NumericVector& ll_trial,
