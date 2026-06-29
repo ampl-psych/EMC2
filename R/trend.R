@@ -743,6 +743,10 @@ update_model_trend <- function(trend, model) {
     }
   }
 
+  # Avoid duplicated names (may be caused by shared pnames)
+  model_list$transform$func <- model_list$transform$func[!duplicated(names(model_list$transform$func))]
+  model_list$p_types        <- model_list$p_types[!duplicated(names(model_list$p_types))]
+
   model_list$trend <- trend
   model <- function() model_list
   model
