@@ -87,6 +87,18 @@ test_that("DDM upper censoring contributes the tail mass P(RT > UC)", {
   expect_equal(cens_ll, obs_ll + n_cens * log(S_UC), tolerance = 1e-6)
 })
 
+test_that("R log_likelihood_ddm truncation twin matches the C++ path", {
+  s <- ddm_setup()
+  set.seed(4)
+  dat <- make_data(s$p, s$des, n_trials = 150)
+  dat_tr <- make_missing(dat, LT = 0.25, UT = 1.2, rt_resolution = 1e-10)
+  emc <- make_emc(dat_tr, s$des, type = "single", compress = FALSE, n_chains = 1,
+                  rt_resolution = 1e-10)
+  ll_cpp <- ddm_calc_ll(emc, s$p)
+  ll_R   <- EMC2:::calc_ll_R(s$p, emc[[1]]$model(), emc[[1]]$data[[1]])
+  expect_equal(ll_cpp, ll_R, tolerance = 1e-8)
+})
+
 test_that("DDM without truncation/censoring is unchanged by the new path", {
   s <- ddm_setup()
   set.seed(3)

@@ -42,11 +42,37 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
 log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
   # DDM summed log likelihood, with protection against numerical issues
 {
+  ok <- attr(pars,"ok")
   like <- numeric(dim(dadm)[1])
-  if (any(attr(pars,"ok")))
-    like[attr(pars,"ok")] <- model$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],
-                                                       pars[attr(pars,"ok"),,drop=FALSE])
-  like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
+  if (any(ok))
+    like[ok] <- model$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
+  like[ok][is.na(like[ok])] <- 0
+
+  # Truncation: renormalise each retained trial's density by the probability
+  # mass inside the truncation window,
+  #   P(LT < RT < UT) = sum over both responses of ( F_R(UT) - F_R(LT) ),
+  # via the defective DDM cdf (model$pfun). This is the R-path twin of the C++
+  # truncation in c_log_likelihood_DDM; without it calc_ll_R would return the
+  # un-truncated density. (Censoring is handled on the C++ path only.)
+  LT <- dadm$LT; UT <- dadm$UT
+  if (!is.null(LT) && !is.null(UT) && !(all(LT==0) & all(is.infinite(UT)))) {
+    Rlevs <- levels(dadm$R)
+    Rlo <- factor(rep(Rlevs[1],nrow(pars)),levels=Rlevs)
+    Rhi <- factor(rep(Rlevs[2],nrow(pars)),levels=Rlevs)
+    Fhi <- rep(1,nrow(pars))            # F(UT)=1 when UT=Inf (mass sums to 1)
+    sel <- ok & is.finite(UT)
+    if (any(sel)) Fhi[sel] <-
+      model$pfun(UT[sel],Rlo[sel],pars[sel,,drop=FALSE]) +
+      model$pfun(UT[sel],Rhi[sel],pars[sel,,drop=FALSE])
+    Flo <- numeric(nrow(pars))          # F(LT)=0 when LT=0
+    sel <- ok & (LT>0)
+    if (any(sel)) Flo[sel] <-
+      model$pfun(LT[sel],Rlo[sel],pars[sel,,drop=FALSE]) +
+      model$pfun(LT[sel],Rhi[sel],pars[sel,,drop=FALSE])
+    Pin <- Fhi - Flo
+    fix <- ok & like>0 & is.finite(Pin) & Pin>0
+    like[fix] <- like[fix]/Pin[fix]
+  }
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
