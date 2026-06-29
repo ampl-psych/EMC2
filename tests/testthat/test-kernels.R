@@ -222,6 +222,169 @@ apply_kernel(kernel_pars, emc)
 # all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 
 
+# BETA-BINOMIAL, DBM, TPM LEARNING RULES --------------------------------------
+
+# NB using helper functions defined in tests/testthat/helper-kernels.R that are
+# independent of the EMC2 trends framework
+
+# shared covariate vector (true mean roughly 0.3; includes NA)
+covariate1 <- c(
+  0, 1, 0, 0, 0, 0, 1, NA, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, NA, 0, 1, 0, 0
+)
+
+# Beta-binomial (basic)
+snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 4)
+trend_bb_basic <- make_trend(
+  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial'))
+)
+emc <- make_minimal_emc(
+  trend_bb_basic, n_trials = length(covariate1), covariate1 = covariate1
+)
+# uniform prior: Beta shape parameters = 1
+kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1))
+true_out <- beta_binomial_basic(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2])
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out)
+snapshot_matrix[ , c(1, 2)] <- c(true_out, emc_out)
+# informative prior: shape1 = mean * scale; shape2 = (1-mean) * scale
+kernel_pars <- c(
+  "m.a0" = log(mean(covariate1, na.rm = TRUE) * 10),
+  "m.b0" = log((1 - mean(covariate1, na.rm = TRUE)) * 10)
+)
+true_out <- beta_binomial_basic(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2])
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out)
+snapshot_matrix[ , c(3, 4)] <- c(true_out, emc_out)
+# conclude with test snapshot
+test_that("beta_binomial_Rcpp", {expect_snapshot(snapshot_matrix)})
+
+
+# Beta-binomial (exponential decay)
+trend_bb_decay <- make_trend(
+  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial_decay'))
+)
+emc <- make_minimal_emc(
+  trend_bb_decay, n_trials = length(covariate1), covariate1 = covariate1
+)
+# uniform prior with decay = 4: Updates are weighted by exp(-1/4); implies half-life of 4*log(2)=2.8 trials
+kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1), "m.decay" = log(4))
+true_out <- beta_binomial_decay(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
+  decay = exp(kernel_pars[3])
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out)
+# conclude with test snapshot
+test_that("beta_binomial_decay_Rcpp", {
+  expect_snapshot(matrix(c(true_out, emc_out), nrow = length(covariate1)))
+})
+
+# Beta-binomial (sliding window)
+trend_bb_window <- make_trend(
+  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial_window'))
+)
+emc <- make_minimal_emc(
+  trend_bb_window, n_trials = length(covariate1), covariate1 = covariate1
+)
+# uniform prior with memory window of 6 trials
+kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1), "m.window" = log(6))
+true_out <- beta_binomial_window(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
+  window = exp(kernel_pars[3])
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out)
+# conclude with test snapshot
+test_that("beta_binomial_window_Rcpp", {
+  expect_snapshot(matrix(c(true_out, emc_out), nrow = length(covariate1)))
+})
+
+
+# Dynamic Belief Model
+snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 6)
+trend_dbm <- make_trend(
+  make_base('m', 'lin', make_kernel('covariate1', 'dbm'))
+)
+emc <- make_minimal_emc(
+  trend_dbm, n_trials = length(covariate1), covariate1 = covariate1
+)
+# change point probability of zero, output should be equivalent to Beta binomial
+kernel_pars <- c(
+  "m.cp" =  qnorm(1e-12),
+  "m.mu0" = qnorm(mean(covariate1, na.rm = TRUE)),
+  "m.s0" = log(10)
+)
+true_out <- dbm(
+  x = covariate1, cp = pnorm(kernel_pars[1]), mu0 = pnorm(kernel_pars[2]),
+  s0 = exp(kernel_pars[3])
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out, tolerance = 1e-5)
+emc_out_bb <- as.numeric(
+  apply_kernel(
+    kernel_pars = c(
+      "m.a0" = log(mean(covariate1, na.rm = TRUE) * 10),
+      "m.b0" = log((1 - mean(covariate1, na.rm = TRUE)) * 10)
+    ),
+    emc = make_minimal_emc(
+      trend_bb_basic, n_trials = length(covariate1), covariate1 = covariate1
+    )
+  )
+)
+all.equal(emc_out, emc_out_bb, tolerance = 1e-5)
+snapshot_matrix[ , c(1, 2)] <- c(true_out, emc_out)
+# change point probability of one, output should be constant across trials
+kernel_pars <- c(
+  "m.cp" =  qnorm(1 - 1e-12),
+  "m.mu0" = qnorm(mean(covariate1, na.rm = TRUE)),
+  "m.s0" = log(10)
+)
+true_out <- dbm(
+  x = covariate1, cp = unname(pnorm(kernel_pars[1])),
+  mu0 = unname(pnorm(kernel_pars[2])), s0 = unname(exp(kernel_pars[3]))
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out, tolerance = 1e-5)
+all.equal(
+  emc_out,
+  rep(
+    x = beta_mean(
+      a = unname(pnorm(kernel_pars[2])) * unname(exp(kernel_pars[3])),
+      b = (1 - unname(pnorm(kernel_pars[2]))) * unname(exp(kernel_pars[3]))
+    ),
+    length = length(emc_out)
+  ),
+  tolerance = 1e-5
+)
+snapshot_matrix[ , c(3, 4)] <- c(true_out, emc_out)
+# change point probability of 0.2
+kernel_pars <- c(
+  "m.cp" =  qnorm(0.2),
+  "m.mu0" = qnorm(mean(covariate1, na.rm = TRUE)),
+  "m.s0" = log(10)
+)
+true_out <- dbm(
+  x = covariate1, cp = unname(pnorm(kernel_pars[1])),
+  mu0 = unname(pnorm(kernel_pars[2])), s0 = unname(exp(kernel_pars[3]))
+)
+# plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+all.equal(emc_out, true_out)
+snapshot_matrix[ , c(5, 6)] <- c(true_out, emc_out)
+# conclude with test snapshot
+test_that("beta_binomial_Rcpp", {expect_snapshot(snapshot_matrix)})
+
+
 # # Custom kernel -- only C -------------------------------------------------
 # This cannot be part of that-test :-( but we can still use it for manual tests...
 # Write a custom kernel to a separate file
