@@ -216,6 +216,7 @@ DDM <- function(){
 #' @export
 DDMGNG <- function(){
   list(
+    c_name = "DDMGNG",   # routes to the C++ go/nogo path in calc_ll
     type="DDM",
     p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
               "s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),

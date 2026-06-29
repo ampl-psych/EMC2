@@ -380,12 +380,31 @@ static RaceModelSetup make_ddm_setup(const ParamTable& pt)
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                             const int n_trials, IntegerVector expand,
                             double min_ll, std::vector<int> is_ok,
-                            TruncSpec& trunc, CensorSpec& censor){
+                            TruncSpec& trunc, CensorSpec& censor, bool gng){
   const int n_out = expand.length();
   NumericVector rts = data["rt"];
   IntegerVector R = data["R"];
   NumericVector lls(n_trials);
   lls = d_DDM_Wien(rts, R, pars, is_ok);   // per-trial log density (R_NegInf if !is_ok)
+
+  // Go/no-go: a withheld trial (rt NA) contributes P(no go response by TIMEOUT)
+  // = 1 - F_go(TIMEOUT), the cens-consistent inline form (matches the R
+  // log_likelihood_ddmgng). Reuses the defective DDM cdf (ddm_logcdf_one).
+  // GNG data carries no LT/UT/missingness, so the trunc/censor specs below are
+  // inactive; this overwrite only touches the withheld (non-finite-rt) trials.
+  if (gng) {
+    NumericVector TIMEOUT = data["TIMEOUT"];
+    IntegerVector Rgo     = data["Rgo"];   // factor -> integer level (1=lower, 2=upper)
+    for (int i = 0; i < n_trials; ++i) {
+      if (is_ok[i] && !R_FINITE(rts[i])) {
+        const double logF = ddm_logcdf_one(TIMEOUT[i], Rgo[i],
+                                           pars(i,0), pars(i,1), pars(i,2), pars(i,3),
+                                           pars(i,4), pars(i,5), pars(i,6), pars(i,7));
+        const double p = 1.0 - std::exp(logF);   // P(RT > TIMEOUT on the go boundary)
+        lls[i] = (p > 0.0) ? std::log(p) : min_ll;
+      }
+    }
+  }
 
   // Truncation: subtract the per-trial log normalizer log(S(LT) - S(UT)).
   // Same machinery as the race path; the DDM survivor backend (ddm_truncate)
@@ -586,10 +605,12 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   // -----------------------------------------------------------------------
   // DDM
   // -----------------------------------------------------------------------
-  if (type == "DDM") {
+  if (type == "DDM" || type == "DDMGNG") {
+    const bool gng = (type == "DDMGNG");      // go/nogo: withheld trials use 1 - F_go(TIMEOUT)
     IntegerVector expand = data.attr("expand");
     // Truncation / censoring via the shared spec machinery (DDM has n_acc = 1).
     // Built once; the DDM survivor backend (ddm_truncate) is installed via setup.
+    // For GNG data there are no LT/UT/missingness columns, so both are inactive.
     RaceScratch ddm_scratch;
     ddm_scratch.reserve(n_rows);
     RaceModelSetup ddm_setup = make_ddm_setup(ctx.param_table);
@@ -601,7 +622,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok, trunc, censor);
+      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok, trunc, censor, gng);
     }
   } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
     IntegerVector expand = data.attr("expand");
