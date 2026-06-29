@@ -168,6 +168,17 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     formula <- check_trend(trend,c(names(functions), covariates), model, formula, parameter_design)
   }
 
+  ## Go/no-go: a "nogo" response level silently switches the model to its
+  ## go/nogo variant. The likelihood branches on the "GNG" suffix in type /
+  ## c_name; withheld (inhibited) trials are handled as no-response events.
+  if ("nogo" %in% Rlevels) {
+    m_list <- model()
+    if (!grepl("GNG", m_list$type)) m_list$type <- paste0(m_list$type, "GNG")
+    if (!is.null(m_list$c_name) && !grepl("GNG", m_list$c_name))
+      m_list$c_name <- paste0(m_list$c_name, "GNG")
+    model <- function() m_list
+  }
+
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
@@ -362,7 +373,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
   if (!is_choice_accumulator_type(type)) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-  if (type == "RACE" || is_choice_only_model_type(type)) {
+  if (type %in% c("RACE", "RACEGNG") || is_choice_only_model_type(type)) {
     nacc <- length(levels(data$R))
     datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
@@ -421,6 +432,12 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
 
     if (type %in% c("MT","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
+    if (type == "RACEGNG") {
+      # Withheld (inhibited) trials are coded with infinite rt; for those the
+      # no-go accumulator is the winner (no observable response was made).
+      is_inf <- is.infinite(datar$rt)
+      if (any(is_inf)) datar$winner[is_inf] <- datar$lR[is_inf] == "nogo"
+    }
   }
   datar
 }

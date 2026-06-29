@@ -469,6 +469,22 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    # Go/no-go (race): a simulated "nogo" response is a withheld (inhibited)
+    # trial -- the no-go accumulator finished first, so no RT is observed. Mark
+    # it the cens censoring way (rt = NA + a missingness code) so the likelihood
+    # integrates over the no-go finishing time rather than scoring a density.
+    # missingness == 4 is the go/no-go withheld code (distinct from 1/2/3 used by
+    # ordinary lower/upper/both censoring); the matching likelihood branch lives
+    # in CensorSpec. R stays "nogo" so the expanded winner = (lR == "nogo").
+    if (grepl("GNG", model()$type, fixed = TRUE) &&
+        is.factor(data$R) && "nogo" %in% levels(data$R)) {
+      withheld <- !is.na(data$R) & data$R == "nogo"
+      if (any(withheld)) {
+        data$rt[withheld] <- NA
+        if (is.null(data$missingness)) data$missingness <- NA_integer_
+        data$missingness[withheld] <- 4L
+      }
+    }
     if (is_choice_only_model_type(model()) &&
         "rt" %in% names(data) &&
         all(is.na(data$rt))) {
