@@ -129,6 +129,10 @@ get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds
     .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
 }
 
+rdm_gng_withheld_R <- function(v, B, A, t0, s, nogo, lower, upper) {
+    .Call(`_EMC2_rdm_gng_withheld_R`, v, B, A, t0, s, nogo, lower, upper)
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }
