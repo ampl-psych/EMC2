@@ -6,6 +6,7 @@
 #include "model_lnr.h"
 #include "model_LBA.h"
 #include "model_RDM.h"
+#include "model_DDM.h"
 using namespace Rcpp;
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,9 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_SZ       = pt.base_index_for("SZ");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.spec.col_st0      = pt.base_index_for("st0");
-//    s.fill_survivor     = ddm_survivor;
+    // no fill function, directly called from the branch in calc_ll instead
+    // signature mismatch -- no idx_win / idx_los in the DDM
+    s.fill_survivor     = ddm_survivor;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");

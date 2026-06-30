@@ -366,6 +366,7 @@ double c_log_likelihood_DDM(ParamTable& pt,
                             const std::vector<int>& idx_all,
                             const IntegerVector& expand,
                             double min_ll,
+                            TruncSpec& trunc, CensorSpec& censor,
                             NumericVector& ll_trial) {
   const int n_trials = (int)idx_all.size();
   double* lls_ptr = ll_trial.begin();
@@ -373,6 +374,18 @@ double c_log_likelihood_DDM(ParamTable& pt,
 
   // 1. fill log-likelihoods row-wise
   fill_ddm(rts, R, pt, spec, idx_all, lls_ptr);
+
+  // Truncation: subtract the per-trial log normalizer log(S(LT) - S(UT)).
+  // Same machinery as the race path; the DDM survivor backend (ddm_truncate)
+  // makes the per-trial reduction a pass-through (n_acc = 1).
+  if (trunc.any()) {
+    const std::vector<double> log_Z = trunc.calculate_normalization_constant();
+    for (int t = 0; t < trunc.n_trials; ++t) lls_ptr[t] -= log_Z[t];
+  }
+  // Censoring: overwrite censored trials with their interval mass, reusing the
+  // truncation survivors (trunc.S_lower / trunc.S_upper are defaulted when no
+  // truncation columns are present).
+  if (censor.any()) censor.fill_censored_rows(trunc.S_upper, trunc.S_lower, ll_trial, min_ll);
 
   // 2. clamp non-ok trials
   auto clamp = [min_ll](double v) {
@@ -588,11 +601,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   // DDM
   // -----------------------------------------------------------------------
   if (type == "DDM") {
-    // IntegerVector expand = data.attr("expand");
-//    NumericVector ll_row(n_rows);                // stores (log)likelihood of rows (trials)
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
-
-    // New
     NumericVector rts     = data["rt"];
     IntegerVector R       = data["R"];
     IntegerVector expand  = data.attr("expand");
@@ -607,9 +616,13 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     // Buffer
     NumericVector ll_trial(n_rows);     // log-likelihoods, one per trial
 
+    RaceScratch ddm_scratch;
+    CensorSpec censor = make_censor_spec(data, n_rows, /* nacc = */ 1, setup, ctx.param_table, ddm_scratch);
+    TruncSpec  trunc  = make_trunc_spec (data, n_rows, /* nacc = */ 1, setup, ctx.param_table, ddm_scratch);
+
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
-      std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+      // std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
 
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
@@ -622,7 +635,9 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         rts, R, is_ok,
         idx_all,
         expand,
-        min_ll, ll_trial);
+        min_ll,
+        trunc, censor,
+        ll_trial);
 
     }
   } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
