@@ -309,7 +309,7 @@ test_that("beta_binomial_window_Rcpp", {
 
 
 # Dynamic Belief Model
-snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 6)
+snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 8)
 trend_dbm <- make_trend(
   make_base('m', 'lin', make_kernel('covariate1', 'dbm'))
 )
@@ -328,7 +328,7 @@ true_out <- dbm(
 )
 # plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
-all.equal(emc_out, true_out, tolerance = 1e-5)
+all.equal(emc_out, true_out)
 emc_out_bb <- as.numeric(
   apply_kernel(
     kernel_pars = c(
@@ -340,8 +340,8 @@ emc_out_bb <- as.numeric(
     )
   )
 )
-all.equal(emc_out, emc_out_bb, tolerance = 1e-5)
-snapshot_matrix[ , c(1, 2)] <- c(true_out, emc_out)
+all.equal(emc_out, emc_out_bb, tolerance = 1e-6)
+snapshot_matrix[ , 1:3] <- c(true_out, emc_out, emc_out_bb)
 # change point probability of one, output should be constant across trials
 kernel_pars <- c(
   "m.cp" =  qnorm(1 - 1e-12),
@@ -354,19 +354,16 @@ true_out <- dbm(
 )
 # plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
-all.equal(emc_out, true_out, tolerance = 1e-5)
-all.equal(
-  emc_out,
-  rep(
-    x = beta_mean(
-      a = unname(pnorm(kernel_pars[2])) * unname(exp(kernel_pars[3])),
-      b = (1 - unname(pnorm(kernel_pars[2]))) * unname(exp(kernel_pars[3]))
-    ),
-    length = length(emc_out)
+all.equal(emc_out, true_out)
+fixed_beta_out <- rep(
+  x = beta_mean(
+    a = unname(pnorm(kernel_pars[2])) * unname(exp(kernel_pars[3])),
+    b = (1 - unname(pnorm(kernel_pars[2]))) * unname(exp(kernel_pars[3]))
   ),
-  tolerance = 1e-5
+  length = length(emc_out)
 )
-snapshot_matrix[ , c(3, 4)] <- c(true_out, emc_out)
+all.equal(emc_out, fixed_beta_out, tolerance = 1e-5)
+snapshot_matrix[ , 4:6] <- c(true_out, emc_out, fixed_beta_out)
 # change point probability of 0.2
 kernel_pars <- c(
   "m.cp" =  qnorm(0.2),
@@ -380,7 +377,7 @@ true_out <- dbm(
 # plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
 all.equal(emc_out, true_out)
-snapshot_matrix[ , c(5, 6)] <- c(true_out, emc_out)
+snapshot_matrix[ , 7:8] <- c(true_out, emc_out)
 # conclude with test snapshot
 test_that("beta_binomial_Rcpp", {expect_snapshot(snapshot_matrix)})
 

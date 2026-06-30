@@ -100,15 +100,15 @@ beta_binomial_window <- function(x, a0, b0, window) {
 
 dbm <- function(x, cp, mu0, s0) {
   n_total <- length(x)
-  cp_eps <- 1e-10
+  # cp_eps <- 1e-10
   a <- mu0 * s0
   b <- (1 - mu0) * s0
-  if (cp < cp_eps) {
-    return(beta_binomial_basic(x = x, a0 = a, b0 = b))
-  }
-  if ((1 - cp) < cp_eps) {
-    return(rep(x = beta_mean(a, b), length = n_total))
-  }
+  # if (cp < cp_eps) {
+  #   return(beta_binomial_basic(x = x, a0 = a, b0 = b))
+  # }
+  # if ((1 - cp) < cp_eps) {
+  #   return(rep(x = beta_mean(a, b), length = n_total))
+  # }
   grid_res <- 100
   out <- numeric(n_total)
   prob_grid <- (0:grid_res) / grid_res
