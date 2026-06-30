@@ -279,6 +279,22 @@ static double logFs(double t, double v, double a, double w, int K)
   double sqt = std::sqrt(t), temp = -v * a*w - (v * v)*t / 2;
   double vt = v * t;
 
+
+  // SM: alternative implementation that skips the lognormal calls in logMill  -- not 100% if correct, so commented out
+//   const double c = 0.5 * v * v * t;   // constant across iterations
+//
+// for (int k = K; k >= 0; k--) {
+//     double rj_p = a * (2*k + w);
+//     double rj_m = a * (2*k + 2.0 - w);
+//
+//     double pos1 = -rj_p * v + c + lnnorm(-(rj_p - vt) / sqt);
+//     double pos2 =  rj_p * v + c + lnnorm(-(rj_p + vt) / sqt);  // sign flips for +vt
+//     double neg1 = -rj_m * v + c + lnnorm(-(rj_m - vt) / sqt);
+//     double neg2 =  rj_m * v + c + lnnorm(-(rj_m + vt) / sqt);
+//
+//     fplus  = logsum(logsum(pos1, pos2), fplus);
+//     fminus = logsum(logsum(neg1, neg2), fminus);
+// }
   for (int k = K; k >= 0; k--)
   {
     double rj = a*(2 * k + w);
@@ -345,8 +361,7 @@ static void run_hcubature(int (*integrand)(unsigned, const double*, void*, unsig
                           bool sv_first_dim,
                           double* val, double* err)
 {
-  double* xmin = static_cast<double*>(R_Calloc(dim, double));
-  double* xmax = static_cast<double*>(R_Calloc(dim, double));
+  double xmin[3] = {}, xmax[3] = {1.0, 1.0, 1.0};
 
   if (sv_first_dim) {
     xmin[0] = -1.0; xmax[0] = 1.0;
@@ -358,7 +373,6 @@ static void run_hcubature(int (*integrand)(unsigned, const double*, void*, unsig
 
   hcubature(integrand, &params, dim, xmin, xmax, DDM_NEVAL,
             DDM_EPS * 0.9, 0.0, val, err);
-  R_Free(xmin); R_Free(xmax);
 }
 
 static int int_ddiff(unsigned /*dim*/, const double* x, void* p,
@@ -554,31 +568,35 @@ NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars
 }
 
 
-void ddm_survivor(const std::vector<int>&   idx,
-                  const std::vector<double>& bound,
-                  const IntegerVector&       Rs,
-                  const ParamTable&          pt,
-                  const RaceSpec&            spec,
-                  double* __restrict__       out)
+void ddm_survivor(const std::vector<int>&     idx,
+                  const std::vector<double>&  bound,
+                  const ParamTable&           pt,
+                  const RaceSpec&             spec,
+                  double* __restrict__        out,
+                  RaceScratch&                scratch)
 {
-    const double* __restrict__ bd  = bound.data();
-    const double* __restrict__ v   = &pt.base(0, spec.col_v);
-    const double* __restrict__ a   = &pt.base(0, spec.col_B);
-    const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
-    const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
-    const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
-    const double* __restrict__ s   = &pt.base(0, spec.col_s);
-    const double* __restrict__ Z   = &pt.base(0, spec.col_Z);
-    const double* __restrict__ SZ  = &pt.base(0, spec.col_SZ);
+  const double* __restrict__ bd  = bound.data();
+  const double* __restrict__ v   = &pt.base(0, spec.col_v);
+  const double* __restrict__ a   = &pt.base(0, spec.col_a);
+  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+  const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
+  const double* __restrict__ s   = &pt.base(0, spec.col_s);
+  const double* __restrict__ Z   = &pt.base(0, spec.col_Z);
+  const double* __restrict__ SZ  = &pt.base(0, spec.col_SZ);
 
-    for (int j = 0; j < (int)idx.size(); ++j) {
-      const int i = idx[j];
-      if (bd[i] - t0[i] <= 0.0) continue;   // semantic guard — leave default (log(1) = 0)
-      const double logcdf = ddm_logcdf_scalar(bd[i], Rs[i], v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
-      if(logcdf == R_NegInf) {
-        out[i] = 0.0;
-      } else {
-        out[i] = std::log1p(-std::exp(logcdf));
-      }
+  for (int j = 0; j < (int)idx.size(); ++j) {
+    const int i = idx[j];
+
+    if (bd[i] - t0[i] <= 0.0) continue;  // bound before t0 — no mass yet, log(1) = 0
+
+    const double logcdf_upper = ddm_logcdf_scalar(bd[i], 1, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
+    const double logcdf_lower = ddm_logcdf_scalar(bd[i], 2, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
+    double S = 1 - (std::exp(logcdf_upper) + std::exp(logcdf_lower));
+
+    // clamp - probability so between 0 and 1, anything else is integration error or numerical precision error
+    if (!std::isfinite(S) || S < 0.0) S = 0.0;
+    else if (S > 1.0) S = 1.0;
+    out[i] = S;
     }
 }

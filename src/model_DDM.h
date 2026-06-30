@@ -1,3 +1,11 @@
+// This DDM implementation is taken from the wienR package for R (https://github.com/RaphaelHartmann/WienR), which is distributed under a GNU GPL-2 license
+//
+// Original authors of the source code:
+// Chair of Social Psychology, University of Freiburg
+// Authors: Christoph Klauer and Raphael Hartmann
+//
+// The code has been modified to work with EMC2s internal structures
+
 #ifndef MODEL_DDM_H
 #define MODEL_DDM_H
 
@@ -33,12 +41,12 @@ void fill_ddm(const NumericVector& rts,
               double* __restrict__ ll_row);
 
 // Survival function for the DDM
-void ddm_survivor(const std::vector<int>&   idx,
+void ddm_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,
-                  const IntegerVector&       Rs,
-                  const ParamTable&          pt,
-                  const RaceSpec&            spec,
-                  double* __restrict__       out);
+                  const ParamTable& pt,
+                  const RaceSpec& spec,
+                  double* __restrict__ out,
+                  RaceScratch& scratch);
 
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, std::vector<int> is_ok);
