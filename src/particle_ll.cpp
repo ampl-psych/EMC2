@@ -358,24 +358,57 @@ double c_log_likelihood_race(ParamTable& pt,
 }
 
 
+double c_log_likelihood_DDM(ParamTable& pt,
+                            RaceSpec& spec,
+                            const NumericVector& rts,
+                            const IntegerVector& R,
+                            const std::vector<int>& is_ok,
+                            const std::vector<int>& idx_all,
+                            const IntegerVector& expand,
+                            double min_ll,
+                            NumericVector& ll_trial) {
+  const int n_trials = (int)idx_all.size();
+  double* lls_ptr = ll_trial.begin();
+  const int* ok_ptr    = is_ok.data();
+
+  // 1. fill log-likelihoods row-wise
+  fill_ddm(rts, R, pt, spec, idx_all, lls_ptr);
+
+  // 2. clamp non-ok trials
+  auto clamp = [min_ll](double v) {
+    return (v > min_ll) ? v : min_ll;
+  };
+
+  for (int t = 0; t < n_trials; ++t) {
+    const int i  = idx_all[t];
+    lls_ptr[i] = ok_ptr[i] ? clamp(lls_ptr[i]) : min_ll;
+  }
+
+  // 3) Expand and sum
+  const int  m       = expand.size();
+  const int* exp_ptr = expand.begin();
+  double sum_ll = 0.0;
+
+#pragma omp simd reduction(+:sum_ll)
+  for (int i = 0; i < m; ++i) {
+    sum_ll += clamp(lls_ptr[exp_ptr[i] - 1]);
+  }
+  return sum_ll;
+}
+
+
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                             const int n_trials, IntegerVector expand,
                             double min_ll, std::vector<int> is_ok){
   const int n_out = expand.length();
   NumericVector rts = data["rt"];
   IntegerVector R = data["R"];
+
   NumericVector lls(n_trials);
   lls = d_DDM_Wien(rts, R, pars, is_ok);
 
-  // lls_exp = c_expand(lls, expand); // decompress
-  // // lls_exp = lls;
-  // lls_exp[is_na(lls_exp)] = min_ll;
-  // lls_exp[is_infinite(lls_exp)] = min_ll;
-  // lls_exp[lls_exp < min_ll] = min_ll;
-  // return(sum(lls_exp));
-  // More SIMD-friendly == faster
-  // decompress
 
+  // Decompress
   const double* lls_ptr    = lls.begin();
   const int*    expand_ptr = expand.begin();
 
@@ -555,14 +588,42 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   // DDM
   // -----------------------------------------------------------------------
   if (type == "DDM") {
-    IntegerVector expand = data.attr("expand");
+    // IntegerVector expand = data.attr("expand");
+//    NumericVector ll_row(n_rows);                // stores (log)likelihood of rows (trials)
+    RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+
+    // New
+    NumericVector rts     = data["rt"];
+    IntegerVector R       = data["R"];
+    IntegerVector expand  = data.attr("expand");
+
+    // DDM has no winner/loser split, but we reuse the same idx pattern.
+    // All rows are "active"; we build idx_all once outside the particle loop.
+    // Rows that are is_ok==0 are handled outside fill_ddm.
+    std::vector<int> idx_all;
+    idx_all.reserve(n_rows);
+    for (int i = 0; i < n_rows; ++i) idx_all.push_back(i);
+
+    // Buffer
+    NumericVector ll_trial(n_rows);     // log-likelihoods, one per trial
+
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
+      std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
-      NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok);
+
+      // NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
+      // lls[i] = c_log_likelihood_DDM(pars, data, n_rows, expand, min_ll, is_ok);
+      lls[i] = c_log_likelihood_DDM(
+        ctx.param_table, setup.spec,
+        rts, R, is_ok,
+        idx_all,
+        expand,
+        min_ll, ll_trial);
+
     }
   } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
     IntegerVector expand = data.attr("expand");

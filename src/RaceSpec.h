@@ -4,13 +4,20 @@
 #include <vector>
 
 struct RaceSpec {
+  // typically shared
   int col_v  = -1;
   int col_B  = -1;
   int col_A  = -1;
   int col_t0 = -1;
   int col_s  = -1;
   int col_sv = -1;
+  // LNR
   int col_m  = -1;
+  // DDM
+  int col_Z  = -1;
+  int col_SZ = -1;
+  int col_st0= -1;
+  int col_a  = -1;
 };
 
 struct RaceScratch {
