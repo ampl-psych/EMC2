@@ -15,6 +15,11 @@
 //                   Branchless polynomial; best vectorisability.
 //                   Pure C++; thread-safe.
 //
+// qnorm (all modes except 0): Wichura AS241 (Appl. Stat. 37:477-484, 1988).
+//   Three-region rational approximation; full double precision in a single
+//   pass (~1e-15 max absolute error). No refinement step needed.
+//   Pure C++; thread-safe.
+//
 // Example Makevars lines:
 //   PKG_CXXFLAGS = -DPNORM_MODE=0   # exact R::pnorm (not thread-safe)
 //   PKG_CXXFLAGS = -DPNORM_MODE=1   # fast, near-double (default)
@@ -56,6 +61,10 @@ namespace pnorm_detail {
 inline double exact_pnorm_std(double x, bool lower, bool logp)
 {
   return R::pnorm(x, 0.0, 1.0, lower, logp);
+}
+inline double exact_qnorm_std(double p)
+{
+  return R::qnorm(p, 0.0, 1.0, true, false);
 }
 #endif
 
@@ -164,6 +173,117 @@ inline double as_pnorm_std(double x, bool lower, bool logp)
 #endif // PNORM_MODE == 2
 
 // ===========================================================================
+// qnorm — Wichura AS241 (Appl. Stat. 37:477-484, 1988)
+//
+// Three-region rational approximation giving full double precision (~1e-15
+// max absolute error) in a single pass. No refinement step needed.
+// This is the same algorithm used internally by GSL and R's qnorm().
+//
+// Domain: p in (0, 1). Returns ±Inf at boundaries.
+// ===========================================================================
+
+#if PNORM_MODE != 0
+namespace as241 {
+
+// Coefficients for the central region (|p - 0.5| <= 0.425)
+constexpr double A0 =  3.3871328727963666080e0;
+constexpr double A1 =  1.3314166789178437745e+2;
+constexpr double A2 =  1.9715909503065514427e+3;
+constexpr double A3 =  1.3731693765509461125e+4;
+constexpr double A4 =  4.5921953931549871457e+4;
+constexpr double A5 =  6.7265770927008700853e+4;
+constexpr double A6 =  3.3430575583588128105e+4;
+constexpr double A7 =  2.5090809287301226727e+3;
+
+constexpr double B1 =  4.2313330701600911252e+1;
+constexpr double B2 =  6.8718700749205790830e+2;
+constexpr double B3 =  5.3941960214247511077e+3;
+constexpr double B4 =  2.1213794301586595867e+4;
+constexpr double B5 =  3.9307895800092710610e+4;
+constexpr double B6 =  2.8729085735721942674e+4;
+constexpr double B7 =  5.2264952788528545610e+3;
+
+// Coefficients for the tail regions (0.425 < |p - 0.5| < 0.5)
+constexpr double C0 =  1.42343711074721209650e0;
+constexpr double C1 =  4.63033784615654529590e0;
+constexpr double C2 =  5.76949722146864628717e0;
+constexpr double C3 =  3.64784832476320460504e0;
+constexpr double C4 =  1.27045825245236838258e0;
+constexpr double C5 =  2.41780725177450611770e-1;
+constexpr double C6 =  2.27001535109994502416e-2;
+constexpr double C7 =  7.74545433931955401503e-4;
+
+constexpr double D1 =  2.05319162663775882187e0;
+constexpr double D2 =  1.67638483950684182780e0;
+constexpr double D3 =  6.89767334985100004550e-1;
+constexpr double D4 =  1.48103976427480074590e-1;
+constexpr double D5 =  1.51986665636164571966e-2;
+constexpr double D6 =  5.47593808499534494600e-4;
+constexpr double D7 =  1.05075007164441684324e-9;
+
+// Coefficients for the far tail (|p - 0.5| >= 0.5, i.e. p < 0.02425 or p > 0.97575)
+constexpr double E0 =  6.65790464350110377720e0;
+constexpr double E1 =  5.46378491116411436990e0;
+constexpr double E2 =  1.78482653991729133580e0;
+constexpr double E3 =  2.96560571828504891230e-1;
+constexpr double E4 =  2.65321895265761230930e-2;
+constexpr double E5 =  1.24266094738807843860e-3;
+constexpr double E6 =  2.71155556874348757815e-5;
+constexpr double E7 =  2.01033439929228813265e-7;
+
+constexpr double F1 =  5.99832206555887937690e-1;
+constexpr double F2 =  1.36929880922735805310e-1;
+constexpr double F3 =  1.48753612908506508940e-2;
+constexpr double F4 =  7.86869131145613259100e-4;
+constexpr double F5 =  1.84631831751005468180e-5;
+constexpr double F6 =  1.42151175831644588870e-7;
+constexpr double F7 =  2.04426310338993978564e-15;
+
+constexpr double SPLIT1 = 0.425;
+constexpr double SPLIT2 = 5.0;
+constexpr double CONST1 = 0.180625;   // 0.5 - SPLIT1^2 / 2
+constexpr double CONST2 = 1.6;
+
+[[gnu::always_inline]] inline double qnorm(double p)
+{
+  if (p <= 0.0) return -INFINITY;
+  if (p >= 1.0) return  INFINITY;
+
+  const double q = p - 0.5;
+
+  if (std::fabs(q) <= SPLIT1) {
+    // Central region
+    const double r = CONST1 - q * q;
+    return q * (((((((A7*r+A6)*r+A5)*r+A4)*r+A3)*r+A2)*r+A1)*r+A0) /
+      (((((((B7*r+B6)*r+B5)*r+B4)*r+B3)*r+B2)*r+B1)*r+1.0);
+  }
+
+  // Tail regions — work with the smaller of p and 1-p
+  double r = std::sqrt(-std::log(q < 0.0 ? p : 1.0 - p));
+  double x;
+
+  if (r <= SPLIT2) {
+    r -= CONST2;
+    x = (((((((C7*r+C6)*r+C5)*r+C4)*r+C3)*r+C2)*r+C1)*r+C0) /
+      (((((((D7*r+D6)*r+D5)*r+D4)*r+D3)*r+D2)*r+D1)*r+1.0);
+  } else {
+    r -= SPLIT2;
+    x = (((((((E7*r+E6)*r+E5)*r+E4)*r+E3)*r+E2)*r+E1)*r+E0) /
+      (((((((F7*r+F6)*r+F5)*r+F4)*r+F3)*r+F2)*r+F1)*r+1.0);
+  }
+
+  return q < 0.0 ? -x : x;
+}
+
+} // namespace as241
+
+inline double cpp_qnorm_std(double p)
+{
+  return as241::qnorm(p);
+}
+#endif // PNORM_MODE != 0
+
+// ===========================================================================
 // Shared helpers
 // ===========================================================================
 
@@ -190,10 +310,13 @@ inline double fast_dlnorm(double t, double m, double s)
 
 #if   PNORM_MODE == 2
 #define PNORM_STD(x, lower, logp) pnorm_detail::as_pnorm_std((x), (lower), (logp))
+#define QNORM_STD(p)              pnorm_detail::cpp_qnorm_std((p))
 #elif PNORM_MODE == 1
 #define PNORM_STD(x, lower, logp) pnorm_detail::hart_pnorm_std((x), (lower), (logp))
+#define QNORM_STD(p)              pnorm_detail::cpp_qnorm_std((p))
 #else
 #define PNORM_STD(x, lower, logp) pnorm_detail::exact_pnorm_std((x), (lower), (logp))
+#define QNORM_STD(p)              pnorm_detail::exact_qnorm_std((p))
 #endif
 
 // ===========================================================================
