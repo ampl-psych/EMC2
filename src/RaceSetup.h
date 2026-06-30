@@ -24,12 +24,6 @@ using race_combined_fn = void(*)(const NumericVector&,
                               double* __restrict__ raw,
                               RaceScratch& scratch);
 
-// using censor_fn = void(*)(const CensorSpec& censor,
-//                           const ParamTable& pt,
-//                           const RaceSpec& spec,
-//                           double* __restrict__ ll_row,
-//                           RaceScratch& scratch);
-
 using survivor_fn = void(*)(const std::vector<int>& idx,
                             const std::vector<double>& bound,
                             const ParamTable& pt,
@@ -72,6 +66,16 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_t0       = pt.base_index_for("t0");
     s.fill_both         = dlba_plba_fast;
     s.fill_survivor     = lba_survivor;
+  } else if(type == "DDM") {
+    s.spec.col_s        = pt.base_index_for("s");
+    s.spec.col_a        = pt.base_index_for("a");
+    s.spec.col_v        = pt.base_index_for("v");
+    s.spec.col_sv       = pt.base_index_for("sv");
+    s.spec.col_Z        = pt.base_index_for("Z");
+    s.spec.col_SZ       = pt.base_index_for("SZ");
+    s.spec.col_t0       = pt.base_index_for("t0");
+    s.spec.col_st0      = pt.base_index_for("st0");
+//    s.fill_survivor     = ddm_survivor;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");

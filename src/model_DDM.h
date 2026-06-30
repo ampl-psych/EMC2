@@ -7,6 +7,72 @@ using namespace Rcpp;
 #include "pdf_fncs.h"
 #include "fncs_seven.h"
 #include "tools.h"
+#include "RaceSpec.h"
+
+
+void fill_ddm(const NumericVector& rts,
+              const IntegerVector& R,
+              const ParamTable& pt,
+              const RaceSpec& spec,
+              const std::vector<int>& idx_all,
+              double* __restrict__ ll_row)
+{
+    const double* __restrict__ rt_ptr = rts.begin();
+    const int*    __restrict__ R_ptr  = R.begin();
+
+    const double* __restrict__ v   = &pt.base(0, spec.col_v);
+    const double* __restrict__ a   = &pt.base(0, spec.col_a);
+    const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+    const double* __restrict__ z   = &pt.base(0, spec.col_Z);
+    const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+    const double* __restrict__ s   = &pt.base(0, spec.col_s);
+    const double* __restrict__ sz  = &pt.base(0, spec.col_SZ);
+    const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
+    const int n = (int)idx_all.size();
+
+    int    Epsflag = 1;
+    double eps     = 5e-3;
+    int    K       = 0;
+
+    for (int j = 0; j < n; ++j) {
+        const int i       = idx_all[j];
+        const double pm   = (R_ptr[i] == 1) ? -1.0 : 1.0;
+        const double teff = rt_ptr[i] - t0[i];
+
+        if (sz[i] == 0.0 && st0[i] == 0.0) {
+          if (teff <= 0.0) { ll_row[i] = R_NegInf; continue; }
+
+            double val = dwiener(
+                teff * pm,
+                a[i]  / s[i],
+                v[i]  / s[i],
+                z[i],
+                sv[i] / s[i],
+                eps, K, Epsflag);
+          ll_row[i] = std::isfinite(val) ? val : R_NegInf;
+        } else {
+            int    Neval = 6000;
+            int    choice = 0;
+            double Rval, Rerr;
+
+            double sz_i = (z[i] < (1.0 - z[i]))
+                ? 2.0 * sz[i] *        z[i]
+                : 2.0 * sz[i] * (1.0 - z[i]);
+
+            ddiff(choice,
+                  rt_ptr[i], pm,
+                  a[i]  / s[i],
+                  v[i]  / s[i],
+                  t0[i], z[i], sz_i,
+                  sv[i] / s[i],
+                  st0[i],
+                  eps, K, Epsflag, Neval, &Rval, &Rerr);
+
+            ll_row[i] = (std::isfinite(Rval) && Rval > 0.0) ? std::log(Rval) : R_NegInf;
+        }
+    }
+}
+
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, std::vector<int> is_ok){
   int Epsflag = 1;
