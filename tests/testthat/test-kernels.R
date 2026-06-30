@@ -232,17 +232,29 @@ covariate1 <- c(
   0, 1, 0, 0, 0, 0, 1, NA, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, NA, 0, 1, 0, 0
 )
 
+make_minimal_emc_wrap <- function(kernel_name) {
+  make_minimal_emc(
+    trend = make_trend(
+      make_base(
+        target_parameter = "m",
+        type = "lin",
+        kernel = make_kernel(
+          cov_names = "covariate1",
+          type = kernel_name
+        )
+      )
+    ),
+    n_trials = length(covariate1),
+    covariate1 = covariate1
+  )
+}
+
 # Beta-binomial (basic)
 snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 4)
-trend_bb_basic <- make_trend(
-  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial'))
-)
-emc <- make_minimal_emc(
-  trend_bb_basic, n_trials = length(covariate1), covariate1 = covariate1
-)
+emc <- make_minimal_emc_wrap("beta_binomial")
 # uniform prior: Beta shape parameters = 1
 kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1))
-true_out <- beta_binomial_basic(
+true_out <- beta_binomial(
   x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2])
 )
 # plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
@@ -254,7 +266,7 @@ kernel_pars <- c(
   "m.a0" = log(mean(covariate1, na.rm = TRUE) * 10),
   "m.b0" = log((1 - mean(covariate1, na.rm = TRUE)) * 10)
 )
-true_out <- beta_binomial_basic(
+true_out <- beta_binomial(
   x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2])
 )
 # plot(seq_along(covariate1), true_out, ylim = c(0.1, 0.6), type = "l", bty = "n"); abline(h = mean(covariate1, na.rm = TRUE), lty = 2)
@@ -266,15 +278,10 @@ test_that("beta_binomial_Rcpp", {expect_snapshot(snapshot_matrix)})
 
 
 # Beta-binomial (exponential decay)
-trend_bb_decay <- make_trend(
-  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial_decay'))
-)
-emc <- make_minimal_emc(
-  trend_bb_decay, n_trials = length(covariate1), covariate1 = covariate1
-)
+emc <- make_minimal_emc_wrap("beta_binomial_decay")
 # uniform prior with decay = 4: Updates are weighted by exp(-1/4); implies half-life of 4*log(2)=2.8 trials
 kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1), "m.decay" = log(4))
-true_out <- beta_binomial_decay(
+true_out <- beta_binomial(
   x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
   decay = exp(kernel_pars[3])
 )
@@ -286,16 +293,12 @@ test_that("beta_binomial_decay_Rcpp", {
   expect_snapshot(matrix(c(true_out, emc_out), nrow = length(covariate1)))
 })
 
+
 # Beta-binomial (sliding window)
-trend_bb_window <- make_trend(
-  make_base('m', 'lin', make_kernel('covariate1', 'beta_binomial_window'))
-)
-emc <- make_minimal_emc(
-  trend_bb_window, n_trials = length(covariate1), covariate1 = covariate1
-)
+emc <- make_minimal_emc_wrap("beta_binomial_window")
 # uniform prior with memory window of 6 trials
 kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1), "m.window" = log(6))
-true_out <- beta_binomial_window(
+true_out <- beta_binomial(
   x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
   window = exp(kernel_pars[3])
 )
@@ -310,12 +313,7 @@ test_that("beta_binomial_window_Rcpp", {
 
 # Dynamic Belief Model
 snapshot_matrix <- matrix(nrow = length(covariate1), ncol = 8)
-trend_dbm <- make_trend(
-  make_base('m', 'lin', make_kernel('covariate1', 'dbm'))
-)
-emc <- make_minimal_emc(
-  trend_dbm, n_trials = length(covariate1), covariate1 = covariate1
-)
+emc <- make_minimal_emc_wrap("dbm")
 # change point probability of zero, output should be equivalent to Beta binomial
 kernel_pars <- c(
   "m.cp" =  qnorm(1e-12),
@@ -335,9 +333,7 @@ emc_out_bb <- as.numeric(
       "m.a0" = log(mean(covariate1, na.rm = TRUE) * 10),
       "m.b0" = log((1 - mean(covariate1, na.rm = TRUE)) * 10)
     ),
-    emc = make_minimal_emc(
-      trend_bb_basic, n_trials = length(covariate1), covariate1 = covariate1
-    )
+    emc = make_minimal_emc_wrap("beta_binomial")
   )
 )
 all.equal(emc_out, emc_out_bb, tolerance = 1e-6)
