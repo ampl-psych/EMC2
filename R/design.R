@@ -70,10 +70,11 @@
 #'     )
 #'   )
 #'   }
-#' @param LC Lower censoring limit. Either a scalar or a vector of length
-#' @param UC Upper censoring limit. Either a scalar or a vector of length nrow(data)
-#' @param LT Lower truncation limit. Either a scalar or a vector of length nrow(data)
-#' @param UT Upper truncation limit. Either a scalar or a vector of length nrow(data)
+#' @param TC A named list of truncation/censoring settings passed on to
+#'   \code{make_missing} (e.g. \code{list(LT = 0.2, UC = 2)}); elements
+#'   \code{LT}/\code{LC}/\code{UC}/\code{UT} (scalars or subject-named vectors)
+#'   plus \code{LCresponse}/\code{UCresponse}/etc. Stored on the design and
+#'   applied by \code{make_data}. \code{NULL} means no truncation/censoring.
 #' @param ... Additional, optional arguments
 #'
 #' @return A design list.
@@ -106,7 +107,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                    functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
                    trend=NULL,
                    transform = NULL, bound = NULL, parameter_design=NULL,
-                   LT=NULL, LC=NULL, UC=NULL, UT=NULL,
+                   TC=NULL,
                    ...){
 
   optionals <- list(...)
@@ -137,6 +138,12 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     class(design) <- "emc.design"
     return(design)
   }
+  # Allow a customized model passed as a called list (e.g.
+  # design(model = SSEXG(stop_method = "gl"))), not just the bare constructor.
+  if (is.list(model) && !is.function(model)) {
+    .model_list_arg <- model
+    model <- function() return(.model_list_arg)
+  }
   if (!is.null(data)) {
     if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
     data$subjects <- factor(data$subjects)
@@ -152,11 +159,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       # covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
-    # From ZH's branch -- not sure again how we want to code LC/UC/LT/UT. Attributes?
-    if(is.null(LT)){if("LT"%in%colnames(data)) LT=data$LT else{LT <- attr(data,"LT")}}; if (is.null(LT)) LT <- 0
-    if(is.null(UT)){if("UT"%in%colnames(data)) UT=data$UT else{UT <- attr(data,"UT")}}; if (is.null(UT)) UT <- Inf
-    if(is.null(LC)){if("LC"%in%colnames(data)) LC=data$LC else{LC <- attr(data,"LC")}}; if (is.null(LC)) LC <- 0
-    if(is.null(UC)){if("UC"%in%colnames(data)) UC=data$UC else{UC <- attr(data,"UC")}}; if (is.null(UC)) UC <- Inf
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
 
@@ -207,10 +209,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   formula <- prepared_design$formula
   constants <- prepared_design$constants
 
+  # Normalise the truncation/censoring list (Zach-style single interface); stored
+  # on the design as design$TC. make_data resolves it (with data columns) later.
+  TC <- check_missing(TC)
+
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
-                 parameter_design=parameter_design, LC=LC, UC=UC, LT=LT, UT=UT)
+                 parameter_design=parameter_design, TC=TC)
   class(design) <- "emc.design"
 
   # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model
@@ -689,7 +695,12 @@ design_model <- function(data,design,model=NULL,
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
+  # Only create Ffunction columns when missing. Many designs use stochastic
+  # Ffunctions (e.g. SSD assignment), so overwriting an existing column would
+  # silently change the design encoded in the data and break likelihood checks
+  # (and SBC, where simulated SSDs must survive into the fit's dadm).
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
+    if (i %in% names(da)) next
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da[,i] <- newF
   }

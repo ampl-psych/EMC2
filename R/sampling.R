@@ -697,6 +697,10 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
     if(is.null(model$c_name)){ # use the R implementation
       lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else {
+      # SS models: push stop_method/stop_n_nodes into the process-global C++
+      # stop-success config before any C++ likelihood eval (forked workers
+      # inherit it; PSOCK workers set it themselves). No-op for non-SS models.
+      set_stop_method_from_model(model)
       p_types <- names(model$p_types)
       designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")

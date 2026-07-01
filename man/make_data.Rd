@@ -12,6 +12,7 @@ make_data(
   expand = 1,
   staircase = NULL,
   functions = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -34,6 +35,11 @@ algorithm. If non-null and a list then passed through as is, if not it is assign
 default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
 
 \item{functions}{List of functions you want to apply to the data generation.}
+
+\item{TC}{A named list of truncation/censoring settings passed to
+\code{make_missing} (e.g. \code{list(LT = 0.2, UC = 2)}). If \code{NULL}, the
+settings stored on the design (\code{design(TC = ...)}) or read from the data
+columns are used; otherwise no truncation/censoring is applied.}
 
 \item{...}{Additional optional arguments}
 }

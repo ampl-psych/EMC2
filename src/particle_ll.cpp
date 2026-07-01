@@ -14,6 +14,9 @@
 #include "model_RDM.h"
 #include "model_DDM.h"
 #include "model_MRI.h"
+#include "model_SS_EXG.h"    // stop-signal ex-Gaussian race (needs exgaussian/stop_quad)
+#include "model_SS_RDEX.h"   // stop-signal Wald-go / exG-stop (needs model_RDM.h above)
+#include "ss_likelihood.h"   // SS trial-loop likelihood (needs both SS model headers + submat_rcpp)
 
 // RaceSetup last — references functions defined in model headers above
 #include "RaceSetup.h"
@@ -616,6 +619,34 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       lls[i] = is_ar1 ? c_log_likelihood_MRI_white(pars, y, is_ok, n_rows, n_pars, min_ll)
         : c_log_likelihood_MRI(pars, y, is_ok, n_rows, n_pars, min_ll);
       }
+  // -----------------------------------------------------------------------
+  // Stop-signal (SSEXG / SSRDEX)
+  // -----------------------------------------------------------------------
+  } else if (type == "SSEXG" || type == "SSRDEX") {
+    IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    const int n_lR = unique(lR).length();
+    const int n_trials_ss = (n_lR > 0) ? (n_rows / n_lR) : n_rows;
+    const std::string type_std(type.get_cstring());
+    SSModelAdapter ssa = resolve_ss_adapter(type_std);
+    for (int i = 0; i < n_particles; ++i) {
+      std::fill(is_ok.begin(), is_ok.end(), 1);
+      if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
+      // The SS trial loop reads parameters by FIXED column index (mu=0..tauS=5,
+      // tf=6, gf=7, exg_lb=8, exgS_lb=9 / RDEX layout). get_pars_matrix uses
+      // keep_names order, which is NOT guaranteed to match p_types declaration
+      // order (e.g. tf/gf and exg_lb/exgS_lb come out swapped), so reorder to
+      // p_types order to make the fixed indices valid.
+      pars = submat_rcpp_col_by_names(pars, p_types);
+      c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
+      lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_ss(pars, data, n_trials_ss, expand, min_ll, is_ok,
+                                   ssa.go_lpdf_ptr, ssa.go_lccdf_ptr,
+                                   ssa.stop_logsurv_ptr, ssa.stop_success_ptr,
+                                   ssa.idx_tf, ssa.idx_gf);
+    }
   // -----------------------------------------------------------------------
   // Race models (RDM, LBA, LNR)
   // -----------------------------------------------------------------------

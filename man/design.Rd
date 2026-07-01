@@ -21,10 +21,7 @@ design(
   transform = NULL,
   bound = NULL,
   parameter_design = NULL,
-  LT = NULL,
-  LC = NULL,
-  UC = NULL,
-  UT = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -111,13 +108,11 @@ components:
   )
   }}
 
-\item{LT}{Lower truncation limit. Either a scalar or a vector of length nrow(data)}
-
-\item{LC}{Lower censoring limit. Either a scalar or a vector of length}
-
-\item{UC}{Upper censoring limit. Either a scalar or a vector of length nrow(data)}
-
-\item{UT}{Upper truncation limit. Either a scalar or a vector of length nrow(data)}
+\item{TC}{A named list of truncation/censoring settings passed on to
+\code{make_missing} (e.g. \code{list(LT = 0.2, UC = 2)}); elements
+\code{LT}/\code{LC}/\code{UC}/\code{UT} (scalars or subject-named vectors)
+plus \code{LCresponse}/\code{UCresponse}/etc. Stored on the design and
+applied by \code{make_data}. \code{NULL} means no truncation/censoring.}
 
 \item{...}{Additional, optional arguments}
 }

@@ -187,10 +187,17 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   }
 
   # Censoring proportions (like truncation dont censor if equal to LC or UC)
+  # SS convention: intrinsic no-response (stop-success / go-failure) arrives from
+  # the rfun as an already-NA rt. That is NOT censoring — it takes the dedicated
+  # `withheld` code 4 (below) and is excluded from lower/upper censoring here
+  # (mirrors the go/nogo special case above). Detect SS by the SSD column.
+  is_ss <- "SSD" %in% names(data)
+  is_nr <- is_ss & is.na(data$rt)
   cutL <- is.finite(data$rt) & (data$rt < LC_eff)
   cutL[is.na(cutL)] <- TRUE; cutL[no_censor] <- FALSE
   cutU <- (data$rt > UC_eff)
   cutU[is.na(cutU)] <- TRUE; cutU[no_censor] <- FALSE
+  cutL[is_nr] <- FALSE; cutU[is_nr] <- FALSE
   if (verbose) {
     if (!all(LC_eff==0)) {
       if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
@@ -211,13 +218,43 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   data$R[cutL & !LCresponse] <- NA
   data$R[cutU & !UCresponse] <- NA
 
-  # Add missingness column
+  # Add missingness column (1=lower, 2=upper, 3=both, 4=withheld/intrinsic NR)
   data$missingness <- NA_integer_
   data$missingness[cutL & !cutU] <- 1L  # lower-censored only
   data$missingness[cutU & !cutL] <- 2L  # upper-censored only
   data$missingness[cutL &  cutU] <- 3L  # both
+  data$missingness[is_nr]        <- 4L  # SS withheld / intrinsic no-response
 
   data
+}
+
+
+# Resolve the truncation/censoring list TC into a full list of make_missing
+# arguments. TC is the single interface used by design() and make_data() (Zach
+# style): when NULL the defaults are used, overridden first by matching data
+# columns (LT/LC/UC/UT) then by a design's stored TC. Reuses add_defaults().
+check_missing <- function(TC, data = NULL, design = NULL) {
+  if (is.null(TC)) {
+    TC <- list()
+    TC <- add_defaults(TC, LT = 0, LC = 0, UT = Inf, UC = Inf,
+      no_truncate = FALSE, no_censor = FALSE, verbose = FALSE, digits = 2,
+      LCresponse = FALSE, UCresponse = FALSE, LCdirection = TRUE, UCdirection = TRUE,
+      pContaminant = NULL, rt_resolution = NULL)
+    if (!is.null(data)) {
+      for (i in c("LT", "LC", "UC", "UT")) {
+        if (!is.null(data[[i]])) TC[[i]] <- data[[i]]
+      }
+    } else if (!is.null(design) && !is.null(design$TC)) {
+      for (i in names(TC)) TC[[i]] <- design$TC[[i]]
+    }
+  } else {
+    if (!is.list(TC)) stop("TC must be a list")
+    TC <- add_defaults(TC, LT = 0, LC = 0, UT = Inf, UC = Inf,
+      no_truncate = FALSE, no_censor = FALSE, verbose = FALSE, digits = 2,
+      LCresponse = FALSE, UCresponse = FALSE, LCdirection = TRUE, UCdirection = TRUE,
+      pContaminant = NULL, rt_resolution = NULL)
+  }
+  TC
 }
 
 
@@ -244,6 +281,10 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
+#' @param TC A named list of truncation/censoring settings passed to
+#'   \code{make_missing} (e.g. \code{list(LT = 0.2, UC = 2)}). If \code{NULL}, the
+#'   settings stored on the design (\code{design(TC = ...)}) or read from the data
+#'   columns are used; otherwise no truncation/censoring is applied.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -272,7 +313,7 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' @export
 
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
-                      functions = NULL, ...)
+                      functions = NULL, TC = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -297,14 +338,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' each trial. Must have names specified in the design Fcovariates argument.
   check_bounds <- FALSE
 
-  LT<-0
-  UT<-Inf
-  LC<-0
-  UC<-Inf
-  LCresponse<-TRUE
-  UCresponse<-TRUE
-  LCdirection<-TRUE
-  UCdirection<-TRUE
   force_direction<-FALSE
   force_response<-FALSE
   rtContaminantNA<-FALSE
@@ -319,6 +352,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(is.null(data)) data <- get_data(parameters)
     parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
   }
+
+  # Resolve truncation/censoring from the TC list (Zach-style single interface):
+  # defaults, overridden by data columns (LT/LC/UC/UT) or the design's stored TC.
+  TC <- check_missing(TC, design = design, data = data)
+  LT <- TC$LT; UT <- TC$UT; LC <- TC$LC; UC <- TC$UC
+  LCresponse <- TC$LCresponse; UCresponse <- TC$UCresponse
+  LCdirection <- TC$LCdirection; UCdirection <- TC$UCdirection
 
   # Make sure parameters are in the right format, either matrix or vector
   sampled_p_names <- names(sampled_pars(design))
@@ -363,10 +403,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                            do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH, NOT SURE IF THIS IS WISE
                            drop_R = F)
   } else {
-    LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
-    UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
-    LC <- attr(data,"LC"); if (is.null(LC)) LC <- 0
-    UC <- attr(data,"UC"); if (is.null(UC)) UC <- Inf
+    # LT/LC/UC/UT come from TC (check_missing above, which reads data columns).
     if (!force_direction) {
       ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
       LCdirection <- any(ok)
@@ -387,9 +424,20 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     data <- add_trials(data[order(data$subjects),])
   }
+  # SS staircase: make_ssd() attaches an "emc_ssd" attribute (carrying the
+  # staircase spec) to the SSD vector it returns. Capture it here before the
+  # value is stored into the data.frame (which strips custom attributes), then
+  # feed it in as `staircase` below so the rfun can resolve NA-marked SSDs.
+  ssd_meta <- NULL
   if(!is.null(functions)){
     for(i in 1:length(functions)){
-      data[[names(functions)[i]]] <- functions[[i]](data)
+      value <- functions[[i]](data)
+      meta <- attr(value, "emc_ssd")
+      if(!is.null(meta)){
+        attr(value, "emc_ssd") <- NULL
+        ssd_meta <- meta$staircase
+      }
+      data[[names(functions)[i]]] <- value
     }
   }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
@@ -457,18 +505,57 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                     data.frame(lapply(data,rep,times=expand)))
       pars <- apply(pars,2,rep,times=expand)
     }
+    # Finalise the staircase spec before simulation: the per-trial stepping in
+    # the rfun classifies each simulated response via the spec's response labels
+    # (up/down rules), so the lR levels and upper-censor must be pushed into the
+    # spec AND its per-group sub-specs, else stepping misclassifies and the SSD
+    # ladder runs away. (Mirrors Zach's make_data staircase finalisation.)
+    if (is.null(staircase) && !is.null(ssd_meta)) staircase <- ssd_meta
     if (!is.null(staircase)) {
+      lR_levels <- if (is.null(data$lR)) character(0) else levels(data$lR)
+      staircase$labels <- lR_levels
+      if (!is.null(staircase$specs)) {
+        for (nm in names(staircase$specs)) {
+          if (is.list(staircase$specs[[nm]])) staircase$specs[[nm]]$labels <- lR_levels
+        }
+      }
+      staircase$UC <- UC
       attr(data, "staircase") <- staircase
     }
     if (any(names(data)=="RACE")) {
       Rrt <- RACE_rfun(data, pars, model)
     } else Rrt <- model()$rfun(data,pars)
+    staircase_meta <- attr(data, "staircase")
     dropNames <- c("lR","lM")
     if (!return_Ffunctions && !is.null(design$Ffunctions))
       dropNames <- c(dropNames,names(design$Ffunctions))
+    # Protect simulated SSD: when supplied via functions=list(SSD=...) it is
+    # registered as an Ffunction, but unlike deterministic Ffunctions its random
+    # per-trial values cannot be re-derived from the design, so it must survive
+    # into the returned data (mirrors Zach's make_data SSD guard).
+    if ("SSD" %in% dropNames) dropNames <- dropNames[!grepl("SSD", dropNames)]
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
+    # Subsetting strips attributes; re-attach the staircase so the returned data
+    # carries it for downstream use (make_emc etc.).
+    if (!is.null(staircase_meta)) attr(data, "staircase") <- staircase_meta
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    # Apply truncation/censoring for every RT model (Zach-style). make_missing
+    # enforces the cens convention: rt finite-or-NA (no Inf/-Inf) + a `missingness`
+    # column (1/2/3 = lower/upper/both) and LC/UC/LT/UT columns. SS additionally
+    # tags intrinsic no-response (stop-success / go-failure) as code 4. Skipped for
+    # choice-only models (all-NA rt would be mis-tagged). rt_resolution comes from
+    # TC (NULL by default -> binning deferred to make_emc, matching Zach).
+    if ("rt" %in% names(data) && !is_choice_only_model_type(model())) {
+      stair_attr <- attr(data, "staircase")
+      data <- make_missing(data, LT = TC$LT, LC = TC$LC, UC = TC$UC, UT = TC$UT,
+        LCresponse = TC$LCresponse, UCresponse = TC$UCresponse,
+        LCdirection = TC$LCdirection, UCdirection = TC$UCdirection,
+        pContaminant = TC$pContaminant, no_truncate = TC$no_truncate,
+        no_censor = TC$no_censor, verbose = TC$verbose,
+        rt_resolution = TC$rt_resolution, digits = TC$digits)
+      if (!is.null(stair_attr)) attr(data, "staircase") <- stair_attr
+    }
     if (is_choice_only_model_type(model()) &&
         "rt" %in% names(data) &&
         all(is.na(data$rt))) {

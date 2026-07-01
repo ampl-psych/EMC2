@@ -37,20 +37,48 @@ pWald <- function(t, v, B, A, t0) {
     .Call(`_EMC2_pWald`, t, v, B, A, t0)
 }
 
-pEXG <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
-    .Call(`_EMC2_pEXG`, q, mu, sigma, tau, lower_tail, log_p)
+emc2_set_stop_method <- function(method = "auto", n_nodes = 64L) {
+    invisible(.Call(`_EMC2_emc2_set_stop_method`, method, n_nodes))
 }
 
-dEXG <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
-    .Call(`_EMC2_dEXG`, x, mu, sigma, tau, log_d)
+emc2_get_stop_method <- function() {
+    .Call(`_EMC2_emc2_get_stop_method`)
 }
 
-dEXGrace <- function(dt, mu, sigma, tau) {
-    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
+ss_texg_stop_success_auto_branch <- function(SSD, pars, upper = -1.0) {
+    .Call(`_EMC2_ss_texg_stop_success_auto_branch`, SSD, pars, upper)
 }
 
-stopfn_exg <- function(t, mu, sigma, tau, SSD) {
-    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
+ss_texg_stop_success_value <- function(SSD, pars, method = "integrate", upper = -1.0, n_nodes = 64L, k_sigma = 8.0, k_tau = 16.0, max_subdiv = 100L, abs_tol = 1e-8, rel_tol = 1e-6) {
+    .Call(`_EMC2_ss_texg_stop_success_value`, SSD, pars, method, upper, n_nodes, k_sigma, k_tau, max_subdiv, abs_tol, rel_tol)
+}
+
+dEXGrace <- function(dt, mu, sigma, tau, min_ll) {
+    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau, min_ll)
+}
+
+stopfn_exg <- function(t, mu, sigma, tau, SSD, min_ll) {
+    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD, min_ll)
+}
+
+pTEXG_vec <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_vec`, q, mu, sigma, tau, lb, lower_tail, log_p)
+}
+
+dTEXG_vec <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_vec`, x, mu, sigma, tau, lb, log_d)
+}
+
+dTEXGrace <- function(dt, mu, sigma, tau, lb) {
+    .Call(`_EMC2_dTEXGrace`, dt, mu, sigma, tau, lb)
+}
+
+stopfn_texg <- function(t, mu, sigma, tau, lb, SSD) {
+    .Call(`_EMC2_stopfn_texg`, t, mu, sigma, tau, lb, SSD)
+}
+
+ss_rdex_stop_success_value <- function(SSD, pars, method = "integrate", upper = -1.0, n_nodes = 64L, k_sigma = 8.0, k_tau = 16.0, max_subdiv = 100L, abs_tol = 1e-8, rel_tol = 1e-6) {
+    .Call(`_EMC2_ss_rdex_stop_success_value`, SSD, pars, method, upper, n_nodes, k_sigma, k_tau, max_subdiv, abs_tol, rel_tol)
 }
 
 pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
@@ -61,36 +89,44 @@ dEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
     .Call(`_EMC2_dEXG_RDEX`, x, mu, sigma, tau, log_d)
 }
 
-pigt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_pigt0_RDEX`, t, k, l)
+dWald_RDEX_old <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_dWald_RDEX_old`, t, v, B, A, t0)
 }
 
-digt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_digt0_RDEX`, t, k, l)
+dWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0, s)
 }
 
-pigt_RDEX <- function(t, k = 1, l = 1, a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_pigt_RDEX`, t, k, l, a, threshold)
+pWald_RDEX_old <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_pWald_RDEX_old`, t, v, B, A, t0)
 }
 
-digt_RDEX <- function(t, k = 1., l = 1., a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_digt_RDEX`, t, k, l, a, threshold)
+pWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0, s)
 }
 
-dWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0)
+pTEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_RDEX`, q, mu, sigma, tau, lb, lower_tail, log_p)
 }
 
-pWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0)
+dTEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_RDEX`, x, mu, sigma, tau, lb, log_d)
 }
 
-dRDEXrace <- function(dt, mu, sigma, tau, v, B, A, t0, exgWinner = TRUE) {
-    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, v, B, A, t0, exgWinner)
+dRDEXrace_old <- function(dt, mu, sigma, tau, v, B, A, t0, exgWinner = TRUE) {
+    .Call(`_EMC2_dRDEXrace_old`, dt, mu, sigma, tau, v, B, A, t0, exgWinner)
 }
 
-stopfn_rdex <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
-    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
+dRDEXrace <- function(dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner = TRUE) {
+    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner)
+}
+
+stopfn_rdex_old <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
+    .Call(`_EMC2_stopfn_rdex_old`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
+}
+
+stopfn_rdex <- function(t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD) {
+    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD)
 }
 
 fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {

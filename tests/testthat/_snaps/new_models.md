@@ -30,25 +30,25 @@
     Code
       make_data(p_vector, dGNG, n_trials = 10)
     Output
-         trials subjects     S     R        rt
-      1       1        1  left right 0.5699457
-      2       2        1  left right 1.0712502
-      3       3        1  left right 0.9057347
-      4       4        1  left right 0.8566880
-      5       5        1  left right 0.6253342
-      6       6        1  left right 1.0906341
-      7       7        1  left right 0.5305895
-      8       8        1  left right 0.5611776
-      9       9        1  left right 0.5721548
-      10     10        1  left right 0.7099338
-      11     11        1 right right 0.5117904
-      12     12        1 right right 0.5066511
-      13     13        1 right right 0.7898381
-      14     14        1 right  left        NA
-      15     15        1 right right 0.9470190
-      16     16        1 right  left        NA
-      17     17        1 right  left        NA
-      18     18        1 right  left        NA
-      19     19        1 right right 0.4737746
-      20     20        1 right  left        NA
+         trials subjects     S     R        rt LT  UT LC  UC missingness
+      1       1        1  left right 0.5699457  0 Inf  0 Inf          NA
+      2       2        1  left right 1.0712502  0 Inf  0 Inf          NA
+      3       3        1  left right 0.9057347  0 Inf  0 Inf          NA
+      4       4        1  left right 0.8566880  0 Inf  0 Inf          NA
+      5       5        1  left right 0.6253342  0 Inf  0 Inf          NA
+      6       6        1  left right 1.0906341  0 Inf  0 Inf          NA
+      7       7        1  left right 0.5305895  0 Inf  0 Inf          NA
+      8       8        1  left right 0.5611776  0 Inf  0 Inf          NA
+      9       9        1  left right 0.5721548  0 Inf  0 Inf          NA
+      10     10        1  left right 0.7099338  0 Inf  0 Inf          NA
+      11     11        1 right right 0.5117904  0 Inf  0 Inf          NA
+      12     12        1 right right 0.5066511  0 Inf  0 Inf          NA
+      13     13        1 right right 0.7898381  0 Inf  0 Inf          NA
+      14     14        1 right  <NA>        NA  0 Inf  0 Inf           2
+      15     15        1 right right 0.9470190  0 Inf  0 Inf          NA
+      16     16        1 right  <NA>        NA  0 Inf  0 Inf           2
+      17     17        1 right  <NA>        NA  0 Inf  0 Inf           2
+      18     18        1 right  <NA>        NA  0 Inf  0 Inf           2
+      19     19        1 right right 0.4737746  0 Inf  0 Inf          NA
+      20     20        1 right  <NA>        NA  0 Inf  0 Inf           2
 
