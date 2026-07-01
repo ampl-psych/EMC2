@@ -273,3 +273,103 @@ void lnr_survivor(const std::vector<int>&     idx,
     out[sc_idx[j]] = 1.0 - cdf;
   }
 }
+
+// -----------------------------------------------------------------------------
+// LNR survivor with known response — numerical integration
+//
+// Computes P(winner finishes first in [lower, upper]) for one trial by
+// integrating f_winner(t) * prod_{j != winner} S_j(t) over [lower, upper].
+// -----------------------------------------------------------------------------
+
+struct LNRIntegrand {
+  int           n_acc;
+  int           winner;   // 0-based within-trial index
+  const double* m;        // lognormal mean per accumulator
+  const double* s;        // lognormal sd per accumulator
+  const double* t0;
+};
+
+// hcubature callback: x[0] = absolute time t
+// retval[0] = f_winner(t - t0_winner) * prod_{j != winner} S_j(t - t0_j)
+inline int int_lnr_survivor(unsigned /*dim*/, const double* x, void* p,
+                            unsigned /*fdim*/, double* retval)
+{
+  const LNRIntegrand* P = static_cast<const LNRIntegrand*>(p);
+  const double t       = x[0];
+  const int    w       = P->winner;
+  const double t_eff_w = t - P->t0[w];
+
+  // Density of winner — early exit if t <= t0
+  if (t_eff_w <= 0.0) { retval[0] = 0.0; return 0; }
+  const double dens = DLNORM(t_eff_w, P->m[w], P->s[w]);
+  if (!(dens > 0.0))  { retval[0] = 0.0; return 0; }
+
+  // Survivor of each loser: 1 - plnorm(t - t0_j, m_j, s_j)
+  double out = dens;
+  for (int j = 0; j < P->n_acc; ++j) {
+    if (j == w) continue;
+    const double t_eff_j = t - P->t0[j];
+    const double cdf = (t_eff_j <= 0.0) ? 0.0 : PLNORM(t_eff_j, P->m[j], P->s[j]);
+    out *= (1.0 - cdf);
+  }
+  retval[0] = out;
+  return 0;
+}
+
+// Integrate f_winner * prod S_losers over [lower, upper] for one trial.
+// m/s/t0 are raw (no pre-scaling needed for LNR), length n_acc, caller-owned.
+inline double lnr_survivor_scalar(const double* m, const double* s,
+                                  const double* t0,
+                                  int n_acc, int winner,
+                                  double lower, double upper,
+                                  double abstol = 1e-8, double reltol = 1e-6,
+                                  int maxeval = 6000)
+{
+  LNRIntegrand ig{ n_acc, winner, m, s, t0 };
+  double val = 0.0, err = 0.0;
+  hcubature(int_lnr_survivor, static_cast<void*>(&ig), 1, &lower, &upper,
+            maxeval, abstol, reltol, &val, &err);
+  if (!std::isfinite(val) || val < 0.0) return 0.0;
+  if (val > 1.0)                         return 1.0;
+  return val;
+}
+
+// -----------------------------------------------------------------------------
+// lnr_survivor_with_response()
+//
+// For each entry j in idx:
+//   - idx[j]    = base row (t * n_acc) into ParamTable
+//   - winner[j] = within-trial winner index [0, n_acc-1]
+//   - lower[j]  = lower integration bound for this trial
+//   - upper[j]  = upper integration bound for this trial
+//   - out[j]    = integral result, one value per trial
+//
+// Scratch buffers allocated once (length n_acc), reused across trials.
+// No pre-scaling needed — LNR parameters enter DLNORM/PLNORM directly.
+// -----------------------------------------------------------------------------
+void lnr_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out)
+{
+  std::vector<double> m_buf(n_acc), s_buf(n_acc), t0_buf(n_acc);
+
+  const int n = (int)idx.size();
+  for (int j = 0; j < n; ++j) {
+    const int base = idx[j];  // = t * n_acc
+
+    for (int acc = 0; acc < n_acc; ++acc) {
+      const int row  = base + acc;
+      m_buf[acc]     = pt.base(row, spec.col_m);
+      s_buf[acc]     = pt.base(row, spec.col_s);
+      t0_buf[acc]    = pt.base(row, spec.col_t0);
+    }
+
+    out[j] = lnr_survivor_scalar(m_buf.data(), s_buf.data(), t0_buf.data(),
+                                 n_acc, winner[j], lower[j], upper[j]);
+  }
+}
