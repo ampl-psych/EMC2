@@ -53,6 +53,8 @@ get_missing <- function(supplied, data, bound_name, default,type) {
 #' @param rt_resolution A double, see make_emc, specified here so binning of rt and LC/UC/LT/UT is consistent.
 #'        The default is 1/60 as in make_emc, but when make_missing is called by make_data the default is to
 #'        do nothing unless an explicit is value passed in the missing list.
+#' @param digits Integer, number of decimal places used when rounding the
+#'        percentage summaries reported when \code{verbose = TRUE}. Default 2.
 #' @return A filtered and modified data frame with added/updated LC, UC, LT and UT columns
 #' @examples
 #' # First make some data
@@ -61,8 +63,8 @@ get_missing <- function(supplied, data, bound_name, default,type) {
 #'   matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
 #'   formula = list(B ~ 1, v ~ lM, A ~ 1, t0 ~ 1, s ~ lM),
 #'   constants = c(s = log(1)))
-#' p_vector <- log(c(B=2,A=.5,t0=0.2,v=1,v_lMTRUE=2,s_lMTRUE=.8)
-#' dat <- make_data(p_vector, designRDM,n_trials = 10)
+#' p_vector <- log(c(B=2,A=.5,t0=0.2,v=1,v_lMTRUE=2,s_lMTRUE=.8))
+#' dat <- make_data(p_vector, designRDM, n_trials = 10)
 #'
 #' # Filter data frame without LT/UC/LT/UT columns (as in most real data files)
 #' data <- dat
