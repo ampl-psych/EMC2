@@ -10,7 +10,7 @@ get_missing <- function(supplied, data, bound_name, default,type) {
       stop(bound_name," must be logical")
     if (type=="numeric" & !is.numeric(supplied))
       stop(bound_name," must be numeric")
-    subjectwise <- all(hasName(supplied,levels(data$subjects)))
+    subjectwise <- all(utils::hasName(supplied,levels(data$subjects)))
     if (!subjectwise) bound <- supplied else
       bound <- supplied[as.character(data$subjects)]
   }
@@ -55,16 +55,16 @@ get_missing <- function(supplied, data, bound_name, default,type) {
 #'        do nothing unless an explicit is value passed in the missing list.
 #' @return A filtered and modified data frame with added/updated LC, UC, LT and UT columns
 #' @examples
-#' First make some data
+#' # First make some data
 #'   designRDM <- design(model = RDM,
 #'   factors = list(subjects = 1:2, S = c("left", "right")),Rlevels = c("left", "right"),
 #'   matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
 #'   formula = list(B ~ 1, v ~ lM, A ~ 1, t0 ~ 1, s ~ lM),
 #'   constants = c(s = log(1)))
-#' p_vector <-log(c(B=2,A=.5,t0=0.2,v=1,v_lMTRUE=2,s_lMTRUE=.8)
+#' p_vector <- log(c(B=2,A=.5,t0=0.2,v=1,v_lMTRUE=2,s_lMTRUE=.8)
 #' dat <- make_data(p_vector, designRDM,n_trials = 10)
 #'
-#' Filter data frame without LT/UC/LT/UT columns (as in most real data files)
+#' # Filter data frame without LT/UC/LT/UT columns (as in most real data files)
 #' data <- dat
 #' mdata <- make_missing(dat,LT=.7,LC=.75,UC=1.5,UT=1.6,verbose=TRUE)
 #' @export
