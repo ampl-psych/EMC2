@@ -7,7 +7,7 @@
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-// #include "CensorSpec.h"
+#include "hcubature.h"
 
 using namespace Rcpp;
 
@@ -51,5 +51,13 @@ void lnr_survivor(const std::vector<int>&     idx,
                   double* __restrict__        out,
                   RaceScratch&                scratch);
 
+void lnr_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out);
 
 #endif

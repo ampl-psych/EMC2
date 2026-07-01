@@ -600,3 +600,53 @@ void ddm_survivor(const std::vector<int>&     idx,
     out[i] = S;
     }
 }
+
+
+void ddm_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out)
+{
+  // DDM has exactly 2 boundaries: winner=0 → upper (R=1), winner=1 → lower (R=2).
+  // P(winner hits first in [lo, hi]) = CDF_winner(hi) - CDF_winner(lo).
+  // No race integral needed — the two accumulators are the two boundaries of a
+  // single diffusion process, so the winning boundary is determined by R directly.
+
+  const double* __restrict__ v   = &pt.base(0, spec.col_v);
+  const double* __restrict__ a   = &pt.base(0, spec.col_a);
+  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
+  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
+  const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
+  const double* __restrict__ s   = &pt.base(0, spec.col_s);
+  const double* __restrict__ Z   = &pt.base(0, spec.col_Z);
+  const double* __restrict__ SZ  = &pt.base(0, spec.col_SZ);
+
+  const int n = (int)idx.size();
+  for (int j = 0; j < n; ++j) {
+    const int    i  = idx[j];           // base row = trial * n_acc, n_acc is always 1 for DDM
+    const int    R  = winner[j] + 1;    // 0-based winner → 1-based R (1=upper, 2=lower)
+    const double lo = lower[j];
+    const double hi = upper[j];
+
+    // CDF at upper bound
+    double cdf_hi = 0.0;
+    if (hi - t0[i] > 0.0)
+      cdf_hi = std::exp(ddm_logcdf_scalar(hi, R, v[i], a[i], sv[i],
+                                          t0[i], st0[i], s[i], Z[i], SZ[i]));
+
+    // CDF at lower bound
+    double cdf_lo = 0.0;
+    if (lo - t0[i] > 0.0)
+      cdf_lo = std::exp(ddm_logcdf_scalar(lo, R, v[i], a[i], sv[i],
+                                          t0[i], st0[i], s[i], Z[i], SZ[i]));
+
+    double p = cdf_hi - cdf_lo;
+    if (!std::isfinite(p) || p < 0.0) p = 0.0;
+    else if (p > 1.0)                  p = 1.0;
+    out[j] = p;
+  }
+}

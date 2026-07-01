@@ -7,7 +7,7 @@
 #include "math_utils.h"
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-// #include "CensorSpec.h"
+#include "hcubature.h"
 
 constexpr double LBA_A_ASYMPTOTIC = 1e-10;
 
@@ -88,5 +88,13 @@ void lba_survivor(const std::vector<int>& idx,
                   double* __restrict__ out,
                   RaceScratch& scratch);
 
+void lba_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out);
 
 #endif // model_LBA_h

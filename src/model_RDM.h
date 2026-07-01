@@ -8,7 +8,7 @@
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
 #include "ParamTable.h"
-// #include "CensorSpec.h"
+#include "hcubature.h"
 
 using namespace Rcpp;
 
@@ -198,5 +198,14 @@ void rdm_survivor(const std::vector<int>& idx,
                   const RaceSpec& spec,
                   double* __restrict__ out,
                   RaceScratch& scratch);
+
+void rdm_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out);
 
 #endif // rdm_h

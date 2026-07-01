@@ -343,7 +343,7 @@ double c_log_likelihood_race(ParamTable& pt,
   }
 
   // 4) Fill in trialwise censor probabilities
-  if (censor.any()) censor.fill_censored_rows(trunc.S_upper, trunc.S_lower, ll_trial, min_ll);
+  if (censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);
 
   // 5) Expand and sum
   const int  m       = expand.size();
@@ -385,7 +385,7 @@ double c_log_likelihood_DDM(ParamTable& pt,
   // Censoring: overwrite censored trials with their interval mass, reusing the
   // truncation survivors (trunc.S_lower / trunc.S_upper are defaulted when no
   // truncation columns are present).
-  if (censor.any()) censor.fill_censored_rows(trunc.S_upper, trunc.S_lower, ll_trial, min_ll);
+  if (censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);
 
   // 2. clamp non-ok trials
   auto clamp = [min_ll](double v) {
