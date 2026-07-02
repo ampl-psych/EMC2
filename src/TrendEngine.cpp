@@ -191,8 +191,8 @@ void init_combined_for_slot(KernelSlotSpec& slot,
                             const Rcpp::List& spec,
                             const Rcpp::DataFrame& data) {
 
-  Rcpp::CharacterVector cov_spec = spec["covariate"];
-  Rcpp::CharacterVector par_input = spec["par_input"];
+  Rcpp::CharacterVector cov_spec = Rcpp::as<Rcpp::CharacterVector>(spec["covariate"]);
+  Rcpp::CharacterVector par_input = Rcpp::as<Rcpp::CharacterVector>(spec["par_input"]);
 
   int n_covariates = cov_spec.size();
   int n_par_input  = par_input.size();
@@ -207,7 +207,7 @@ void init_combined_for_slot(KernelSlotSpec& slot,
   // copy covariate columns
   for (int i = 0; i < n_covariates; i++) {
     Rcpp::String cov_name = cov_spec[i];
-    slot.kernel_input.column(i) = Rcpp::as<Rcpp::NumericVector>(data[cov_name]);
+    slot.kernel_input.column(i) = Rcpp::as<Rcpp::NumericVector>(SEXP(data[cov_name]));
     col_names[i] = cov_name;
     slot.covariate_indices.push_back(i);
   }
@@ -233,7 +233,7 @@ void init_multicovariate_for_slot(KernelSlotSpec& slot,
     stop("init_multicovariate_for_slot: missing 'covariate' field");
   }
 
-  CharacterVector cov_spec(spec["covariate"]);
+  Rcpp::CharacterVector cov_spec = Rcpp::as<Rcpp::CharacterVector>(spec["covariate"]);
   const int n_covs   = cov_spec.size();
   const int n_trials = data.nrow();
 
@@ -296,7 +296,7 @@ void init_covariate_maps_for_slot(KernelSlotSpec& slot,
 
   string cov_name = as<string>(STRING_ELT(spec["covariate"], 0));
 
-  List maps_spec(spec["map"]);
+  List maps_spec = Rcpp::as<Rcpp::List>(spec["map"]);
   CharacterVector map_names = maps_spec.names();
   if (map_names.size() != maps_spec.size()) {
     stop("Trend: 'map' list must be named");
@@ -326,7 +326,7 @@ void init_covariate_maps_for_slot(KernelSlotSpec& slot,
            map_nm.c_str());
     }
 
-    NumericMatrix mat(maps_data[idx_data]);
+    NumericMatrix mat = Rcpp::as<Rcpp::NumericMatrix>(maps_data[idx_data]);
     if (mat.nrow() != T) {
       stop("Trend: covariate_maps[['%s']] has %d rows, expected %d",
            map_nm.c_str(), mat.nrow(), T);
@@ -373,7 +373,7 @@ void init_multicovariate_maps_for_slot(KernelSlotSpec& slot,
     stop("Trend: 'map' specified but data has no 'covariate_maps' attribute");
   }
 
-  List maps_spec(spec["map"]);
+  List maps_spec = Rcpp::as<Rcpp::List>(spec["map"]);
   CharacterVector map_names = maps_spec.names();
   if (map_names.size() != maps_spec.size()) {
     stop("Trend: 'map' list must be named");
@@ -402,7 +402,7 @@ void init_multicovariate_maps_for_slot(KernelSlotSpec& slot,
            map_nm.c_str());
     }
 
-    NumericMatrix mat(maps_data[idx_data]);
+    NumericMatrix mat = Rcpp::as<Rcpp::NumericMatrix>(maps_data[idx_data]);
     if (mat.nrow() != T) {
       stop("Trend: covariate_maps[['%s']] has %d rows, expected %d",
            map_nm.c_str(), mat.nrow(), T);
@@ -428,13 +428,13 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
     return;
   }
 
-  trend = Rcpp::List(trend_.get());
+  trend = Rcpp::as<Rcpp::List>(trend_.get());
 
   // covariate_maps from data attribute (if any)
   if (data_.hasAttribute("covariate_maps")) {
     SEXP cm = data_.attr("covariate_maps");
     if (!Rf_isNull(cm)) {
-      data_covariate_maps = Rcpp::List(cm);
+      data_covariate_maps = Rcpp::as<Rcpp::List>(cm);
       has_data_covariate_maps = data_covariate_maps.size() > 0;
       // Rprintf("Found a covariate map?!");
     }
@@ -459,7 +459,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
   for (int i = 0; i < n_specs; ++i) {
     if (trend[i] == R_NilValue) continue;
 
-    Rcpp::List tr_i = trend[i];
+    Rcpp::List tr_i = Rcpp::as<Rcpp::List>(trend[i]);
     std::string name_i = Rcpp::as<std::string>(tnames[i]);
 
     if (!tr_i.containsElementNamed("phase") ||
@@ -492,7 +492,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
     // trend_pnames from this spec
     op.trend_pnames = Rcpp::CharacterVector(0);
     if (tr_i.containsElementNamed("trend_pnames")) {
-      Rcpp::CharacterVector tp(tr_i["trend_pnames"]);
+      Rcpp::CharacterVector tp = Rcpp::as<Rcpp::CharacterVector>(tr_i["trend_pnames"]);
       op.trend_pnames = tp;
       for (int k = 0; k < tp.size(); ++k) {
         std::string pn = Rcpp::as<std::string>(tp[k]);
@@ -534,7 +534,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       slot.custom_fun = custom_attr;  // store SEXP (externalptr)
 
       // spec copy with *single* covariate name
-      Rcpp::List tr_copy = Rcpp::clone(tr_i);
+      Rcpp::List tr_copy = Rcpp::as<Rcpp::List>(Rcpp::clone(tr_i));
 
       init_combined_for_slot(slot, tr_copy, data);
       op.kernels.push_back(std::move(slot));
@@ -586,7 +586,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
               slot.kernel_type = ktype;
               slot.input_kind  = InputKind::Covariate;
 
-              Rcpp::List tr_copy = Rcpp::clone(tr_i);
+              Rcpp::List tr_copy = Rcpp::as<Rcpp::List>(Rcpp::clone(tr_i));
               tr_copy["covariate"] = cov_name;
 
               init_covariate_for_slot(slot, tr_copy, data);
@@ -778,7 +778,7 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
         if (n_kp_rows > 0 && (int)k < n_kp_rows) {
           // Row k, columns [n_base_pars .. n_kp_cols)
           for (int c = n_base_pars; c < n_kp_cols; ++c) {
-            Rcpp::CharacterVector col = Rcpp::as<Rcpp::CharacterVector>(kp_df[c]);
+            Rcpp::CharacterVector col = Rcpp::as<Rcpp::CharacterVector>(SEXP(kp_df[c]));
             std::string pname = Rcpp::as<std::string>(col[k]);
             slot_indices.push_back(pt.base_index_for(pname));
           }
