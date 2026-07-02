@@ -32,18 +32,29 @@ struct CensorSpec {
   int n_acc     = 0;
 
   // Working buffers — length n_rows, filled by fill_truncate calls
-  mutable std::vector<double> p_lower;   // S_k(LT - t0) per accumulator row
-  mutable std::vector<double> p_upper;   // S_k(UT - t0) per accumulator row
+  mutable std::vector<double> p_lower;   // S_k(LC - t0) per accumulator row
+  mutable std::vector<double> p_upper;   // S_k(UC - t0) per accumulator row
 
-  // References to model objects — set at construction time
-  const RaceModelSetup* setup  = nullptr;
-  const ParamTable*     pt     = nullptr;
+  // Pre-allocated integration buffers — sized once in make_censor_spec,
+  // reused every call to fill_censored_rows. Avoids heap allocation in the
+  // particle loop. Sized to the largest known-response index list.
+  mutable std::vector<double> lo_L,  hi_L,  out_L;   // lower-censored, known
+  mutable std::vector<double> lo_U,  hi_U,  out_U;   // upper-censored, known
+  mutable std::vector<double> lo1_B, hi1_B, out1_B;  // both-censored, known [LT, LC]
+  mutable std::vector<double> lo2_B, hi2_B, out2_B;  // both-censored, known [UC, UT]
+
+  // References to model objects — set at construction time, valid for
+  // the lifetime of the particle loop (pt is mutated each iteration but
+  // the pointer itself remains stable)
+  const RaceModelSetup* setup   = nullptr;
+  const ParamTable*     pt      = nullptr;
   RaceScratch*          scratch = nullptr;
 
   bool any() const {
     return !idx_L.empty() || !idx_U.empty() || !idx_B.empty() ||
       !idx_L_known.empty() || !idx_U_known.empty() || !idx_B_known.empty();
   }
+
   void fill_censored_rows(const TruncSpec& trunc,
                           //std::vector<double>& S_race_UT,
                           //std::vector<double>& S_race_LT,
