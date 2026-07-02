@@ -18,7 +18,7 @@ calc_lls <- function(emc, n_particles=1e3) {
   p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
   colnames(p_mat) <- p_types
   ## always set t0 to log(runif(0, min(dadm$rt))) to ensure there's actual density
-  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt)))
+  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt, na.rm=TRUE)))
 
   ## if the model is an RDM, set half of the A-values to 0 to ensure both pathways (digt0/pigt0 and digt_core/pigt_core) are tested
   if(model$c_name == 'RDM') {
@@ -104,3 +104,17 @@ DDM_s <- make_emc(dat, design_DDM, rt_resolution = 0.05, n_chains = 2)
 test_that("DDM", {
   expect_snapshot(calc_lls(DDM_s))
 })
+
+
+
+# Tests for likelihoods that rely on survivor functions (1-CDFs) ----------
+dat_m <- make_missing(dat, LT=0.15, UC=0.75, rt_resolution=0.05) # truncation requires CDFs on each trial, censoring only for NA trials
+LNR_s1_m <- make_emc(dat_m, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+RDM_s1_m <- make_emc(dat_m, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+LBA_s1_m <- make_emc(dat_m, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+WDM_s1_m <- make_emc(dat_m, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+
+test_that("LNR with missing", {expect_snapshot(calc_lls(LNR_s1_m))})
+test_that("RDM with missing", {expect_snapshot(calc_lls(RDM_s1_m))})
+test_that("LBA with missing", {expect_snapshot(calc_lls(LBA_s1_m))})
+test_that("WDM with missing", {expect_snapshot(calc_lls(WDM_s1_m))})
