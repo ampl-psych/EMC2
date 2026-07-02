@@ -80,7 +80,8 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
 #'
 #' @return Invisibly, the same structure `run_sbc()` returns (for single fits an
 #'   SBC list of rank/med/bias/coverage; for hierarchical fits a list with
-#'   `rank`, `prior` and `rand_effects`), as if the run had finished at the
+#'   `rank`, `prior`, `rand_effects` and, for runs produced by the current
+#'   version, `med`/`bias`/`coverage` for the group `mu` and `Sigma`), as if the run had finished at the
 #'   recovered number of replicates. The integer replicate indices included are stored in
 #'   the `"recovered_reps"` attribute. For hierarchical recovery when the prior
 #'   draws are unavailable, `$prior` is `NULL` (ranks are still fully recovered).
@@ -257,7 +258,7 @@ recover_sbc <- function(tempdir, design, fileName = NULL, prior_in = NULL,
   idx  <- sort(as.integer(names(reps)))
   reps <- reps[as.character(idx)]
   ok   <- vapply(reps, function(r)
-    !is.null(r) && !isTRUE(r$failed) && !is.null(r$rank), logical(1))
+    is.list(r) && !isTRUE(r$failed) && !is.null(r$rank), logical(1))
   if (!any(ok)) stop("No completed replicates found to assemble")
   used_idx <- idx[ok]
   SBC <- split_list_to_dfs(reps[ok])
@@ -278,7 +279,7 @@ recover_sbc <- function(tempdir, design, fileName = NULL, prior_in = NULL,
   idx  <- sort(as.integer(names(reps)))
   reps <- reps[as.character(idx)]
   ok   <- vapply(reps, function(r)
-    !is.null(r) && !is.null(r$rank_mu_row), logical(1))
+    is.list(r) && !is.null(r$rank_mu_row), logical(1))
   if (!any(ok)) stop("No completed replicates found to assemble")
   used_idx <- idx[ok]
   reps <- reps[ok]
@@ -294,6 +295,19 @@ recover_sbc <- function(tempdir, design, fileName = NULL, prior_in = NULL,
   out <- list(rank         = list(mu = rank_mu, var = rank_var),
               prior        = list(mu = prior_mu, var = prior_var),
               rand_effects = all_rand_effects)
+
+  # Recovery statistics (median/bias/coverage of mu and Sigma), if every included
+  # replicate carries them (older rank-only runs omit them -> plots fall back to
+  # ranks + p(KS)). Column order matches $rank so calc_sbc_stats() aligns them.
+  if (all(vapply(reps, function(r) !is.null(r[["med_mu_row"]]), logical(1)))) {
+    bind_mu  <- function(f) { m <- do.call(rbind, lapply(reps, `[[`, f))
+                              if (!is.null(par_names)) colnames(m) <- par_names; m }
+    bind_var <- function(f) { m <- do.call(rbind, lapply(reps, `[[`, f))
+                              colnames(m) <- reps[[1]][["var_col_names"]]; m }
+    out$med      <- list(mu = bind_mu("med_mu_row"),      var = bind_var("med_var_row"))
+    out$bias     <- list(mu = bind_mu("bias_mu_row"),     var = bind_var("bias_var_row"))
+    out$coverage <- list(mu = bind_mu("coverage_mu_row"), var = bind_var("coverage_var_row"))
+  }
   attr(out, "recovered_reps") <- used_idx
   out
 }
@@ -391,10 +405,33 @@ run_SBC_hierarchical_rep <- function(i, design_in, prior_mu, prior_var, trials, 
   prior_var_input <- get_pars(emc, selection = "Sigma", flatten = TRUE, true_pars = prior_var[,, i])[[1]][[1]]
   rank_var_row    <- unname(mapply(get_ranks_ESS, split(var_rec, row(var_rec)), t(ESS_var), prior_var_input))
 
-  result <- list(rank_mu_row   = rank_mu_row,
-                 rank_var_row  = rank_var_row,
-                 var_col_names = colnames(prior_var_input),
-                 rand_effects  = rand_effects)
+  # Recovery statistics (posterior median, bias vs truth, 95% CI coverage) for the
+  # group mean (mu) and (co)variance (Sigma) parameters, so plot_sbc_*(add_stats =
+  # TRUE) shows coverage/bias/precision for hierarchical fits, as it does for
+  # single-subject fits. Rows of mu_rec/var_rec are the parameters (as used for the
+  # ranks above), aligned with prior_mu[, i] / prior_var_input.
+  true_mu  <- prior_mu[, i]
+  med_mu   <- apply(mu_rec, 1, median)
+  ci_mu    <- apply(mu_rec, 1, stats::quantile, probs = c(0.025, 0.975))
+  bias_mu  <- med_mu - true_mu
+  cov_mu   <- true_mu > ci_mu[1, ] & true_mu < ci_mu[2, ]
+
+  true_var <- as.numeric(prior_var_input)
+  med_var  <- apply(var_rec, 1, median)
+  ci_var   <- apply(var_rec, 1, stats::quantile, probs = c(0.025, 0.975))
+  bias_var <- med_var - true_var
+  cov_var  <- true_var > ci_var[1, ] & true_var < ci_var[2, ]
+
+  result <- list(rank_mu_row      = rank_mu_row,
+                 rank_var_row     = rank_var_row,
+                 med_mu_row       = unname(med_mu),
+                 bias_mu_row      = unname(bias_mu),
+                 coverage_mu_row  = unname(cov_mu),
+                 med_var_row      = unname(med_var),
+                 bias_var_row     = unname(bias_var),
+                 coverage_var_row = unname(cov_var),
+                 var_col_names    = colnames(prior_var_input),
+                 rand_effects     = rand_effects)
   if (!is.null(temp_dir))
     saveRDS(result, file.path(temp_dir, paste0("rep_", i, ".rds")))
   # Also write to persistent storage (survives node-local temp cleanup)
@@ -498,6 +535,14 @@ SBC_hierarchical_parallel <- function(design_in, prior_in, replicates = 250, tri
             var_col_names = var_col_names,
             rand_effects  = NULL
           )
+          if (!is.null(partial_sbc$med)) {   # carry recovery stats if the partial has them
+            result$med_mu_row       <- unname(as.numeric(partial_sbc$med$mu[k, ]))
+            result$bias_mu_row      <- unname(as.numeric(partial_sbc$bias$mu[k, ]))
+            result$coverage_mu_row  <- unname(as.logical(partial_sbc$coverage$mu[k, ]))
+            result$med_var_row      <- unname(as.numeric(partial_sbc$med$var[k, ]))
+            result$bias_var_row     <- unname(as.numeric(partial_sbc$bias$var[k, ]))
+            result$coverage_var_row <- unname(as.logical(partial_sbc$coverage$var[k, ]))
+          }
           saveRDS(result, file.path(temp_dir, paste0("rep_", k, ".rds")))
           completed_results[[as.character(k)]] <- result
           if (!is.null(persist_dir) && !is.null(persist_base))
@@ -576,10 +621,34 @@ run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots,
   dots[["verboseProgress"]] <- FALSE
   message("Running data set ", sbc_running_counter(rep, temp_dir, offset))
   p_vector <- prior_alpha[rep,]
-  data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
-  emc <- suppressMessages(do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc))))
-
   p_vector_dir <- if (!is.null(temp_dir)) temp_dir else "."
+
+  # Mark this replicate as failed (and save the offending draw) instead of
+  # letting an error abort the whole parallel run. A single bad prior draw must
+  # not take down the other replicates in the mclapply batch.
+  fail_rep <- function(msg) {
+    filename <- file.path(p_vector_dir, paste0("p_vector_rep", rep, ".Rdata"))
+    save(p_vector, file = filename)
+    warning("Replicate ", rep, " failed and was skipped: ", msg,
+            ". Parameters saved as ", filename)
+    list(rank = NULL, med = NULL, bias = NULL, coverage = NULL, failed = TRUE)
+  }
+
+  # make_data returns FALSE when >10% of parameter values fall out of the model
+  # bounds (e.g. a prior draw in an invalid region); guard that and any error in
+  # data / emc construction so it becomes a skipped replicate, not a hard crash.
+  data <- tryCatch(
+    do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data))),
+    error = function(e) e)
+  if (inherits(data, "error")) return(fail_rep(conditionMessage(data)))
+  if (!is.data.frame(data))
+    return(fail_rep("make_data returned no data (parameters out of model bounds)"))
+
+  emc <- tryCatch(
+    suppressMessages(do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))),
+    error = function(e) e)
+  if (inherits(emc, "error")) return(fail_rep(conditionMessage(emc)))
+
   fit_result <- tryCatch({
     do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
   }, warning = function(w) {
@@ -604,16 +673,20 @@ run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots,
 
   emc <- fit_result
 
-  ESS       <- ess_summary(emc, stat = NULL)[[1]]
-  alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
-  rank      <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
-  names(rank) <- names(sampled_pars(design_in))
-  CI       <- credint(emc)[[1]]
-  med      <- CI[, 2]
-  bias     <- med - p_vector
-  coverage <- p_vector > CI[, 1] & p_vector < CI[, 3]
-
-  result <- list(rank = rank, med = med, bias = bias, coverage = coverage)
+  # Post-fit summaries can also fail on pathological draws; treat as a skipped rep.
+  result <- tryCatch({
+    ESS       <- ess_summary(emc, stat = NULL)[[1]]
+    alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
+    rank      <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
+    names(rank) <- names(sampled_pars(design_in))
+    CI       <- credint(emc)[[1]]
+    med      <- CI[, 2]
+    bias     <- med - p_vector
+    coverage <- p_vector > CI[, 1] & p_vector < CI[, 3]
+    list(rank = rank, med = med, bias = bias, coverage = coverage)
+  }, error = function(e) e)
+  if (inherits(result, "error"))
+    return(fail_rep(paste0("post-fit summary error: ", conditionMessage(result))))
   if (!is.null(temp_dir))
     saveRDS(result, file.path(temp_dir, paste0("rep_", rep, ".rds")))
   if (!is.null(persist_dir) && !is.null(persist_base))
@@ -1073,9 +1146,10 @@ make_smooth <- function(x, y, N = 1000){
 #'   statistic's value may instead be a named list/vector keyed by parameter (a
 #'   subset; parameters not named use that statistic's default position) to set
 #'   its position per panel, with `FALSE`/`NA` suppressing it on a given panel.
-#'   The three recovery statistics are only available for single-subject SBC
-#'   (omitted, with a warning, for hierarchical SBC output); `pvalue` is computed
-#'   from the ranks and is always shown.
+#'   The three recovery statistics are available for single-subject SBC and for
+#'   hierarchical SBC (shown for the group `mu` and `Sigma`); they are omitted,
+#'   with a warning, only for older rank-only objects that do not carry them.
+#'   `pvalue` is computed from the ranks and is always shown.
 #' @param main Optional. `NULL` (the default) uses the auto-generated per-panel
 #'   title. A single string is used as the title on every panel. A character
 #'   vector sets one title per panel and must have the same length as the number
@@ -1105,9 +1179,9 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL,
   panel <- 0L
   stat_spec <- .sbc_resolve_stat_spec(add_stats, unique(unlist(lapply(ranks, colnames))))
   if (is.null(stats) && !is.null(stat_spec) && any(names(stat_spec) %in% .sbc_recovery_stats))
-    warning("add_stats was requested but no recovery statistics are available; ",
-            "coverage/bias/precision are only produced for single-subject SBC. Skipping ",
-            "them (the p(KS) calibration value is still shown).")
+    warning("add_stats was requested but this SBC object carries no recovery ",
+            "statistics (an older rank-only run); coverage/bias/precision are skipped ",
+            "(the p(KS) calibration value is still shown).")
 
   # layout = NULL means: do not touch the device layout (mfrow/mfcol); draw the
   # panels into whatever grid is already set up, with no new page between them.

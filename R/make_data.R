@@ -197,7 +197,13 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   cutL[is.na(cutL)] <- TRUE; cutL[no_censor] <- FALSE
   cutU <- (data$rt > UC_eff)
   cutU[is.na(cutU)] <- TRUE; cutU[no_censor] <- FALSE
-  cutL[is_nr] <- FALSE; cutU[is_nr] <- FALSE
+  # Intrinsic no-response (successful stop / go failure) is never lower-censored.
+  # Under a finite deadline the observer cannot distinguish a withheld response from
+  # a too-slow (censored) one, so both are treated as upper-censored (code 2) and
+  # scored by the combined "no response by UC" likelihood (matching Zach). With no
+  # deadline (UC=Inf) it stays an intrinsic withheld response (code 4).
+  cutL[is_nr] <- FALSE
+  cutU[is_nr] <- is.finite(UC_eff)[is_nr]
   if (verbose) {
     if (!all(LC_eff==0)) {
       if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
@@ -221,9 +227,9 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   # Add missingness column (1=lower, 2=upper, 3=both, 4=withheld/intrinsic NR)
   data$missingness <- NA_integer_
   data$missingness[cutL & !cutU] <- 1L  # lower-censored only
-  data$missingness[cutU & !cutL] <- 2L  # upper-censored only
+  data$missingness[cutU & !cutL] <- 2L  # upper-censored only (incl. deadline NR)
   data$missingness[cutL &  cutU] <- 3L  # both
-  data$missingness[is_nr]        <- 4L  # SS withheld / intrinsic no-response
+  data$missingness[is_nr & !cutU] <- 4L # withheld / intrinsic NR (only when UC=Inf)
 
   data
 }

@@ -35,9 +35,10 @@ each value is a \code{legend()} position keyword (e.g. \code{"topright"},
 statistic's value may instead be a named list/vector keyed by parameter (a
 subset; parameters not named use that statistic's default position) to set
 its position per panel, with \code{FALSE}/\code{NA} suppressing it on a given panel.
-The three recovery statistics are only available for single-subject SBC
-(omitted, with a warning, for hierarchical SBC output); \code{pvalue} is computed
-from the ranks and is always shown.}
+The three recovery statistics are available for single-subject SBC and for
+hierarchical SBC (shown for the group \code{mu} and \code{Sigma}); they are omitted,
+with a warning, only for older rank-only objects that do not carry them.
+\code{pvalue} is computed from the ranks and is always shown.}
 
 \item{main}{Optional. \code{NULL} (the default) uses the auto-generated per-panel
 title. A single string is used as the title on every panel. A character

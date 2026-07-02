@@ -174,6 +174,47 @@ test_that("SSEXG no ST, UC=1.2: finite-RT R==C++; full-dataset C++ is finite", {
 })
 
 
+# ── Test 2b: deadline censoring unifies no-responses; R == C++ (combined) ──────
+# Under a finite deadline the observer cannot tell a successful stop from a
+# too-slow (censored) response, so make_missing labels ALL no-responses code-2
+# and the likelihood scores them with the combined P(no response by UC). code-4
+# (intrinsic NR) must NOT appear when a deadline is present. R and C++ must agree
+# exactly on the full censored dataset (both use the combined formula).
+test_that("SSEXG deadline: NR unified into code-2 (no code-4) and R == C++", {
+  set.seed(48)
+  design_ss <- .make_design_no_st()
+  p_vector  <- .set_pars_no_st(sampled_pars(design_ss, doMap = FALSE))
+
+  dat  <- make_data(p_vector, design_ss, n_trials = 800, TC = list(UC = 0.6))
+  expect_true(any(dat$missingness == 2, na.rm = TRUE),  "expected deadline-censored (code-2) trials")
+  expect_false(any(dat$missingness == 4, na.rm = TRUE), "no code-4 (intrinsic NR) under a finite deadline")
+
+  dadm <- EMC2:::design_model(dat, design_ss, compress = FALSE, rt_resolution = 1e-12, verbose = FALSE)
+  ll_c <- .cpp_ll(p_vector, dadm)
+  ll_r <- .r_ll(p_vector, dadm)
+  expect_true(is.finite(ll_c))
+  expect_equal(as.numeric(ll_c), as.numeric(ll_r), tolerance = 1e-4)
+})
+
+
+# ── Test 2c: likelihood is compression-invariant (SSD in the compression key) ──
+# compress=TRUE must give exactly the same total LL as compress=FALSE. SSD is part
+# of the compression key, so deadline no-responses at different SSDs (incl. go
+# SSD=Inf vs finite stop SSDs, and staircase SSDs) are not collapsed together.
+test_that("SSEXG likelihood is compression-invariant with censoring + mixed SSD", {
+  set.seed(49)
+  design_ss <- .make_design_no_st()
+  p_vector  <- .set_pars_no_st(sampled_pars(design_ss, doMap = FALSE))
+  dat  <- make_data(p_vector, design_ss, n_trials = 1000, TC = list(UC = 0.6))
+
+  dF <- EMC2:::design_model(dat, design_ss, compress = FALSE, rt_resolution = 1/60, verbose = FALSE)
+  dT <- EMC2:::design_model(dat, design_ss, compress = TRUE,  rt_resolution = 1/60, verbose = FALSE)
+  expect_lt(nrow(dT), nrow(dF))   # compression actually did something
+  expect_equal(as.numeric(.cpp_ll(p_vector, dF)),
+               as.numeric(.cpp_ll(p_vector, dT)), tolerance = 1e-6)
+})
+
+
 # ── Test 3: with ST, UC = Inf ─────────────────────────────────────────────────
 # Three observable outcome types to cover:
 #   (a) go-trial go response

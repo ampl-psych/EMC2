@@ -347,7 +347,13 @@ inline double c_log_likelihood_ss(
     // intrinsic no-response (withheld), never an observed trial.
     if (miss == NA_INTEGER && !R_FINITE(rt)) miss = 4;
 
-    // upper-censored / deadline log-mass, using UC[start_row] as the deadline.
+    // Upper (deadline) censoring log-mass = P(NO response observed by the deadline UC).
+    // On a stop trial the observer cannot tell a successful stop from a too-slow
+    // (censored) response, so both are modelled together (make_missing labels all
+    // such no-responses code 2): P = gf + (1-gf)*[ tf*S_go(UC) + (1-tf)*(P(stop wins
+    // by UC) + P(neither finished by UC)) ] = p(gofail) + p(Stop) + (1-p(Stop))*p(Censor).
+    // With UC=Inf it reduces to the intrinsic no-response mass (== withheld_lp), so the
+    // code-2 and code-4 formulas coincide for undeadlined trials.
     auto upper_deadline_lp = [&]() -> double {
       double logS_go = (n_accG > 0) ? log_surv_mask(uc, P, is_go) : 0.0;
       if (!stop_signal_presented)

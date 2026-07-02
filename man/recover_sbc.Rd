@@ -43,7 +43,8 @@ the rep files; otherwise force \code{"single"} or \code{"hierarchical"}.}
 \value{
 Invisibly, the same structure \code{run_sbc()} returns (for single fits an
 SBC list of rank/med/bias/coverage; for hierarchical fits a list with
-\code{rank}, \code{prior} and \code{rand_effects}), as if the run had finished at the
+\code{rank}, \code{prior}, \code{rand_effects} and, for runs produced by the current
+version, \code{med}/\code{bias}/\code{coverage} for the group \code{mu} and \code{Sigma}), as if the run had finished at the
 recovered number of replicates. The integer replicate indices included are stored in
 the \code{"recovered_reps"} attribute. For hierarchical recovery when the prior
 draws are unavailable, \verb{$prior} is \code{NULL} (ranks are still fully recovered).
