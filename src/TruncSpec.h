@@ -27,16 +27,23 @@ struct TruncSpec {
   mutable std::vector<double> S_lower;   // S_RACE(LT - t0) per trial
   mutable std::vector<double> S_upper;   // S_RACE(UT - t0) per trial
 
-  // References to model objects — set at construction time
-  const RaceModelSetup* setup  = nullptr;
-  const ParamTable*     pt     = nullptr;
+
+  // Pre-allocated output buffer — filled by calculate_normalization_constant(),
+  // length n_trials. Avoids heap allocation in the particle loop.
+  mutable std::vector<double> log_Z;
+
+  // References to model objects — set at construction time, valid for
+  // the lifetime of the particle loop (pt is mutated each iteration but
+  // the pointer itself remains stable)
+  const RaceModelSetup* setup   = nullptr;
+  const ParamTable*     pt      = nullptr;
   RaceScratch*          scratch = nullptr;
 
   bool any() const { return !idx_LT.empty() || !idx_UT.empty(); }
 
   // Fills p_lower / p_upper, reduces across accumulators, returns log Z per trial
   // (length n_trials, ready to subtract from ll_trial)
-  std::vector<double> calculate_normalization_constant() const;
+  void calculate_normalization_constant() const;
 };
 
 TruncSpec make_trunc_spec(const Rcpp::DataFrame& data,

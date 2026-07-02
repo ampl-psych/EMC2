@@ -50,10 +50,10 @@ static double logdiff(double xa, double xb) {
   return result;
 }
 
-static double lognormal(double x) {
-  return	-0.5*x*x - M_LN_SQRT_PI - 0.5*M_LN2;
-}
-
+// static double lognormal(double x) {
+//   return	-0.5*x*x - M_LN_SQRT_PI - 0.5*M_LN2;
+// }
+//
 /*
  The original function lnnorm was written by
  Jean Marie Linhart
@@ -134,12 +134,12 @@ static double lnnorm(double z)
   return(t) ;
 }
 
-static double logMill(double x) {
-  double m;
-  if (x > 1.0e5) return -std::log(x);
-  m = lnnorm(-x) - lognormal(x);
-  return m;
-}
+// static double logMill(double x) {
+//   double m;
+//   if (x > 1.0e5) return -std::log(x);
+//   m = lnnorm(-x) - lognormal(x);
+//   return m;
+// }
 
 
 // =============================================================================
@@ -275,37 +275,67 @@ static double Kl(double t, double v, double a, double w, double err) {
 // Short-t CDF series: linear-domain accumulation, log returned
 static double logFs(double t, double v, double a, double w, int K)
 {
+  // double fplus = -INFINITY, fminus = -INFINITY;
+  // double sqt = std::sqrt(t), temp = -v * a*w - (v * v)*t / 2;
+  // double vt = v * t;
+  //
+  // for (int k = K; k >= 0; k--)
+  // {
+  //   double rj = a*(2 * k + w);
+  //   double dj = lognormal(rj / sqt);
+  //   double pos1 = dj + logMill((rj - vt) / sqt);
+  //   double pos2 = dj + logMill((rj + vt) / sqt);
+  //   fplus = logsum(logsum(pos1, pos2), fplus);
+  //   rj = a*(2.0 * k + 2.0 - w);
+  //   dj =  lognormal(rj / sqt);
+  //   double neg1 = dj + logMill((rj - vt) / sqt);
+  //   double neg2 = dj + logMill((rj + vt) / sqt);
+  //   fminus = logsum(logsum(neg1, neg2), fminus);
+  // }
+
+  // SM: alternative implementation that skips the lognormal calls in logMill --
+  // Each term involves phi(r/sqrt(t)) * R((r ± vt)/sqrt(t)) where phi is the
+  // standard normal density and R(x) = P(Z > x) is the Mills ratio.
+  // logMill(x) = lnnorm(-x) - lognormal(x), so in log space:
+  //
+  //   lognormal(r/sqrt(t)) + logMill((r ± vt)/sqrt(t))
+  //     = lognormal(r/sqrt(t)) + lnnorm(-(r ± vt)/sqrt(t)) - lognormal((r ± vt)/sqrt(t))
+  //
+  // The two lognormal terms cancel analytically. For the (r - vt) case:
+  //   lognormal(r/sqrt(t)) - lognormal((r-vt)/sqrt(t))
+  //     = -r^2/(2t) + (r-vt)^2/(2t)
+  //     = (-r^2 + r^2 - 2rvt + v^2*t^2) / (2t)
+  //     = -rv + v^2*t/2
+  //
+  // For the (r + vt) case:
+  //   lognormal(r/sqrt(t)) - lognormal((r+vt)/sqrt(t))
+  //     = -r^2/(2t) + (r+vt)^2/(2t)
+  //     = (-r^2 + r^2 + 2rvt + v^2*t^2) / (2t)
+  //     = +rv + v^2*t/2
+  //
+  // So the two terms per k become:
+  //   pos1: -r*v + c + lnnorm(-(r - vt)/sqrt(t))   where c = v^2*t/2
+  //   pos2: +r*v + c + lnnorm(-(r + vt)/sqrt(t))
+  //
+  // This avoids 4 logMill calls (each of which calls lnnorm + lognormal) per k,
+  // replacing them with 4 direct lnnorm calls.
   double fplus = -INFINITY, fminus = -INFINITY;
-  double sqt = std::sqrt(t), temp = -v * a*w - (v * v)*t / 2;
-  double vt = v * t;
+  const double sqt  = std::sqrt(t);
+  const double vt   = v * t;
+  const double c    = 0.5 * v * v * t;
+  const double temp = -v * a * w - c;
 
-
-  // SM: alternative implementation that skips the lognormal calls in logMill  -- not 100% if correct, so commented out
-//   const double c = 0.5 * v * v * t;   // constant across iterations
-//
-// for (int k = K; k >= 0; k--) {
-//     double rj_p = a * (2*k + w);
-//     double rj_m = a * (2*k + 2.0 - w);
-//
-//     double pos1 = -rj_p * v + c + lnnorm(-(rj_p - vt) / sqt);
-//     double pos2 =  rj_p * v + c + lnnorm(-(rj_p + vt) / sqt);  // sign flips for +vt
-//     double neg1 = -rj_m * v + c + lnnorm(-(rj_m - vt) / sqt);
-//     double neg2 =  rj_m * v + c + lnnorm(-(rj_m + vt) / sqt);
-//
-//     fplus  = logsum(logsum(pos1, pos2), fplus);
-//     fminus = logsum(logsum(neg1, neg2), fminus);
-// }
-  for (int k = K; k >= 0; k--)
-  {
-    double rj = a*(2 * k + w);
-    double dj = lognormal(rj / sqt);
-    double pos1 = dj + logMill((rj - vt) / sqt);
-    double pos2 = dj + logMill((rj + vt) / sqt);
+  for (int k = K; k >= 0; k--) {
+    // Positive terms: r = a*(2k + w)
+    const double rp   = a * (2.0 * k + w);
+    const double pos1 = (-rp * v + c) + lnnorm(-(rp - vt) / sqt);
+    const double pos2 = (+rp * v + c) + lnnorm(-(rp + vt) / sqt);
     fplus = logsum(logsum(pos1, pos2), fplus);
-    rj = a*(2.0 * k + 2.0 - w);
-    dj =  lognormal(rj / sqt);
-    double neg1 = dj + logMill((rj - vt) / sqt);
-    double neg2 = dj + logMill((rj + vt) / sqt);
+
+    // Negative terms: r = a*(2k + 2 - w)
+    const double rm   = a * (2.0 * k + 2.0 - w);
+    const double neg1 = (-rm * v + c) + lnnorm(-(rm - vt) / sqt);
+    const double neg2 = (+rm * v + c) + lnnorm(-(rm + vt) / sqt);
     fminus = logsum(logsum(neg1, neg2), fminus);
   }
 
@@ -313,26 +343,26 @@ static double logFs(double t, double v, double a, double w, int K)
 }
 
 // Large-t CDF series: linear-domain accumulation, log returned
+// Rewritten by SM
 static double logFl(double q, double v, double a, double w, int K)
 {
   double fplus = -INFINITY, fminus = -INFINITY;
   double la = std::log(a), lv = std::log(fabs(v));
-  double F = -INFINITY;
+  const double half_pia_sq_q  = 0.5 * (M_PI / a) * (M_PI / a) * q;  // (k*pi/a)^2 * q/2, scaled by k^2 in loop
+
   for (int k = K; k >= 1; k--) {
-    double temp0 = std::log(k * 1.0), temp1 = k * M_PI, temp2 = temp1 * w;
-    double check = sin(temp2);
-    if (check > 0) {
-      double temp = temp0 - logsum(2 * lv, 2 * (temp0 + M_LNPI - la)) - 0.5 * ((temp1 / a)*(temp1 / a)) * q + std::log(check);
-      fplus = logsum(temp, fplus);
+    const double temp0  = std::log((double)k);
+    const double kpi    = k * M_PI;
+    const double check  = std::sin(kpi * w);
+    if (check == 0.0) continue;
+
+    const double temp = temp0 - logsum(2.0 * lv, 2.0 * (temp0 + M_LNPI - la))
+                              - (double)(k * k) * half_pia_sq_q
+                              + std::log(std::fabs(check));
+    if (check > 0.0) fplus  = logsum(temp, fplus);
+    else             fminus = logsum(temp, fminus);
     }
-    else if (check < 0)
-    {
-      double temp = temp0 - logsum(2 * lv, 2 * (temp0 + M_LNPI - la)) - 0.5 * ((temp1 / a)*(temp1 / a)) * q + std::log(-check);
-      fminus = logsum(temp, fminus);
-    }
-  }
-  F = logdiff(fplus, fminus);
-  return (F - v * a * w - 0.5 * (v * v) * q);
+  return logdiff(fplus, fminus) - v * a * w - 0.5 * v * v * q;
 }
 
 // log-CDF of the Wiener first-passage time (lower boundary)
@@ -350,6 +380,41 @@ static double pwiener(double q, double a, double v, double w)
     return logdiff(logP(a, v, w), lg + logFl(q, v, a, w, static_cast<int>(Kll)));
   }
 }
+
+// Computes log-CDF for both boundaries simultaneously, sharing Ks/Kl computation.
+// log_upper: lower boundary w = 1-w, v_eff = -v  (R=1)
+// log_lower: lower boundary w = w,   v_eff =  v  (R=2)
+static void pwiener_both(double q, double a, double v, double w,
+                         double& log_upper, double& log_lower)
+{
+  if (std::isinf(q)) {
+    log_upper = logP(a, -v, 1.0 - w);
+    log_lower = logP(a,  v, w);
+    return;
+  }
+
+  // Ks/Kl for upper boundary (w_u = 1-w, v_u = -v)
+  const double Kss_u = Ks(q, -v, a, 1.0 - w, DDM_LOG_EPS);
+  const double Kll_u = Kl(q, -v, a, 1.0 - w, DDM_LOG_EPS);
+
+  // Ks/Kl for lower boundary (w_l = w, v_l = v)
+  // Take the max of both boundaries so one series choice covers both
+  const double Kss_l = Ks(q,  v, a, w, DDM_LOG_EPS);
+  const double Kll_l = Kl(q,  v, a, w, DDM_LOG_EPS);
+
+  const double Kss = std::fmax(Kss_u, Kss_l);
+  const double Kll = std::fmax(Kll_u, Kll_l);
+
+  if (3.0 * Kss < Kll) {
+    log_upper = logFs(q, -v, a, 1.0 - w, static_cast<int>(Kss));
+    log_lower = logFs(q,  v, a, w,       static_cast<int>(Kss));
+  } else {
+    const double lg = M_LN2 + M_LNPI - 2.0 * std::log(a);
+    log_upper = logdiff(logP(a, -v, 1.0 - w), lg + logFl(q, -v, a, 1.0 - w, static_cast<int>(Kll)));
+    log_lower = logdiff(logP(a,  v, w),        lg + logFl(q,  v, a, w,        static_cast<int>(Kll)));
+  }
+}
+
 
 // =============================================================================
 // Integration helpers
@@ -588,17 +653,25 @@ void ddm_survivor(const std::vector<int>&     idx,
   for (int j = 0; j < (int)idx.size(); ++j) {
     const int i = idx[j];
 
-    if (bd[i] - t0[i] <= 0.0) continue;  // bound before t0 — no mass yet, log(1) = 0
+    if (bd[i] - t0[i] <= 0.0) continue;
 
-    const double logcdf_upper = ddm_logcdf_scalar(bd[i], 1, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
-    const double logcdf_lower = ddm_logcdf_scalar(bd[i], 2, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
-    double S = 1 - (std::exp(logcdf_upper) + std::exp(logcdf_lower));
+    double logcdf_upper, logcdf_lower;
 
-    // clamp - probability so between 0 and 1, anything else is integration error or numerical precision error
-    if (!std::isfinite(S) || S < 0.0) S = 0.0;
-    else if (S > 1.0) S = 1.0;
-    out[i] = S;
+    if (sv[i] == 0.0 && SZ[i] == 0.0 && st0[i] == 0.0) {
+      // Fast path: fused pwiener call, Ks/Kl computed once
+      pwiener_both(bd[i] - t0[i], a[i] / s[i], v[i] / s[i], Z[i],
+                   logcdf_upper, logcdf_lower);
+    } else {
+      // Slow path: two independent integrations
+      logcdf_upper = ddm_logcdf_scalar(bd[i], 1, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
+      logcdf_lower = ddm_logcdf_scalar(bd[i], 2, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
     }
+
+    double S = 1.0 - (std::exp(logcdf_upper) + std::exp(logcdf_lower));
+    if (!std::isfinite(S) || S < 0.0) S = 0.0;
+    else if (S > 1.0)                  S = 1.0;
+    out[i] = S;
+  }
 }
 
 

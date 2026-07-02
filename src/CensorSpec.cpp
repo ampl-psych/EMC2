@@ -18,8 +18,6 @@ using namespace Rcpp;
 // 4. Fills S_upper in ll_trial
 // -----------------------------------------------------------------------------
 void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
-                                    //std::vector<double>& S_race_UT,
-                                    //std::vector<double>& S_race_LT,
                                     NumericVector& ll_trial,
                                     const double min_ll) const
 {
@@ -30,8 +28,6 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
   // Fill p_upper: S_k(UC - t0) for active UC rows, 0.0 elsewhere (default -- at t=inf, S=0)
   std::fill(p_upper.begin(), p_upper.end(), 0.0);
   setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
-
-  // ToDo: For cases with known responses, fill p_upper and p_lower with integration methods here
 
   // Minimal LL
   auto clamp = [min_ll](double v) {
@@ -70,7 +66,6 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     }
     const double p = (1-prod_LC) + prod_UC;        // P(T <= LC || P >= UC) = (1-S_RACE(LC)) + S_RACE(UC)
     ll_trial[row] = std::log(clamp(p));
-
   }
 
   // -------------------------------------------------------------------------
@@ -82,53 +77,49 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
   // Lower-censored, known response: integrate over [LT, LC]
   if (!idx_L_known.empty()) {
     const int n = (int)idx_L_known.size();
-    std::vector<double> lo(n), hi(n), out(n);
     for (int j = 0; j < n; ++j) {
       const int base = idx_L_known[j];
-      lo[j] = trunc.LT.empty() ? 0.0 : trunc.LT[base];
-      hi[j] = LC[base];
+      lo_L[j] = trunc.LT.empty() ? 0.0 : trunc.LT[base];
+      hi_L[j] = LC[base];
     }
-    setup->fill_survivor_with_response(idx_L_known, winner_L_known, lo, hi,
-                                       n_acc, *pt, setup->spec, out.data());
+    setup->fill_survivor_with_response(idx_L_known, winner_L_known, lo_L, hi_L,
+                                       n_acc, *pt, setup->spec, out_L.data());
     for (int j = 0; j < n; ++j)
-      ll_trial[idx_L_known[j] / n_acc] = std::log(clamp(out[j]));
+      ll_trial[idx_L_known[j] / n_acc] = std::log(clamp(out_L[j]));
   }
 
   // Upper-censored, known response: integrate over [UC, UT]
   if (!idx_U_known.empty()) {
     const int n = (int)idx_U_known.size();
-    std::vector<double> lo(n), hi(n), out(n);
-
     for (int j = 0; j < n; ++j) {
       const int base = idx_U_known[j];
-      lo[j] = UC[base];
+      lo_U[j] = UC[base];
       // Don't integrate to inf but to CENS_UPPER_CAP
-      hi[j] = std::isfinite(trunc.UT[base]) ? trunc.UT[base] : CENS_UPPER_CAP;
+      hi_U[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
     }
-    setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo, hi,
-                                       n_acc, *pt, setup->spec, out.data());
+    setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo_U, hi_U,
+                                       n_acc, *pt, setup->spec, out_U.data());
     for (int j = 0; j < n; ++j) {
-      ll_trial[idx_U_known[j] / n_acc] = std::log(clamp(out[j]));
+      ll_trial[idx_U_known[j] / n_acc] = std::log(clamp(out_U[j]));
     }
   }
 
   // Both-censored, known response: sum integrals over [LT, LC] and [UC, UT]
   if (!idx_B_known.empty()) {
     const int n = (int)idx_B_known.size();
-    std::vector<double> lo1(n), hi1(n), lo2(n), hi2(n), out1(n), out2(n);
     for (int j = 0; j < n; ++j) {
       const int base = idx_B_known[j];
-      lo1[j] = trunc.LT.empty() ? 0.0           : trunc.LT[base];
-      hi1[j] = LC[base];
-      lo2[j] = UC[base];
-      hi2[j] = std::isfinite(trunc.UT[base]) ? trunc.UT[base] : CENS_UPPER_CAP;
+      lo1_B[j] = trunc.LT.empty() ? 0.0 : trunc.LT[base];
+      hi1_B[j] = LC[base];
+      lo2_B[j] = UC[base];
+      hi2_B[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
     }
-    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo1, hi1,
-                                       n_acc, *pt, setup->spec, out1.data());
-    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo2, hi2,
-                                       n_acc, *pt, setup->spec, out2.data());
+    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo1_B, hi1_B,
+                                       n_acc, *pt, setup->spec, out1_B.data());
+    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo2_B, hi2_B,
+                                       n_acc, *pt, setup->spec, out2_B.data());
     for (int j = 0; j < n; ++j)
-      ll_trial[idx_B_known[j] / n_acc] = std::log(clamp(out1[j] + out2[j]));
+      ll_trial[idx_B_known[j] / n_acc] = std::log(clamp(out1_B[j] + out2_B[j]));
   }
 }
 
@@ -170,7 +161,7 @@ CensorSpec make_censor_spec(const DataFrame& data,
   const int*    missingness_ptr = INTEGER(missingness_tmp);
 
   IntegerVector R_tmp = data["R"];
-  const int*    R_ptr = INTEGER(R_tmp);   // NA_integer_ sentinel for unknown response
+  const int*    R_ptr = INTEGER(R_tmp);
 
   NumericVector lc_tmp, uc_tmp;
   if (has_LC_col) {
@@ -205,12 +196,12 @@ CensorSpec make_censor_spec(const DataFrame& data,
 
   // Trial-level loop (step by n_acc): populate trial index lists
   for (int base = 0; base < censor.n_rows; base += n_acc) {
-    const int miss = missingness_ptr[base];
+    const int miss  = missingness_ptr[base];
     if (miss == 0) continue;
 
-    const int R_val  = R_ptr[base];
+    const int  R_val = R_ptr[base];
     const bool known = (R_val != NA_INTEGER);
-    const int winner = known ? (R_val - 1) : -1;  // 0-based; -1 unused for analytical
+    const int winner = known ? (R_val - 1) : -1;
 
     switch (miss) {
     case 1:
@@ -235,11 +226,23 @@ CensorSpec make_censor_spec(const DataFrame& data,
   if (!censor.idx_U.empty() && censor.UC.empty())
     Rcpp::stop("missingness contains upper-censored rows (2 or 3) but no UC column found in data");
 
-  // Allocate working buffers for row-wise survivors
+  // Working buffers for analytical survivor products
   censor.p_lower.resize(censor.n_rows);
   censor.p_upper.resize(censor.n_rows);
 
+  // Pre-allocate integration buffers — sized to each known-response index list.
+  // These are reused every particle iteration with no further allocation.
+  const int n_L = (int)censor.idx_L_known.size();
+  const int n_U = (int)censor.idx_U_known.size();
+  const int n_B = (int)censor.idx_B_known.size();
+
+  censor.lo_L.resize(n_L);  censor.hi_L.resize(n_L);  censor.out_L.resize(n_L);
+  censor.lo_U.resize(n_U);  censor.hi_U.resize(n_U);  censor.out_U.resize(n_U);
+  censor.lo1_B.resize(n_B); censor.hi1_B.resize(n_B); censor.out1_B.resize(n_B);
+  censor.lo2_B.resize(n_B); censor.hi2_B.resize(n_B); censor.out2_B.resize(n_B);
+
   return censor;
 }
+
 
 

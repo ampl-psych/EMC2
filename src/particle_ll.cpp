@@ -338,8 +338,8 @@ double c_log_likelihood_race(ParamTable& pt,
 
   // 3) Trialwise truncation correction
   if (trunc.any()) {
-    const auto log_Z = trunc.calculate_normalization_constant();
-    for (int t = 0; t < trunc.n_trials; ++t) ll_ptr[t] -= log_Z[t];
+    trunc.calculate_normalization_constant();
+    for (int t = 0; t < trunc.n_trials; ++t) ll_ptr[t] -= trunc.log_Z[t];
   }
 
   // 4) Fill in trialwise censor probabilities
@@ -379,9 +379,10 @@ double c_log_likelihood_DDM(ParamTable& pt,
   // Same machinery as the race path; the DDM survivor backend (ddm_truncate)
   // makes the per-trial reduction a pass-through (n_acc = 1).
   if (trunc.any()) {
-    const std::vector<double> log_Z = trunc.calculate_normalization_constant();
-    for (int t = 0; t < trunc.n_trials; ++t) lls_ptr[t] -= log_Z[t];
+    trunc.calculate_normalization_constant();
+    for (int t = 0; t < trunc.n_trials; ++t) lls_ptr[t] -= trunc.log_Z[t];
   }
+
   // Censoring: overwrite censored trials with their interval mass, reusing the
   // truncation survivors (trunc.S_lower / trunc.S_upper are defaulted when no
   // truncation columns are present).
