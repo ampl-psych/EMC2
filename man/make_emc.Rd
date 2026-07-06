@@ -30,9 +30,11 @@ make_emc(
 
 \item{n_chains}{An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute \code{rhat}).}
 
-\item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations.}
+\item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations.
+Compression is not supported for stop-signal models and will be turned off automatically.}
 
-\item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
+\item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.
+Stop-signal models ignore RT binning and use exact trial-level RTs.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
 

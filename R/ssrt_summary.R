@@ -30,7 +30,27 @@
 #' @param thin,filter,length.out,subject Passed to [get_pars()].
 #' @param ... Additional arguments passed to [get_pars()].
 #'
-#' @return A data frame with posterior summaries for `ssrt_mean` and `ssrt_sd`.
+#' @return A data frame with posterior summaries. The main rows are:
+#' \describe{
+#'   \item{`ssrt_mean`}{The mean stop finishing time on the seconds scale.}
+#'   \item{`ssrt_sd`}{The total standard deviation of stop finishing times on
+#'   the seconds scale. For population summaries this combines the average
+#'   within-person stop-time variance and the between-person variance in SSRT
+#'   means.}
+#'   \item{`between_subject_sd`}{Only returned for population summaries. The
+#'   standard deviation of individual SSRT means implied by the hierarchical
+#'   population distribution.}
+#'   \item{`mean_within_subject_sd`}{Only returned for population summaries.
+#'   The average individual stop-time standard deviation.}
+#' }
+#' Output columns identify the summary target (`level`, `subject`,
+#' `condition`, and condition columns when relevant), the stop distribution
+#' (`stop_family`), the moment formula used (`method`), the Monte Carlo
+#' population size for population summaries (`n_population`), and posterior
+#' summary columns. `mean` and `sd` are the posterior mean and posterior
+#' standard deviation of the requested SSRT quantity. The remaining columns are
+#' the requested quantiles from `probs`, named by their percentages, for example
+#' `2.5%`, `50%`, and `97.5%`.
 #' @export
 ssrt_summary <- function(emc,
                          level = c("population", "individual", "condition"),
@@ -325,10 +345,7 @@ ssrt_summary_condition <- function(emc, info, probs, stage, data,
                                    n_population, thin, filter, length.out,
                                    subject, ...) {
   design <- get_design(emc)[[1]]
-  if (is.null(data)) {
-    data <- get_data(emc)[[1]]
-  }
-  if (is.list(data) && !is.data.frame(data)) data <- data[[1]]
+  data <- ssrt_condition_data_frame(emc, data)
   if (!is.data.frame(data)) {
     stop("`data` must be a data frame when `level = \"condition\"`.",
          call. = FALSE)
@@ -337,13 +354,23 @@ ssrt_summary_condition <- function(emc, info, probs, stage, data,
   if (is.null(condition_vars)) {
     condition_vars <- ssrt_stop_formula_variables(emc, info)
     condition_vars <- setdiff(condition_vars, "subjects")
-    if (!length(condition_vars)) {
-      condition_vars <- setdiff(names(design$Ffactors), "subjects")
-    }
+  }
+  stop_formula_vars <- setdiff(ssrt_stop_formula_variables(emc, info), "subjects")
+  if (!length(stop_formula_vars)) {
+    stop("Stop parameters are not modeled as a function of any condition variable; ",
+         "condition-level SSRT summaries are not defined for this model.",
+         call. = FALSE)
   }
   condition_vars <- intersect(condition_vars, names(data))
   if (!length(condition_vars)) {
     stop("Could not determine condition variables. Supply `condition_vars`.",
+         call. = FALSE)
+  }
+  unused_condition_vars <- setdiff(condition_vars, stop_formula_vars)
+  if (length(unused_condition_vars)) {
+    stop("Condition variable(s) not used in stop-parameter formulas: ",
+         paste(unused_condition_vars, collapse = ", "), ". ",
+         "SSRT only varies by variables included in the stop-parameter formulas.",
          call. = FALSE)
   }
 
@@ -408,6 +435,19 @@ ssrt_summary_condition <- function(emc, info, probs, stage, data,
   )
 }
 
+ssrt_condition_data_frame <- function(emc, data = NULL) {
+  if (is.null(data)) {
+    data <- get_data(emc)
+  }
+  if (is.data.frame(data)) {
+    return(data)
+  }
+  if (is.list(data) && length(data) == 1L && is.data.frame(data[[1]])) {
+    return(data[[1]])
+  }
+  data
+}
+
 ssrt_condition_label <- function(data, condition_vars) {
   if (length(condition_vars) == 1L) {
     return(as.character(data[[condition_vars]]))
@@ -417,13 +457,13 @@ ssrt_condition_label <- function(data, condition_vars) {
   })
 }
 
-ssrt_population_condition_data <- function(data, n_population) {
+ssrt_population_condition_data <- function(data, condition_vars, n_population) {
   if (!"subjects" %in% names(data)) {
     stop("Condition-level population summaries require a `subjects` column.",
          call. = FALSE)
   }
 
-  row_key <- setdiff(names(data), c("subjects", "rt"))
+  row_key <- condition_vars
   template <- data[!duplicated(data[, row_key, drop = FALSE]), , drop = FALSE]
   subjects <- sprintf("population_%04d", seq_len(n_population))
   out <- template[rep(seq_len(nrow(template)), times = n_population), ,
@@ -511,7 +551,11 @@ ssrt_summary_condition_population_hierarchical <- function(emc, design, data,
     length.out = length.out,
     ...
   )
-  population_data <- ssrt_population_condition_data(data, n_population)
+  population_data <- ssrt_population_condition_data(
+    data = data,
+    condition_vars = condition_vars,
+    n_population = n_population
+  )
 
   mapped <- par_data_map(
     alpha,

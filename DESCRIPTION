@@ -37,7 +37,6 @@ URL: https://ampl-psych.github.io/EMC2/, https://github.com/ampl-psych/EMC2
 BugReports: https://github.com/ampl-psych/EMC2/issues 
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),
@@ -74,3 +73,4 @@ Depends:
     R (>= 3.5.0)
 LazyData: true
 Config/testthat/parallel: true
+Config/roxygen2/version: 8.0.0
