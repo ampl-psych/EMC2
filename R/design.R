@@ -1,3 +1,15 @@
+as_model_function <- function(model) {
+  if (is.function(model)) {
+    return(model)
+  }
+  if (is.list(model) && !is.null(model$p_types) && !is.null(model$Ttransform)) {
+    model_obj <- model
+    return(function() model_obj)
+  }
+  stop("`model` must be a model function or a model object with `p_types` and `Ttransform`.",
+       call. = FALSE)
+}
+
 #' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -14,7 +26,7 @@
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' Example: `c("right", "left")`
-#' @param model A function, specifies the model type.
+#' @param model A function or model object, specifies the model type.
 #' Choose from the drift diffusion model`DDM()`,
 #' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
 #' the racing diffusion model `RDM()`, or define your own
@@ -132,6 +144,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     class(design) <- "emc.design"
     return(design)
   }
+  model <- as_model_function(model)
   if (!is.null(data)) {
     if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
     data$subjects <- factor(data$subjects)

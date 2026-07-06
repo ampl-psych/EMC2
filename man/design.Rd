@@ -38,7 +38,7 @@ Example: \code{list(subjects=levels(dat$subjects), condition=levels(dat$conditio
 \item{Rlevels}{A character vector. Contains the response factor levels.
 Example: \code{c("right", "left")}}
 
-\item{model}{A function, specifies the model type.
+\item{model}{A function or model object, specifies the model type.
 Choose from the drift diffusion model\code{DDM()},
 the log-normal race model (\code{LNR()}), the linear ballistic model (\code{LBA()}),
 the racing diffusion model \code{RDM()}, or define your own
