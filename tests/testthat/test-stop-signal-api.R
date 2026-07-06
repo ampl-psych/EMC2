@@ -64,3 +64,45 @@ test_that("SSEXG and SSRDEX are compatibility wrappers for stop_signal", {
   expect_identical(SSRDEX()$p_types, stop_signal(go = "racing_diffusion", stop = "exgaussian")$p_types)
   expect_identical(SSRDEX()$c_name, stop_signal(go = "racing_diffusion", stop = "exgaussian")$c_name)
 })
+
+test_that("design accepts a stop_signal model object directly", {
+  direct <- design(
+    model = stop_signal(),
+    factors = list(subjects = 1, S = c("left", "right")),
+    Rlevels = c("left", "right"),
+    matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+    formula = list(
+      mu ~ lM,
+      sigma ~ 1,
+      tau ~ 1,
+      muS ~ 1,
+      sigmaS ~ 1,
+      tauS ~ 1,
+      gf ~ 1,
+      tf ~ 1
+    ),
+    report_p_vector = FALSE
+  )
+
+  wrapped <- design(
+    model = function() stop_signal(),
+    factors = list(subjects = 1, S = c("left", "right")),
+    Rlevels = c("left", "right"),
+    matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+    formula = list(
+      mu ~ lM,
+      sigma ~ 1,
+      tau ~ 1,
+      muS ~ 1,
+      sigmaS ~ 1,
+      tauS ~ 1,
+      gf ~ 1,
+      tf ~ 1
+    ),
+    report_p_vector = FALSE
+  )
+
+  expect_true(is.function(direct$model))
+  expect_identical(direct$model()$p_types, wrapped$model()$p_types)
+  expect_identical(direct$model()$c_name, wrapped$model()$c_name)
+})
