@@ -11,14 +11,53 @@ stop_signal(
 }
 \arguments{
 \item{go}{Character string. Go-runner family: \code{"exgaussian"} or
-\code{"racing_diffusion"}.}
+\code{"racing_diffusion"}. The default is \code{"exgaussian"}.}
 
 \item{stop}{Character string. Stop-runner family: \code{"exgaussian"},
-\code{"lognormal"}, or \code{"weibull"}.}
+\code{"lognormal"}, or \code{"weibull"}. The default is \code{"exgaussian"}.}
 }
 \value{
 A model list with all the necessary functions to sample.
 }
 \description{
 Creates a stop-signal race model by combining a go runner with a stop runner.
+}
+\details{
+The default model is \code{stop_signal(go = "exgaussian", stop = "exgaussian")},
+which is equivalent to \code{\link[=SSEXG]{SSEXG()}}. The hybrid racing-diffusion /
+ex-Gaussian model \code{stop_signal(go = "racing_diffusion", stop = "exgaussian")} is equivalent to \code{\link[=SSRDEX]{SSRDEX()}}.
+
+A stop-signal model is represented as a race between stochastic finishing
+times. On go trials, only the go runner is triggered. On stop trials, the go
+runner is triggered by the choice stimulus and the stop runner is triggered
+after the stop-signal delay. If the stop runner finishes before the go runner,
+the response is inhibited; otherwise a response is observed. The go runner
+family controls the finish-time distribution for response execution. The
+stop runner family controls the finish-time distribution for response
+inhibition.
+
+The go runner can be:\tabular{lll}{
+   \strong{Family} \tab \strong{Parameters} \tab \strong{Interpretation} \cr
+   \code{"exgaussian"} \tab \code{mu}, \code{sigma}, \code{tau}, \code{exg_lb} \tab Descriptive ex-Gaussian go finish-time distribution. \code{mu} is the mean of the Gaussian component, \code{sigma} is the standard deviation of the Gaussian component, \code{tau} is the mean of the exponential component, and \code{exg_lb} is the lower bound used for truncation. See \code{\link[=SSEXG]{SSEXG()}} for the full parameter description. \cr
+   \code{"racing_diffusion"} \tab \code{v}, \code{B}, \code{A}, \code{t0}, \code{s} \tab Racing-diffusion go process. \code{v} is the evidence-accumulation rate, \code{A} is between-trial variation in start point, \code{B} is the distance from \code{A} to the response threshold, \code{t0} is non-decision time, and \code{s} is within-trial drift-rate standard deviation. See \code{\link[=SSRDEX]{SSRDEX()}} for the full parameter description. \cr
+}
+
+
+The stop runner can be:\tabular{lll}{
+   \strong{Family} \tab \strong{Parameters} \tab \strong{Interpretation} \cr
+   \code{"exgaussian"} \tab \code{muS}, \code{sigmaS}, \code{tauS}, \code{exgS_lb} \tab Descriptive ex-Gaussian stop finish-time distribution. \code{muS} is the mean of the Gaussian component, \code{sigmaS} is the standard deviation of the Gaussian component, \code{tauS} is the mean of the exponential component, and \code{exgS_lb} is the lower bound used for truncation. The stop mean is \code{muS + tauS}. See \code{\link[=SSEXG]{SSEXG()}} and \code{\link[=SSRDEX]{SSRDEX()}} for the ex-Gaussian stop-parameter description. \cr
+   \code{"lognormal"} \tab \code{meanlogS}, \code{sdlogS} \tab Lognormal stop finish-time distribution. \code{meanlogS} is the mean of the associated normal distribution on the log-seconds scale. \code{sdlogS} is estimated on the log scale and transformed with \code{exp(sdlogS)} to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The stop mean is \code{exp(meanlogS + exp(sdlogS)^2 / 2)}. \cr
+   \code{"weibull"} \tab \code{shapeS}, \code{scaleS} \tab Weibull stop finish-time distribution. \code{shapeS} and \code{scaleS} are estimated on the log scale and transformed with \code{exp(shapeS)} and \code{exp(scaleS)}. \code{shapeS} controls the shape of the hazard and distribution skew; \code{scaleS} controls the time scale. The stop mean is \code{exp(scaleS) * gamma(1 + 1 / exp(shapeS))}. \cr
+}
+
+
+All stop-signal models include \code{tf} and \code{gf}. \code{tf} is the attentional lapse
+rate for the stop process ("trigger failure") and \code{gf} is the attentional
+lapse rate for the go process ("go failure"). Both are estimated on the
+probit scale and transformed to probabilities.
+
+Default values are used for parameters that are not explicitly listed in the
+\code{formula} argument of \code{\link[=design]{design()}}. They can be inspected with, for example,
+\code{stop_signal()$p_types}, \code{stop_signal(stop = "lognormal")$p_types}, or
+\code{stop_signal(go = "racing_diffusion", stop = "weibull")$p_types}.
 }

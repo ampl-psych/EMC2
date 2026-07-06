@@ -669,9 +669,50 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' Creates a stop-signal race model by combining a go runner with a stop runner.
 #'
 #' @param go Character string. Go-runner family: `"exgaussian"` or
-#'   `"racing_diffusion"`.
+#'   `"racing_diffusion"`. The default is `"exgaussian"`.
 #' @param stop Character string. Stop-runner family: `"exgaussian"`,
-#'   `"lognormal"`, or `"weibull"`.
+#'   `"lognormal"`, or `"weibull"`. The default is `"exgaussian"`.
+#'
+#' @details
+#'
+#' The default model is `stop_signal(go = "exgaussian", stop = "exgaussian")`,
+#' which is equivalent to [SSEXG()]. The hybrid racing-diffusion /
+#' ex-Gaussian model `stop_signal(go = "racing_diffusion",
+#' stop = "exgaussian")` is equivalent to [SSRDEX()].
+#'
+#' A stop-signal model is represented as a race between stochastic finishing
+#' times. On go trials, only the go runner is triggered. On stop trials, the go
+#' runner is triggered by the choice stimulus and the stop runner is triggered
+#' after the stop-signal delay. If the stop runner finishes before the go runner,
+#' the response is inhibited; otherwise a response is observed. The go runner
+#' family controls the finish-time distribution for response execution. The
+#' stop runner family controls the finish-time distribution for response
+#' inhibition.
+#'
+#' The go runner can be:
+#'
+#' | **Family** | **Parameters** | **Interpretation** |
+#' |-----------|----------------|--------------------|
+#' | `"exgaussian"` | `mu`, `sigma`, `tau`, `exg_lb` | Descriptive ex-Gaussian go finish-time distribution. `mu` is the mean of the Gaussian component, `sigma` is the standard deviation of the Gaussian component, `tau` is the mean of the exponential component, and `exg_lb` is the lower bound used for truncation. See [SSEXG()] for the full parameter description. |
+#' | `"racing_diffusion"` | `v`, `B`, `A`, `t0`, `s` | Racing-diffusion go process. `v` is the evidence-accumulation rate, `A` is between-trial variation in start point, `B` is the distance from `A` to the response threshold, `t0` is non-decision time, and `s` is within-trial drift-rate standard deviation. See [SSRDEX()] for the full parameter description. |
+#'
+#' The stop runner can be:
+#'
+#' | **Family** | **Parameters** | **Interpretation** |
+#' |-----------|----------------|--------------------|
+#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See [SSEXG()] and [SSRDEX()] for the ex-Gaussian stop-parameter description. |
+#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
+#' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and transformed with `exp(shapeS)` and `exp(scaleS)`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `exp(scaleS) * gamma(1 + 1 / exp(shapeS))`. |
+#'
+#' All stop-signal models include `tf` and `gf`. `tf` is the attentional lapse
+#' rate for the stop process ("trigger failure") and `gf` is the attentional
+#' lapse rate for the go process ("go failure"). Both are estimated on the
+#' probit scale and transformed to probabilities.
+#'
+#' Default values are used for parameters that are not explicitly listed in the
+#' `formula` argument of [design()]. They can be inspected with, for example,
+#' `stop_signal()$p_types`, `stop_signal(stop = "lognormal")$p_types`, or
+#' `stop_signal(go = "racing_diffusion", stop = "weibull")$p_types`.
 #'
 #' @return A model list with all the necessary functions to sample.
 #' @export
