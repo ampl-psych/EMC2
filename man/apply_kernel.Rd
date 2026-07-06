@@ -4,7 +4,7 @@
 \alias{apply_kernel}
 \title{Apply a kernel implied in an emc object}
 \usage{
-apply_kernel(kernel_pars, emc, subject = 1, input_pars = NULL, trend_n = 1)
+apply_kernel(kernel_pars, emc, subject = 1, input_pars = NULL)
 }
 \arguments{
 \item{kernel_pars}{A named vector of kernel parameters on the natural scale.
@@ -16,10 +16,6 @@ Use \code{NULL} for kernels that do not require parameters.}
 
 \item{input_pars}{Optional parameter matrix containing externally supplied
 parameter values (e.g., trend parameters). Only needed for custom kernels.}
-
-\item{trend_n}{Integer specifying which trend to apply when multiple trends
-exist in the model. Defaults to \code{1}. A warning is issued if the model
-contains more than one trend.}
 }
 \value{
 Returns a kernel matrix produced by the corresponding implementation.

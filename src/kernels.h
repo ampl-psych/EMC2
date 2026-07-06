@@ -8,6 +8,8 @@
 #include <Rcpp.h>    //
 #include "nan_check.h"
 #include "EMC2/userfun.hpp"
+#include "Mat.h"
+#include "kernels_math.h"
 
 // View
 struct KernelParsView {
@@ -18,6 +20,7 @@ struct KernelParsView {
 // Struct for optional kernel arguments. Currently only "q-value resetting" is supported.
 struct KernelArgs {
   const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
+  int grid_res = 100;
   // Future extensible fields go here, e.g.:
   // const double* some_other_col = nullptr;
 };
@@ -39,6 +42,7 @@ struct KernelOutput {
 enum class KernelType {
   SimpleDelta,
   Delta2Kernel,
+  DeltaDecoupled,
   // Delta2Kernel2,
   Delta2LR,
   LinIncr,
@@ -51,7 +55,12 @@ enum class KernelType {
   Poly3,
   Poly4,
   Custom,
-  RescorlaWagner
+  RescorlaWagner,
+  BetaBinomial,
+  BetaBinomialDecay,
+  BetaBinomialWindow,
+  DBM,
+  TPM
 };
 
 // Some meta-data for kernels -- mostly for the future
@@ -63,8 +72,8 @@ struct KernelMeta {
 inline KernelMeta kernel_meta(KernelType kt) {
   switch (kt) {
   case KernelType::SimpleDelta:
+  case KernelType::DeltaDecoupled:
   case KernelType::Delta2Kernel:
-  // case KernelType::Delta2Kernel2:
   case KernelType::Delta2LR:
   case KernelType::LinIncr:
   case KernelType::LinDecr:
@@ -75,9 +84,15 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::Poly2:
   case KernelType::Poly3:
   case KernelType::Poly4:
-    return {1, true};   // all current kernels: 1D input, grouping allowed
+    return {1, true};   // all above kernels: 1D input, grouping allowed
   case KernelType::Custom: return{1, false};
   case KernelType::RescorlaWagner: return{-1, false};  // N columns allowed
+  case KernelType::BetaBinomial:
+  case KernelType::BetaBinomialDecay:
+  case KernelType::BetaBinomialWindow:
+  case KernelType::DBM:
+  case KernelType::TPM:
+    return {1, false};
   }
 
   // default future behaviour: 1D, but no grouping
@@ -106,7 +121,7 @@ public:
   virtual void set_kernel_args(const KernelArgs& /*args*/) {}
 
   virtual void run(const KernelParsView& kernel_pars,
-                   const Rcpp::NumericMatrix& covariate,
+                   const Mat& covariate,
                    const std::vector<int>& comp_idx) = 0;
 
   virtual void reset() {
@@ -199,12 +214,12 @@ public:
   }
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& input,
+           const Mat& input,
            const std::vector<int>& comp_idx) override {
 
              const int n_comp   = static_cast<int>(comp_idx.size());
              const int n_pars   = static_cast<int>(kernel_pars.cols.size());
-             const int n_inputs = input.ncol();
+             const int n_inputs = input.ncol;
 
              if (n_comp == 0) {
                out_.clear();
@@ -349,7 +364,7 @@ public:
 
 struct LinIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -358,9 +373,10 @@ struct LinIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
-                 out_[j] = x;  // compressed index
-               }
+               out_[j] = x;
+               // if (!is_nan(x)) {
+               //   out_[j] = x;  // compressed index
+               // }
              }
 
              mark_run_complete();
@@ -370,7 +386,7 @@ struct LinIncrKernel : BaseKernel {
 
 struct LinDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -380,9 +396,10 @@ struct LinDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
-                 out_[j] = -x;
-               }
+               out_[j] = -x;
+               // if (!is_nan(x)) {
+               //   out_[j] = -x;
+               // }
                // out_[j] = last;
              }
 
@@ -392,7 +409,7 @@ struct LinDecrKernel : BaseKernel {
 
 struct ExpDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -408,10 +425,10 @@ struct ExpDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -421,7 +438,7 @@ struct ExpDecrKernel : BaseKernel {
 
 struct ExpIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -437,10 +454,10 @@ struct ExpIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -450,7 +467,7 @@ struct ExpIncrKernel : BaseKernel {
 
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -466,10 +483,10 @@ struct PowDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -479,7 +496,7 @@ struct PowDecrKernel : BaseKernel {
 
 struct PowIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -495,10 +512,10 @@ struct PowIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -508,7 +525,7 @@ struct PowIncrKernel : BaseKernel {
 
 struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("Poly2Kernel expects 2 parameter columns, got %d",
@@ -525,12 +542,12 @@ struct Poly2Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
                  out_[j] = a1 * x + a2 * x2;
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -540,7 +557,7 @@ struct Poly2Kernel : BaseKernel {
 
 struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Poly3Kernel expects 3 parameter columns, got %d",
@@ -558,14 +575,14 @@ struct Poly3Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
                  double x2 = x * x;
                  double x3 = x2 * x;
                  out_[j] = a1 * x + a2 * x2 + a3 * x3;
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -575,7 +592,7 @@ struct Poly3Kernel : BaseKernel {
 
 struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Poly4Kernel expects 4 parameter columns, got %d",
@@ -594,7 +611,7 @@ struct Poly4Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!is_nan(x)) {
+               // if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -604,7 +621,7 @@ struct Poly4Kernel : BaseKernel {
                  double x3 = x2 * x;
                  double x4 = x2 * x2;
                  out_[j] = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
-               }
+               // }
                // out_[j] = last;
              }
 
@@ -618,7 +635,7 @@ struct SimpleDelta : DeltaKernel {
   SimpleDelta() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
@@ -640,7 +657,7 @@ struct SimpleDelta : DeltaKernel {
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
-             const double* cov_ptr   = covariate.begin();
+             const double* cov_ptr   = covariate.colptr(0);
 
              int row0 = comp_idx[0];
              q_       = q0_col[row0];
@@ -671,11 +688,74 @@ struct SimpleDelta : DeltaKernel {
            }
 };
 
+// Delta rule reparametrised to decouple the movement towards the outcome from the decay towards 0
+struct DeltaDecoupled : DeltaKernel {
+  DeltaDecoupled() {}
+
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 3) {
+               Rcpp::stop("DeltaDecoupled expects 3 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             const int n_comp = static_cast<int>(comp_idx.size());
+             if (n_comp <= 0) {
+               out_.clear();
+               pes_.clear();
+               mark_run_complete();
+               return;
+             }
+
+             // slightly faster -- no-op size check, no need to write anything
+             out_.resize(n_comp);
+             pes_.resize(n_comp);
+             pes_[n_comp - 1] = NA_REAL;
+
+             const double* q0_col    = kernel_pars.cols[0];
+             const double* alpha_col = kernel_pars.cols[1];
+             const double* lambda_col = kernel_pars.cols[2];
+             const double* cov_ptr   = covariate.colptr(0);
+
+             int row0 = comp_idx[0];
+             q_       = q0_col[row0];
+             out_[0]  = q_;
+
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r    = comp_idx[j];
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
+               double x = cov_ptr[r];
+
+               if (!is_nan(x)) {
+                 double alpha  = alpha_col[r];
+                 double lambda = lambda_col[r];
+                 double term1 = alpha*x;
+                 double term2 = lambda*q_;
+                 q_ += term1 - term2;
+                 double pe    = x - q_;  // bit questionable what the RPE is in this case though
+                 pes_[j]      = pe;
+                 // q_          += alpha * pe;
+               } else {
+                 pes_[j] = NA_REAL;
+               }
+               out_[j + 1] = q_;
+             }
+
+             mark_run_complete();
+           }
+};
+
 struct Delta2LR : DeltaKernel {
   Delta2LR() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Delta2LR expects 3 parameter columns, got %d",
@@ -724,12 +804,11 @@ struct Delta2LR : DeltaKernel {
 };
 
 // 2D PE kernel: separate from DeltaKernel
-// to-do - deprecate this, it doesn't work and is annoying to maintain...
 struct Delta2Kernel : SequentialKernel {
   double qFast_ = NA_REAL;
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
-  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
+  const int* q_reset_ = nullptr;
 
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
@@ -752,7 +831,7 @@ struct Delta2Kernel : SequentialKernel {
   Delta2Kernel() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
@@ -880,7 +959,7 @@ public:
   }
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
+           const Mat& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 2) {
@@ -889,7 +968,7 @@ public:
              }
 
              const int n_comp = static_cast<int>(comp_idx.size());
-             n_covs_          = covariate.ncol();
+             n_covs_          = covariate.ncol;
 
              if (n_comp == 0 || n_covs_ == 0) {
                q_mat_.clear();
@@ -1020,6 +1099,7 @@ public:
   }
 };
 
+
 // // 2kernel adjusted
 // struct Delta2Kernel2 : Delta2Kernel {
 //   double qFast_ = NA_REAL;
@@ -1096,6 +1176,493 @@ public:
 //              mark_run_complete();
 //            }
 // };
+
+// =============================================================================
+// DBMBaseKernel
+// Streams: 1 = prediction mean, 2 = prediction mode, 3 = surprise (bits)
+// =============================================================================
+
+struct DBMBaseKernel : BaseKernel {
+protected:
+  std::vector<double> pred_mean_;
+  std::vector<double> pred_mode_;
+  mutable std::vector<double> surprise_;          // computed lazily
+  std::vector<double> comp_obs_;                  // compressed observations, stored during run()
+  mutable bool surprise_computed_ = false;
+
+  void store_obs(const double* cov_ptr, const std::vector<int>& comp_idx) {
+    const int n_comp = static_cast<int>(comp_idx.size());
+    comp_obs_.resize(n_comp);
+    for (int j = 0; j < n_comp; ++j)
+      comp_obs_[j] = cov_ptr[comp_idx[j]];
+  }
+
+  void ensure_surprise() const {
+    if (surprise_computed_) return;
+    const int n_comp = static_cast<int>(pred_mean_.size());
+    surprise_.resize(n_comp, std::numeric_limits<double>::quiet_NaN());
+    for (int j = 0; j < n_comp; ++j)
+      if (!is_nan(comp_obs_[j]))
+        surprise_[j] = shannon_surprise(pred_mean_[j], comp_obs_[j]);
+    surprise_computed_ = true;
+  }
+
+public:
+  void reset() override {
+    BaseKernel::reset();
+    pred_mean_.clear();
+    pred_mode_.clear();
+    surprise_.clear();
+    comp_obs_.clear();
+    surprise_computed_ = false;
+  }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 3);
+  }
+
+  KernelOutput get_output_stream(int code) const override {
+    if (code == 3) ensure_surprise(); // compute surprise the moment it is requested, not before
+    const std::vector<double>* src = nullptr;
+    if      (code == 1) src = &pred_mean_;
+    else if (code == 2) src = &pred_mode_;
+    else if (code == 3) src = &surprise_;
+    else Rcpp::stop("DBMBaseKernel::get_output_stream: unsupported code %d "
+                      "(1=mean, 2=mode, 3=surprise)", code);
+
+    if (has_expand_idx_) {
+      const int n_full = static_cast<int>(expand_idx_.size());
+      stream_buf_[0].resize(n_full);
+      for (int i = 0; i < n_full; ++i)
+        stream_buf_[0][i] = (*src)[expand_idx_[i] - 1];
+      return KernelOutput{ stream_buf_[0].data(), n_full, 1 };
+    }
+    return KernelOutput{ src->data(), static_cast<int>(src->size()), 1 };
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "mean";
+    if (code == 2) return "mode";
+    if (code == 3) return "surprise";
+    throw std::runtime_error("DBMBaseKernel::output_stream_name: unsupported code");
+  }
+
+protected:
+  void compute_surprise(const double* cov_ptr,
+                        const std::vector<int>& comp_idx) {
+    const int n_comp = static_cast<int>(comp_idx.size());
+    surprise_.resize(n_comp, std::numeric_limits<double>::quiet_NaN());
+    for (int j = 0; j < n_comp; ++j) {
+      const double obs = cov_ptr[comp_idx[j]];
+      if (!is_nan(obs))
+        surprise_[j] = shannon_surprise(pred_mean_[j], obs);
+    }
+  }
+
+  // keep out_ in sync with pred_mean_ so BaseKernel::do_expand works if called
+  void sync_out_to_mean() { out_ = pred_mean_; }
+};
+
+// =============================================================================
+// BetaBinomialKernel  —  basic (no memory constraint)
+// Parameters: a0, b0
+// =============================================================================
+
+struct BetaBinomialKernel : DBMBaseKernel {
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 2)
+               Rcpp::stop("BetaBinomialKernel expects 2 parameter columns (a0, b0), got %d",
+                          (int)kernel_pars.cols.size());
+
+             const int     n_comp  = static_cast<int>(comp_idx.size());
+             const double* a0_col  = kernel_pars.cols[0];
+             const double* b0_col  = kernel_pars.cols[1];
+             const double* cov_ptr = covariate.colptr(0);
+
+             pred_mean_.resize(n_comp);
+             pred_mode_.resize(n_comp);
+
+             double n_hit = 0.0, n_trial = 0.0;
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int    r   = comp_idx[j];
+               const double a_t = a0_col[r] + n_hit;
+               const double b_t = b0_col[r] + (n_trial - n_hit);
+
+               pred_mean_[j] = beta_mean(a_t, b_t);
+               pred_mode_[j] = beta_mode(a_t, b_t);
+
+               const double x = cov_ptr[r];
+               if (!is_nan(x)) { n_hit += x; n_trial += 1.0; }
+             }
+
+             store_obs(cov_ptr, comp_idx);
+             sync_out_to_mean();
+             mark_run_complete();
+           }
+};
+
+// =============================================================================
+// BetaBinomialDecayKernel  —  exponential decay on accumulated counts
+// Parameters: a0, b0, decay
+// =============================================================================
+
+struct BetaBinomialDecayKernel : DBMBaseKernel {
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 3)
+               Rcpp::stop("BetaBinomialDecayKernel expects 3 parameter columns "
+                            "(a0, b0, decay), got %d",
+                            (int)kernel_pars.cols.size());
+
+             const int     n_comp    = static_cast<int>(comp_idx.size());
+             const double* a0_col    = kernel_pars.cols[0];
+             const double* b0_col    = kernel_pars.cols[1];
+             const double* decay_col = kernel_pars.cols[2];
+             const double* cov_ptr   = covariate.colptr(0);
+
+             pred_mean_.resize(n_comp);
+             pred_mode_.resize(n_comp);
+
+             double n_hit = 0.0, n_trial = 0.0;
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int    r   = comp_idx[j];
+               const double a_t = a0_col[r] + n_hit;
+               const double b_t = b0_col[r] + (n_trial - n_hit);
+
+               pred_mean_[j] = beta_mean(a_t, b_t);
+               pred_mode_[j] = beta_mode(a_t, b_t);
+
+               const double df = std::exp(-1.0 / decay_col[r]);
+               const double x  = cov_ptr[r];
+               if (!is_nan(x)) {
+                 n_hit   = df * (n_hit + x);
+                 n_trial = df * (n_trial + 1.0);
+               } else {
+                 // still decay without observation: passage of time erodes memory
+                 n_hit   = df * n_hit;
+                 n_trial = df * n_trial;
+               }
+             }
+
+             store_obs(cov_ptr, comp_idx);
+             sync_out_to_mean();
+             mark_run_complete();
+           }
+};
+
+// =============================================================================
+// BetaBinomialWindowKernel  —  fixed sliding window
+// Parameters: a0, b0, window
+// =============================================================================
+
+struct BetaBinomialWindowKernel : DBMBaseKernel {
+private:
+  struct Event { double obs; int idx; };
+
+public:
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 3)
+               Rcpp::stop("BetaBinomialWindowKernel expects 3 parameter columns "
+                            "(a0, b0, window), got %d",
+                            (int)kernel_pars.cols.size());
+
+             const int     n_comp     = static_cast<int>(comp_idx.size());
+             const double* a0_col     = kernel_pars.cols[0];
+             const double* b0_col     = kernel_pars.cols[1];
+             const double* window_col = kernel_pars.cols[2];
+             const double* cov_ptr    = covariate.colptr(0);
+
+             pred_mean_.resize(n_comp);
+             pred_mode_.resize(n_comp);
+
+             double n_hit = 0.0, n_trial = 0.0;
+             std::deque<Event> buf;
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int r = comp_idx[j];
+               const int w = static_cast<int>(window_col[r]);
+
+               // prune observations outside the window
+               while (!buf.empty() && (r - buf.front().idx) > w) {
+                 n_hit   -= buf.front().obs;
+                 n_trial -= 1.0;
+                 buf.pop_front();
+               }
+
+               const double a_t = a0_col[r] + n_hit;
+               const double b_t = b0_col[r] + (n_trial - n_hit);
+
+               pred_mean_[j] = beta_mean(a_t, b_t);
+               pred_mode_[j] = beta_mode(a_t, b_t);
+
+               const double x = cov_ptr[r];
+               if (!is_nan(x)) {
+                 buf.push_back({x, r});
+                 n_hit   += x;
+                 n_trial += 1.0;
+               }
+             }
+
+             store_obs(cov_ptr, comp_idx);
+             sync_out_to_mean();
+             mark_run_complete();
+           }
+};
+
+// =============================================================================
+// DBMKernel  —  Dynamic Belief Model
+// Yu & Cohen (2008), Ide et al. (2013)
+// Parameters: cp, mu0, s0
+// kernel_args: grid_res (default 100)
+// =============================================================================
+
+struct DBMKernel : DBMBaseKernel {
+private:
+  int grid_res_ = 100; // TODO grid_res_ probably needs to be raised for computing mode
+
+public:
+  void set_kernel_args(const KernelArgs& args) override {
+    if (args.grid_res > 0) grid_res_ = args.grid_res;
+  }
+
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 3)
+               Rcpp::stop("DBMKernel expects 3 parameter columns (cp, mu0, s0), got %d",
+                          (int)kernel_pars.cols.size());
+
+             const int     n_comp  = static_cast<int>(comp_idx.size());
+             const double* cp_col  = kernel_pars.cols[0];
+             const double* mu0_col = kernel_pars.cols[1];
+             const double* s0_col  = kernel_pars.cols[2];
+             const double* cov_ptr = covariate.colptr(0);
+
+             pred_mean_.resize(n_comp);
+             pred_mode_.resize(n_comp);
+
+             const int    gs     = grid_res_ + 1;
+
+             std::vector<double> prob_grid(gs), x_like(gs), y_like(gs);
+             for (int i = 0; i < gs; ++i) {
+               prob_grid[i] = static_cast<double>(i) / (gs - 1);
+               x_like[i]   = prob_grid[i];
+               y_like[i]   = 1.0 - prob_grid[i];
+             }
+
+             std::vector<double> DBM_prior(gs), DBM_pred(gs), DBM_post(gs);
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int    r   = comp_idx[j];
+               const double cp  = cp_col[r];
+               const double mu0 = mu0_col[r];
+               const double s0  = s0_col[r];
+               const double a   = mu0 * s0;
+               const double b   = (1.0 - mu0) * s0;
+               const double x   = cov_ptr[r];
+
+               // compute discretised Beta prior
+               for (int i = 0; i < gs; ++i)
+                 DBM_prior[i] = dbeta_val(prob_grid[i], a, b);
+               normalise_inplace(DBM_prior);
+
+               // predictive distribution
+               if (j == 0) {
+                 // first trial: fixed prior is the predictive
+                 DBM_pred = DBM_prior;
+               } else {
+                 // otherwise: mixture of fixed prior and most recent posterior
+                 const double mix_old = 1.0 - cp;
+                 const double mix_new = cp;
+                 for (int i = 0; i < gs; ++i)
+                   DBM_pred[i] = mix_old * DBM_post[i] + mix_new * DBM_prior[i];
+                 normalise_inplace(DBM_pred);
+               }
+
+               pred_mean_[j] = mean_discrete(prob_grid, DBM_pred);
+               pred_mode_[j] = mode_discrete(prob_grid, DBM_pred);
+
+               // posterior update
+               if (is_nan(x)) {
+                 DBM_post = DBM_pred;   // no observation: push predictive forward
+               } else {
+                 const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
+                 for (int i = 0; i < gs; ++i)
+                   DBM_post[i] = DBM_pred[i] * like[i];
+                 normalise_inplace(DBM_post);
+               }
+             }
+
+             store_obs(cov_ptr, comp_idx);
+             sync_out_to_mean();
+             mark_run_complete();
+           }
+};
+
+// =============================================================================
+// TPMKernel  —  Transition Probability Model
+// Yu & Cohen (2008)
+// Parameters: cp, a0, b0
+// kernel_args: grid_res (default 100)
+// =============================================================================
+
+struct TPMKernel : DBMBaseKernel {
+private:
+  int grid_res_ = 100;
+
+  struct TPMGrid {
+    int resol = 0, n_combi = 0;
+    std::vector<double> p_XX, p_XY;
+    std::vector<double> like_XX, like_XY, like_YX, like_YY;
+    std::vector<double> mean_p;
+  };
+
+  TPMGrid build_grid(int grid_res) const {
+    const int resol   = grid_res + 1;
+    const int n_combi = resol * resol;
+
+    std::vector<double> grid(resol);
+    for (int i = 0; i < resol; ++i)
+      grid[i] = static_cast<double>(i) / (resol - 1);
+
+    TPMGrid g;
+    g.resol = resol; g.n_combi = n_combi;
+    g.p_XX.resize(n_combi);    g.p_XY.resize(n_combi);
+    g.like_XX.resize(n_combi); g.like_XY.resize(n_combi);
+    g.like_YX.resize(n_combi); g.like_YY.resize(n_combi);
+    g.mean_p.resize(n_combi);
+
+    int idx = 0;
+    for (int i0 = 0; i0 < resol; ++i0) {
+      const double pXY = grid[i0];
+      for (int i1 = 0; i1 < resol; ++i1) {
+        const double pXX   = grid[i1];
+        g.p_XX[idx]    = pXX;
+        g.p_XY[idx]    = pXY;
+        g.like_XX[idx] = pXX;
+        g.like_XY[idx] = pXY;
+        g.like_YX[idx] = 1.0 - pXX;
+        g.like_YY[idx] = 1.0 - pXY;
+        g.mean_p[idx]  = 0.5 * (pXX + pXY);
+        ++idx;
+      }
+    }
+    return g;
+  }
+
+public:
+  void set_kernel_args(const KernelArgs& args) override {
+    if (args.grid_res > 0) grid_res_ = args.grid_res;
+  }
+
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 3)
+               Rcpp::stop("TPMKernel expects 3 parameter columns (cp, a0, b0), got %d",
+                          (int)kernel_pars.cols.size());
+
+             const int     n_comp  = static_cast<int>(comp_idx.size());
+             const double* cp_col  = kernel_pars.cols[0];
+             const double* a0_col  = kernel_pars.cols[1];
+             const double* b0_col  = kernel_pars.cols[2];
+             const double* cov_ptr = covariate.colptr(0);
+
+             pred_mean_.resize(n_comp);
+             pred_mode_.resize(n_comp);
+
+             const double cp_eps  = 1e-10;
+             const TPMGrid grid   = build_grid(grid_res_);
+             const int     nc     = grid.n_combi;
+             const double  inv_nm1 = 1.0 / (nc - 1.0);
+
+             std::vector<double> TPM_post(nc), TPM_pred(nc), TPM_update(nc);
+
+             // initialise posterior with Beta prior from first trial
+             {
+               const int r0 = comp_idx[0];
+               for (int k = 0; k < nc; ++k)
+                 TPM_post[k] = dbeta_val(grid.p_XX[k], a0_col[r0], b0_col[r0])
+                 * dbeta_val(grid.p_XY[k], a0_col[r0], b0_col[r0]);
+               normalise_inplace(TPM_post);
+             }
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int    r       = comp_idx[j];
+               const double cp      = cp_col[r];
+               const double x       = cov_ptr[r];
+               const bool   curr_na = is_nan(x);
+               const bool   prev_na = (j == 0) || is_nan(cov_ptr[comp_idx[j - 1]]);
+               const int    curr    = curr_na ? -1 : static_cast<int>(x);
+               const int    prev    = (j == 0 || prev_na) ? -1
+               : static_cast<int>(cov_ptr[comp_idx[j - 1]]);
+
+               // degenerate: cp ≈ 1
+               if ((1.0 - cp) < cp_eps) {
+                 pred_mean_[j] = beta_mean(a0_col[r], b0_col[r]);
+                 pred_mode_[j] = pred_mean_[j];
+                 continue;
+               }
+
+               // degenerate: cp ≈ 0 — no volatility, read directly from posterior
+               if (cp < cp_eps) {
+                 pred_mean_[j] = prev_na
+                 ? mean_discrete(grid.mean_p, TPM_post)
+                   : (prev == 1 ? mean_discrete(grid.p_XX, TPM_post)
+                        : mean_discrete(grid.p_XY, TPM_post));
+                 pred_mode_[j] = pred_mean_[j];
+               } else {
+                 // full TPM update
+                 const double sum_post = std::accumulate(
+                   TPM_post.begin(), TPM_post.end(), 0.0);
+                 const double mix_old  = 1.0 - cp;
+                 const double mix_new  = cp;
+
+                 for (int k = 0; k < nc; ++k)
+                   TPM_pred[k] = mix_old * TPM_post[k]
+                 + mix_new * (sum_post - TPM_post[k]) * inv_nm1;
+                 normalise_inplace(TPM_pred);
+
+                 pred_mean_[j] = prev_na
+                 ? mean_discrete(grid.mean_p, TPM_pred)
+                   : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
+                        : mean_discrete(grid.p_XY, TPM_pred));
+                 pred_mode_[j] = pred_mean_[j];
+
+                 if (curr_na || prev_na) {
+                   TPM_post = TPM_pred;
+                 } else {
+                   const std::vector<double>* lp =
+                     (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY)
+                     : (curr == 0 ? &grid.like_YX : &grid.like_XX);
+                   for (int k = 0; k < nc; ++k)
+                     TPM_update[k] = mix_old * (*lp)[k] * TPM_post[k]
+                   + mix_new * (*lp)[k]
+                   * (sum_post - TPM_post[k]) * inv_nm1;
+                   normalise_inplace(TPM_update);
+                   std::swap(TPM_post, TPM_update);
+                 }
+               }
+             }
+
+             store_obs(cov_ptr, comp_idx);
+             sync_out_to_mean();
+             mark_run_complete();
+           }
+};
+
 
 // ---- Type mapping + factory ----
 

@@ -16,10 +16,7 @@ resolve_memory_columns <- function(dadm, model) {
   intersect(names(dadm), keep)
 }
 
-has_trend_map <- function(model) {
-  if (is.null(model) || is.function(model) || is.null(model$trend)) return(FALSE)
-  any(vapply(model$trend, function(x) !is.null(x$map) && length(x$map) > 0, logical(1)))
-}
+# SM: moved has_trend_map to trend.R
 
 build_design_pool <- function(dadm, designs) {
   if (is.null(designs)) return(NULL)

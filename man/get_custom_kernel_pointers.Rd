@@ -7,11 +7,12 @@
 get_custom_kernel_pointers(input_data)
 }
 \arguments{
-\item{input_data}{Either an emc object or a trend list.}
+\item{input_data}{Either an emc object or an \code{emc2_trend} object.}
 }
 \value{
-A list-of-lists of custom pointers, one sub-list per model. Trends without a
-custom kernel return NULL. Returns NULL if no custom pointers are found.
+A list-of-lists of custom pointers, one sub-list per model, keyed
+by \code{kernel_id}. Kernels without a custom pointer return \code{NULL}. Returns
+\code{NULL} if no custom pointers are found anywhere.
 }
 \description{
 Extract the pointers so they can be re-added to an emc object after loading it from disk.

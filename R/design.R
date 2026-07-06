@@ -202,12 +202,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
                  parameter_design=parameter_design)
   class(design) <- "emc.design"
+
+  # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model
   if (!is.null(trend)) {
     # check for at = 'lR'
-    if(any(sapply(trend, function(x) x$at) == 'lR') &&
+    if(any(vapply(trend$kernels, function(k) identical(k$at, "lR"), logical(1))) &&
        !is_choice_accumulator_type(model())) {
       warning('A trend has `at="lR"`, but this model does not use accumulator rows. Setting `at` to NULL')
-      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+      for(kernel_id in names(trend$kernels)) if(identical(trend$kernels[[kernel_id]]$at, "lR")) trend$kernels[[kernel_id]]$at <- NULL
     }
     model <- update_model_trend(trend, model)
     design$model <- model
@@ -617,31 +619,29 @@ design_model <- function(data,design,model=NULL,
     da[,i] <- newF
   }
 
-  # Add covariate_map as attribute to da
+  # Trend checks to apply now that we have the data
   if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      if(!is.null(trend_list[[i]]$map)) {
-        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
-        covariate_map_names <- names(trend_list[[i]]$map)
-        covariate_map_functions <- trend_list[[i]]$map
-        for(map_n in 1:length(covariate_map_names)) {
-          covs <- trend_list[[i]]$covariate
-          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+    trend <- model_info$trend
+
+    # loop over bases to find covariate maps
+    for(base in trend$bases) {
+      if(!is.null(base$coding)) {
+        ## look up covariate names
+        if(!'covariate_coding' %in% names(attributes(da))) attr(da, 'covariate_coding') <- list()
+        covs <- trend$kernels[[base$kernel_id]]$cov_names
+        for(scheme_name in names(base$coding)) {
+          attr(da, 'covariate_coding')[[scheme_name]] <- attr(da, 'covariate_coding')[[scheme_name]] <- base$coding[[scheme_name]](dadm = da, covs)
         }
       }
     }
-  }
 
-  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
-  if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      current_trend <- trend_list[[i]]
-      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+    # loop over kernels to check for NAs in data
+    all_kernels <- get_kernels()
+    for(kernel in trend$kernels) {
+      if(!isTRUE(all_kernels[[kernel$type]]$NA_allowed)) {
         # check if any NAs exist in the covariate
-        for(covariate in current_trend$covariate) {
-          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        for(covariate in kernel$cov_names) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', kernel$type, ' kernel type.'))
         }
       }
     }
@@ -759,7 +759,7 @@ design_model <- function(data,design,model=NULL,
       attr(dadm, "designs") <- NULL
     }
     model_list <- model()
-    if (!has_trend_map(model_list)) attr(dadm, "covariate_maps") <- NULL
+    if (!has_trend_coding(model_list)) attr(dadm, "covariate_coding") <- NULL
     keep <- resolve_memory_columns(dadm, model_list)
     if (length(keep) > 0) {
       attrs <- attributes(dadm)
@@ -815,6 +815,15 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 
   # --- 4. Auto-add intercept formulas for source parameters not yet in formula
   missing_sources <- source_pars[!source_pars %in% lhs_terms]
+
+  # Don't add intercept if source will already be generated as a column
+  # of an existing formula (e.g. "B_lRd.alpha_errorFALSE" from "B_lRd.alpha")
+  missing_sources <- missing_sources[!vapply(missing_sources, function(src) {
+    any(vapply(lhs_terms, function(lhs) {
+      startsWith(src, paste0(lhs, "_"))
+    }, logical(1)))
+  }, logical(1))]
+
   if (length(missing_sources) > 0) {
     message(paste0(
       "Intercept formula added for parameter_design source parameter(s): ",
@@ -1112,10 +1121,10 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
 
-    if(!is.null(attr(dadm, 'covariate_maps'))) {
-      covariate_maps <- attr(dadm, 'covariate_maps')
-      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
-      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    if(!is.null(attr(dadm, 'covariate_coding'))) {
+      covariate_coding <- attr(dadm, 'covariate_coding')
+      for(ii in 1:length(covariate_coding)) covariate_coding[[ii]] <- covariate_coding[[ii]][isin,]
+      attr(dl[[i]], 'covariate_coding') <- covariate_coding
     }
 
     if(is.null(attr(dadm, "custom_ll"))){

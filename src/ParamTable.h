@@ -103,6 +103,10 @@ struct ParamTable {
     // Rcpp::stop("ParamTable: parameter '%s' not active", nm.c_str());
   }
 
+  const double* column_by_name_ptr(const std::string& name) const {
+    return &base(0, base_index_for(name));
+  }
+
   // Assign into existing column (writes into base)
   void set_column_by_name(const std::string& nm,
                           const Rcpp::NumericVector& col) {
