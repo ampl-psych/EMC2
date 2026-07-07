@@ -937,6 +937,11 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   acc <- 1:nacc                # choice (go and ST) accumulator index
   allSSD <- data$SSD[is1]
 
+  # set default for latent inhibitor: simple stop-signal task
+  if(!"lI" %in% colnames(pars)){
+    pars <- cbind(pars, lI = 2)
+  }
+
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
   accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
