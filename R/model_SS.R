@@ -881,7 +881,12 @@ SSEXG <- function(stop_method = c("auto", "integrate", "gl", "analytic"),
       # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
       #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
       pars <- cbind(pars, SSD = dadm$SSD)
-      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      # Only necessary for data generation. Default lI to the simple stop-signal
+      # paradigm (all go accumulators, lI = 2) when the design omits it, so the
+      # column always survives into pars (as.numeric(NULL) would make cbind drop
+      # it). Mirrors the likelihood default in log_likelihood_race_ss.
+      lI <- if (is.null(dadm$lI)) rep(2, nrow(dadm)) else as.numeric(dadm$lI)
+      pars <- cbind(pars, lI = lI)
       return(pars)
     },
     # Density function (PDF) for single go racer
@@ -1260,7 +1265,12 @@ SSRDEX <- function(stop_method = c("auto", "integrate", "gl"),
     Ttransform = function(pars, dadm) {
       pars <- cbind(pars, b = pars[,"B"] + pars[,"A"])
       pars <- cbind(pars, SSD = dadm$SSD)
-      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      # Only necessary for data generation. Default lI to the simple stop-signal
+      # paradigm (all go accumulators, lI = 2) when the design omits it, so the
+      # column always survives into pars (as.numeric(NULL) would make cbind drop
+      # it). Mirrors the likelihood default in log_likelihood_race_ss.
+      lI <- if (is.null(dadm$lI)) rep(2, nrow(dadm)) else as.numeric(dadm$lI)
+      pars <- cbind(pars, lI = lI)
       return(pars)
     },
     # Density function (PDF) for single go racer
