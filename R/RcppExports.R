@@ -13,6 +13,38 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
     .Call(`_EMC2_sp_new`, iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm)
 }
 
+ddm_build <- function(fl) {
+    .Call(`_EMC2_ddm_build`, fl)
+}
+
+ddm_ptr_valid <- function(ptr_) {
+    .Call(`_EMC2_ddm_ptr_valid`, ptr_)
+}
+
+ddm_eval_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_eval_cpp`, ptr_, theta, rt, R)
+}
+
+ddm_eval_trials_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_eval_trials_cpp`, ptr_, theta, rt, R)
+}
+
+flow_ptr_valid <- function(ptr_) {
+    .Call(`_EMC2_flow_ptr_valid`, ptr_)
+}
+
+flow_build <- function(fl) {
+    .Call(`_EMC2_flow_build`, fl)
+}
+
+flow_eval_cpp <- function(ptr_, theta, rt) {
+    .Call(`_EMC2_flow_eval_cpp`, ptr_, theta, rt)
+}
+
+flow_eval_trials_cpp <- function(ptr_, theta, rt) {
+    .Call(`_EMC2_flow_eval_trials_cpp`, ptr_, theta, rt)
+}
+
 calculate_subject_means <- function(group_designs, params) {
     .Call(`_EMC2_calculate_subject_means`, group_designs, params)
 }
