@@ -13,7 +13,6 @@ reference:
   - LNR
   - RDM
   - DDMGNG
-  - SDT
 - title: Design and Mapping
 - contents:
   - design
@@ -30,6 +29,9 @@ reference:
   - rotate_loadings
   - make_SEM_diagram
   - make_sem_structure
+  - graphical_model
+  - cut_factors
+  - factor_diagram
 - title: Group Design
 - contents:
   - group_design
@@ -51,6 +53,19 @@ reference:
   - trend_help
   - get_trend_pnames
   - register_trend
+  - apply_kernel
+  - fix_custom_kernel_pointers
+  - get_custom_kernel_pointers
+  - set_custom_kernel_pointers
+  - get_power_spectra
+  - plot_spectrum
+- title: Choice Response Models
+- contents:
+  - multinomial_logit
+  - multinomial_probit
+  - ordered_logit
+  - ordered_probit
+  - plot_fit_choice
 - title: Estimation
 - contents:
   - init_chains
@@ -85,7 +100,6 @@ reference:
   - recovery
   - make_data
   - make_random_effects
-  - recovery
   - get_data
   - get_data.emc
   - profile_plot
@@ -112,6 +126,7 @@ reference:
   - model_averaging
   - run_bridge_sampling
   - get_BayesFactor
+  - add_ICs_MLL
   - credible
   - hypothesis
 
@@ -135,25 +150,10 @@ reference:
   - reshape_events
   - split_timeseries
 
-- title: trend modelling
-- contents:
-  - make_trend
-  - trend_help
-  - get_trend_pnames
-  - apply_kernel
-  - fix_custom_kernel_pointers
-  - get_custom_kernel_pointers
-  - set_custom_kernel_pointers
-  - get_power_spectra
-  - plot_spectrum
-- title: Latent variable modelling
-- contents:
-  - align_loadings
-  - cut_factors
-  - factor_diagram
 - title: miscellaneous
 - contents:
   - update2version
+  - emc2_build_info
 - title: Included data
 - contents:
   - forstmann
@@ -168,5 +168,4 @@ reference:
 # - title: Simulation-based calibration
 #   contents:
 #   - Simulation-based Calibration
-
 

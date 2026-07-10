@@ -510,11 +510,6 @@ get_random_names <- function(par_names, group_designs) {
   return(list(u_names = u_names, s_names = s_names))
 }
 
-#' Check if group design has random effects
-#'
-#' @param group_design A group design object
-#' @return Boolean
-#' @export
 has_random <- function(group_design) {
   if (is.null(group_design)) {
     return(FALSE)
