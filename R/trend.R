@@ -595,15 +595,6 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
 
 
 
-
-#' Check and update formula list for trend parameters
-#'
-#' @param trend A trend list, as made by make_trend
-#' @param covariates Names of covariates, or NULL
-#' @param model A model function, or NULL
-#' @param formula List of formulas, or NULL
-#' @param parameter_design A parameter_design list, or NULL
-#' @return Updated formula list with intercept formulas added for missing trend parameters
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL,
                         parameter_design = NULL) {
   if (!is.null(model)) {
