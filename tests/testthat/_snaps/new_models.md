@@ -19,7 +19,7 @@
       
       $subj_ll
              [,1]
-      1 -187.1293
+      1 -152.8756
       
       $idx
       [1] 1
@@ -34,12 +34,12 @@
       1       1        1  left right 0.7424707
       2       2        1  left right 0.9788611
       3       3        1  left right 0.7264890
-      4       4        1  left right 0.6121781
-      5       5        1  left right 0.4952376
-      6       6        1  left right 0.6591371
-      7       7        1  left right 0.5383684
-      8       8        1  left right 0.6319298
-      9       9        1  left right 0.4657021
+      4       4        1  left  left        NA
+      5       5        1  left  left        NA
+      6       6        1  left  left        NA
+      7       7        1  left  left        NA
+      8       8        1  left  left        NA
+      9       9        1  left  left        NA
       10     10        1  left right 0.4827050
       11     11        1 right right 0.5888895
       12     12        1 right  left        NA
