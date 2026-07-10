@@ -22,12 +22,12 @@ listed in the `formula` argument of
 [`design()`](https://ampl-psych.github.io/EMC2/reference/design.md).They
 can also be accessed with `LNR()$p_types`.
 
-|               |               |                   |             |             |                    |
-|---------------|---------------|-------------------|-------------|-------------|--------------------|
+|  |  |  |  |  |  |
+|----|----|----|----|----|----|
 | **Parameter** | **Transform** | **Natural scale** | **Default** | **Mapping** | **Interpretation** |
-| *m*           | \-            | \[-Inf, Inf\]     | 1           |             | Scale parameter    |
-| *s*           | log           | \[0, Inf\]        | log(1)      |             | Shape parameter    |
-| *t0*          | log           | \[0, Inf\]        | log(0)      |             | Non-decision time  |
+| *m* | \- | \[-Inf, Inf\] | 1 |  | Scale parameter |
+| *s* | log | \[0, Inf\] | log(1) |  | Shape parameter |
+| *t0* | log | \[0, Inf\] | log(0) |  | Non-decision time |
 
 Because the LNR is a race model, it has one accumulator per response
 option. EMC2 automatically constructs a factor representing the

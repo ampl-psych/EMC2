@@ -111,8 +111,8 @@ design_matrices <-  convolve_design_matrix(
   factors = list(difficulty = c("hard", "easy")),
   contrasts = list(difficulty = matrix(c(-1, 1)))
 )
-#>   event_type subjects run onset duration modulation   regressor
-#> 1       hard        1   1    10      0.5          1 difficulty1
-#> 2       easy        1   1    30      0.5         -1 difficulty1
+#>    event_type subjects run onset duration modulation   regressor
+#> 1 difficulty1        1   1    10      0.5         -1 difficulty1
+#> 2 difficulty1        1   1    30      0.5          1 difficulty1
 #> Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)
 ```

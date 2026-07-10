@@ -7,7 +7,7 @@ convenience function to do this.
 ## Usage
 
 ``` r
-fix_custom_kernel_pointers(emc, pointer_source)
+fix_custom_kernel_pointers(emc, pointer_source, model_number = 1)
 ```
 
 ## Arguments
@@ -18,8 +18,13 @@ fix_custom_kernel_pointers(emc, pointer_source)
 
 - pointer_source:
 
-  Either a trend object with correct pointers or another emc object with
+  Either a trend list with correct pointers, or an emc object with
   correct pointers
+
+- model_number:
+
+  If `pointer_source` is a raw trend list and `emc` is a joint model,
+  specifies which model the trend belongs to. Defaults to 1.
 
 ## Value
 

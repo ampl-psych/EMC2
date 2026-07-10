@@ -12,6 +12,11 @@
 
   A step-by-step race model workflow in EMC2 using the LBA
 
+- [Response
+  Models](https://ampl-psych.github.io/EMC2/articles/response-models.md):
+
+  Ordered and multinomial response models in EMC2
+
 - [Simulation-based
   Calibration](https://ampl-psych.github.io/EMC2/articles/Simulation-based-Calibration.md):
 

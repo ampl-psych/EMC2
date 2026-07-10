@@ -23,14 +23,14 @@ listed in the `formula` argument of
 [`design()`](https://ampl-psych.github.io/EMC2/reference/design.md).They
 can also be accessed with `RDM()$p_types`.
 
-|               |               |                   |             |                 |                                                |
-|---------------|---------------|-------------------|-------------|-----------------|------------------------------------------------|
-| **Parameter** | **Transform** | **Natural scale** | **Default** | **Mapping**     | **Interpretation**                             |
-| *v*           | log           | \[0, Inf\]        | log(1)      |                 | Evidence-accumulation rate (drift rate)        |
-| *A*           | log           | \[0, Inf\]        | log(0)      |                 | Between-trial variation (range) in start point |
-| *B*           | log           | \[0, Inf\]        | log(1)      | *b* = *B* + *A* | Distance from *A* to *b* (response threshold)  |
-| *t0*          | log           | \[0, Inf\]        | log(0)      |                 | Non-decision time                              |
-| *s*           | log           | \[0, Inf\]        | log(1)      |                 | Within-trial standard deviation of drift rate  |
+|  |  |  |  |  |  |
+|----|----|----|----|----|----|
+| **Parameter** | **Transform** | **Natural scale** | **Default** | **Mapping** | **Interpretation** |
+| *v* | log | \[0, Inf\] | log(1) |  | Evidence-accumulation rate (drift rate) |
+| *A* | log | \[0, Inf\] | log(0) |  | Between-trial variation (range) in start point |
+| *B* | log | \[0, Inf\] | log(1) | *b* = *B* + *A* | Distance from *A* to *b* (response threshold) |
+| *t0* | log | \[0, Inf\] | log(0) |  | Non-decision time |
+| *s* | log | \[0, Inf\] | log(1) |  | Within-trial standard deviation of drift rate |
 
 All parameters are estimated on the log scale.
 

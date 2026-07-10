@@ -34,7 +34,7 @@ register_trend(trend_parameters, file, transforms = NULL, base = "add")
 
   Default base to use when creating trends with this custom kernel if no
   `bases` argument is supplied to `make_trend`. One of
-  c("lin","exp_lin","centered","add","identity"). Default "add".
+  c("lin","centered","add","identity"). Default "add".
 
 ## Value
 

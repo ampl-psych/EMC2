@@ -22,6 +22,7 @@ design(
   trend = NULL,
   transform = NULL,
   bound = NULL,
+  parameter_design = NULL,
   ...
 )
 ```
@@ -51,14 +52,14 @@ design(
 - model:
 
   A function, specifies the model type. Choose from the drift diffusion
-  model ([`DDM()`](https://ampl-psych.github.io/EMC2/reference/DDM.md),
-  `DDMt0natural()`), the log-normal race model
+  model[`DDM()`](https://ampl-psych.github.io/EMC2/reference/DDM.md),
+  the log-normal race model
   ([`LNR()`](https://ampl-psych.github.io/EMC2/reference/LNR.md)), the
   linear ballistic model
   ([`LBA()`](https://ampl-psych.github.io/EMC2/reference/LBA.md)), the
   racing diffusion model
-  ([`RDM()`](https://ampl-psych.github.io/EMC2/reference/RDM.md),
-  `RDMt0natural()`), or define your own model functions.
+  [`RDM()`](https://ampl-psych.github.io/EMC2/reference/RDM.md), or
+  define your own model functions.
 
 - data:
 
@@ -125,6 +126,34 @@ design(
   likelihood landscape that cannot reasonable be achieved with
   `transform`
 
+- parameter_design:
+
+  A list specifying linear reparameterisations of model parameters in
+  terms of sampled parameters. It must contain:
+
+  `weights`
+
+  :   A named numeric matrix where each row defines one reparameterised
+      model parameter and each column is either a sampled parameter name
+      or the name of a function in `functions`. The row names become the
+      names of the reparameterised model parameters. The value in each
+      cell is the weight applied to that column's contribution.
+
+  Example — a static reparameterisation of `alphaPos` and `alphaNeg`
+  into mean and difference components:
+
+
+        parameter_design = list(
+          weights = matrix(
+            c(1,  0.5,
+              1, -0.5),
+            nrow = 2, byrow = TRUE,
+            dimnames = list(c("alphaPos", "alphaNeg"),
+                            c("alphaMean", "alphaDiff"))
+          )
+        )
+        
+
 - ...:
 
   Additional, optional arguments
@@ -136,6 +165,7 @@ A design list.
 ## Examples
 
 ``` r
+
 # load example dataset
 dat <- forstmann
 

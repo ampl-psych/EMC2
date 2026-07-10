@@ -2,7 +2,8 @@
 
 Plots the trend for selected parameters of a model. Can be used either
 with a p_vector, or trial-wise parameters or covariates obtained from
-predict()
+predict(). Optionally overlays a ground-truth trajectory for recovery
+evaluation.
 
 ## Usage
 
@@ -11,10 +12,13 @@ plot_trend(
   input_data,
   emc,
   par_name,
-  subject = 1,
+  true_trajectories = NULL,
+  subject = NULL,
   filter = NULL,
   on_x_axis = "trials",
   pp_shaded = TRUE,
+  group_average = FALSE,
+  layout = NULL,
   ...
 )
 ```
@@ -23,107 +27,61 @@ plot_trend(
 
 - input_data:
 
-  a p_vector or posterior predictives compatible with the provided emc
-  object
+  A p_vector or posterior predictives compatible with the provided emc
+  object. If posterior predictives, should be the output of
+  `predict(..., return_trialwise_parameters = TRUE)`.
 
 - emc:
 
-  An emc object
+  An emc object.
 
 - par_name:
 
-  Parameter name (or covariate name) to plot
+  Parameter name (or covariate name) to plot.
+
+- true_trajectories:
+
+  Optional. A data frame with columns `subjects`, the column named by
+  `on_x_axis`, and at least `par_name`. If supplied, the true trajectory
+  is overlaid as a dashed black line, and `ylim` expands to include it.
 
 - subject:
 
-  Subject number to plot
+  Subject to plot. If NULL, plots all subjects separately. Ignored when
+  `group_average = TRUE`.
 
 - filter:
 
   Optional function that takes a data frame and returns a logical vector
-  indicating which rows to include in the plot
+  indicating which rows to include. For race models, should select one
+  accumulator, e.g. `function(d) d$lR == 'left'`.
 
 - on_x_axis:
 
-  Column name in the `dadm` to plot on the x-axis. By default 'trials'.
+  Column name to plot on the x-axis. Default `'trials'`.
 
 - pp_shaded:
 
-  Boolean. If `TRUE` will plot 95% credible interval as a shaded area.
-  Otherwise plots separate lines for each iteration of the posterior
-  predictives. Only applicable if `input_data` are posterior
-  predictives.
+  Logical. If TRUE, plots 95% credible interval as a shaded area.
+  Otherwise plots separate lines for each posterior predictive
+  iteration. Only applicable when `input_data` is posterior predictives.
+
+- group_average:
+
+  Logical. If TRUE, plots a single panel averaged across subjects rather
+  than one panel per subject.
+
+- layout:
+
+  Optional integer vector of length 2 to override the automatic mfrow
+  layout. Ignored when `group_average = TRUE`.
 
 - ...:
 
-  Optional arguments that can be passed to `plots`.
+  Optional arguments passed to
+  [`plot()`](https://rdrr.io/r/graphics/plot.default.html).
 
 ## Value
 
-A trend plot
-
-## Examples
-
-``` r
-dat <- EMC2:::add_trials(forstmann)
-dat$trials2 <- dat$trials/1000
-
-lin_trend <- make_trend(cov_names='trials2',
-                        kernels = 'exp_incr',
-                        par_names='B',
-                        bases='lin',
-                        phase = "premap")
-
-design_RDM_lin_B <- design(model=RDM,
-                           data=dat,
-                           covariates='trials2',   # specify relevant covariate columns
-                           matchfun=function(d) d$S==d$lR,
-                           transform=list(func=c('B'='identity')),
-                           formula=list(B ~ 1, v ~ lM, t0 ~ 1),
-                           trend=lin_trend)       # add trend
-#> Intercept formula added for trend_pars: B.w, B.d_ei
-#> Parameter(s) A, s not specified in formula and assumed constant.
-#> 
-#>  Sampled Parameters: 
-#> [1] "B"        "v"        "v_lMTRUE" "t0"       "B.w"      "B.d_ei"  
-#> 
-#>  Design Matrices: 
-#> $B
-#>  B
-#>  1
-#> 
-#> $v
-#>     lM v v_lMTRUE
-#>   TRUE 1        1
-#>  FALSE 1        0
-#> 
-#> $t0
-#>  t0
-#>   1
-#> 
-#> $B.w
-#>  B.w
-#>    1
-#> 
-#> $B.d_ei
-#>  B.d_ei
-#>       1
-#> 
-#> $A
-#>  A
-#>  1
-#> 
-#> $s
-#>  s
-#>  1
-#> 
-
-emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
-#> Processing data set 1
-p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
-
-# Visualize trend
-plot_trend(p_vector, emc=emc,
-           par_name='B', subject='as1t',
-           filter=function(d) d$lR=='right', main='Threshold for right')
-```
+Invisibly returns the credible interval data frame when `input_data` is
+posterior predictives, otherwise NULL.

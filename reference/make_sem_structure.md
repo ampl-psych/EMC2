@@ -22,6 +22,7 @@ make_sem_structure(
   b_specs = NULL,
   k_specs = NULL,
   g_specs = NULL,
+  factor_groups = NULL,
   fixed_value = 0
 )
 ```
@@ -75,6 +76,15 @@ make_sem_structure(
   names, elements are character vectors of covariate names. Example:
   `list(Factor1 = "cov1", Factor2 = c("cov1", "cov2"))`
 
+- factor_groups:
+
+  Optional factor-correlation block specification. Can be either (1) a
+  character vector of factor names defining one correlated block, or (2)
+  a list of character vectors where each element is one correlated
+  block. Factors not listed are treated as independent singleton blocks.
+  Example: `c("Speed", "Caution", "Ability")` or
+  `list(c("Speed", "Caution"), c("Ability", "Strategy"))`.
+
 - fixed_value:
 
   Numeric. The value used for fixed paths in the matrices that are not
@@ -96,6 +106,8 @@ A list containing:
   `sampled_pars(design)`.
 
 - `factor_names`: The provided SEM factor names.
+
+- `factor_groups`: Integer vector indicating factor-correlation blocks.
 
 - `covariates`: A data frame with one row per unique subject and columns
   for each covariate, containing the unique subject-level values. Column

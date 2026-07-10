@@ -17,5 +17,6 @@ get_custom_kernel_pointers(input_data)
 
 ## Value
 
-A list of custom pointers. The list is of the same size as total number
-of trends; trends without a custom kernel return NULL.
+A list-of-lists of custom pointers, one sub-list per model. Trends
+without a custom kernel return NULL. Returns NULL if no custom pointers
+are found.

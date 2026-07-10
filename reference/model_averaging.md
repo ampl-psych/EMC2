@@ -60,19 +60,19 @@ samples_LNR4 <- subset(samples_LNR, length.out = 35)
 ICs <- compare(list(S1 = samples_LNR, S2 = samples_LNR2,
                     S3 = samples_LNR3, S4 = samples_LNR4), BayesFactor = FALSE)
 #>     DIC  wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-#> S1 -610 0.255 -571 0.265         39  -648  -656 -687
-#> S2 -609 0.216 -571 0.206         39  -648  -655 -687
-#> S3 -609 0.204 -570 0.184         39  -648  -656 -687
-#> S4 -610 0.325 -572 0.345         39  -649  -656 -687
+#> S1 -621 0.193 -606 0.157         15  -636  -648 -651
+#> S2 -621 0.208 -606 0.176         15  -636  -648 -651
+#> S3 -621 0.213 -606 0.182         15  -636  -648 -651
+#> S4 -622 0.387 -608 0.485         14  -636  -648 -650
 
 # Model averaging can either be done with a vector of ICs:
 model_averaging(ICs$BPIC[1:2], ICs$BPIC[2:4])
 #>        wFor  wAgainst    Factor
-#> 1 0.3906135 0.6093865 0.6409947
+#> 1 0.2834696 0.7165304 0.3956141
 
 # Or the output of compare:
 model_averaging(ICs[1:2,], ICs[3:4,])
 #>           wFor  wAgainst    Factor
-#> BPIC 0.4710716 0.5289284 0.8906151
-#> DIC  0.4713225 0.5286775 0.8915123
+#> BPIC 0.3333656 0.6666344 0.5000725
+#> DIC  0.4008657 0.5991343 0.6690749
 ```

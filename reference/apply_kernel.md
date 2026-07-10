@@ -8,14 +8,7 @@ produce identical output.
 ## Usage
 
 ``` r
-apply_kernel(
-  kernel_pars,
-  emc,
-  subject = 1,
-  input_pars = NULL,
-  trend_n = 1,
-  mode = "Rcpp"
-)
+apply_kernel(kernel_pars, emc, subject = 1, input_pars = NULL, trend_n = 1)
 ```
 
 ## Arguments
@@ -43,18 +36,6 @@ apply_kernel(
   Integer specifying which trend to apply when multiple trends exist in
   the model. Defaults to `1`. A warning is issued if the model contains
   more than one trend.
-
-- mode:
-
-  Character string specifying which implementation to use:
-
-  `"R"`
-
-  :   Use the pure R implementation.
-
-  `"Rcpp"`
-
-  :   Use the Rcpp implementation (default).
 
 ## Value
 

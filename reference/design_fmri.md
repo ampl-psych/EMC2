@@ -59,8 +59,7 @@ design_matrix <- convolve_design_matrix(
  hrf_model = "glover"
 )
 #>   event_type subjects run onset duration modulation  regressor
-#> 1          A        1   1    30      0.5          1 conditionB
-#> 2          B        1   1    70      0.5          1 conditionB
+#> 1 conditionB        1   1    30      0.5          1 conditionB
 #> Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)
 
 # Create fMRI design for EMC2

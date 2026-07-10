@@ -5,6 +5,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/articles/Simulation-based-Calibration.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/articles/index.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/articles/race-models.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/articles/response-models.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/articles/trends.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/authors.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/index.html</loc></url>
@@ -17,7 +18,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/MRI.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/MRI_AR1.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/RDM.html</loc></url>
-<url><loc>https://ampl-psych.github.io/EMC2/reference/SDT.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/add_ICs_MLL.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/align_loadings.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/apply_kernel.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/auto_thin.html</loc></url>
@@ -35,6 +36,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/cut_factors.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/design.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/design_fmri.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/emc2_build_info.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/ess_summary.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/factor_diagram.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/fit.html</loc></url>
@@ -50,6 +52,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_power_spectra.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/graphical_model.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/group_design.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/high_pass_filter.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/hypothesis.html</loc></url>
@@ -64,6 +67,10 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/mapped_pars.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/merge_chains.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/model_averaging.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/multinomial_logit.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/multinomial_probit.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/ordered_logit.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/ordered_probit.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/pairs_posterior.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/parameters.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot.emc.design.html</loc></url>
@@ -75,6 +82,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_density.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_design.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_design_fmri.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/plot_fit_choice.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_fmri.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_pars.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_relations.html</loc></url>

@@ -1,5 +1,40 @@
 # Changelog
 
+## EMC2 3.5
+
+### Bug fixes
+
+- Fixed fMRI designs when factor levels are present in only some runs.
+- Fixed failures when
+  [`group_design()`](https://ampl-psych.github.io/EMC2/reference/group_design.md)
+  is used during sampling or model comparison.
+- Applied parameter bounds consistently to trend parameters and
+  prevented a degenerate RDM parameter region.
+
+### New features
+
+- Added multinomial and ordered choice-response models, with
+  [`plot_fit_choice()`](https://ampl-psych.github.io/EMC2/reference/plot_fit_choice.md)
+  diagnostics.
+- Extended
+  [`group_design()`](https://ampl-psych.github.io/EMC2/reference/group_design.md)
+  support, including nested random-effects specifications.
+- Extended trends with custom kernels, covariate maps, parameter inputs,
+  latent-stream outputs, and improved
+  [`plot_trend()`](https://ampl-psych.github.io/EMC2/reference/plot_trend.md)
+  support.
+- Added
+  [`add_ICs_MLL()`](https://ampl-psych.github.io/EMC2/reference/add_ICs_MLL.md)
+  to retain information criteria and marginal likelihoods; DIC/BPIC now
+  defaults to the conditional form.
+- Added graphical-model support with
+  [`graphical_model()`](https://ampl-psych.github.io/EMC2/reference/graphical_model.md).
+
+### Bug fixes
+
+- Not all factor levels have to be defined across runs for MRI anymore
+- group_design() works a lot better in sampling/model comparison
+
 ## EMC2 3.4.1
 
 CRAN release: 2026-01-12

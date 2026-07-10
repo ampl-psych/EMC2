@@ -33,6 +33,7 @@ color processing. Similarly, by adding `B ~ LR` we account for a-priori
 preferences for responding certain colors.
 
 ``` r
+
 matchfun <- function(d) d$S == d$lR
 
 # "Average/difference" coding for the TRUE/FALSE lM factor
@@ -91,6 +92,7 @@ combines model and experimental structure into an `emc.design` object.
 returns the free parameters implied by the design.
 
 ``` r
+
 sampled_pars(design_lba)
 ```
 
@@ -107,6 +109,7 @@ shows how those parameters map back to design cells. Here:
 - `B_lRgreen` and `B_lRblue` capture response-specific threshold bias
 
 ``` r
+
 mapped_pars(design_lba)
 ```
 
@@ -130,6 +133,7 @@ empirical data. We first define true parameter values on the transformed
 scale and inspect the numeric mapping:
 
 ``` r
+
 p_vector <- sampled_pars(design_lba)
 p_vector[] <- c(
   v = 1.4,
@@ -160,6 +164,7 @@ mapped_pars(design_lba, p_vector)
 To visualize the implied design-level behavior:
 
 ``` r
+
 plot_design(design_lba, p_vector = p_vector, factors = list(v = "S", B = "lR"), plot_factor = "lR", layout = c(1,3))
 ```
 
@@ -173,12 +178,14 @@ simulates trial-level responses and response times from the specified
 design and parameter values.
 
 ``` r
+
 dat <- make_data(parameters = p_vector, design = design_lba, n_trials = 80)
 ```
 
 A quick check of the simulated defective densities by stimulus identity:
 
 ``` r
+
 plot_density(dat, factors = "S", layout = c(1,3))
 ```
 
@@ -193,6 +200,7 @@ mindful that some parameters are represented on transformed scales, see
 [`?LBA`](https://ampl-psych.github.io/EMC2/reference/LBA.md).
 
 ``` r
+
 prior_lba <- prior(
   design = design_lba,
   type = "single",
@@ -224,6 +232,7 @@ prior_lba <- prior(
 Inspecting implied priors is a useful sanity check:
 
 ``` r
+
 plot(prior_lba, N = 1e3)
 ```
 
@@ -238,6 +247,7 @@ combines data, design, and prior into the object expected by
 [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md).
 
 ``` r
+
 emc <- make_emc(dat, design_lba, prior_list = prior_lba, type = "single")
 ```
 
@@ -251,6 +261,7 @@ The following call is how you can fit this model and save intermediate
 output:
 
 ``` r
+
 emc <- fit(emc, fileName = "data/race-models.RData")
 ```
 
@@ -260,6 +271,7 @@ emc <- fit(emc, fileName = "data/race-models.RData")
 `Rhat`, and ESS for estimated parameters:
 
 ``` r
+
 summary(emc)
 ```
 
@@ -280,6 +292,7 @@ summary(emc)
 compares posterior densities with the generating values:
 
 ``` r
+
 plot_pars(emc, true_pars = p_vector, use_prior_lim = FALSE)
 ```
 
@@ -289,10 +302,12 @@ LBA](race-models_files/figure-html/unnamed-chunk-15-1.png)
 Finally, we generate posterior predictive datasets and compare CDFs:
 
 ``` r
+
 pp <- predict(emc)
 ```
 
 ``` r
+
 plot_cdf(dat, pp, factors = "S", layout = c(1,3))
 ```
 

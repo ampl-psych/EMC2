@@ -29,6 +29,7 @@ to list kernels and bases. The timing of when a trend is applied is
 controlled by `phase` (see [Phases](#phases) below).
 
 ``` r
+
 trend_help()
 ```
 
@@ -46,11 +47,6 @@ trend_help()
     ##   delta: Standard delta rule kernel: k = q[i].
     ##          Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).
     ##          Parameters: q0 (initial value), alpha (learning rate).
-    ##   delta2kernel: Dual kernel delta rule: k = q[i].
-    ##           Combines fast and slow learning rates
-    ##           and switches between them based on dSwitch.
-    ##           Parameters: q0 (initial value), alphaFast (fast learning rate),
-    ##           propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold).
     ##   delta2lr: Dual learning rate delta rule: k = q[i].
     ##           Like the standard delta rule, but with separate
     ##           learning rates for positive and negative prediction errors.
@@ -59,7 +55,6 @@ trend_help()
     ## 
     ## Available base types:
     ##   lin: Linear base: parameter + w * k
-    ##   exp_lin: Exponential linear base: exp(parameter) + exp(w) * k
     ##   centered: Centered mapping: parameter + w*(k - 0.5)
     ##   add: Additive base: parameter + k
     ##   identity: Identity base: k
@@ -85,6 +80,7 @@ and [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md) (calls
 not evaluated here).
 
 ``` r
+
 # Example trend: log-mean increases linearly with trial
 trend_quick <- make_trend(
   par_names = "m",
@@ -137,6 +133,7 @@ design_trend <- design(
     ##    1
 
 ``` r
+
 # How you would run (not executed here)
 # emc <- make_emc(data, design_trend, type = "single")
 # fit <- fit(emc)
@@ -156,6 +153,7 @@ function with the following main arguments:
 Let’s take the following example:
 
 ``` r
+
 trend_lin_decr <- make_trend(
   par_names = "v",
   cov_names = "trial_nr",
@@ -170,6 +168,7 @@ over trials. To see how the trend is formulated use
 [`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md).
 
 ``` r
+
 trend_help(kernel = "lin_incr")
 ```
 
@@ -177,7 +176,7 @@ trend_help(kernel = "lin_incr")
     ## Increasing linear kernel: k = c 
     ##  
     ## Available bases, first is the default: 
-    ## lin, exp_lin, centered 
+    ## lin, centered 
     ## 
 
 The function tells us how the kernel maps the covariate to the kernel
@@ -191,6 +190,7 @@ function is formulated we can use the
 function again.
 
 ``` r
+
 trend_help(base = "lin")
 ```
 
@@ -213,6 +213,7 @@ accessed using the
 function.
 
 ``` r
+
 get_trend_pnames(trend_lin_decr)
 ```
 
@@ -229,6 +230,7 @@ parameters change as a function of covariates.
 ### Linear Trends
 
 ``` r
+
 # Linear decreasing trend
 trend_lin_decr <- make_trend(
   par_names = "v",
@@ -254,6 +256,7 @@ bases and phases and keeps specifications local to parameters.
 ### Exponential Trends
 
 ``` r
+
 # Exponential decreasing trend
 trend_exp_decr <- make_trend(
   par_names = "v",
@@ -275,6 +278,7 @@ Exponential trends are useful for rapid initial changes that level off.
 ### Power Trends
 
 ``` r
+
 # Power decreasing trend
 trend_pow_decr <- make_trend(
   par_names = "v",
@@ -296,6 +300,7 @@ often used for practice effects.
 ### Polynomial Trends
 
 ``` r
+
 # Quadratic trend
 trend_poly2 <- make_trend(
   par_names = "v",
@@ -324,6 +329,7 @@ turning points. Use higher orders cautiously to avoid overfitting.
 ### Learning Rule Trends
 
 ``` r
+
 # Standard delta learning rule
 trend_delta <- make_trend(
   par_names = "v",
@@ -335,30 +341,18 @@ trend_delta <- make_trend(
 trend_delta2 <- make_trend(
   par_names = "v",
   cov_names = "trial_nr",
-  kernels = "delta2kernel"
+  kernels = "delta2lr"
 )
 ```
 
-Delta rules are useful for learning processes. The standard delta rule
-updates based on prediction error. The dual‑rate rule uses fast and slow
-learning rates, switching between them based on discrepancies.
+Delta rules are useful for modelling learning processes. The standard
+delta rule updates each trial based on prediction error. The dual‑kernel
+rule uses fast and slow learning rates, switching between them based on
+discrepancies.
 
 Each kernel has supported bases. You can leave bases to defaults or set
 them explicitly. Changing bases can reflect different interpretations of
-how `k` enters the parameter:
-
-``` r
-trend_exp_incr <- make_trend(
-  par_names = "v",
-  cov_names = "trial_nr",
-  kernels = "exp_incr",
-  bases =  "exp_lin"
-)
-```
-
-For example with base `lin`: `v <- v + B0 * k`. With base `exp_lin`:
-`v <- exp(v) + exp(B0) * k`. The latter can be useful when the parameter
-operates on a multiplicative or positively constrained scale.
+how `k` enters the parameter.
 
 ## Multiple Trends
 
@@ -368,6 +362,7 @@ covariate. Note that with the kernels argument, we can specify different
 kernels for each parameter.
 
 ``` r
+
 # Applying different trends to multiple parameters
 trend_multi <- make_trend(
   par_names = c("v", "t0"),
@@ -380,6 +375,7 @@ Alternatively, different parameters may be affected by different
 covariates:
 
 ``` r
+
 # Specifying different covariates for each trend
 trend_multi <- make_trend(
   par_names = c("v", "t0"),
@@ -391,6 +387,7 @@ trend_multi <- make_trend(
 Lastly, a single parameter may be affected by multiple covariates:
 
 ``` r
+
 # Specifying multiple covariates for a trend
 trend_multi <- make_trend(
   par_names = c("v", "t0"),
@@ -405,6 +402,7 @@ Sometimes multiple trend entries should use the same parameter(s). For
 example, share a base parameter across different target parameters:
 
 ``` r
+
 # Sharing parameters between trends
 trend_shared <- make_trend(
   par_names = c("v", "a"),
@@ -420,6 +418,7 @@ parameters, there is one named `intercept`. Use
 to inspect the generated names:
 
 ``` r
+
 get_trend_pnames(trend_shared)
 ```
 
@@ -438,6 +437,7 @@ Control when a trend is applied via the `phase` argument:
 - `posttransform`: after transforms
 
 ``` r
+
 # Pre-mapping trend
 trend_premap <- make_trend(
   par_names = "v",
@@ -474,6 +474,7 @@ Trends can also depend on other parameters via `par_input`. For example,
 use `t0` as an input to a trend on `m`:
 
 ``` r
+
 trend_par_input <- make_trend(
   par_names = "m",
   cov_names = NULL,
@@ -493,6 +494,7 @@ Use `at` to apply a trend only for rows at a specific factor level
 levels within the same subject.
 
 ``` r
+
 trend_at <- make_trend(
   par_names = c("m"),
   cov_names = list("covariate1"),
@@ -514,6 +516,7 @@ kernel outputs will be summed (after any optional per‑column map
 weights) before the base is applied.
 
 ``` r
+
 trend_multi_same_par <- make_trend(
   par_names = c("m", "m"),
   cov_names = list("covariate1", c("covariate2")),  # second entry could also use par_input
@@ -533,6 +536,7 @@ Instead of one `phase` for all entries, you can provide a vector
 matching `par_names`:
 
 ``` r
+
 trend_phases <- make_trend(
   par_names = c("m", "s", "t0"),
   cov_names = list("covariate1", "covariate1", "covariate2"),
@@ -550,6 +554,7 @@ Sharing can also target kernel parameters, not just the base weight. For
 example, share `d1` across two parameters:
 
 ``` r
+
 trend_shared_kernel <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
@@ -577,15 +582,15 @@ whether the covariate should be set to 0 or some other value.
 
 ### Trial‑wise evaluation and conditional covariates
 
-- Delta‑rule kernels (`delta`, `delta2kernel`, `delta2lr`) are
-  sequential by construction; they update across trials within a
-  subject.
+- Delta‑rule kernels (`delta`, `delta2lr`) are sequential by
+  construction; they update across trials within a subject.
 - Using behavioral covariates (e.g., `rt`, response `R`, or outputs of
   functions in the design) can force a trial‑wise evaluation path so
   that data generation is not conditional on the observed data, but
   rather on the simulated outcomes.
 
 ``` r
+
 # Example delta trend, capturing trial-wise dynamics
 trend_delta <- make_trend(
   par_names = "m",
@@ -639,6 +644,7 @@ design_delta <- design(
     ##        1
 
 ``` r
+
 # Retrieve trial-wise parameters alongside generated data
 # (not executed here)
 # res <- make_data(p_vector, design_delta, n_trials = 10,
@@ -659,14 +665,14 @@ factors using the `formula` argument of
 `get_trend_pnames(trend)` to get the full names to place on the
 left-hand side of a formula. Names follow:
 
-- Base parameter: `<targetParam>.w` (for bases like `lin`, `exp_lin`,
-  `centered`)
+- Base parameter: `<targetParam>.w` (for bases like `lin`, `centered`)
 - Kernel parameters: `<targetParam>.<default_par_name>` (e.g., `d1`,
   `d2`, … for `poly*`; `q0`, `alpha` for `delta`)
 
 Premap example: vary a kernel parameter (`d1`) by `lR`
 
 ``` r
+
 trend_premap <- make_trend(
   par_names = c("m", "lMd"),
   cov_names = list("covariate1", "covariate2"),
@@ -720,12 +726,14 @@ design_premap <- design(
     ##       1
 
 ``` r
+
 # mapped_pars(design_premap)  # inspect mapped parameter structure
 ```
 
 Pretransform example: vary the base weight (`w`) for `s` by `lR`
 
 ``` r
+
 trend_pretrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
@@ -783,12 +791,14 @@ design_pretrans <- design(
     ##       1
 
 ``` r
+
 # mapped_pars(design_pretrans)
 ```
 
 Posttransform example: again vary `s.w` by `lR`
 
 ``` r
+
 trend_posttrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
@@ -842,6 +852,7 @@ design_posttrans <- design(
     ##       1
 
 ``` r
+
 # mapped_pars(design_posttrans)
 ```
 
@@ -859,6 +870,7 @@ fast and portable, we show the code and how to register it but do not
 actually compile or run it here.
 
 ``` r
+
 library(EMC2)
 
 # Write a custom kernel to a separate file
@@ -921,6 +933,7 @@ custom kernels need to be re-added before the emc object can be used for
 sampling or posterior data generation, which can be done as follows:
 
 ``` r
+
 load('./emc_samples_with_custom_trend.RData')
 emc <- fix_custom_kernel_pointers(emc, trend_custom)
 ```
@@ -947,8 +960,6 @@ under appropriate constraints.
 ## Interpreting Bases and Transforms
 
 - `lin`: additive on the parameter scale (`θ <- θ + B0 * k`)
-- `exp_lin`: additive on an exponentialized parameter
-  (`θ <- exp(θ) + exp(B0) * k`)
 - `centered`: centers `k` at 0.5 before scaling
   (`θ <- θ + B0*(k - 0.5)`)
 - `add`: parameter is `θ <- θ + k` (no base parameter)

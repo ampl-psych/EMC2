@@ -7,8 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Diffusion Decision Model (DDM) • EMC2</title>
 <script src="../lightswitch.js"></script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Diffusion Decision Model (DDM)">
 <meta name="description" content="A step-by-step DDM workflow in EMC2">
@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,6 +37,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/DDM.html">Diffusion Decision Model (DDM)</a></li>
     <li><a class="dropdown-item" href="../articles/race-models.html">Race Models</a></li>
+    <li><a class="dropdown-item" href="../articles/response-models.html">Response Models</a></li>
     <li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul>
@@ -282,7 +283,7 @@ expected by <code><a href="../reference/fit.html">fit()</a></code>.</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">design_lex</span>, prior_list <span class="op">=</span> <span class="va">prior_lex</span>, type <span class="op">=</span> <span class="st">"single"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## Processing data set 1</span></span></code></pre>
-<pre><code><span><span class="co">## Likelihood speedup factor: 1.4 (142 unique trials)</span></span></code></pre>
+<pre><code><span><span class="co">## Likelihood speedup factor: 1.4 (144 unique trials)</span></span></code></pre>
 </div>
 <div class="section level2">
 <h2 id="fit">5. Fit<a class="anchor" aria-label="anchor" href="#fit"></a>
@@ -340,7 +341,7 @@ is dominated by non-word responding</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

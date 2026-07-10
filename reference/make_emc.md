@@ -18,6 +18,7 @@ make_emc(
   prior_list = NULL,
   group_design = NULL,
   par_groups = NULL,
+  memory_saver = FALSE,
   ...
 )
 ```
@@ -78,6 +79,11 @@ make_emc(
   numeric vector, e.g., `c(1,1,1,2,2)` means the covariances of the
   first three and of the last two parameters are estimated as two
   separate blocks.
+
+- memory_saver:
+
+  A Boolean. If `TRUE`, store a pooled design representation and drop
+  per-parameter designs from data to reduce memory usage.
 
 - ...:
 

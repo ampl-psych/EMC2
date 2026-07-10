@@ -21,30 +21,29 @@ refer the reader to Talts et al. (2018).
   specifying the prior distribution for the parameters and the
   likelihood function that connects the data to the parameters.
 - For example, suppose you have a model with a set of parameters
-  $\alpha$ and observed data $y$ such that
-  $y \sim p\left( y|\alpha \right)$ and $\alpha \sim p(\alpha)$.
+  $`\alpha`$ and observed data $`y`$ such that $`y \sim p(y|\alpha)`$
+  and $`\alpha \sim p(\alpha)`$.
 
 ### 2. Simulate Parameters and Data
 
 - **Sample Parameters**: Draw a large number of sets of parameters
-  $\alpha^{(i)}$ from the prior distribution $p(\alpha)$.
-- **Simulate Data**: For each set of parameters $\alpha^{(i)}$, simulate
-  a dataset $y^{(i)}$ from the likelihood
-  $p\left( y|\alpha^{(i)} \right)$.
+  $`\alpha^{(i)}`$ from the prior distribution $`p(\alpha)`$.
+- **Simulate Data**: For each set of parameters $`\alpha^{(i)}`$,
+  simulate a dataset $`y^{(i)}`$ from the likelihood
+  $`p(y|\alpha^{(i)})`$.
 
 ### 3. Compute Posterior Distributions
 
-- For each simulated dataset $y^{(i)}$, compute the posterior
-  distribution $p\left( \alpha|y^{(i)} \right)$ using your Bayesian
-  model.
+- For each simulated dataset $`y^{(i)}`$, compute the posterior
+  distribution $`p(\alpha | y^{(i)})`$ using your Bayesian model.
 
 ### 4. Evaluate the Rank Statistics
 
 - For each simulated dataset, determine where the set of true parameters
-  $\alpha^{(i)}$ ranks in the posterior samples of $\alpha$. In *EMC2*
-  we thin the posterior to be equal to the effective sample size. The
-  rank is essentially the number of posterior samples that are less than
-  the true $\alpha^{(i)}$.
+  $`\alpha^{(i)}`$ ranks in the posterior samples of $`\alpha`$. In
+  *EMC2* we thin the posterior to be equal to the effective sample size.
+  The rank is essentially the number of posterior samples that are less
+  than the true $`\alpha^{(i)}`$.
 - Normalize the ranks to lie between 0 and 1. This is your **rank
   statistic**.
 
@@ -71,6 +70,7 @@ SBC. Later we’ll also perform hierarchical SBC for the LBA, DDM, RDM and
 LNR. First we clear our workspace and load *EMC2*
 
 ``` r
+
 rm(list = ls())
 library(EMC2) 
 ```
@@ -97,6 +97,7 @@ on the real line. To check the parameter transformations we use
 [`?LBA`](https://ampl-psych.github.io/EMC2/reference/LBA.md) .
 
 ``` r
+
 matchfun <- function(d) d$S == d$lR
 
 design_LBA <- design(factors=list(subjects=1,S=c("left", "right")),
@@ -115,6 +116,7 @@ Now we plot the prior, with `map = TRUE` (the default) to see the
 implied prior on the transformed parameters.
 
 ``` r
+
 plot(prior_LBA, N = 1e3)
 ```
 
@@ -133,6 +135,7 @@ minimum effective sample size of any of the estimated parameters is
 larger than 100.
 
 ``` r
+
 SBC_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
                   iter = 1000, n_post = 1000, fileName = "data/SBC_LBA_single.RData",
                   cores_per_chain = 30)
@@ -150,6 +153,7 @@ results. First we can plot the standard histograms, with a number of
 equally spaced bins between 0 and 1 of the normalized rank statistic.
 
 ``` r
+
 plot_sbc_hist(SBC_LBA_single, bins = 10)
 ```
 
@@ -166,6 +170,7 @@ density function (ecdf) and the cumulative density function of a uniform
 distribution.
 
 ``` r
+
 plot_sbc_ecdf(SBC_LBA_single)
 ```
 
@@ -197,6 +202,7 @@ For the SBC itself we used the following prior and design settings,
 again being mindful of the required transformations.
 
 ``` r
+
 #?DDM
 design_DDM <- design(factors=list(subjects=1,S=c("left", "right")),
                        Rlevels = c("left", "right"),
@@ -216,6 +222,7 @@ SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100,
 Next we plot the ECDF difference plot again.
 
 ``` r
+
 plot_sbc_ecdf(SBC_DDM_single)
 ```
 
@@ -235,12 +242,12 @@ running non-hierarchical SBC might suffice as it is far more
 computationally efficient.
 
 The approach to running hierarchical SBC is very similar to running
-non-hierarchical SBC. However we can now write the model of data $y$ as
-$y \sim p\left( y|\alpha \right)p\left( \alpha|\theta \right)p(\theta)$.
-Here $p(\theta)$ is the prior on the group-level parameters. The
-generated data for one sample $y^{(i)}$ is still generated from
-$\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$,
-with $\theta^{(i)} \sim p(\theta)$.
+non-hierarchical SBC. However we can now write the model of data $`y`$
+as $`y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)`$. Here $`p(\theta)`$
+is the prior on the group-level parameters. The generated data for one
+sample $`y^{(i)}`$ is still generated from $`\alpha^{(i)}`$, but with
+$`\alpha^{(i)}`$ generated from $`\theta^{(i)}`$, with
+$`\theta^{(i)} \sim p(\theta)`$.
 
 ### Prior structure
 
@@ -276,6 +283,7 @@ prior on the standard deviation of the group-level mean, but also
 through the prior on the group-level variance.
 
 ``` r
+
 n_subjects <- 30
 # 
 matchfun <- function(d) d$S == d$lR
@@ -298,6 +306,7 @@ We can also plot what the implied prior range is of the subject-level
 parameters:
 
 ``` r
+
 plot(prior_LBA, selection = "alpha", N = 1e3, subject = 1)
 ```
 
@@ -308,6 +317,7 @@ To actually run SBC, we can use the same function as before, now also
 specifying how many subjects we want to have in the hierarchical model
 
 ``` r
+
 SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100,
                         n_subjects = n_subjects, fileName = "data/SBC_LBA.RData", cores_per_chain = 30)
 ```
@@ -317,6 +327,7 @@ It will now generate a set of ECDF difference plots for the hierarchical
 variance ranks and the hierarchical means ranks:
 
 ``` r
+
 plot_sbc_ecdf(SBC_LBA)
 ```
 
@@ -334,6 +345,7 @@ We also tested hierarchical SBC for the seven parameter DDM. We again
 chose priors carefully here to match realistic behavioral data.
 
 ``` r
+
 n_subjects <- 30
 
 design_DDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
@@ -357,6 +369,7 @@ did not converge or was very slow to converge. We also only generated
 running a full hierarchical DDM.
 
 ``` r
+
 SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 250, trials = 200,
                         n_subjects = n_subjects, fileName = "data/SBC_DDM.RData", cores_per_chain = 30)
 ```
@@ -368,6 +381,7 @@ that the effective sample size for these parameters is also very small
 2018).
 
 ``` r
+
 plot_sbc_ecdf(SBC_DDM)
 ```
 
@@ -383,6 +397,7 @@ hierarchical SBC for the RDM with the following model definition and
 prior structure.
 
 ``` r
+
 n_subjects <- 30
 
 matchfun <- function(d) d$S == d$lR
@@ -408,6 +423,7 @@ SBC_RDM <- run_sbc(design_RDM, prior_RDM, replicates = 500, trials = 100,
 We again note that SBC shows no bias in the hierarchical RDM model:
 
 ``` r
+
 plot_sbc_ecdf(SBC_RDM)
 ```
 
@@ -422,6 +438,7 @@ Lastly, we run hierarchical SBC for the LNR with the following
 specification
 
 ``` r
+
 n_subjects <- 30
 
 matchfun <- function(d) d$S == d$lR
@@ -445,6 +462,7 @@ SBC_LNR <- run_sbc(design_LNR, prior_LNR, replicates = 500, trials = 100,
 For the LNR hierarchical SBC also shows no considerable bias:
 
 ``` r
+
 plot_sbc_ecdf(SBC_LNR, layout = c(2,2))
 ```
 

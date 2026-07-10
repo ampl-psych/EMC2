@@ -27,6 +27,7 @@ cells. For more info see
 [`?DDM`](https://ampl-psych.github.io/EMC2/reference/DDM.md)
 
 ``` r
+
 LexMat <- cbind(d = c(-1, 1))
 
 design_lex <- design(
@@ -90,6 +91,7 @@ combines model and experimental structure into an `emc.design` object.
 returns the free parameters implied by the design.
 
 ``` r
+
 sampled_pars(design_lex)
 ```
 
@@ -103,6 +105,7 @@ responding and negative values non-word responding. The `v_Lexd`
 parameter captures general sensitivity to lexical evidence.
 
 ``` r
+
 mapped_pars(design_lex)
 ```
 
@@ -121,6 +124,7 @@ own real data! We define true parameter values (on the transformed
 scale) and inspect the numeric mapping:
 
 ``` r
+
 p_vector <- sampled_pars(design_lex)
 p_vector[] <- c(.1, 1.5, .2, log(1.1), log(.3), qnorm(.55), log(.3), .2)
 
@@ -137,6 +141,7 @@ To see more details on the parameters and their scales see
 We can also visualize the implied design-level behavior:
 
 ``` r
+
 plot_design(design_lex, p_vector = p_vector, factors = list(v = "Lex"))
 ```
 
@@ -150,6 +155,7 @@ simulates trial-level responses and response times from the design and
 parameter values.
 
 ``` r
+
 dat <- make_data(parameters = p_vector, design = design_lex, n_trials = 100)
 ```
 
@@ -160,6 +166,7 @@ some more realistic values. Frequency is only defined for `Word`
 stimuli, and typically skewed.
 
 ``` r
+
 word_frequency <- rgamma(sum(dat$Lex == "Word"), shape = 5, rate = .1)
 # To make it more normally distributed we log-transform
 word_frequency <- log(word_frequency)
@@ -182,6 +189,7 @@ dat <- make_data(
 gives a quick check of the simulated data:
 
 ``` r
+
 plot_density(dat, factors = "Lex")
 ```
 
@@ -196,6 +204,7 @@ mindful of the transformations on the parameters when setting priors!
 Again see [`?DDM`](https://ampl-psych.github.io/EMC2/reference/DDM.md)
 
 ``` r
+
 prior_lex <- prior(
   design = design_lex,
   type = "single",
@@ -225,6 +234,7 @@ prior_lex <- prior(
 Inspecting the implied prior is helpful to check prior settings.
 
 ``` r
+
 plot(prior_lex, N = 1e3)
 ```
 
@@ -239,12 +249,13 @@ combines data, design, and prior into the object expected by
 [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md).
 
 ``` r
+
 emc <- make_emc(dat, design_lex, prior_list = prior_lex, type = "single")
 ```
 
     ## Processing data set 1
 
-    ## Likelihood speedup factor: 1.4 (142 unique trials)
+    ## Likelihood speedup factor: 1.4 (144 unique trials)
 
 ## 5. Fit
 
@@ -252,6 +263,7 @@ The following call is how you can fit this model and save intermediate
 output:
 
 ``` r
+
 emc <- fit(emc, fileName = "data/DDM.RData")
 ```
 
@@ -261,6 +273,7 @@ emc <- fit(emc, fileName = "data/DDM.RData")
 `Rhat`, and ESS for estimated parameters:
 
 ``` r
+
 summary(emc)
 ```
 
@@ -280,6 +293,7 @@ summary(emc)
 compares posterior densities with the generating values:
 
 ``` r
+
 plot_pars(emc, true_pars = p_vector, use_prior_lim = FALSE)
 ```
 
@@ -289,10 +303,12 @@ values](DDM_files/figure-html/unnamed-chunk-16-1.png)
 Finally, we generate posterior predictive datasets and compare CDFs:
 
 ``` r
+
 pp <- predict(emc)
 ```
 
 ``` r
+
 plot_cdf(dat, pp, factors = "Lex")
 ```
 
@@ -300,6 +316,7 @@ plot_cdf(dat, pp, factors = "Lex")
 lexicality](DDM_files/figure-html/unnamed-chunk-18-1.png)
 
 ``` r
+
 plot_cdf(dat, pp, factors = "Freq")
 ```
 

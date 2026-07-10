@@ -34,6 +34,7 @@ with associated functions:.
 ## Simple DDM Example
 
 ``` r
+
 library(EMC2)
 
 # Keep only 2 subjects for illustrative purposes

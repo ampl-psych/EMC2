@@ -38,7 +38,7 @@ trend_help(kernel = "exp_incr")
 #> list(d_ei = "exp")
 #>  
 #> Available bases, first is the default: 
-#> lin, exp_lin, centered 
+#> lin, centered 
 #>  
 
 # Get information about linear base
@@ -66,11 +66,6 @@ trend_help()
 #>   delta: Standard delta rule kernel: k = q[i].
 #>          Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).
 #>          Parameters: q0 (initial value), alpha (learning rate).
-#>   delta2kernel: Dual kernel delta rule: k = q[i].
-#>           Combines fast and slow learning rates
-#>           and switches between them based on dSwitch.
-#>           Parameters: q0 (initial value), alphaFast (fast learning rate),
-#>           propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold).
 #>   delta2lr: Dual learning rate delta rule: k = q[i].
 #>           Like the standard delta rule, but with separate
 #>           learning rates for positive and negative prediction errors.
@@ -79,7 +74,6 @@ trend_help()
 #> 
 #> Available base types:
 #>   lin: Linear base: parameter + w * k
-#>   exp_lin: Exponential linear base: exp(parameter) + exp(w) * k
 #>   centered: Centered mapping: parameter + w*(k - 0.5)
 #>   add: Additive base: parameter + k
 #>   identity: Identity base: k

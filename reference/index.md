@@ -12,8 +12,6 @@
   Racing Diffusion Model
 - [`DDMGNG()`](https://ampl-psych.github.io/EMC2/reference/DDMGNG.md) :
   The GNG (go/nogo) Diffusion Decision Model
-- [`SDT()`](https://ampl-psych.github.io/EMC2/reference/SDT.md) :
-  Gaussian Signal Detection Theory Model for Binary Responses
 
 ## Design and Mapping
 
@@ -36,12 +34,27 @@
 
 - [`align_loadings()`](https://ampl-psych.github.io/EMC2/reference/align_loadings.md)
   : Reorder MCMC Samples of Factor Loadings
+
 - [`rotate_loadings()`](https://ampl-psych.github.io/EMC2/reference/rotate_loadings.md)
   : Rotate loadings based on posterior median
+
 - [`make_SEM_diagram()`](https://ampl-psych.github.io/EMC2/reference/make_SEM_diagram.md)
   : Make SEM Diagram
+
 - [`make_sem_structure()`](https://ampl-psych.github.io/EMC2/reference/make_sem_structure.md)
   : Define Structural Equation Model (SEM) Matrices
+
+- [`graphical_model()`](https://ampl-psych.github.io/EMC2/reference/graphical_model.md)
+  : Graphical Model
+
+- [`cut_factors()`](https://ampl-psych.github.io/EMC2/reference/cut_factors.md)
+  : Cut Factors Based on Credible Loadings
+
+- [`factor_diagram()`](https://ampl-psych.github.io/EMC2/reference/factor_diagram.md)
+  :
+
+  Factor diagram plot \#Makes a factor diagram plot. Heavily based on
+  the fa.diagram function of the `psych` package.
 
 ## Group Design
 
@@ -82,6 +95,32 @@
   : Get parameter types from trend object
 - [`register_trend()`](https://ampl-psych.github.io/EMC2/reference/register_trend.md)
   : Register a custom C++ trend kernel
+- [`apply_kernel()`](https://ampl-psych.github.io/EMC2/reference/apply_kernel.md)
+  : Apply a kernel implied in an emc object
+- [`fix_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/fix_custom_kernel_pointers.md)
+  : Reset pointers of custom C++ trend kernels to an emc object
+- [`get_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/get_custom_kernel_pointers.md)
+  : Extract pointers of custom C++ trend kernels from trend list or emc
+  object
+- [`set_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/set_custom_kernel_pointers.md)
+  : (Re-)Set pointers of custom C++ trend kernels to an emc object
+- [`get_power_spectra()`](https://ampl-psych.github.io/EMC2/reference/get_power_spectra.md)
+  : Compute Power Spectra With Optional Subject-Level Aggregation
+- [`plot_spectrum()`](https://ampl-psych.github.io/EMC2/reference/plot_spectrum.md)
+  : Plot Empirical and Posterior Predictive Power Spectra
+
+## Choice Response Models
+
+- [`multinomial_logit()`](https://ampl-psych.github.io/EMC2/reference/multinomial_logit.md)
+  : Multinomial Logit Response Model
+- [`multinomial_probit()`](https://ampl-psych.github.io/EMC2/reference/multinomial_probit.md)
+  : Multinomial Probit Response Model
+- [`ordered_logit()`](https://ampl-psych.github.io/EMC2/reference/ordered_logit.md)
+  : Ordered Logit Response Model
+- [`ordered_probit()`](https://ampl-psych.github.io/EMC2/reference/ordered_probit.md)
+  : Ordered Probit Response Model
+- [`plot_fit_choice()`](https://ampl-psych.github.io/EMC2/reference/plot_fit_choice.md)
+  : Plot Choice Model Fit
 
 ## Estimation
 
@@ -184,7 +223,7 @@
 ## Model Comparison
 
 - [`compare()`](https://ampl-psych.github.io/EMC2/reference/compare.md)
-  : Information Criteria and Marginal Likelihoods
+  : Information Criteria and Log Marginal Likelihood
 - [`compare_subject()`](https://ampl-psych.github.io/EMC2/reference/compare_subject.md)
   : Information Criteria For Each Participant
 - [`model_averaging()`](https://ampl-psych.github.io/EMC2/reference/model_averaging.md)
@@ -193,6 +232,8 @@
   : Estimating Marginal Likelihoods Using WARP-III Bridge Sampling
 - [`get_BayesFactor()`](https://ampl-psych.github.io/EMC2/reference/get_BayesFactor.md)
   : Bayes Factors
+- [`add_ICs_MLL()`](https://ampl-psych.github.io/EMC2/reference/add_ICs_MLL.md)
+  : Add information criteria to emc object
 - [`credible()`](https://ampl-psych.github.io/EMC2/reference/credible.md)
   : Posterior Credible Interval Tests
 - [`hypothesis()`](https://ampl-psych.github.io/EMC2/reference/hypothesis.md)
@@ -239,46 +280,12 @@
 - [`split_timeseries()`](https://ampl-psych.github.io/EMC2/reference/split_timeseries.md)
   : Split fMRI Timeseries Data by ROI Columns
 
-## trend modelling
-
-- [`make_trend()`](https://ampl-psych.github.io/EMC2/reference/make_trend.md)
-  : Create a trend specification for model parameters
-- [`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
-  : Get help information for trend kernels and bases
-- [`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
-  : Get parameter types from trend object
-- [`apply_kernel()`](https://ampl-psych.github.io/EMC2/reference/apply_kernel.md)
-  : Apply a kernel implied in an emc object
-- [`fix_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/fix_custom_kernel_pointers.md)
-  : Reset pointers of custom C++ trend kernels to an emc object
-- [`get_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/get_custom_kernel_pointers.md)
-  : Extract pointers of custom C++ trend kernels from trend list or emc
-  object
-- [`set_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/set_custom_kernel_pointers.md)
-  : (Re-)Set pointers of custom C++ trend kernels to an emc object
-- [`get_power_spectra()`](https://ampl-psych.github.io/EMC2/reference/get_power_spectra.md)
-  : Compute Power Spectra With Optional Subject-Level Aggregation
-- [`plot_spectrum()`](https://ampl-psych.github.io/EMC2/reference/plot_spectrum.md)
-  : Plot Empirical and Posterior Predictive Power Spectra
-
-## Latent variable modelling
-
-- [`align_loadings()`](https://ampl-psych.github.io/EMC2/reference/align_loadings.md)
-  : Reorder MCMC Samples of Factor Loadings
-
-- [`cut_factors()`](https://ampl-psych.github.io/EMC2/reference/cut_factors.md)
-  : Cut Factors Based on Credible Loadings
-
-- [`factor_diagram()`](https://ampl-psych.github.io/EMC2/reference/factor_diagram.md)
-  :
-
-  Factor diagram plot \#Makes a factor diagram plot. Heavily based on
-  the fa.diagram function of the `psych` package.
-
 ## miscellaneous
 
 - [`update2version()`](https://ampl-psych.github.io/EMC2/reference/update2version.md)
   : Update EMC Objects to the Current Version
+- [`emc2_build_info()`](https://ampl-psych.github.io/EMC2/reference/emc2_build_info.md)
+  : Print EMC2 build configuration
 
 ## Included data
 

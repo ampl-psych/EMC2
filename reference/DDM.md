@@ -22,17 +22,17 @@ listed in the `formula` argument of
 [`design()`](https://ampl-psych.github.io/EMC2/reference/design.md).They
 can also be accessed with `DDM()$p_types`.
 
-|               |               |                   |             |                                                 |                                                      |
-|---------------|---------------|-------------------|-------------|-------------------------------------------------|------------------------------------------------------|
-| **Parameter** | **Transform** | **Natural scale** | **Default** | **Mapping**                                     | **Interpretation**                                   |
-| *v*           | \-            | \[-Inf, Inf\]     | 1           |                                                 | Mean evidence-accumulation rate (drift rate)         |
-| *a*           | log           | \[0, Inf\]        | log(1)      |                                                 | Boundary separation                                  |
-| *t0*          | log           | \[0, Inf\]        | log(0)      |                                                 | Non-decision time                                    |
-| *s*           | log           | \[0, Inf\]        | log(1)      |                                                 | Within-trial standard deviation of drift rate        |
-| *Z*           | probit        | \[0, 1\]          | qnorm(0.5)  | *z* = *Z* x *a*                                 | Relative start point (bias)                          |
-| *SZ*          | probit        | \[0, 1\]          | qnorm(0)    | *sz* = 2 x *SZ* x min(*a* x *Z*, *a* x (1-*Z*)) | Relative between-trial variation in start point      |
-| *sv*          | log           | \[0, Inf\]        | log(0)      |                                                 | Between-trial standard deviation of drift rate       |
-| *st0*         | log           | \[0, Inf\]        | log(0)      |                                                 | Between-trial variation (range) in non-decision time |
+|  |  |  |  |  |  |
+|----|----|----|----|----|----|
+| **Parameter** | **Transform** | **Natural scale** | **Default** | **Mapping** | **Interpretation** |
+| *v* | \- | \[-Inf, Inf\] | 1 |  | Mean evidence-accumulation rate (drift rate) |
+| *a* | log | \[0, Inf\] | log(1) |  | Boundary separation |
+| *t0* | log | \[0, Inf\] | log(0) |  | Non-decision time |
+| *s* | log | \[0, Inf\] | log(1) |  | Within-trial standard deviation of drift rate |
+| *Z* | probit | \[0, 1\] | qnorm(0.5) | *z* = *Z* x *a* | Relative start point (bias) |
+| *SZ* | probit | \[0, 1\] | qnorm(0) | *sz* = 2 x *SZ* x min(*a* x *Z*, *a* x (1-*Z*)) | Relative between-trial variation in start point |
+| *sv* | log | \[0, Inf\] | log(0) |  | Between-trial standard deviation of drift rate |
+| *st0* | log | \[0, Inf\] | log(0) |  | Between-trial variation (range) in non-decision time |
 
 `a`, `t0`, `sv`, `st0`, `s` are sampled on the log scale because these
 parameters are strictly positive, `Z`, `SZ` and `DP` are sampled on the

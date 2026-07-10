@@ -22,7 +22,7 @@ Invisible return with a list of all the information that is also printed
 ## Examples
 
 ``` r
-prior_help('diagonal')
+prior_help("diagonal")
 #> type: mu 
 #> Group-level mean 
 #> 

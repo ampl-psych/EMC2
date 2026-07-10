@@ -17,7 +17,8 @@ make_trend(
   at = "lR",
   maps = NULL,
   custom_trend = NULL,
-  ffill_na = NULL
+  kernel_args = NULL,
+  per_covariate_pars = NULL
 )
 ```
 
@@ -77,13 +78,24 @@ make_trend(
 
   A trend registered with `register_trend`
 
-- ffill_na:
+- kernel_args:
 
-  Determines how missing covariate values are handled. If `TRUE`,
-  missing values are forward-filled using the last known non-`NA` value
-  after applying the kernel. If `FALSE`, trials with missing covariates
-  contribute `0` instead. The default (NULL) is interpreted as `TRUE`
-  for delta-rule models and `FALSE` otherwise.
+  Optional named list of kernel-specific arguments, aligned with
+  `par_names`. Can be `NULL` (no arguments) or a single named list
+  applied to all parameters. Currently supported arguments:
+
+  `q_reset_column`
+
+  :   For delta-family kernels (`"delta"`, `"delta2kernel"`,
+      `"delta2lr"`) only. Name of a logical or integer column in `data`
+      indicating trials on which the Q-value should be reset to `q0`
+      before the prediction error is computed. `TRUE`/`1` triggers a
+      reset; `FALSE`/`0` does not.
+
+- per_covariate_pars:
+
+  Optional vector of parameter names that should be estimated separately
+  for each covariate
 
 ## Value
 

@@ -1,7 +1,7 @@
-# Information Criteria and Marginal Likelihoods
+# Information Criteria and Log Marginal Likelihood
 
-Returns the BPIC/DIC or marginal deviance (-2\*marginal likelihood) for
-a list of samples objects.
+Returns the BPIC/DIC and optionally marginal deviance (-2 x log marginal
+likelihood) for a list of samples objects.
 
 ## Usage
 
@@ -11,6 +11,7 @@ compare(
   stage = "sample",
   filter = NULL,
   use_best_fit = TRUE,
+  type = "conditional",
   BayesFactor = TRUE,
   cores_for_props = 4,
   cores_per_prop = 1,
@@ -40,15 +41,23 @@ compare(
 
 - use_best_fit:
 
-  Boolean, defaults to `TRUE`, uses the minimal or mean likelihood
-  (whichever is better) in the calculation, otherwise always uses the
-  mean likelihood.
+  Boolean; defaults to `TRUE` If `TRUE`, uses the smaller of (i) the
+  deviance at the posterior mean parameters and (ii) the lowest deviance
+  across posterior draws (i.e., the best-fitting draw). If `FALSE`, uses
+  only the deviance at the posterior mean parameters (i.e., standard
+  DIC/BPIC).
+
+- type:
+
+  Character. `"conditional"` (default) uses only the data likelihood for
+  DIC/BPIC. `"joint"` uses the joint likelihood including the
+  hierarchical prior; this option is experimental.
 
 - BayesFactor:
 
-  Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated
-  using WARP-III bridge sampling. Usually takes a minute per model added
-  to calculate
+  Boolean, defaults to `TRUE`. Include marginal deviance (`-2 * log`
+  marginal likelihood) as estimated using WARP-III bridge sampling.
+  Usually takes a minute per model added to calculate
 
 - cores_for_props:
 
@@ -84,13 +93,25 @@ Matrix of effective number of parameters, mean deviance, deviance of
 mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and
 associated weights.
 
+## Details
+
+Computes DIC and BPIC using a deviance based on either (a) the data
+likelihood only ("conditional", default) or (b) the joint likelihood
+including the hierarchical prior over subject-level parameters ("joint",
+non-standard, experimental).
+
+If `use_best_fit = TRUE` (default), the deviance anchor is taken as the
+better of the deviance at the posterior mean parameters and the
+best-fitting posterior draw. If `FALSE`, the deviance at the posterior
+mean parameters is used (standard DIC/BPIC).
+
 ## Examples
 
 ``` r
 # \donttest{
 compare(list(samples_LNR), cores_for_props = 1)
 #>     MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-#> 1 -571   1 -610    1 -571     1         39  -648  -656 -687
+#> 1 -571   1 -621    1 -606     1         15  -636  -648 -651
 # Typically we would define a list of two (or more) different models:
 # # Here the full model is an emc object with the hypothesized effect
 # # The null model is an emc object without the hypothesized effect
