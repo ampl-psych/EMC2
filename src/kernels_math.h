@@ -37,10 +37,10 @@ inline double normalise_inplace(std::vector<double>& v) {
 
 inline double mean_discrete(const std::vector<double>& x,
                             const std::vector<double>& w) {
-  double s = 0.0;
+  double m = 0.0;
   const int n = static_cast<int>(x.size());
-  for (int i = 0; i < n; ++i) s += x[i] * w[i];
-  return s;
+  for (int i = 0; i < n; ++i) m += x[i] * w[i];
+  return m;
 }
 
 inline double mode_discrete(const std::vector<double>& x,
@@ -56,6 +56,26 @@ inline double shannon_surprise(double pred, double obs) {
   const double pred_safe = std::min(std::max(pred, tiny), 1.0 - tiny);
   const double like      = (obs == 1.0) ? pred_safe : (1.0 - pred_safe);
   return -std::log(like) * inv_ln2;
+}
+
+inline double var_discrete(const std::vector<double>& x,
+                           const std::vector<double>& w) {
+  double m = 0.0;
+  double sx2 = 0.0;
+  const int n = static_cast<int>(x.size());
+  for (int i = 0; i < n; ++i) {
+    m += x[i] * w[i];
+    sx2 += x[i] * x[i] * w[i];
+  }
+  const double variance = sx2 - (m * m);
+  return std::max(0.0, variance);
+}
+
+inline double log_precision_discrete(const std::vector<double>& x,
+                                 const std::vector<double>& w,
+                                 double epsilon = 1e-12) {
+  const double variance = var_discrete(x, w);
+  return -std::log(std::max(variance, epsilon));
 }
 
 #endif // DBM_MATH_H
