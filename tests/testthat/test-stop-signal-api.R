@@ -48,6 +48,17 @@ test_that("stop_signal exposes the expected parameter names", {
   )
 })
 
+test_that("lognormal stop sdlog has a numerical upper guardrail", {
+  expect_equal(
+    stop_signal(go = "exgaussian", stop = "lognormal")$bound$minmax[, "sdlogS"],
+    c(1e-4, 3)
+  )
+  expect_equal(
+    stop_signal(go = "racing_diffusion", stop = "lognormal")$bound$minmax[, "sdlogS"],
+    c(1e-4, 3)
+  )
+})
+
 test_that("stop_signal routes only existing C++ stop-signal backends", {
   expect_identical(stop_signal(go = "exgaussian", stop = "exgaussian")$c_name, "SSEXG")
   expect_identical(stop_signal(go = "exgaussian", stop = "lognormal")$c_name, "SSLNORM")

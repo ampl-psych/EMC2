@@ -348,7 +348,7 @@ ss_lnormal_stop_spec <- function() {
     parameters = c("meanlogS", "sdlogS"),
     p_types = c(meanlogS = log(.3), sdlogS = log(.25)),
     transform = c(meanlogS = "identity", sdlogS = "exp"),
-    minmax = cbind(meanlogS = c(-Inf, Inf), sdlogS = c(1e-4, Inf)),
+    minmax = cbind(meanlogS = c(-Inf, Inf), sdlogS = c(1e-4, 3)),
     dfun = function(rt, pars) {
       parsS <- pars[, c("meanlogS", "sdlogS", "SSD"), drop = FALSE]
       dlnormalS(rt, parsS)
@@ -701,7 +701,7 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' | **Family** | **Parameters** | **Interpretation** |
 #' |-----------|----------------|--------------------|
 #' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See [SSEXG()] and [SSRDEX()] for the ex-Gaussian stop-parameter description. |
-#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
+#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
 #' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and transformed with `exp(shapeS)` and `exp(scaleS)`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `exp(scaleS) * gamma(1 + 1 / exp(shapeS))`. |
 #'
 #' All stop-signal models include `tf` and `gf`. `tf` is the attentional lapse
