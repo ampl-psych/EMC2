@@ -16,6 +16,13 @@
 //   ddm_eval_trials_cpp(ptr, Theta, rt, R)
 //                                        -> trial-wise rows with
 //                                           consecutive-duplicate caching
+// Ensemble (seed-ensembled production flows; equal-weight density mixture):
+//   ddm_build_ensemble(list of fl)       -> external pointer to k members
+//   ddm_ens_eval_trials_cpp(ptr, Theta, rt, R)
+//                                        -> trial-wise mixture pdf/cdf
+//                                           (mean over members), duplicate
+//                                           caching of all k conditioned
+//                                           states
 //
 // Outputs: joint (defective) pdf and cdf, their logs, and P(R | params).
 // Out-of-box parameters: pdf = 0, cdf = 0, log_pdf = -Inf (rejection
@@ -231,36 +238,62 @@ static void load_mlp(List mlp_list, Mlp& m) {
   }
 }
 
-// [[Rcpp::export]]
-SEXP ddm_build(List fl) {
+static void load_ddm_from_list(List fl, DdmModel& m) {
   List sp = fl["spline"];
   if (as<int>(sp["num_splines"]) != 1 ||
       as<std::string>(sp["output_transform"]) != "exp" ||
       as<std::string>(sp["base_distribution"]) != "standard_normal")
     stop("ddm_build: only single-spline / exp-transform / normal-base flows "
          "are supported.");
-  DdmModel* m = new DdmModel();
-  m->num_bins = as<int>(sp["num_bins"]);
-  m->range_min = as<double>(sp["range_min"]);
-  m->range_max = as<double>(sp["range_max"]);
-  m->min_bin_size = as<double>(sp["min_bin_size"]);
-  m->min_knot_slope = as<double>(sp["min_knot_slope"]);
+  m.num_bins = as<int>(sp["num_bins"]);
+  m.range_min = as<double>(sp["range_min"]);
+  m.range_max = as<double>(sp["range_max"]);
+  m.min_bin_size = as<double>(sp["min_bin_size"]);
+  m.min_knot_slope = as<double>(sp["min_knot_slope"]);
   List scaler = fl["scaler"];
-  m->scaler_mean = as<std::vector<double>>(scaler["mean"]);
-  m->scaler_scale = as<std::vector<double>>(scaler["scale"]);
-  m->n_ctx = (int)m->scaler_mean.size();
+  m.scaler_mean = as<std::vector<double>>(scaler["mean"]);
+  m.scaler_scale = as<std::vector<double>>(scaler["scale"]);
+  m.n_ctx = (int)m.scaler_mean.size();
   List bounds = fl["bounds_sampled"];
-  m->lower = as<std::vector<double>>(bounds["lower"]);
-  m->upper = as<std::vector<double>>(bounds["upper"]);
-  load_mlp(fl["flow_mlp"], m->flow);
-  load_mlp(fl["classifier_mlp"], m->clf);
-  if (m->flow.layers[0].nin != m->n_ctx + 1)
+  m.lower = as<std::vector<double>>(bounds["lower"]);
+  m.upper = as<std::vector<double>>(bounds["upper"]);
+  load_mlp(fl["flow_mlp"], m.flow);
+  load_mlp(fl["classifier_mlp"], m.clf);
+  if (m.flow.layers[0].nin != m.n_ctx + 1)
     stop("ddm_build: flow input dim must be n_params + 1 (response).");
-  if (m->clf.layers[0].nin != m->n_ctx)
+  if (m.clf.layers[0].nin != m.n_ctx)
     stop("ddm_build: classifier input dim must be n_params.");
+}
+
+// [[Rcpp::export]]
+SEXP ddm_build(List fl) {
+  DdmModel* m = new DdmModel();
+  load_ddm_from_list(fl, *m);
   XPtr<DdmModel> ptr(m, true);
   ptr.attr("class") = "ddm_flow_model";
   ptr.attr("model") = as<std::string>(fl["model"]);
+  return ptr;
+}
+
+struct DdmEnsemble { std::vector<DdmModel> members; };
+
+// Equal-weight ensemble of DDM flows (same context/bounds, e.g. training
+// seeds). fls: an R list of weight lists as accepted by ddm_build.
+// [[Rcpp::export]]
+SEXP ddm_build_ensemble(List fls) {
+  if (fls.size() < 1) stop("ddm_build_ensemble: need at least one member.");
+  DdmEnsemble* e = new DdmEnsemble();
+  e->members.resize(fls.size());
+  for (int k = 0; k < fls.size(); ++k) {
+    load_ddm_from_list(fls[k], e->members[k]);
+    if (e->members[k].n_ctx != e->members[0].n_ctx ||
+        e->members[k].lower != e->members[0].lower ||
+        e->members[k].upper != e->members[0].upper)
+      stop("ddm_build_ensemble: members disagree on context dim or bounds.");
+  }
+  XPtr<DdmEnsemble> ptr(e, true);
+  ptr.attr("class") = "ddm_flow_ensemble";
+  ptr.attr("n_members") = (int)e->members.size();
   return ptr;
 }
 
@@ -329,6 +362,58 @@ List ddm_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt,
       pdf[t] = 0.0; cdf[t] = 0.0; log_pdf[t] = R_NegInf; p_R[t] = NA_REAL;
     } else {
       eval_one(c, rt[t], R[t], t, pdf, cdf, log_pdf, p_R);
+    }
+  }
+  return List::create(_["pdf"] = pdf, _["cdf"] = cdf,
+                      _["log_pdf"] = log_pdf, _["p_R"] = p_R);
+}
+
+// Trial-wise ensemble evaluation: equal-weight mixture over members.
+// pdf/cdf/p_R are means over members; log_pdf = log(mean pdf). Consecutive
+// duplicate parameter rows reuse all k conditioned states.
+// [[Rcpp::export]]
+List ddm_ens_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt,
+                             IntegerVector R) {
+  XPtr<DdmEnsemble> ptr(ptr_);
+  const DdmEnsemble& e = *ptr;
+  const int K = (int)e.members.size();
+  const DdmModel& m0 = e.members[0];
+  const int n = rt.size();
+  if (theta.nrow() != n || theta.ncol() != m0.n_ctx)
+    stop("theta must be length(rt) x %d.", m0.n_ctx);
+  if (R.size() != n) stop("rt and R must have equal length.");
+
+  NumericVector pdf(n), cdf(n), log_pdf(n), p_R(n);
+  NumericVector pdf1(1), cdf1(1), lp1(1), pR1(1);   // per-member scratch
+  std::vector<double> row(m0.n_ctx), prev(m0.n_ctx,
+                                          std::numeric_limits<double>::quiet_NaN());
+  std::vector<DdmCond> cond(K);
+  bool have = false, prev_in_box = false;
+
+  for (int t = 0; t < n; ++t) {
+    if (R[t] != 1 && R[t] != 2) stop("R must be 1 or 2.");
+    for (int j = 0; j < m0.n_ctx; ++j) row[j] = theta(t, j);
+    const bool same = have && std::equal(row.begin(), row.end(), prev.begin());
+    if (!same) {
+      prev = row;
+      prev_in_box = in_box(m0, row.data());   // members share bounds
+      if (prev_in_box)
+        for (int k = 0; k < K; ++k)
+          ddm_condition(e.members[k], row.data(), cond[k]);
+      have = true;
+    }
+    if (!prev_in_box) {
+      pdf[t] = 0.0; cdf[t] = 0.0; log_pdf[t] = R_NegInf; p_R[t] = NA_REAL;
+    } else {
+      double s_pdf = 0.0, s_cdf = 0.0, s_pR = 0.0;
+      for (int k = 0; k < K; ++k) {
+        eval_one(cond[k], rt[t], R[t], 0, pdf1, cdf1, lp1, pR1);
+        s_pdf += pdf1[0]; s_cdf += cdf1[0]; s_pR += pR1[0];
+      }
+      pdf[t] = s_pdf / K;
+      cdf[t] = s_cdf / K;
+      p_R[t] = s_pR / K;
+      log_pdf[t] = std::log(pdf[t]);
     }
   }
   return List::create(_["pdf"] = pdf, _["cdf"] = cdf,

@@ -27,13 +27,18 @@ flownn_get <- function(name) {
   ptr
 }
 
-# DDM-character models use the two-network evaluator (src/flow_ddm.cpp)
+# DDM-character models use the two-network evaluator (src/flow_ddm.cpp).
+# The shipped .rds may be a single weight list or an ensemble
+# (list(members = list(...))): seed-ensembled flows are evaluated as an
+# equal-weight density mixture, which removes training-seed noise.
 ddmnn_get <- function(name) {
   ptr <- flownn_cache[[name]]
   if (is.null(ptr) || !ddm_ptr_valid(ptr)) {
     path <- system.file("extdata", "flownn", paste0(name, ".rds"),
                         package = "EMC2", mustWork = TRUE)
-    ptr <- ddm_build(readRDS(path))
+    fl <- readRDS(path)
+    members <- if (is.null(fl$members)) list(fl) else fl$members
+    ptr <- ddm_build_ensemble(members)
     flownn_cache[[name]] <- ptr
   }
   ptr
@@ -74,13 +79,13 @@ dRDMnn <- function(rt, pars) {
 }
 
 dDDMnn <- function(rt, R, pars) {
-  ddm_eval_trials_cpp(ddmnn_get("ddm_large"), .theta_DDMnn(pars),
-                      rt, as.integer(R))$pdf
+  ddm_ens_eval_trials_cpp(ddmnn_get("ddm_ens5"), .theta_DDMnn(pars),
+                          rt, as.integer(R))$pdf
 }
 
 pDDMnn <- function(rt, R, pars) {
-  ddm_eval_trials_cpp(ddmnn_get("ddm_large"), .theta_DDMnn(pars),
-                      rt, as.integer(R))$cdf
+  ddm_ens_eval_trials_cpp(ddmnn_get("ddm_ens5"), .theta_DDMnn(pars),
+                          rt, as.integer(R))$cdf
 }
 
 pRDMnn <- function(rt, pars) {
@@ -208,11 +213,14 @@ RDMnn <- function() {
 #' The Diffusion Decision Model — Neural-Network Likelihood
 #'
 #' Variant of [DDM] whose joint likelihood of response and rt is computed by
-#' two trained neural networks (neural likelihood estimation) instead of the
+#' trained neural networks (neural likelihood estimation) instead of the
 #' numerical-integral density: a normalizing flow for the rt distribution
 #' conditional on parameters and response, and a classifier for the choice
-#' probability. Evaluation takes microseconds per trial — orders of
-#' magnitude faster than the numerical DDM density.
+#' probability. The shipped likelihood is a five-member seed ensemble
+#' (identical architecture, independent training runs; equal-weight density
+#' mixture), which removes training-seed variability from the approximation.
+#' Evaluation takes microseconds per trial — orders of magnitude faster
+#' than the numerical DDM density.
 #'
 #' @details
 #'

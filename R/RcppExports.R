@@ -17,6 +17,10 @@ ddm_build <- function(fl) {
     .Call(`_EMC2_ddm_build`, fl)
 }
 
+ddm_build_ensemble <- function(fls) {
+    .Call(`_EMC2_ddm_build_ensemble`, fls)
+}
+
 ddm_ptr_valid <- function(ptr_) {
     .Call(`_EMC2_ddm_ptr_valid`, ptr_)
 }
@@ -27,6 +31,10 @@ ddm_eval_cpp <- function(ptr_, theta, rt, R) {
 
 ddm_eval_trials_cpp <- function(ptr_, theta, rt, R) {
     .Call(`_EMC2_ddm_eval_trials_cpp`, ptr_, theta, rt, R)
+}
+
+ddm_ens_eval_trials_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_ens_eval_trials_cpp`, ptr_, theta, rt, R)
 }
 
 flow_ptr_valid <- function(ptr_) {

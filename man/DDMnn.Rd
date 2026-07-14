@@ -11,11 +11,14 @@ A model list with all the necessary functions for EMC2 to sample
 }
 \description{
 Variant of \link{DDM} whose joint likelihood of response and rt is computed by
-two trained neural networks (neural likelihood estimation) instead of the
+trained neural networks (neural likelihood estimation) instead of the
 numerical-integral density: a normalizing flow for the rt distribution
 conditional on parameters and response, and a classifier for the choice
-probability. Evaluation takes microseconds per trial — orders of
-magnitude faster than the numerical DDM density.
+probability. The shipped likelihood is a five-member seed ensemble
+(identical architecture, independent training runs; equal-weight density
+mixture), which removes training-seed variability from the approximation.
+Evaluation takes microseconds per trial — orders of magnitude faster
+than the numerical DDM density.
 }
 \details{
 Parameters, transforms, and interpretation match \link{DDM}:\tabular{lllll}{
