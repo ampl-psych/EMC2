@@ -12,3 +12,4 @@ paper
 .positai
 src/Makevars
 inst/include/build_info.h
+tests/extratests
