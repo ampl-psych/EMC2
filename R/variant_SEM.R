@@ -36,12 +36,42 @@ sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integra
 }
 
 
+# Lambda_mat and K_mat are applied to the parameter vector by position, so their
+# rows must be in the same order as the sampled parameters. A joint design list
+# supplied to make_sem_structure in a different order than the one being fitted
+# yields a row permutation that would otherwise be applied silently.
+align_sem_rows <- function(mat, par_names, mat_name){
+  if (is.null(mat)) return(NULL)
+  if (nrow(mat) != length(par_names)) {
+    stop(mat_name, " has ", nrow(mat), " rows but the model has ",
+         length(par_names), " sampled parameters.")
+  }
+  row_names <- rownames(mat)
+  if (is.null(row_names)) {
+    rownames(mat) <- par_names
+    return(mat)
+  }
+  if (identical(row_names, par_names)) return(mat)
+  if (!setequal(row_names, par_names)) {
+    stop(mat_name, " rownames do not match the sampled parameters.\n",
+         "  Missing from ", mat_name, ": ",
+         paste(setdiff(par_names, row_names), collapse = ", "), "\n",
+         "  Not a parameter: ",
+         paste(setdiff(row_names, par_names), collapse = ", "), "\n",
+         "Was make_sem_structure given the same design as the one being fitted?")
+  }
+  mat[par_names, , drop = FALSE]
+}
+
 add_info_SEM <- function(sampler, prior = NULL, ...){
   args <- list(...)
   sem_settings <- args$sem_settings
   if (is.null(sem_settings)) stop("sem_settings is required")
 
   n_pars <- sum(!sampler$nuisance)
+  par_names <- sampler$par_names[!sampler$nuisance]
+  sem_settings$Lambda_mat <- align_sem_rows(sem_settings$Lambda_mat, par_names, "Lambda_mat")
+  sem_settings$K_mat <- align_sem_rows(sem_settings$K_mat, par_names, "K_mat")
 
   # Create backup matrices if NULL
   if (is.null(sem_settings$Lambda_mat)) {
