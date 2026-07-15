@@ -8,6 +8,7 @@ ssrt_summary(
   emc,
   level = c("population", "individual", "condition"),
   probs = c(0.025, 0.5, 0.975),
+  details = FALSE,
   stage = get_last_stage(emc),
   n_population = 1000,
   seed = NULL,
@@ -31,6 +32,13 @@ distribution implied by the hierarchical mean and covariance draws.
 moments.}
 
 \item{probs}{Numeric vector of quantiles to return.}
+
+\item{details}{Logical. If \code{FALSE}, return a compact summary with only the
+SSRT mean and standard deviation rows, requested posterior summary columns,
+necessary subject/condition identifiers, and \code{n_population} where relevant.
+The full detailed summary is retained in the \code{"ssrt_details"} attribute. If
+\code{TRUE}, return the detailed summary directly, including technical metadata
+and population variance-decomposition rows.}
 
 \item{stage}{Sampling stage passed to \code{\link[=get_pars]{get_pars()}}.}
 
@@ -63,18 +71,22 @@ A data frame with posterior summaries. The main rows are:
 the seconds scale. For population summaries this combines the average
 within-person stop-time variance and the between-person variance in SSRT
 means.}
-\item{\code{between_subject_sd}}{Only returned for population summaries. The
+\item{\code{between_subject_sd}}{Returned for population summaries when
+\code{details = TRUE}. The
 standard deviation of individual SSRT means implied by the hierarchical
 population distribution.}
-\item{\code{mean_within_subject_sd}}{Only returned for population summaries.
+\item{\code{mean_within_subject_sd}}{Returned for population summaries when
+\code{details = TRUE}.
 The average individual stop-time standard deviation.}
 }
 Output columns identify the summary target (\code{level}, \code{subject},
 \code{condition}, and condition columns when relevant), the stop distribution
 (\code{stop_family}), the moment formula used (\code{method}), the Monte Carlo
 population size for population summaries (\code{n_population}), and posterior
-summary columns. \code{mean} and \code{sd} are the posterior mean and posterior
-standard deviation of the requested SSRT quantity. The remaining columns are
+summary columns. With \code{details = FALSE}, technical metadata columns are
+omitted, empty identifier columns are dropped, and the unabridged data frame
+is stored in \code{attr(x, "ssrt_details")}. \code{mean} and \code{sd} are the posterior mean
+and posterior standard deviation of the requested SSRT quantity. The remaining columns are
 the requested quantiles from \code{probs}, named by their percentages, for example
 \verb{2.5\%}, \verb{50\%}, and \verb{97.5\%}.
 }

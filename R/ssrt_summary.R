@@ -14,6 +14,12 @@
 #' `"condition"` maps stop parameters to design cells before computing SSRT
 #' moments.
 #' @param probs Numeric vector of quantiles to return.
+#' @param details Logical. If `FALSE`, return a compact summary with only the
+#' SSRT mean and standard deviation rows, requested posterior summary columns,
+#' necessary subject/condition identifiers, and `n_population` where relevant.
+#' The full detailed summary is retained in the `"ssrt_details"` attribute. If
+#' `TRUE`, return the detailed summary directly, including technical metadata
+#' and population variance-decomposition rows.
 #' @param stage Sampling stage passed to [get_pars()].
 #' @param n_population Number of implied population members sampled per
 #' posterior draw when `level = "population"`.
@@ -37,24 +43,29 @@
 #'   the seconds scale. For population summaries this combines the average
 #'   within-person stop-time variance and the between-person variance in SSRT
 #'   means.}
-#'   \item{`between_subject_sd`}{Only returned for population summaries. The
+#'   \item{`between_subject_sd`}{Returned for population summaries when
+#'   `details = TRUE`. The
 #'   standard deviation of individual SSRT means implied by the hierarchical
 #'   population distribution.}
-#'   \item{`mean_within_subject_sd`}{Only returned for population summaries.
+#'   \item{`mean_within_subject_sd`}{Returned for population summaries when
+#'   `details = TRUE`.
 #'   The average individual stop-time standard deviation.}
 #' }
 #' Output columns identify the summary target (`level`, `subject`,
 #' `condition`, and condition columns when relevant), the stop distribution
 #' (`stop_family`), the moment formula used (`method`), the Monte Carlo
 #' population size for population summaries (`n_population`), and posterior
-#' summary columns. `mean` and `sd` are the posterior mean and posterior
-#' standard deviation of the requested SSRT quantity. The remaining columns are
+#' summary columns. With `details = FALSE`, technical metadata columns are
+#' omitted, empty identifier columns are dropped, and the unabridged data frame
+#' is stored in `attr(x, "ssrt_details")`. `mean` and `sd` are the posterior mean
+#' and posterior standard deviation of the requested SSRT quantity. The remaining columns are
 #' the requested quantiles from `probs`, named by their percentages, for example
 #' `2.5%`, `50%`, and `97.5%`.
 #' @export
 ssrt_summary <- function(emc,
                          level = c("population", "individual", "condition"),
                          probs = c(0.025, 0.5, 0.975),
+                         details = FALSE,
                          stage = get_last_stage(emc),
                          n_population = 1000,
                          seed = NULL,
@@ -70,6 +81,9 @@ ssrt_summary <- function(emc,
   condition_level <- match.arg(condition_level)
   if (!is.numeric(probs) || any(probs < 0 | probs > 1)) {
     stop("`probs` must contain probabilities between 0 and 1.", call. = FALSE)
+  }
+  if (!is.logical(details) || length(details) != 1L || is.na(details)) {
+    stop("`details` must be `TRUE` or `FALSE`.", call. = FALSE)
   }
   if (!is.numeric(n_population) || length(n_population) != 1L ||
       is.na(n_population) || n_population < 2) {
@@ -107,28 +121,50 @@ ssrt_summary <- function(emc,
   }
 
   if (identical(level, "individual")) {
-    return(ssrt_summary_individual(
+    out <- ssrt_summary_individual(
       emc = emc, info = info, probs = probs, stage = stage,
       thin = thin, filter = filter, length.out = length.out,
       subject = subject, ...
-    ))
+    )
+    return(ssrt_format_output(out, details = details))
   }
 
   if (identical(level, "condition")) {
-    return(ssrt_summary_condition(
+    out <- ssrt_summary_condition(
       emc = emc, info = info, probs = probs, stage = stage,
       data = data, condition_vars = condition_vars,
       condition_level = condition_level,
       n_population = n_population, thin = thin, filter = filter, length.out = length.out,
       subject = subject, ...
-    ))
+    )
+    return(ssrt_format_output(out, details = details))
   }
 
-  ssrt_summary_population(
+  out <- ssrt_summary_population(
     emc = emc, info = info, probs = probs, stage = stage,
     n_population = n_population, thin = thin, filter = filter,
     length.out = length.out, ...
   )
+  ssrt_format_output(out, details = details)
+}
+
+ssrt_format_output <- function(out, details) {
+  if (isTRUE(details)) {
+    return(out)
+  }
+
+  detailed_out <- out
+  out <- out[out$parameter %in% c("ssrt_mean", "ssrt_sd"), , drop = FALSE]
+  technical_columns <- c("level", "stop_family", "method")
+  out <- out[, setdiff(names(out), technical_columns), drop = FALSE]
+
+  empty_identifier <- vapply(out, function(x) {
+    all(is.na(x)) || all(!nzchar(as.character(x)))
+  }, logical(1))
+  protected_columns <- c("parameter", "mean", "sd", "n_population")
+  out <- out[, !empty_identifier | names(out) %in% protected_columns, drop = FALSE]
+  attr(out, "ssrt_details") <- detailed_out
+  out
 }
 
 ssrt_model_info <- function(emc) {
