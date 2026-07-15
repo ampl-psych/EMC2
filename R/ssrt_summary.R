@@ -12,7 +12,8 @@
 #' distribution implied by the hierarchical mean and covariance draws.
 #' `"individual"` summarizes each subject's posterior `alpha` draws.
 #' `"condition"` maps stop parameters to design cells before computing SSRT
-#' moments.
+#' moments. For `type = "single"` fits, the default is resolved to
+#' `"individual"` because no population distribution is sampled.
 #' @param probs Numeric vector of quantiles to return.
 #' @param details Logical. If `FALSE`, return a compact summary with only the
 #' SSRT mean and standard deviation rows, requested posterior summary columns,
@@ -77,8 +78,34 @@ ssrt_summary <- function(emc,
                          length.out = NULL,
                          subject = NULL,
                          ...) {
+  level_missing <- missing(level)
+  condition_level_missing <- missing(condition_level)
   level <- match.arg(level)
   condition_level <- match.arg(condition_level)
+  single_level <- ssrt_is_single_level(emc)
+  if (single_level && identical(level, "population")) {
+    if (level_missing) {
+      level <- "individual"
+    } else {
+      stop(
+        "`level = \"population\"` is not defined for `type = \"single\"` fits. ",
+        "Use `level = \"individual\"`.",
+        call. = FALSE
+      )
+    }
+  }
+  if (single_level && identical(level, "condition") &&
+      identical(condition_level, "population")) {
+    if (condition_level_missing) {
+      condition_level <- "individual"
+    } else {
+      stop(
+        "`condition_level = \"population\"` is not defined for ",
+        "`type = \"single\"` fits. Use `condition_level = \"individual\"`.",
+        call. = FALSE
+      )
+    }
+  }
   if (!is.numeric(probs) || any(probs < 0 | probs > 1)) {
     stop("`probs` must contain probabilities between 0 and 1.", call. = FALSE)
   }
@@ -165,6 +192,10 @@ ssrt_format_output <- function(out, details) {
   out <- out[, !empty_identifier | names(out) %in% protected_columns, drop = FALSE]
   attr(out, "ssrt_details") <- detailed_out
   out
+}
+
+ssrt_is_single_level <- function(emc) {
+  is.list(emc) && length(emc) >= 1L && identical(emc[[1]]$type, "single")
 }
 
 ssrt_model_info <- function(emc) {

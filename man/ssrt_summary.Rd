@@ -29,7 +29,8 @@ ssrt_summary(
 distribution implied by the hierarchical mean and covariance draws.
 \code{"individual"} summarizes each subject's posterior \code{alpha} draws.
 \code{"condition"} maps stop parameters to design cells before computing SSRT
-moments.}
+moments. For \code{type = "single"} fits, the default is resolved to
+\code{"individual"} because no population distribution is sampled.}
 
 \item{probs}{Numeric vector of quantiles to return.}
 
