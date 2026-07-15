@@ -134,11 +134,29 @@ ssrt_summary <- function(emc,
 ssrt_model_info <- function(emc) {
   design <- get_design(emc)[[1]]
   model <- design$model()
-  if (is.null(model$ss_info) || is.null(model$ss_info$stop_family)) {
+  if (!is.null(model$ss_info) && !is.null(model$ss_info$stop_family)) {
+    info <- model$ss_info
+  } else if (identical(model$c_name, "SSEXG") ||
+             identical(model$c_name, "SSRDEX")) {
+    info <- list(
+      go_family = if (identical(model$c_name, "SSEXG")) {
+        "exgaussian"
+      } else {
+        "racing_diffusion"
+      },
+      stop_family = "exgaussian",
+      go_parameters = setdiff(
+        names(model$p_types),
+        c("muS", "sigmaS", "tauS", "exgS_lb", "tf", "gf")
+      ),
+      stop_parameters = c("muS", "sigmaS", "tauS"),
+      stop_mean = "muS + tauS",
+      stop_sd = "sqrt(sigmaS^2 + tauS^2)"
+    )
+  } else {
     stop("`ssrt_summary()` currently supports EMC2 stop-signal models only.",
          call. = FALSE)
   }
-  info <- model$ss_info
   info$exgS_lb <- if ("exgS_lb" %in% names(design$constants)) {
     unname(design$constants[["exgS_lb"]])
   } else if ("exgS_lb" %in% names(model$p_types)) {
