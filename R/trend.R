@@ -1079,7 +1079,7 @@ get_kernels <- function() {
     transforms   = list(func = list("a0" = "exp", "b0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   beta_binomial_decay = list(
@@ -1088,7 +1088,7 @@ get_kernels <- function() {
     transforms   = list(func = list("a0" = "exp", "b0" = "exp", "decay" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   beta_binomial_window = list(
@@ -1097,7 +1097,7 @@ get_kernels <- function() {
     transforms   = list(func = list("a0" = "exp", "b0" = "exp", "window" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   dbm = list(
@@ -1106,7 +1106,7 @@ get_kernels <- function() {
     transforms   = list(func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   tpm = list(
@@ -1115,7 +1115,7 @@ get_kernels <- function() {
     transforms   = list(func = list("cp" = "pnorm", "a0" = "exp", "b0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE)
   # delta2kernel2 = list(description = paste(

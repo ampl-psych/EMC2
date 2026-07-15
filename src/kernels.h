@@ -17,10 +17,10 @@ struct KernelParsView {
   std::vector<const double*> cols;  // cols[k][row] = value for param k at trial row
 };
 
-// Struct for optional kernel arguments. Currently only "q-value resetting" is supported.
+// Struct for optional kernel arguments.
 struct KernelArgs {
   const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
-  int grid_res = 100;
+  int grid_res = 100; // resolution of discretised probability dists for DBM-like kernels
   // Future extensible fields go here, e.g.:
   // const double* some_other_col = nullptr;
 };
@@ -1179,7 +1179,8 @@ public:
 
 // =============================================================================
 // DBMBaseKernel
-// Streams: 1 = prediction mean, 2 = prediction mode, 3 = surprise (bits)
+// Streams: 1 = prediction mean, 2 = prediction mode, 3 = surprise (bits),
+//          4 = prediction log-precision
 // =============================================================================
 
 struct DBMBaseKernel : BaseKernel {
@@ -1187,6 +1188,7 @@ protected:
   std::vector<double> pred_mean_;
   std::vector<double> pred_mode_;
   mutable std::vector<double> surprise_;          // computed lazily
+  std::vector<double> pred_logprecision_;
   std::vector<double> comp_obs_;                  // compressed observations, stored during run()
   mutable bool surprise_computed_ = false;
 
@@ -1213,12 +1215,13 @@ public:
     pred_mean_.clear();
     pred_mode_.clear();
     surprise_.clear();
+    pred_logprecision_.clear();
     comp_obs_.clear();
     surprise_computed_ = false;
   }
 
   bool has_output_stream(int code) const override {
-    return (code >= 1 && code <= 3);
+    return (code >= 1 && code <= 4);
   }
 
   KernelOutput get_output_stream(int code) const override {
@@ -1227,8 +1230,9 @@ public:
     if      (code == 1) src = &pred_mean_;
     else if (code == 2) src = &pred_mode_;
     else if (code == 3) src = &surprise_;
+    else if (code == 4) src = &pred_logprecision_;
     else Rcpp::stop("DBMBaseKernel::get_output_stream: unsupported code %d "
-                      "(1=mean, 2=mode, 3=surprise)", code);
+                      "(1=mean, 2=mode, 3=surprise, 4=log-precision)", code);
 
     if (has_expand_idx_) {
       const int n_full = static_cast<int>(expand_idx_.size());
@@ -1244,6 +1248,7 @@ public:
     if (code == 1) return "mean";
     if (code == 2) return "mode";
     if (code == 3) return "surprise";
+    if (code == 4) return "log-precision";
     throw std::runtime_error("DBMBaseKernel::output_stream_name: unsupported code");
   }
 
@@ -1284,6 +1289,7 @@ struct BetaBinomialKernel : DBMBaseKernel {
 
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
+             pred_logprecision_.resize(n_comp);
 
              double n_hit = 0.0, n_trial = 0.0;
 
@@ -1294,6 +1300,7 @@ struct BetaBinomialKernel : DBMBaseKernel {
 
                pred_mean_[j] = beta_mean(a_t, b_t);
                pred_mode_[j] = beta_mode(a_t, b_t);
+               pred_logprecision_[j] = beta_log_precision(a_t, b_t);
 
                const double x = cov_ptr[r];
                if (!is_nan(x)) { n_hit += x; n_trial += 1.0; }
@@ -1328,6 +1335,7 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
+             pred_logprecision_.resize(n_comp);
 
              double n_hit = 0.0, n_trial = 0.0;
 
@@ -1338,6 +1346,7 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 
                pred_mean_[j] = beta_mean(a_t, b_t);
                pred_mode_[j] = beta_mode(a_t, b_t);
+               pred_logprecision_[j] = beta_log_precision(a_t, b_t);
 
                const double df = std::exp(-1.0 / decay_col[r]);
                const double x  = cov_ptr[r];
@@ -1384,6 +1393,7 @@ public:
 
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
+             pred_logprecision_.resize(n_comp);
 
              double n_hit = 0.0, n_trial = 0.0;
              std::deque<Event> buf;
@@ -1404,6 +1414,7 @@ public:
 
                pred_mean_[j] = beta_mean(a_t, b_t);
                pred_mode_[j] = beta_mode(a_t, b_t);
+               pred_logprecision_[j] = beta_log_precision(a_t, b_t);
 
                const double x = cov_ptr[r];
                if (!is_nan(x)) {
@@ -1428,7 +1439,7 @@ public:
 
 struct DBMKernel : DBMBaseKernel {
 private:
-  int grid_res_ = 100; // TODO grid_res_ probably needs to be raised for computing mode
+  int grid_res_ = 100;
 
 public:
   void set_kernel_args(const KernelArgs& args) override {
@@ -1451,6 +1462,7 @@ public:
 
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
+             pred_logprecision_.resize(n_comp);
 
              const int    gs     = grid_res_ + 1;
 
@@ -1492,6 +1504,7 @@ public:
 
                pred_mean_[j] = mean_discrete(prob_grid, DBM_pred);
                pred_mode_[j] = mode_discrete(prob_grid, DBM_pred);
+               pred_logprecision_[j] = log_precision_discrete(prob_grid, DBM_pred);
 
                // posterior update
                if (is_nan(x)) {
@@ -1512,7 +1525,7 @@ public:
 
 // =============================================================================
 // TPMKernel  —  Transition Probability Model
-// Yu & Cohen (2008)
+// Meyniel et al. (2016)
 // Parameters: cp, a0, b0
 // kernel_args: grid_res (default 100)
 // =============================================================================
@@ -1582,6 +1595,7 @@ public:
 
              pred_mean_.resize(n_comp);
              pred_mode_.resize(n_comp);
+             pred_logprecision_.resize(n_comp);
 
              const double cp_eps  = 1e-10;
              const TPMGrid grid   = build_grid(grid_res_);
@@ -1613,6 +1627,7 @@ public:
                if ((1.0 - cp) < cp_eps) {
                  pred_mean_[j] = beta_mean(a0_col[r], b0_col[r]);
                  pred_mode_[j] = pred_mean_[j];
+                 pred_logprecision_[j] = beta_log_precision(a0_col[r], b0_col[r]);
                  continue;
                }
 
@@ -1623,6 +1638,10 @@ public:
                    : (prev == 1 ? mean_discrete(grid.p_XX, TPM_post)
                         : mean_discrete(grid.p_XY, TPM_post));
                  pred_mode_[j] = pred_mean_[j];
+                 pred_logprecision_[j] = prev_na
+                 ? log_precision_discrete(grid.mean_p, TPM_post)
+                   : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_post)
+                        : log_precision_discrete(grid.p_XY, TPM_post));
                } else {
                  // full TPM update
                  const double sum_post = std::accumulate(
@@ -1640,6 +1659,10 @@ public:
                    : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
                         : mean_discrete(grid.p_XY, TPM_pred));
                  pred_mode_[j] = pred_mean_[j];
+                 pred_logprecision_[j] = prev_na
+                 ? log_precision_discrete(grid.mean_p, TPM_pred)
+                   : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
+                        : log_precision_discrete(grid.p_XY, TPM_pred));
 
                  if (curr_na || prev_na) {
                    TPM_post = TPM_pred;
