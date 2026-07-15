@@ -71,15 +71,17 @@ inline double mode_discrete(const std::vector<double>& x,
 
 inline double var_discrete(const std::vector<double>& x,
                            const std::vector<double>& w) {
-  double m = 0.0;
-  double sx2 = 0.0;
   const int n = static_cast<int>(x.size());
+  double m = 0.0;
   for (int i = 0; i < n; ++i) {
     m += x[i] * w[i];
-    sx2 += x[i] * x[i] * w[i];
   }
-  const double variance = sx2 - (m * m);
-  return std::max(0.0, variance);
+  double v = 0.0;
+  for (int i = 0; i < n; ++i) {
+    const double d = x[i] - m;
+    v += d * d * w[i];
+  }
+  return std::max(0.0, v);
 }
 
 inline double log_precision_discrete(const std::vector<double>& x,
