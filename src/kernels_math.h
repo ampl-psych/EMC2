@@ -24,12 +24,13 @@ inline double beta_mean(double a, double b) {
 //   return (a * b) / (ab_sum * ab_sum * (ab_sum + 1.0));
 // }
 
-inline double beta_log_precision(double a, double b, double epsilon = 1e-12) {
+inline double beta_log_precision(double a, double b) {
+  static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
   const double ab_sum = a + b;
   const double result = 2.0 * std::log(ab_sum) +
     std::log1p(ab_sum) - std::log(a) - std::log(b);
-  if (!is_finite(result)) {
-    return -std::log(epsilon);
+  if (!is_finite(result) || result > ceiling) {
+    return ceiling;
   }
   return result;
 }
@@ -82,10 +83,13 @@ inline double var_discrete(const std::vector<double>& x,
 }
 
 inline double log_precision_discrete(const std::vector<double>& x,
-                                     const std::vector<double>& w,
-                                     double epsilon = 1e-12) {
-  const double variance = var_discrete(x, w);
-  return -std::log(std::max(variance, epsilon));
+                                     const std::vector<double>& w) {
+  static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
+  const double result = -std::log(var_discrete(x, w));
+  if (!is_finite(result) || result > ceiling) {
+    return ceiling;
+  }
+  return result;
 }
 
 
