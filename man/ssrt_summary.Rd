@@ -65,13 +65,26 @@ observed subject's \code{alpha} draws and returns subject-by-condition summaries
 \item{...}{Additional arguments passed to \code{\link[=get_pars]{get_pars()}}.}
 }
 \value{
-A data frame with posterior summaries. The main rows are:
+By default (\code{details = FALSE}), a compact data frame with one row for
+each requested SSRT quantity:
 \describe{
 \item{\code{ssrt_mean}}{The mean stop finishing time on the seconds scale.}
 \item{\code{ssrt_sd}}{The total standard deviation of stop finishing times on
 the seconds scale. For population summaries this combines the average
 within-person stop-time variance and the between-person variance in SSRT
 means.}
+}
+The default output includes the \code{parameter}, posterior \code{mean}, posterior
+\code{sd}, requested quantile columns, necessary subject/condition identifiers,
+and \code{n_population} for population summaries.
+
+The full detailed summary is stored in \code{attr(x, "ssrt_details")} when
+\code{details = FALSE}, where \code{x} is the returned object. Calling
+\code{ssrt_summary(..., details = TRUE)} returns this detailed data frame directly.
+The detailed output also includes technical metadata columns (\code{level},
+\code{stop_family}, and \code{method}) and, for population summaries, the additional
+rows:
+\describe{
 \item{\code{between_subject_sd}}{Returned for population summaries when
 \code{details = TRUE}. The
 standard deviation of individual SSRT means implied by the hierarchical
@@ -80,15 +93,7 @@ population distribution.}
 \code{details = TRUE}.
 The average individual stop-time standard deviation.}
 }
-Output columns identify the summary target (\code{level}, \code{subject},
-\code{condition}, and condition columns when relevant), the stop distribution
-(\code{stop_family}), the moment formula used (\code{method}), the Monte Carlo
-population size for population summaries (\code{n_population}), and posterior
-summary columns. With \code{details = FALSE}, technical metadata columns are
-omitted, empty identifier columns are dropped, and the unabridged data frame
-is stored in \code{attr(x, "ssrt_details")}. \code{mean} and \code{sd} are the posterior mean
-and posterior standard deviation of the requested SSRT quantity. The remaining columns are
-the requested quantiles from \code{probs}, named by their percentages, for example
+In all outputs, quantile columns are named by their percentages, for example
 \verb{2.5\%}, \verb{50\%}, and \verb{97.5\%}.
 }
 \description{

@@ -37,13 +37,26 @@
 #' @param thin,filter,length.out,subject Passed to [get_pars()].
 #' @param ... Additional arguments passed to [get_pars()].
 #'
-#' @return A data frame with posterior summaries. The main rows are:
+#' @return By default (`details = FALSE`), a compact data frame with one row for
+#' each requested SSRT quantity:
 #' \describe{
 #'   \item{`ssrt_mean`}{The mean stop finishing time on the seconds scale.}
 #'   \item{`ssrt_sd`}{The total standard deviation of stop finishing times on
 #'   the seconds scale. For population summaries this combines the average
 #'   within-person stop-time variance and the between-person variance in SSRT
 #'   means.}
+#' }
+#' The default output includes the `parameter`, posterior `mean`, posterior
+#' `sd`, requested quantile columns, necessary subject/condition identifiers,
+#' and `n_population` for population summaries.
+#'
+#' The full detailed summary is stored in `attr(x, "ssrt_details")` when
+#' `details = FALSE`, where `x` is the returned object. Calling
+#' `ssrt_summary(..., details = TRUE)` returns this detailed data frame directly.
+#' The detailed output also includes technical metadata columns (`level`,
+#' `stop_family`, and `method`) and, for population summaries, the additional
+#' rows:
+#' \describe{
 #'   \item{`between_subject_sd`}{Returned for population summaries when
 #'   `details = TRUE`. The
 #'   standard deviation of individual SSRT means implied by the hierarchical
@@ -52,15 +65,7 @@
 #'   `details = TRUE`.
 #'   The average individual stop-time standard deviation.}
 #' }
-#' Output columns identify the summary target (`level`, `subject`,
-#' `condition`, and condition columns when relevant), the stop distribution
-#' (`stop_family`), the moment formula used (`method`), the Monte Carlo
-#' population size for population summaries (`n_population`), and posterior
-#' summary columns. With `details = FALSE`, technical metadata columns are
-#' omitted, empty identifier columns are dropped, and the unabridged data frame
-#' is stored in `attr(x, "ssrt_details")`. `mean` and `sd` are the posterior mean
-#' and posterior standard deviation of the requested SSRT quantity. The remaining columns are
-#' the requested quantiles from `probs`, named by their percentages, for example
+#' In all outputs, quantile columns are named by their percentages, for example
 #' `2.5%`, `50%`, and `97.5%`.
 #' @export
 ssrt_summary <- function(emc,
