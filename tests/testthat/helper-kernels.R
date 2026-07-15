@@ -1,4 +1,9 @@
-# NB assuming inputs a and b are strictly positive
+# Beta distribution helpers ---------------------------------------------------
+
+beta_mean <- function(a, b) {
+  return(a / (a + b))
+}
+
 beta_mode <- function(a, b) {
   out <- numeric(length(a))
   # symmetric case: a == b.
@@ -21,21 +26,44 @@ beta_mode <- function(a, b) {
   return(out)
 }
 
-# NB assuming inputs a and b are strictly positive
-beta_mean <- function(a, b) {
-  return(a / (a + b))
+beta_logprecision <- function(a, b) {
+  return(2 * log(a + b) + log1p(a + b) - log(a) - log(b))
 }
 
-# helper: normalise discretised density
+# Discretised probability distribution helpers --------------------------------
+
 normalise <- function(x) {
   return(x / sum(x))
 }
 
-# Shannon surprise (bits)
+mean_discrete <- function(grid, prob) {
+  return(sum(grid * prob))
+}
+
+mode_discrete <- function(grid, prob) {
+  return(grid[which.max(prob)])
+}
+
+logprecision_discrete <- function(grid, prob) {
+  ceiling <- -log(.Machine$double.eps)
+  m <- sum(grid * prob)
+  var <- max(0, sum((grid - m)^2 * prob))
+  out <- -log(var)
+  if (!is.finite(out) || out > ceiling) {
+    return(ceiling)
+  }
+  return(out)
+}
+
+# Shannon surprise (bits) -----------------------------------------------------
+
 shannon_surprise <- function(pred, obs) {
   pred_safe <- pmin(pmax(pred, .Machine$double.eps), (1 - .Machine$double.neg.eps))
   return(-log2(ifelse(obs == 1, pred_safe, (1 - pred_safe))))
 }
+
+
+# Beta-binomial model ---------------------------------------------------------
 
 # beta-binomial model, optionally with exponential decay ("leaky integration")
 # applied to past observations, or with memory of past events limited to a
@@ -43,11 +71,12 @@ shannon_surprise <- function(pred, obs) {
 beta_binomial <- function(
     x, a0, b0,
     decay = 0, window = 0,
-    return_map = FALSE, return_surprise = FALSE
+    output_type = c("mean", "mode", "surprise", "log-precision")
 ) {
   if (!all(x %in% c(0, 1) | is.na(x))) {
     stop("All `x` entries that are not NA must be 0 or 1.")
   }
+  output_type <- match.arg(output_type)
 
   n_total <- length(x)
   pars <- matrix(nrow = 4, ncol = n_total)
@@ -81,8 +110,10 @@ beta_binomial <- function(
     # prediction before observing trial t:
     a_t <- pars["a0", t] + n_hit
     b_t <- pars["b0", t] + (n_trial - n_hit)
-    if (return_map) {
+    if (output_type == "mode") {
       out[t] <- beta_mode(a_t, b_t)
+    } else if (output_type == "log-precision") {
+      out[t] <- beta_logprecision(a_t, b_t)
     } else {
       out[t] <- beta_mean(a_t, b_t)
     }
@@ -119,11 +150,14 @@ beta_binomial <- function(
     }
   }
 
-  if (return_surprise) {
+  if (output_type == "surprise") {
     out <- shannon_surprise(out, x)
   }
   return(out)
 }
+
+
+# Dynamic belief model --------------------------------------------------------
 
 # Dynamic Belief Model (DBM), based on Yu & Cohen (2008), NeurIPS; and
 # Ide et al. (2013), JoN
@@ -137,12 +171,13 @@ beta_binomial <- function(
 # the trial-wise output is constant.
 dbm <- function(
     x, cp, mu0, s0,
-    return_map = FALSE, return_surprise = FALSE,
+    output_type = c("mean", "mode", "surprise", "log-precision"),
     grid_res = 100L
 ) {
   if (!all(x %in% c(0, 1) | is.na(x))) {
     stop("All `x` entries that are not NA must be 0 or 1.")
   }
+  output_type <- match.arg(output_type)
 
   n_total <- length(x)
   pars <- matrix(nrow = 3, ncol = n_total)
@@ -177,12 +212,14 @@ dbm <- function(
         (1 - pars["cp", t]) * DBM_post + pars["cp", t] * DBM_prior
       )
     }
-    # main trial-wise output: predicted probability of observation X,
-    # operationalised as either the mean or mode of the predictive distribution
-    if (return_map) {
-      out[t] <- prob_grid[which.max(DBM_pred)]
+    # main trial-wise output: mean, mode, or log-precision of predictive distribution
+    # for the probability of observation X
+    if (output_type == "mode") {
+      out[t] <- mode_discrete(prob_grid, DBM_pred)
+    } else if (output_type == "log-precision") {
+      out[t] <- logprecision_discrete(prob_grid, DBM_pred)
     } else {
-      out[t] <- sum(prob_grid * DBM_pred)
+      out[t] <- mean_discrete(prob_grid, DBM_pred)
     }
     # update posterior distribution
     if (is.na(x[t])) {
@@ -197,7 +234,7 @@ dbm <- function(
     }
   }
 
-  if (return_surprise) {
+  if (output_type == "surprise") {
     out <- shannon_surprise(out, x)
   }
   return(out)
