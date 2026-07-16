@@ -21,6 +21,7 @@ struct KernelParsView {
 struct KernelArgs {
   const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
   int grid_res = 100; // resolution of discretised probability dists for DBM-like kernels
+  const int* belief_reset = nullptr;
   // Future extensible fields go here, e.g.:
   // const double* some_other_col = nullptr;
 };
@@ -1191,6 +1192,7 @@ protected:
   std::vector<double> pred_logprecision_;
   std::vector<double> comp_obs_;                  // compressed observations, stored during run()
   mutable bool surprise_computed_ = false;
+  const int* belief_reset_ = nullptr;   // <-- ADD: null = no reset
 
   void store_obs(const double* cov_ptr, const std::vector<int>& comp_idx) {
     const int n_comp = static_cast<int>(comp_idx.size());
@@ -1225,6 +1227,10 @@ public:
     pred_logprecision_.clear();
     comp_obs_.clear();
     surprise_computed_ = false;
+  }
+
+  void set_kernel_args(const KernelArgs& args) override {
+    belief_reset_ = args.belief_reset;
   }
 
   bool has_output_stream(int code) const override {
@@ -1308,6 +1314,11 @@ struct BetaBinomialKernel : DBMBaseKernel {
 
              for (int j = 0; j < n_comp; ++j) {
                const int    r   = comp_idx[j];
+
+               if (belief_reset_ && belief_reset_[r]) {
+                 double n_hit = 0.0, n_trial = 0.0;
+               }
+
                const double a_t = a0_col[r] + n_hit;
                const double b_t = b0_col[r] + (n_trial - n_hit);
 
@@ -1354,6 +1365,11 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 
              for (int j = 0; j < n_comp; ++j) {
                const int    r   = comp_idx[j];
+
+               if (belief_reset_ && belief_reset_[r]) {
+                 double n_hit = 0.0, n_trial = 0.0;
+               }
+
                const double a_t = a0_col[r] + n_hit;
                const double b_t = b0_col[r] + (n_trial - n_hit);
 
@@ -1414,6 +1430,11 @@ public:
              for (int j = 0; j < n_comp; ++j) {
                const int r = comp_idx[j];
                const int w = static_cast<int>(window_col[r]);
+
+               if (belief_reset_ && belief_reset_[r]) {
+                 double n_hit = 0.0, n_trial = 0.0;
+                 buf.clear();
+               }
 
                // prune observations outside the window
                while (!buf.empty() && (r - buf.front().idx) > w) {
@@ -1503,8 +1524,8 @@ public:
                normalise_inplace(DBM_prior);
 
                // predictive distribution
-               if (j == 0) {
-                 // first trial: fixed prior is the predictive
+               if (j == 0 || (belief_reset_ && belief_reset_[r])) {
+                 // first trial or belief reset: fixed prior is the predictive
                  DBM_pred = DBM_prior;
                } else {
                  // otherwise: mixture of fixed prior and most recent posterior
