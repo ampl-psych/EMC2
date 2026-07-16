@@ -1203,9 +1203,13 @@ protected:
     if (surprise_computed_) return;
     const int n_comp = static_cast<int>(pred_mean_.size());
     surprise_.resize(n_comp, std::numeric_limits<double>::quiet_NaN());
-    for (int j = 0; j < n_comp; ++j)
-      if (!is_nan(comp_obs_[j]))
+    for (int j = 0; j < n_comp; ++j) {
+      if (is_nan(comp_obs_[j])) {
+        surprise_[j] = shannon_entropy(pred_mean_[j]);
+      } else {
         surprise_[j] = shannon_surprise(pred_mean_[j], comp_obs_[j]);
+      }
+    }
     surprise_computed_ = true;
   }
 
@@ -1259,8 +1263,11 @@ protected:
     surprise_.resize(n_comp, std::numeric_limits<double>::quiet_NaN());
     for (int j = 0; j < n_comp; ++j) {
       const double obs = cov_ptr[comp_idx[j]];
-      if (!is_nan(obs))
+      if (is_nan(obs)) {
+        surprise_[j] = shannon_entropy(pred_mean_[j]);
+      } else {
         surprise_[j] = shannon_surprise(pred_mean_[j], obs);
+      }
     }
   }
 
