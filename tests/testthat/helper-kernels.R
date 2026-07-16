@@ -58,6 +58,9 @@ logprecision_discrete <- function(grid, prob) {
 # Shannon surprise (bits) -----------------------------------------------------
 
 shannon_surprise <- function(pred, obs) {
+  if (is.na(obs)) {
+    return(NA_real_)
+  }
   pred_safe <- pmin(pmax(pred, .Machine$double.eps), (1 - .Machine$double.neg.eps))
   return(-log2(ifelse(obs == 1, pred_safe, (1 - pred_safe))))
 }
