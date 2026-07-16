@@ -104,13 +104,13 @@ inline double shannon_surprise(double pred, double obs) {
   return -std::log(like) * inv_ln2;
 }
 
-inline double shannon_entropy(double pred) {
-  static const double inv_ln2 = 1.0 / std::log(2.0);
-  static const double tiny    = std::numeric_limits<double>::min();
-  const double pred_safe = std::min(std::max(pred, tiny), 1.0 - tiny);
-  const double entropy = pred_safe * std::log(pred_safe)
-    + (1.0 - pred_safe) * std::log(1.0 - pred_safe);
-  return -entropy * inv_ln2;
-}
+// inline double shannon_entropy(double pred) {
+//   static const double inv_ln2 = 1.0 / std::log(2.0);
+//   static const double tiny    = std::numeric_limits<double>::min();
+//   const double pred_safe = std::min(std::max(pred, tiny), 1.0 - tiny);
+//   const double entropy = pred_safe * std::log(pred_safe)
+//     + (1.0 - pred_safe) * std::log(1.0 - pred_safe);
+//   return -entropy * inv_ln2;
+// }
 
 #endif // DBM_MATH_H
