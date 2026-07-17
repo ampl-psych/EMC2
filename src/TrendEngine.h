@@ -54,6 +54,7 @@ struct KernelSpec {
 
   // kernel_args
   std::vector<int> q_reset_col;   // length n_trials, or empty
+  std::vector<int> belief_reset_col;
   KernelArgs       kernel_args;   // raw-pointer view; rebuilt via build_kernel_args()
 
   // custom kernel pointer (R_NilValue if not custom)
@@ -72,6 +73,8 @@ struct KernelSpec {
     kernel_args = KernelArgs{};
     if (!q_reset_col.empty())
       kernel_args.q_reset = q_reset_col.data();
+    if (!belief_reset_col.empty())
+      kernel_args.belief_reset = belief_reset_col.data();
   }
 };
 

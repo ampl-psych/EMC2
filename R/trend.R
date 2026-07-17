@@ -36,6 +36,12 @@
 #'       column in `data` indicating trials on which the Q-value should be
 #'       reset to `q0` before the prediction error is computed.
 #'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}
+#'     \item{`belief_reset_column`}{For DBM-family kernels (`"beta_binomial"`,
+#'       `"beta_binomial_decay"`, `"beta_binomial_window"`, `"DBM"`, `"TPM"`)
+#'       only. Name of a logical or integer column in `data` indicating trials
+#'       on which the predictive distribution should be re-initialised, that is,
+#'       all preceding observations should be forgotten.
+#'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}#'
 #'   }
 #' @param custom_kernel A custom kernel registered with [register_kernel()].
 #'   Required when `kernel = "custom"`.
@@ -75,6 +81,11 @@ make_kernel <- function(cov_names,
       warning("kernel_args$q_reset_column is only meaningful for delta-family ",
               "kernels; ignored for kernel '", type, "'.")
       kernel_args$q_reset_column <- NULL
+    }
+    if (!is.null(kernel_args$belief_reset_column) && !type %in% delta_kernels) {
+      warning("kernel_args$belief_reset_column is only meaningful for DBM-family ",
+              "kernels; ignored for kernel '", type, "'.")
+      kernel_args$belief_reset_column <- NULL
     }
   }
 
