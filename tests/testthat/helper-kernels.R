@@ -74,7 +74,8 @@ shannon_surprise <- function(pred, obs) {
 beta_binomial <- function(
     x, a0, b0,
     decay = 0, window = 0,
-    output_type = c("mean", "mode", "surprise", "log-precision")
+    output_type = c("mean", "mode", "surprise", "log-precision"),
+    belief_reset = NULL
 ) {
   if (!all(x %in% c(0, 1) | is.na(x))) {
     stop("All `x` entries that are not NA must be 0 or 1.")
@@ -95,12 +96,25 @@ beta_binomial <- function(
     stop("Cannot use both `decay` and `window`. Choose only one memory constraint.")
   }
 
+  if (is.null(belief_reset)) {
+    belief_reset <- FALSE
+  }
+  if (length(belief_reset) == 1L) {
+    belief_reset <- rep(belief_reset, times = n_total)
+  }
+
   out <- numeric(n_total)
   n_hit <- 0
   n_trial <- 0
   buf <- list(obs = numeric(0), idx = integer(0))
 
   for (t in seq_len(n_total)) {
+    # if applicable, reset belief
+    if (belief_reset[t]) {
+      n_hit <- 0
+      n_trial <- 0
+      buf <- list(obs = numeric(0), idx = integer(0))
+    }
     # if applicable, prune memory based on current memory window
     if (use_window) {
       while (length(buf[["obs"]]) > 0 && (t - buf[["idx"]][1]) > pars["window", t]) {
@@ -175,7 +189,8 @@ beta_binomial <- function(
 dbm <- function(
     x, cp, mu0, s0,
     output_type = c("mean", "mode", "surprise", "log-precision"),
-    grid_res = 100L
+    grid_res = 100L,
+    belief_reset = NULL
 ) {
   if (!all(x %in% c(0, 1) | is.na(x))) {
     stop("All `x` entries that are not NA must be 0 or 1.")
@@ -195,6 +210,13 @@ dbm <- function(
   pars["b", ] <- (1 - as.numeric(mu0)) * as.numeric(s0)
   out <- numeric(n_total)
 
+  if (is.null(belief_reset)) {
+    belief_reset <- FALSE
+  }
+  if (length(belief_reset) == 1L) {
+    belief_reset <- rep(belief_reset, times = n_total)
+  }
+
   # discretised density grids
   prob_grid <- (0:grid_res) / grid_res
   # pre-compute Bernoulli likelihoods for binary observation X vs. Y
@@ -205,7 +227,7 @@ dbm <- function(
     # compute discretised Beta prior for trial t
     DBM_prior <- normalise(stats::dbeta(prob_grid, pars["a", t], pars["b", t]))
     # compute predictive distribution:
-    if (t == 1) {
+    if (t == 1 || belief_reset[t]) {
       # initialise predicted probability of observation X with fixed prior
       DBM_pred <- DBM_prior
     } else {
