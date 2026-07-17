@@ -1316,7 +1316,8 @@ struct BetaBinomialKernel : DBMBaseKernel {
                const int    r   = comp_idx[j];
 
                if (belief_reset_ && belief_reset_[r]) {
-                 double n_hit = 0.0, n_trial = 0.0;
+                 n_hit = 0.0;
+                 n_trial = 0.0;
                }
 
                const double a_t = a0_col[r] + n_hit;
@@ -1367,7 +1368,8 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
                const int    r   = comp_idx[j];
 
                if (belief_reset_ && belief_reset_[r]) {
-                 double n_hit = 0.0, n_trial = 0.0;
+                 n_hit = 0.0;
+                 n_trial = 0.0;
                }
 
                const double a_t = a0_col[r] + n_hit;
@@ -1432,7 +1434,8 @@ public:
                const int w = static_cast<int>(window_col[r]);
 
                if (belief_reset_ && belief_reset_[r]) {
-                 double n_hit = 0.0, n_trial = 0.0;
+                 n_hit = 0.0;
+                 n_trial = 0.0;
                  buf.clear();
                }
 
