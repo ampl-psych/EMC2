@@ -1480,6 +1480,7 @@ private:
 
 public:
   void set_kernel_args(const KernelArgs& args) override {
+    DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
   }
 
@@ -1613,6 +1614,7 @@ private:
 
 public:
   void set_kernel_args(const KernelArgs& args) override {
+    DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
   }
 
