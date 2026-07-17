@@ -31,6 +31,12 @@ Currently supported:
 column in \code{data} indicating trials on which the Q-value should be
 reset to \code{q0} before the prediction error is computed.
 \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
+\item{\code{belief_reset_column}}{For DBM-family kernels (\code{"beta_binomial"},
+\code{"beta_binomial_decay"}, \code{"beta_binomial_window"}, \code{"DBM"}, \code{"TPM"})
+only. Name of a logical or integer column in \code{data} indicating trials
+on which the predictive distribution should be re-initialised, that is,
+all preceding observations should be forgotten.
+\code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}#'
 }}
 
 \item{custom_kernel}{A custom kernel registered with \code{\link[=register_kernel]{register_kernel()}}.
