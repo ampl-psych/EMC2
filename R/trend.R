@@ -652,15 +652,6 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
 
 
 
-#' Check and update formula list for trend parameters
-#'
-#' @param trend An `emc2_trend` object created by [make_trend()].
-#' @param covariates Character vector of covariate column names in the data.
-#' @param model A model function, or NULL.
-#' @param formula List of formulas, or NULL.
-#' @param parameter_design A parameter_design list, or NULL.
-#' @return Updated formula list with intercept formulas added for missing trend
-#'   parameters.
 check_trend <- function(trend, covariates = NULL, model = NULL,
                         formula = NULL, parameter_design = NULL) {
 
