@@ -222,7 +222,9 @@ apply_kernel(kernel_pars, emc)
 # all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 
 
-# BETA-BINOMIAL, DBM, TPM LEARNING RULES --------------------------------------
+# ----------------------------------------------------------------------------~
+# BETA-BINOMIAL, DBM, TPM LEARNING RULES                                  -----
+# ----------------------------------------------------------------------------~
 
 # NB using helper functions defined in tests/testthat/helper-kernels.R that are
 # independent of the EMC2 trends framework
@@ -257,15 +259,14 @@ output_codes <- 1L
 output_types <- c("mean")
 
 # Beta-binomial (basic)
-emc <- lapply(
+emc <- setNames(lapply(
   X = output_codes,
   FUN = function(x) {
     make_minimal_emc_wrap("beta_binomial", output_code = x)
   }
-)
-names(emc) <- output_types
-snapshot_list <- vector(mode = "list", length = 2L)
-names(snapshot_list) <- c("uniform", "informative")
+), output_types)
+snapshot_list <- vector(mode = "list", length = 3L)
+names(snapshot_list) <- c("uniform", "uniform_reset", "informative")
 
 # uniform prior: Beta shape parameters = 1
 kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1))
@@ -284,6 +285,41 @@ emc_out <- sapply(
 )
 all.equal(emc_out, true_out)
 snapshot_list[["uniform"]] <- list(
+  manual = true_out,
+  emc = emc_out
+)
+
+# test belief resetting
+reset_column <- rep(FALSE, times = length(covariate1))
+reset_idx <- floor(length(covariate1)/2)
+reset_column[reset_idx] <- TRUE
+
+emc_reset <- make_minimal_emc(
+  trend = make_trend(
+    make_base(
+      target_parameter = "m",
+      type = "lin",
+      kernel = make_kernel(
+        cov_names = "covariate1",
+        type = "beta_binomial",
+        kernel_args = list(belief_reset_column = "do_reset")
+      ),
+      kernel_output = 1L
+    )
+  ),
+  n_trials = length(covariate1),
+  covariate1 = covariate1,
+  do_reset = reset_column
+)
+
+true_out <- beta_binomial(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
+  belief_reset = reset_column
+)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
+all.equal(emc_out, true_out)
+identical(emc_out[1], emc_out[reset_idx])
+snapshot_list[["uniform_reset"]] <- list(
   manual = true_out,
   emc = emc_out
 )
@@ -356,6 +392,8 @@ emc <- lapply(
   }
 )
 names(emc) <- output_types
+snapshot_list <- vector(mode = "list", length = 2L)
+names(snapshot_list) <- c("uniform", "uniform_reset")
 
 # uniform prior with memory window of 6 trials
 kernel_pars <- c("m.a0" = log(1), "m.b0" = log(1), "m.window" = log(6))
@@ -374,9 +412,46 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+snapshot_list[["uniform"]] <- list(
+  manual = true_out,
+  emc = emc_out
+)
+
+# test belief resetting
+emc_reset <- make_minimal_emc(
+  trend = make_trend(
+    make_base(
+      target_parameter = "m",
+      type = "lin",
+      kernel = make_kernel(
+        cov_names = "covariate1",
+        type = "beta_binomial_window",
+        kernel_args = list(belief_reset_column = "do_reset")
+      ),
+      kernel_output = 1L
+    )
+  ),
+  n_trials = length(covariate1),
+  covariate1 = covariate1,
+  do_reset = reset_column
+)
+
+true_out <- beta_binomial(
+  x = covariate1, a0 = exp(kernel_pars[1]), b0 = exp(kernel_pars[2]),
+  window = exp(kernel_pars[3]),
+  belief_reset = reset_column
+)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
+all.equal(emc_out, true_out)
+identical(emc_out[1], emc_out[reset_idx])
+snapshot_list[["uniform_reset"]] <- list(
+  manual = true_out,
+  emc = emc_out
+)
+
 # conclude with test snapshot
 test_that("beta_binomial_window_Rcpp", {
-  expect_snapshot(list(manual = true_out, emc = emc_out))
+  expect_snapshot(snapshot_list)
 })
 
 
@@ -388,8 +463,8 @@ emc <- lapply(
   }
 )
 names(emc) <- output_types
-snapshot_list <- vector(mode = "list", length = 3L)
-names(snapshot_list) <- c("cp_0", "cp_1", "cp_real")
+snapshot_list <- vector(mode = "list", length = 4L)
+names(snapshot_list) <- c("cp_0", "cp_1", "cp_real", "cp_real_reset")
 
 # change point probability of zero, output should be equivalent to Beta binomial
 kernel_pars <- c(
@@ -516,6 +591,39 @@ snapshot_list[["cp_real"]] <- list(
   manual = true_out,
   emc = emc_out
 )
+
+# test belief resetting
+emc_reset <- make_minimal_emc(
+  trend = make_trend(
+    make_base(
+      target_parameter = "m",
+      type = "lin",
+      kernel = make_kernel(
+        cov_names = "covariate1",
+        type = "dbm",
+        kernel_args = list(belief_reset_column = "do_reset")
+      ),
+      kernel_output = 1L
+    )
+  ),
+  n_trials = length(covariate1),
+  covariate1 = covariate1,
+  do_reset = reset_column
+)
+
+true_out <- dbm(
+  x = covariate1, cp = pnorm(kernel_pars[1]), mu0 = pnorm(kernel_pars[2]),
+  s0 = exp(kernel_pars[3]),
+  belief_reset = reset_column
+)
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
+all.equal(emc_out, true_out)
+identical(emc_out[1], emc_out[reset_idx])
+snapshot_list[["cp_real_reset"]] <- list(
+  manual = true_out,
+  emc = emc_out
+)
+
 # conclude with test snapshot
 test_that("dbm_Rcpp", {expect_snapshot(snapshot_list)})
 
