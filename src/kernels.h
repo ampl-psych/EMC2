@@ -1636,7 +1636,6 @@ public:
              pred_mode_.resize(n_comp);
              pred_logprecision_.resize(n_comp);
 
-             const double cp_eps  = 1e-10;
              const TPMGrid grid   = build_grid(grid_res_);
              const int     nc     = grid.n_combi;
              const double  inv_nm1 = 1.0 / (nc - 1.0);
@@ -1662,60 +1661,38 @@ public:
                const int    prev    = (j == 0 || prev_na) ? -1
                : static_cast<int>(cov_ptr[comp_idx[j - 1]]);
 
-               // degenerate: cp ≈ 1
-               if ((1.0 - cp) < cp_eps) {
-                 pred_mean_[j] = beta_mean(a0_col[r], b0_col[r]);
-                 pred_mode_[j] = pred_mean_[j];
-                 pred_logprecision_[j] = beta_log_precision(a0_col[r], b0_col[r]);
-                 continue;
-               }
+               const double sum_post = std::accumulate(
+                 TPM_post.begin(), TPM_post.end(), 0.0);
+               const double mix_old  = 1.0 - cp;
+               const double mix_new  = cp;
 
-               // degenerate: cp ≈ 0 — no volatility, read directly from posterior
-               if (cp < cp_eps) {
-                 pred_mean_[j] = prev_na
-                 ? mean_discrete(grid.mean_p, TPM_post)
-                   : (prev == 1 ? mean_discrete(grid.p_XX, TPM_post)
-                        : mean_discrete(grid.p_XY, TPM_post));
-                 pred_mode_[j] = pred_mean_[j];
-                 pred_logprecision_[j] = prev_na
-                 ? log_precision_discrete(grid.mean_p, TPM_post)
-                   : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_post)
-                        : log_precision_discrete(grid.p_XY, TPM_post));
+               for (int k = 0; k < nc; ++k)
+                 TPM_pred[k] = mix_old * TPM_post[k]
+               + mix_new * (sum_post - TPM_post[k]) * inv_nm1;
+               normalise_inplace(TPM_pred);
+
+               pred_mean_[j] = prev_na
+               ? mean_discrete(grid.mean_p, TPM_pred)
+                 : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
+                      : mean_discrete(grid.p_XY, TPM_pred));
+               pred_mode_[j] = pred_mean_[j];
+               pred_logprecision_[j] = prev_na
+               ? log_precision_discrete(grid.mean_p, TPM_pred)
+                 : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
+                      : log_precision_discrete(grid.p_XY, TPM_pred));
+
+               if (curr_na || prev_na) {
+                 TPM_post = TPM_pred;
                } else {
-                 // full TPM update
-                 const double sum_post = std::accumulate(
-                   TPM_post.begin(), TPM_post.end(), 0.0);
-                 const double mix_old  = 1.0 - cp;
-                 const double mix_new  = cp;
-
+                 const std::vector<double>* lp =
+                   (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY)
+                   : (curr == 0 ? &grid.like_YX : &grid.like_XX);
                  for (int k = 0; k < nc; ++k)
-                   TPM_pred[k] = mix_old * TPM_post[k]
-                 + mix_new * (sum_post - TPM_post[k]) * inv_nm1;
-                 normalise_inplace(TPM_pred);
-
-                 pred_mean_[j] = prev_na
-                 ? mean_discrete(grid.mean_p, TPM_pred)
-                   : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
-                        : mean_discrete(grid.p_XY, TPM_pred));
-                 pred_mode_[j] = pred_mean_[j];
-                 pred_logprecision_[j] = prev_na
-                 ? log_precision_discrete(grid.mean_p, TPM_pred)
-                   : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
-                        : log_precision_discrete(grid.p_XY, TPM_pred));
-
-                 if (curr_na || prev_na) {
-                   TPM_post = TPM_pred;
-                 } else {
-                   const std::vector<double>* lp =
-                     (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY)
-                     : (curr == 0 ? &grid.like_YX : &grid.like_XX);
-                   for (int k = 0; k < nc; ++k)
-                     TPM_update[k] = mix_old * (*lp)[k] * TPM_post[k]
-                   + mix_new * (*lp)[k]
-                   * (sum_post - TPM_post[k]) * inv_nm1;
-                   normalise_inplace(TPM_update);
-                   std::swap(TPM_post, TPM_update);
-                 }
+                   TPM_update[k] = mix_old * (*lp)[k] * TPM_post[k]
+                 + mix_new * (*lp)[k]
+                 * (sum_post - TPM_post[k]) * inv_nm1;
+                 normalise_inplace(TPM_update);
+                 std::swap(TPM_post, TPM_update);
                }
              }
 
