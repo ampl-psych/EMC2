@@ -1675,7 +1675,10 @@ public:
                ? mean_discrete(grid.mean_p, TPM_pred)
                  : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
                       : mean_discrete(grid.p_XY, TPM_pred));
-               pred_mode_[j] = pred_mean_[j];
+               pred_mode_[j] = prev_na
+               ? mode_discrete(grid.mean_p, TPM_pred)
+                 : (prev == 1 ? mode_discrete(grid.p_XX, TPM_pred)
+                      : mode_discrete(grid.p_XY, TPM_pred));
                pred_logprecision_[j] = prev_na
                ? log_precision_discrete(grid.mean_p, TPM_pred)
                  : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
