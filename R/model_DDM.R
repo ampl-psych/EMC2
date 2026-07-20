@@ -41,7 +41,8 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
   pars <- pars[ok,,drop=FALSE]
   R <- R[ok]
-  pars <- as.matrix(pars);
+  pars <- as.matrix(pars)
+  zero_drift_check_needed <- utils::packageVersion("WienR") < "0.3-17"
   # DDM gets unhappy with large trial numbers so split them into separate lists
   split_idx <- rep(1:ceiling(nrow(pars)/5e3), each = 5e3)
   split_idx <- split_idx[1:nrow(pars)]
@@ -53,9 +54,19 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
     for(id in unique(idx)){
       is_id <- which(idx == id)
       cur_pars <- pars_tmp[is_id[1],]
-      tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
-                                  w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
-                                  st0 = cur_pars["st0"], precision = precision, method="p-ars"))
+      cur_pars_drift <- cur_pars["v"]/cur_pars[ "s"]
+      # old versions of WienR have bug in generating responses (lower vs upper boundary)
+      # when drift rate is exactly zero
+      if (zero_drift_check_needed && cur_pars_drift == 0) {
+        cur_pars_drift <- 1e-10
+      }
+      tmp <- suppress_output(rWDM(
+        N = length(is_id),
+        a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars_drift, w = cur_pars["Z"],
+        t0 = cur_pars["t0"],
+        sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"], st0 = cur_pars["st0"],
+        precision = precision, method="p-ars"
+      ))
       tmp <- data.frame(R = tmp$response, rt = tmp$q)
       out[is_id,] <- tmp
     }
