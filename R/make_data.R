@@ -170,7 +170,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+                             drop_subjects = F, n_trials = n_trials, add_acc=T,
                            drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
@@ -233,9 +233,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
   } else {
+    # Have to reduce here, but add_acc=T required in making
+    # parameters when a function uses accumulator (lR or lM)
+    data=data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM","winner"))]
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {

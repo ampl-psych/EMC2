@@ -1370,9 +1370,11 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
-  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = T, drop_subjects = F,
-                                      do_functions = F),
-                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
+
+  md <- minimal_design(design, covariates = Fcovariates, verbose = F,
+            drop_R = F, add_acc = T, drop_subjects = F, do_functions = T)
+  md=md[md$lR==levels(md$lR)[1],!(names(md) %in% c("lR","lM","winner"))]
+  dadm <- design_model(md,design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
   if (is_ordered_response_type(model()))
