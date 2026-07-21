@@ -19,7 +19,7 @@
       
       $subj_ll
              [,1]
-      1 -149.5918
+      1 -126.1569
       
       $idx
       [1] 1
@@ -33,14 +33,14 @@
          trials subjects     S     R        rt
       1       1        1  left right 0.5699457
       2       2        1  left right 1.0712502
-      3       3        1  left right 0.9057347
+      3       3        1  left  left        NA
       4       4        1  left right 0.8566880
-      5       5        1  left right 0.6253342
+      5       5        1  left  left        NA
       6       6        1  left right 1.0906341
       7       7        1  left right 0.5305895
       8       8        1  left right 0.5611776
       9       9        1  left right 0.5721548
-      10     10        1  left right 0.7099338
+      10     10        1  left  left        NA
       11     11        1 right right 0.5117904
       12     12        1 right right 0.5066511
       13     13        1 right right 0.7898381
