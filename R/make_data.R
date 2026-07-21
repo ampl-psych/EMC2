@@ -170,7 +170,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=T,
+                             drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
