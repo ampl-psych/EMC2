@@ -259,7 +259,7 @@ run_bridge_sampling <- function(emc, stage = "sample", filter = NULL, repetition
       s1 <- bridge_sampling(samples, n_eff, split1, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
                             maxiter = maxiter, stage = stage,
                             r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
-      split2 <- seq(round(sum(idx)/2 + 1),  sum(idx))
+      split2 <- seq(round(sum(idx)/2 + 1) : sum(idx))
       s2 <- bridge_sampling(samples, n_eff, split2, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
                             maxiter = maxiter, stage = stage,
                             r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)

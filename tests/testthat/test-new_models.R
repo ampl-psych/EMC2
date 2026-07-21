@@ -17,8 +17,6 @@ sdat <- make_data(p_vector,dGNG,n_trials=10)
 emc <- make_emc(sdat,dGNG,type="single", compress = FALSE, n_chains = 1)
 
 test_that("DDMGNG", {
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
   expect_snapshot(init_chains(emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
   expect_snapshot(make_data(p_vector,dGNG,n_trials=10))
 })
