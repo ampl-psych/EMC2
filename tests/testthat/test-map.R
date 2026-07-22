@@ -73,3 +73,21 @@ test_that("make_data / mapped_pars expand for functions that reference lR", {
   expect_s3_class(mp, "data.frame")
   expect_gt(nrow(mp), 0)
 })
+
+test_that("par_data_map handles models without an lR column (DDM prior plots)", {
+  # par_data_map underlies prior plotting. It expands with add_acc=T but never
+  # collapses on lR, so DDM-type models (no accumulators) must still map cleanly.
+  ddm_des <- design(factors = list(subjects = 1, S = c("left", "right")),
+                    Rlevels = c("left", "right"), model = DDM,
+                    formula = list(v ~ S, a ~ 1, Z ~ 1, t0 ~ 1),
+                    report_p_vector = FALSE)
+  p <- sampled_pars(ddm_des, doMap = FALSE)
+  par_mcmc <- array(rnorm(length(p) * 1 * 2), dim = c(length(p), 1, 2),
+                    dimnames = list(names(p), "1", NULL))
+
+  res <- par_data_map(par_mcmc, ddm_des, n_trials = 5)
+  expect_gt(nrow(res$data), 0)
+  expect_false("lR" %in% names(res$data))
+  # one mapped-parameter slab per mcmc draw
+  expect_identical(dim(res$pars)[2], 2L)
+})
