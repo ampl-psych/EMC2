@@ -628,6 +628,82 @@ snapshot_list[["cp_real_reset"]] <- list(
 test_that("dbm_Rcpp", {expect_snapshot(snapshot_list)})
 
 
+# minimal Transition Probability Model (TPM)
+
+# NB using Matlab toolbox (copyright 2016 Florent Meyniel & Maxime Maheu;
+# https://github.com/florentmeyniel/MinimalTransitionProbsModel) as ground truth.
+# This toolbox doesn't accomodate missing obs, hence we change the covariate1
+# vector as follows:
+covariate1 <- c(
+  1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 2, 1, 1, 2, 1, 2, 1, 1
+) - 1
+
+# Matlab script:
+# clear; close('all');
+# try cd('MarkovReview'); catch, end;
+# addpath('Tools');
+# addpath('IdealObserversCode');
+# s = [1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 2, 1, 1, 2, 1, 2, 1, 1];
+#
+# % Set parameters
+# in.s            = s;                % sequence
+# in.learned      = 'transition';     % estimate transition
+# in.jump         = 1;                % estimate with jumps
+# in.mode         = 'HMM';            % use the HMM (not sampling) algorithm
+# in.opt.pJ       = 0.2;              % a priori probability that a jump occur at each outcome
+# n               = 100;              % resolution of the univariate probability grid
+# in.opt.pgrid    = linspace(0,1,n);  % estimation probability grid
+# in.opt.Alpha0   = ones(n)/(n^2);    % uniform prior on transition probabilities
+# in.verbose      = 1;                % to check that no default values are used.
+#
+# % Compute the observer
+# out = IdealObserver(in);
+# 1 - out.p1_mean'
+
+true_out <- c(
+  0.5000, 0.5000, 0.6088, 0.4374, 0.3561, 0.3108, 0.4541, 0.4895, 0.3863,
+  0.3364, 0.3051, 0.4382, 0.4741, 0.3767, 0.3971, 0.5030, 0.4020, 0.3810,
+  0.5145, 0.4139, 0.3721, 0.5201, 0.3392, 0.5822, 0.4502, 0.3565, 0.5490,
+  0.3248, 0.5993, 0.4633
+)
+
+emc <- make_minimal_emc(
+  trend = make_trend(
+    make_base(
+      target_parameter = "m",
+      type = "lin",
+      kernel = make_kernel(
+        cov_names = "covariate1",
+        type = "tpm"
+      ),
+      kernel_output = 1L
+    )
+  ),
+  n_trials = length(covariate1),
+  covariate1 = covariate1
+)
+
+emc <- make_minimal_emc_wrap("tpm", output_code = 1L)
+kernel_pars <- c("m.cp" =  qnorm(0.2), "m.a0" = log(1), "m.b0" = log(1))
+emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
+
+# NB after thorough debugging, it turns out that the output from the Matlab toolbox
+# is offset by one index relative to our output. Specifically, in Matlab,
+# out.p1_mean(t) is the model's forecast for trial t+1, computed from data through
+# trial t. This is in contrast to our implementation of Beta-binomial / DBM-like
+# kernels: our output for trial t is the forecast for trial t, computed before
+# seeing trial t (i.e., a true one-step-ahead prediction).
+# After taking this into account, our output is correct:
+
+all.equal(emc_out[-1], true_out[-length(true_out)], tolerance = 1e-3)
+
+# conclude with test snapshot
+test_that("tpm_Rcpp", {
+  expect_snapshot(list(Matlab = true_out, emc = emc_out))
+})
+
+
+
 # # Custom kernel -- only C -------------------------------------------------
 # This cannot be part of that-test :-( but we can still use it for manual tests...
 # Write a custom kernel to a separate file
