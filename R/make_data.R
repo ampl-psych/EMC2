@@ -169,8 +169,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       stop("If data is not provided need to specify number of trials")
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    # Expand to accumulators only when a design function references accumulator
+    # factors (lR/lM); those functions must be evaluated on the expanded data and
+    # collapsed back below. Other models keep one row per trial (add_acc=F).
+    needs_acc <- !is.null(design$Ffunctions) &&
+      any(grepl("lR|lM", vapply(design$Ffunctions,
+                function(f) paste(deparse(f), collapse=" "), character(1))))
     data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=T,
+                             drop_subjects = F, n_trials = n_trials, add_acc=needs_acc,
                            drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
@@ -233,9 +239,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
   } else {
-    # Have to reduce here, but add_acc=T required in making
-    # parameters when a function uses accumulator (lR or lM)
-    data=data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM","winner"))]
+    # If data was accumulator-expanded so functions could reference lR/lM,
+    # collapse back to one row per trial before simulating.
+    if ("lR" %in% names(data)) {
+      data <- data[data$lR==levels(data$lR)[1],
+                   !(names(data) %in% c("lR","lM","winner")), drop=FALSE]
+    }
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=F,compress=FALSE,verbose=FALSE,

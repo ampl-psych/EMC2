@@ -1373,7 +1373,13 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 
   md <- minimal_design(design, covariates = Fcovariates, verbose = F,
             drop_R = F, add_acc = T, drop_subjects = F, do_functions = T)
-  md=md[md$lR==levels(md$lR)[1],!(names(md) %in% c("lR","lM","winner"))]
+  # add_acc=T lets functions reference accumulator factors (lR/lM); collapse back
+  # to one row per trial for models that have an lR column (race types). DDM-type
+  # models have no lR, so leave their rows untouched.
+  if ("lR" %in% names(md)) {
+    md <- md[md$lR==levels(md$lR)[1],
+             !(names(md) %in% c("lR","lM","winner")), drop=FALSE]
+  }
   dadm <- design_model(md,design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
