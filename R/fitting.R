@@ -125,6 +125,12 @@ run_emc <- function(emc, stage, stop_criteria,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
 
+    # A chain that errors inside the parallel sampler comes back as a try-error
+    # (or a value with no $samples) rather than a sampler object. Report which
+    # chain failed and why here, instead of failing later with a cryptic error
+    # in chain_n() ("$ operator is invalid for atomic vectors").
+    check_chain_failures(sub_emc, stage, fileName)
+
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
     if(stage != 'preburn'){
@@ -799,6 +805,29 @@ make_emc <- function(data,design,model=NULL,
       }
     }
   }
+  # Identifiability check: warn about sampled parameters that have no effect on
+  # the likelihood (all-zero mapped design column). In a joint model a parameter
+  # is only unidentified if it is zero in every data set that contains it, so
+  # aggregate across dadm_list. Catching this here avoids losing hours to a fit
+  # that later crashes when the group-level covariance diverges.
+  sp_list <- lapply(dadm_list, function(d) attr(d, "sampled_p_names"))
+  if (all(lengths(sp_list) > 0)) {
+    present   <- table(unlist(sp_list))
+    zero_hits <- table(unlist(lapply(dadm_list, function(d) attr(d, "zero_effect_pars"))))
+    if (length(zero_hits) > 0) {
+      unident <- names(zero_hits)[as.integer(zero_hits) == as.integer(present[names(zero_hits)])]
+      if (length(unident) > 0) {
+        warning("The following parameter(s) have no effect on the likelihood ",
+                "(their mapped design column is all zero) and are unidentified:\n  ",
+                paste(unident, collapse = ", "),
+                "\nCheck the contrast/design matrices for these parameters, or add ",
+                "them to `constants`. Leaving an unidentified parameter free lets the ",
+                "group-level variance diverge, which typically crashes the sampler ",
+                "mid-run.", call. = FALSE)
+      }
+    }
+  }
+
   # Make sure class retains following changes
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
@@ -935,6 +964,35 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
   }
   return(list_out)
+}
+
+# Turn a silent per-chain sampler failure into an informative error. mclapply
+# puts a try-error object in a chain's slot when its worker errors (and a worker
+# killed for memory returns something with no $samples); left unchecked this
+# surfaces much later as "$ operator is invalid for atomic vectors" in chain_n().
+check_chain_failures <- function(chains, stage, fileName = NULL){
+  failed <- vapply(chains, function(x){
+    inherits(x, "try-error") || is.null(x) || !is.list(x) || is.null(x$samples)
+  }, logical(1))
+  if(!any(failed)) return(invisible(NULL))
+  reasons <- vapply(which(failed), function(i){
+    x <- chains[[i]]
+    cond <- attr(x, "condition")
+    reason <- if(!is.null(cond)) conditionMessage(cond)
+      else if(inherits(x, "try-error")) trimws(as.character(x))
+      else "chain worker returned no samples (it likely crashed or ran out of memory)"
+    paste0("  chain ", i, ": ", reason)
+  }, character(1))
+  saved <- if(!is.null(fileName)) paste0(" The fit up to the previous stage was saved to '",
+                                         fix_fileName(fileName), "'.") else ""
+  stop("Sampling failed in ", sum(failed), " of ", length(chains),
+       " chain(s) during the '", stage, "' stage:\n",
+       paste(reasons, collapse = "\n"),
+       "\n\nThis usually means the group-level covariance became ill-conditioned ",
+       "(often from an unidentified parameter) or the likelihood hit a numerical ",
+       "problem. Inspect the group variances / Rhat of the saved fit, check for ",
+       "unidentified parameters, and consider a tighter prior or fewer free ",
+       "parameters.", saved, call. = FALSE)
 }
 
 #' Strip all entries except samples from EMC list entries

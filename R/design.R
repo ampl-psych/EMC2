@@ -737,6 +737,22 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
+
+  # Record sampled parameters whose mapped design column is all zero: they make
+  # no contribution to the likelihood and are structurally unidentified. A
+  # parameter appearing in several design matrices counts as identified if any
+  # occurrence is non-zero. make_emc aggregates this across (joint) data sets.
+  nonzero_p <- character(0); all_p <- character(0)
+  for (x in out) {
+    ass <- attr(x, "assign")
+    pcol <- !is.na(ass)
+    if (!any(pcol)) next
+    xp <- x[, pcol, drop = FALSE]
+    all_p <- c(all_p, colnames(xp))
+    nonzero_p <- c(nonzero_p, colnames(xp)[colSums(abs(xp)) != 0])
+  }
+  zero_effect_pars <- setdiff(unique(all_p), unique(nonzero_p))
+  attr(dadm,"zero_effect_pars") <- intersect(zero_effect_pars, sampled_p_names)
   if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
