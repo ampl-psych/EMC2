@@ -1516,27 +1516,30 @@ public:
              for (int j = 0; j < n_comp; ++j) {
                const int    r   = comp_idx[j];
                const double cp  = cp_col[r];
+               const double mix_old = 1.0 - cp;
+               const double mix_new = cp;
                const double mu0 = mu0_col[r];
                const double s0  = s0_col[r];
                const double a   = mu0 * s0;
                const double b   = (1.0 - mu0) * s0;
                const double x   = cov_ptr[r];
+               const bool   reset = (j == 0) || (belief_reset_ && belief_reset_[r]);
 
                // compute discretised Beta prior
-               for (int i = 0; i < gs; ++i)
+               for (int i = 0; i < gs; ++i) {
                  DBM_prior[i] = dbeta_val(prob_grid[i], a, b);
+               }
                normalise_inplace(DBM_prior);
 
                // predictive distribution
-               if (j == 0 || (belief_reset_ && belief_reset_[r])) {
+               if (reset) {
                  // first trial or belief reset: fixed prior is the predictive
                  DBM_pred = DBM_prior;
                } else {
                  // otherwise: mixture of fixed prior and most recent posterior
-                 const double mix_old = 1.0 - cp;
-                 const double mix_new = cp;
-                 for (int i = 0; i < gs; ++i)
+                 for (int i = 0; i < gs; ++i) {
                    DBM_pred[i] = mix_old * DBM_post[i] + mix_new * DBM_prior[i];
+                 }
                  normalise_inplace(DBM_pred);
                }
 
@@ -1549,8 +1552,9 @@ public:
                  DBM_post = DBM_pred;   // no observation: push predictive forward
                } else {
                  const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
-                 for (int i = 0; i < gs; ++i)
+                 for (int i = 0; i < gs; ++i) {
                    DBM_post[i] = DBM_pred[i] * like[i];
+                 }
                  normalise_inplace(DBM_post);
                }
              }
@@ -1642,58 +1646,58 @@ public:
 
              std::vector<double> TPM_post(nc), TPM_pred(nc), TPM_update(nc);
 
-             // initialise posterior with Beta prior from first trial
-             {
-               const int r0 = comp_idx[0];
-               for (int k = 0; k < nc; ++k)
-                 TPM_post[k] = dbeta_val(grid.p_XX[k], a0_col[r0], b0_col[r0])
-                 * dbeta_val(grid.p_XY[k], a0_col[r0], b0_col[r0]);
-               normalise_inplace(TPM_post);
-             }
-
              for (int j = 0; j < n_comp; ++j) {
                const int    r       = comp_idx[j];
                const double cp      = cp_col[r];
+               const double mix_old  = 1.0 - cp;
+               const double mix_new  = cp;
                const double x       = cov_ptr[r];
-               const bool   curr_na = is_nan(x);
+               const bool   reset   = (j == 0) || (belief_reset_ && belief_reset_[r]);
                const bool   prev_na = (j == 0) || is_nan(cov_ptr[comp_idx[j - 1]]);
-               const int    curr    = curr_na ? -1 : static_cast<int>(x);
                const int    prev    = (j == 0 || prev_na) ? -1
                : static_cast<int>(cov_ptr[comp_idx[j - 1]]);
+               const bool   curr_na = is_nan(x);
+               const int    curr    = curr_na ? -1 : static_cast<int>(x);
 
                const double sum_post = std::accumulate(
                  TPM_post.begin(), TPM_post.end(), 0.0);
-               const double mix_old  = 1.0 - cp;
-               const double mix_new  = cp;
 
-               for (int k = 0; k < nc; ++k)
-                 TPM_pred[k] = mix_old * TPM_post[k]
-               + mix_new * (sum_post - TPM_post[k]) * inv_nm1;
+               if (reset) {
+                 for (int k = 0; k < nc; ++k) {
+                   TPM_pred[k] = dbeta_val(grid.p_XX[k], a0_col[r], b0_col[r])
+                     * dbeta_val(grid.p_XY[k], a0_col[r], b0_col[r]);
+                 }
+               } else {
+                 for (int k = 0; k < nc; ++k) {
+                   TPM_pred[k] = mix_old * TPM_post[k]
+                     + mix_new * (sum_post - TPM_post[k]) * inv_nm1;
+                 }
+               }
                normalise_inplace(TPM_pred);
 
-               pred_mean_[j] = prev_na
-               ? mean_discrete(grid.mean_p, TPM_pred)
-                 : (prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
-                      : mean_discrete(grid.p_XY, TPM_pred));
-               pred_mode_[j] = prev_na
-               ? mode_discrete(grid.mean_p, TPM_pred)
-                 : (prev == 1 ? mode_discrete(grid.p_XX, TPM_pred)
-                      : mode_discrete(grid.p_XY, TPM_pred));
-               pred_logprecision_[j] = prev_na
-               ? log_precision_discrete(grid.mean_p, TPM_pred)
-                 : (prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
-                      : log_precision_discrete(grid.p_XY, TPM_pred));
+               if (prev_na) {
+                 pred_mean_[j] = mean_discrete(grid.mean_p, TPM_pred);
+                 pred_mode_[j] = mode_discrete(grid.mean_p, TPM_pred);
+                 pred_logprecision_[j] = log_precision_discrete(grid.mean_p, TPM_pred);
+               } else {
+                 pred_mean_[j] = prev == 1 ? mean_discrete(grid.p_XX, TPM_pred)
+                   : mean_discrete(grid.p_XY, TPM_pred);
+                 pred_mode_[j] = prev == 1 ? mode_discrete(grid.p_XX, TPM_pred)
+                   : mode_discrete(grid.p_XY, TPM_pred);
+                 pred_logprecision_[j] = prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred)
+                   : log_precision_discrete(grid.p_XY, TPM_pred);
+               }
 
                if (curr_na || prev_na) {
                  TPM_post = TPM_pred;
                } else {
                  const std::vector<double>* lp =
                    (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY)
-                   : (curr == 0 ? &grid.like_YX : &grid.like_XX);
-                 for (int k = 0; k < nc; ++k)
+                     : (curr == 0 ? &grid.like_YX : &grid.like_XX);
+                 for (int k = 0; k < nc; ++k) {
                    TPM_update[k] = mix_old * (*lp)[k] * TPM_post[k]
-                 + mix_new * (*lp)[k]
-                 * (sum_post - TPM_post[k]) * inv_nm1;
+                     + mix_new * (*lp)[k] * (sum_post - TPM_post[k]) * inv_nm1;
+                 }
                  normalise_inplace(TPM_update);
                  std::swap(TPM_post, TPM_update);
                }
