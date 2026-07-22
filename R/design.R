@@ -737,6 +737,22 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
+
+  # Record sampled parameters whose mapped design column is all zero: they make
+  # no contribution to the likelihood and are structurally unidentified. A
+  # parameter appearing in several design matrices counts as identified if any
+  # occurrence is non-zero. make_emc aggregates this across (joint) data sets.
+  nonzero_p <- character(0); all_p <- character(0)
+  for (x in out) {
+    ass <- attr(x, "assign")
+    pcol <- !is.na(ass)
+    if (!any(pcol)) next
+    xp <- x[, pcol, drop = FALSE]
+    all_p <- c(all_p, colnames(xp))
+    nonzero_p <- c(nonzero_p, colnames(xp)[colSums(abs(xp)) != 0])
+  }
+  zero_effect_pars <- setdiff(unique(all_p), unique(nonzero_p))
+  attr(dadm,"zero_effect_pars") <- intersect(zero_effect_pars, sampled_p_names)
   if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
@@ -1379,9 +1395,17 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
-  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
-                                      do_functions = F),
-                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
+
+  md <- minimal_design(design, covariates = Fcovariates, verbose = F,
+            drop_R = F, add_acc = T, drop_subjects = F, do_functions = T)
+  # add_acc=T lets functions reference accumulator factors (lR/lM); collapse back
+  # to one row per trial for models that have an lR column (race types). DDM-type
+  # models have no lR, so leave their rows untouched.
+  if ("lR" %in% names(md)) {
+    md <- md[md$lR==levels(md$lR)[1],
+             !(names(md) %in% c("lR","lM","winner")), drop=FALSE]
+  }
+  dadm <- design_model(md,design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
   if (is_ordered_response_type(model()))

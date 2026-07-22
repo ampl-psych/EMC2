@@ -36,12 +36,42 @@ sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integra
 }
 
 
+# Lambda_mat and K_mat are applied to the parameter vector by position, so their
+# rows must be in the same order as the sampled parameters. A joint design list
+# supplied to make_sem_structure in a different order than the one being fitted
+# yields a row permutation that would otherwise be applied silently.
+align_sem_rows <- function(mat, par_names, mat_name){
+  if (is.null(mat)) return(NULL)
+  if (nrow(mat) != length(par_names)) {
+    stop(mat_name, " has ", nrow(mat), " rows but the model has ",
+         length(par_names), " sampled parameters.")
+  }
+  row_names <- rownames(mat)
+  if (is.null(row_names)) {
+    rownames(mat) <- par_names
+    return(mat)
+  }
+  if (identical(row_names, par_names)) return(mat)
+  if (!setequal(row_names, par_names)) {
+    stop(mat_name, " rownames do not match the sampled parameters.\n",
+         "  Missing from ", mat_name, ": ",
+         paste(setdiff(par_names, row_names), collapse = ", "), "\n",
+         "  Not a parameter: ",
+         paste(setdiff(row_names, par_names), collapse = ", "), "\n",
+         "Was make_sem_structure given the same design as the one being fitted?")
+  }
+  mat[par_names, , drop = FALSE]
+}
+
 add_info_SEM <- function(sampler, prior = NULL, ...){
   args <- list(...)
   sem_settings <- args$sem_settings
   if (is.null(sem_settings)) stop("sem_settings is required")
 
   n_pars <- sum(!sampler$nuisance)
+  par_names <- sampler$par_names[!sampler$nuisance]
+  sem_settings$Lambda_mat <- align_sem_rows(sem_settings$Lambda_mat, par_names, "Lambda_mat")
+  sem_settings$K_mat <- align_sem_rows(sem_settings$K_mat, par_names, "K_mat")
 
   # Create backup matrices if NULL
   if (is.null(sem_settings$Lambda_mat)) {
@@ -895,7 +925,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #' The subject-level parameter names for Lambda_mat and K_mat rows are derived from `sampled_pars(design)`.
 #' It validates that covariates are consistent per subject (subject column in `data` must be named "subjects")
 #' and includes an aggregated subject-level covariate data frame named `covariates` in the output list.
-#' For identifiability, the first parameter listed in `lambda_specs` for each factor is fixed to 1.
+#' For identifiability, when a factor's loadings are given as a character vector, the first parameter
+#' listed in `lambda_specs` for that factor is fixed to 1.
 #'
 #' @param data A data frame containing a column named "subjects"
 #'   and any covariate columns specified in `covariate_cols`.
@@ -903,12 +934,20 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #'   The parameter names for the SEM are derived from `names(sampled_pars(design))`.
 #' @param covariate_cols Character vector or NULL. Column names in `data` to be used
 #'   as covariates for K_mat and G_mat. If NULL, no covariates are processed.
-#' @param lambda_specs A list defining factor loadings.
-#'   The list names should be factor names and each element should be a
-#'   character vector of parameter names (from `names(sampled_pars(design))`) that load onto that factor.
-#'   The first parameter listed for each factor will be fixed to 1 for identifiability.
-#'   Example: `list(Factor1 = c("v_Sleft", "a_Eneutral"), Factor2 = "t0")`
-#'   Here, `Lambda_mat["v_Sleft", "Factor1"]` would be 1.
+#' @param lambda_specs A list defining factor loadings. The list names should be factor names.
+#'   Each element may be given in one of two forms:
+#'   \enumerate{
+#'     \item A character vector of parameter names (from `names(sampled_pars(design))`) that load
+#'       onto that factor. The first parameter listed is fixed to 1 for identifiability and the
+#'       remaining ones are estimated.
+#'       Example: `list(Factor1 = c("v_Sleft", "a_Eneutral"), Factor2 = "t0")`.
+#'       Here, `Lambda_mat["v_Sleft", "Factor1"]` would be 1.
+#'     \item A named numeric vector, where the names are parameter names and the values are written
+#'       directly into `Lambda_mat`. A value of `Inf` marks an estimated loading; any finite value
+#'       fixes the loading to that value. No automatic identifiability constraint is applied in this
+#'       mode, so at least one loading should typically be fixed.
+#'       Example: `list(Factor1 = c(v_Sleft = 1, a_Eneutral = Inf))`.
+#'   }
 #' @param b_specs A list defining regressions among factors.
 #'   List names are outcome factors, elements are character vectors of predictor factors.
 #'   Example: `list(Factor2 = "Factor1", Factor3 = c("Factor1", "Factor2"))`
@@ -1129,22 +1168,46 @@ make_sem_structure <- function(data = NULL,
   if (!is.null(lambda_specs)) {
     for (f_name in names(lambda_specs)) {
       if (!f_name %in% factor_names) stop(paste0("Factor '", f_name, "' in lambda_specs not in SEM factor_names."))
-      p_names_for_f <- lambda_specs[[f_name]]
-      if (!is.character(p_names_for_f) || length(p_names_for_f) == 0) {
-        stop(paste0("Values in lambda_specs for factor '", f_name, "' must be a non-empty character vector of design parameter names."))
+      spec_for_f <- lambda_specs[[f_name]]
+      if (length(spec_for_f) == 0) {
+        stop(paste0("Values in lambda_specs for factor '", f_name, "' must be a non-empty character vector or a named numeric vector."))
       }
 
-      # Identifiability constraint: first parameter fixed to 1
-      first_p_name_spec <- p_names_for_f[1]
-      if (!first_p_name_spec %in% par_names) stop(paste0("Parameter '", first_p_name_spec, "' for factor '", f_name, "' in lambda_specs (for identifiability) not in names derived from sampled_pars(design)."))
-      Lambda_mat[first_p_name_spec, f_name] <- 1
-
-      # Other specified parameters set to free
-      if (length(p_names_for_f) > 1) {
-        for (p_name_spec in p_names_for_f[-1]) {
-          if (!p_name_spec %in% par_names) stop(paste0("Parameter '", p_name_spec, "' for factor '", f_name, "' in lambda_specs not in names derived from sampled_pars(design)."))
-          Lambda_mat[p_name_spec, f_name] <- free_value_internal
+      if (is.numeric(spec_for_f)) {
+        # Named numeric vector: values are written into Lambda_mat directly.
+        # Inf entries are estimated, finite entries are fixed to that value.
+        # No automatic identifiability constraint is applied in this mode.
+        p_names_for_f <- names(spec_for_f)
+        if (is.null(p_names_for_f) || any(is.na(p_names_for_f)) || any(p_names_for_f == "")) {
+          stop(paste0("lambda_specs for factor '", f_name, "' is numeric but has missing or empty names; names must be parameter names from sampled_pars(design)."))
         }
+        if (anyDuplicated(p_names_for_f)) {
+          stop(paste0("lambda_specs for factor '", f_name, "' has duplicate parameter names."))
+        }
+        if (any(is.na(spec_for_f))) {
+          stop(paste0("lambda_specs for factor '", f_name, "' contains NA values; use Inf for estimated loadings or a finite value for fixed loadings."))
+        }
+        for (p_name_spec in p_names_for_f) {
+          if (!p_name_spec %in% par_names) stop(paste0("Parameter '", p_name_spec, "' for factor '", f_name, "' in lambda_specs not in names derived from sampled_pars(design)."))
+        }
+        Lambda_mat[p_names_for_f, f_name] <- unname(spec_for_f)
+      } else if (is.character(spec_for_f)) {
+        p_names_for_f <- spec_for_f
+
+        # Identifiability constraint: first parameter fixed to 1
+        first_p_name_spec <- p_names_for_f[1]
+        if (!first_p_name_spec %in% par_names) stop(paste0("Parameter '", first_p_name_spec, "' for factor '", f_name, "' in lambda_specs (for identifiability) not in names derived from sampled_pars(design)."))
+        Lambda_mat[first_p_name_spec, f_name] <- 1
+
+        # Other specified parameters set to free
+        if (length(p_names_for_f) > 1) {
+          for (p_name_spec in p_names_for_f[-1]) {
+            if (!p_name_spec %in% par_names) stop(paste0("Parameter '", p_name_spec, "' for factor '", f_name, "' in lambda_specs not in names derived from sampled_pars(design)."))
+            Lambda_mat[p_name_spec, f_name] <- free_value_internal
+          }
+        }
+      } else {
+        stop(paste0("Values in lambda_specs for factor '", f_name, "' must be a non-empty character vector or a named numeric vector."))
       }
     }
   }
