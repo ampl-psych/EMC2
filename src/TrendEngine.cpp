@@ -132,6 +132,7 @@ static void build_kernel_args(KernelSpec& ks,
                               const Rcpp::DataFrame& data)
 {
   ks.q_reset_col.clear();
+  ks.belief_reset_col.clear();
 
   if (!k_lst.containsElementNamed("kernel_args")) { ks.build_kernel_args(); return; }
   SEXP ka_sexp = k_lst["kernel_args"];
@@ -153,6 +154,23 @@ static void build_kernel_args(KernelSpec& ks,
                     col_name.c_str());
       if ((int)ks.q_reset_col.size() != n)
         Rf_error("kernel_args$q_reset_column: wrong length");
+    }
+  }
+  if (ka.containsElementNamed("belief_reset_column")) {
+    SEXP cns = ka["belief_reset_column"];
+    if (!Rf_isNull(cns)) {
+      std::string col_name = sexp_to_str(cns);
+      if (!data.containsElementNamed(col_name.c_str()))
+        Rf_error("kernel_args$belief_reset_column: column '%s' not found", col_name.c_str());
+      SEXP col = data[col_name.c_str()];
+      int n = data.nrows();
+      ks.belief_reset_col.resize(n);
+      if      (TYPEOF(col) == LGLSXP) { const int* p = LOGICAL(col); std::copy(p, p+n, ks.belief_reset_col.data()); }
+      else if (TYPEOF(col) == INTSXP)  { const int* p = INTEGER(col); std::copy(p, p+n, ks.belief_reset_col.data()); }
+      else Rf_error("kernel_args$belief_reset_column: column '%s' must be logical or integer",
+                    col_name.c_str());
+      if ((int)ks.belief_reset_col.size() != n)
+        Rf_error("kernel_args$belief_reset_column: wrong length");
     }
   }
   if (ka.containsElementNamed("grid_res")) {

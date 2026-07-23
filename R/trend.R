@@ -36,6 +36,12 @@
 #'       column in `data` indicating trials on which the Q-value should be
 #'       reset to `q0` before the prediction error is computed.
 #'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}
+#'     \item{`belief_reset_column`}{For DBM-family kernels (`"beta_binomial"`,
+#'       `"beta_binomial_decay"`, `"beta_binomial_window"`, `"DBM"`, `"TPM"`)
+#'       only. Name of a logical or integer column in `data` indicating trials
+#'       on which the predictive distribution should be re-initialised, that is,
+#'       all preceding observations should be forgotten.
+#'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}#'
 #'   }
 #' @param custom_kernel A custom kernel registered with [register_kernel()].
 #'   Required when `kernel = "custom"`.
@@ -75,6 +81,11 @@ make_kernel <- function(cov_names,
       warning("kernel_args$q_reset_column is only meaningful for delta-family ",
               "kernels; ignored for kernel '", type, "'.")
       kernel_args$q_reset_column <- NULL
+    }
+    if (!is.null(kernel_args$belief_reset_column) && !type %in% delta_kernels) {
+      warning("kernel_args$belief_reset_column is only meaningful for DBM-family ",
+              "kernels; ignored for kernel '", type, "'.")
+      kernel_args$belief_reset_column <- NULL
     }
   }
 
@@ -1074,48 +1085,97 @@ get_kernels <- function() {
               experimental=TRUE,
               NA_allowed=TRUE),
   beta_binomial = list(
-    description  = "Beta-Binomial ideal observer: tracks binary observations.",
+    description = paste(
+      "Beta-Binomial learning kernel:\n",
+      "        k = predicted probability of the current trial's observation\n",
+      "        being X as opposed to Y.\n",
+      "        Assumes a binary (Bernoulli) sequence of observations.\n",
+      "        Parameters: a0, b0 (shape parameters of the Beta prior)."
+    ),
     default_pars = c("a0", "b0"),
     transforms   = list(func = list("a0" = "exp", "b0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   beta_binomial_decay = list(
-    description  = "Beta-Binomial with exponential decay on accumulated counts.",
+    description = paste(
+      "Beta-Binomial learning kernel with leaky integration:\n",
+      "        k = predicted probability of the current trial's observation\n",
+      "        being X as opposed to Y.\n",
+      "        Assumes a binary (Bernoulli) sequence of observations.\n",
+      "        Applies exponential decay ('leaky integration') to the count\n",
+      "        of past observations by multiplying past accumulated counts by exp(-1/decay).\n",
+      "        Parameters: a0, b0 (shape parameters of the Beta prior), decay."
+    ),
     default_pars = c("a0", "b0", "decay"),
     transforms   = list(func = list("a0" = "exp", "b0" = "exp", "decay" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   beta_binomial_window = list(
-    description  = "Beta-Binomial with fixed sliding window.",
+    description = paste(
+      "Beta-Binomial learning kernel with sliding window on memory:\n",
+      "        k = predicted probability of the current trial's observation\n",
+      "        being X as opposed to Y.\n",
+      "        Assumes a binary (Bernoulli) sequence of observations.\n",
+      "        Limits memory of past events to a fixed window.\n",
+      "        Parameters: a0, b0 (shape parameters of the Beta prior), window."
+    ),
     default_pars = c("a0", "b0", "window"),
     transforms   = list(func = list("a0" = "exp", "b0" = "exp", "window" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   dbm = list(
-    description  = "Dynamic Belief Model (Yu & Cohen 2008).",
+    description = paste(
+      "Dynamic Belief Model (DBM) kernel:\n",
+      "        k = predicted probability of the current trial's observation\n",
+      "        being X as opposed to Y.\n",
+      "        Assumes a binary (Bernoulli) sequence of observations.\n",
+      "        Assumes that the trial-wise latent probability that the observation is X\n",
+      "        is a mixture of the previous trial's posterior belief about that probability\n",
+      "        and a fixed prior belief.",
+      "        The parameter controlling this mixture can be interpreted as the assumed\n",
+      "        probability of a change-point in the environment (i.e., volatility).\n",
+      "        Parameters: cp (change-point probability),\n",
+      "        mu0 (mean of Beta prior), s0 (scale of Beta prior)."
+    ),
     default_pars = c("cp", "mu0", "s0"),
     transforms   = list(func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE),
   tpm = list(
-    description  = "Transition Probability Model (Yu & Cohen 2008).",
+    description = paste(
+      "Transition Probability Model (TPM) kernel:\n",
+      "        k = predicted probability of the current trial's observation\n",
+      "        being X as opposed to Y, conditional on the previous trial's observation.\n",
+      "        Assumes a binary (Bernoulli) sequence of observations and\n",
+      "        estimates first-order transition probabilities.\n",
+      "        Incorporates a trial-wise change-point probability cp[i] controlling\n",
+      "        belief volatility.\n",
+      "        Note that k(t) is a one-step-ahead prediction: It uses only observations\n",
+      "        up to and including trial t-1, and is computed before trial t's observation\n",
+      "        is known. This is in contrast to the original Matlab toolbox implementation\n",
+      "        (Meyniel et al., 2016), where the output for trial t is the model's forecast\n",
+      "        for trial t+1, computed from observations through trial t.",
+      "        Parameters: cp (change-point probability),\n",
+      "        a0, b0 (shared shape parameters of the two - assumed independent -\n",
+      "        Beta priors over transition probabilities p(X|X) and p(X|Y))."
+    ),
     default_pars = c("cp", "a0", "b0"),
     transforms   = list(func = list("cp" = "pnorm", "a0" = "exp", "b0" = "exp")),
     bases        = base_2p,
     sequential   = TRUE,
-    n_outputs    = 3L,
+    n_outputs    = 4L,
     experimental = TRUE,
     NA_allowed=TRUE)
   # delta2kernel2 = list(description = paste(
