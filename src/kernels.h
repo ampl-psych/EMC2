@@ -1675,7 +1675,7 @@ public:
                }
                normalise_inplace(TPM_pred);
 
-               if (prev_na) {
+               if (prev_na || reset) {
                  pred_mean_[j] = mean_discrete(grid.mean_p, TPM_pred);
                  pred_mode_[j] = mode_discrete(grid.mean_p, TPM_pred);
                  pred_logprecision_[j] = log_precision_discrete(grid.mean_p, TPM_pred);
@@ -1688,7 +1688,7 @@ public:
                    : log_precision_discrete(grid.p_XY, TPM_pred);
                }
 
-               if (curr_na || prev_na) {
+               if (curr_na || prev_na || reset) {
                  TPM_post = TPM_pred;
                } else {
                  const std::vector<double>* lp =
