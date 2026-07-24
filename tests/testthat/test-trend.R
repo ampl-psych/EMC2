@@ -92,7 +92,7 @@ trend_pretrans <- make_trend(make_base(type='lin', 'm', make_kernel(type='delta'
 design_pretrans <- design(
   data = dat,
   trend = trend_pretrans,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR, m.q0~1, m.alpha~1, s.d_ed~1, m.w~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -112,7 +112,7 @@ trend_posttrans <- make_trend(make_base(type='lin','m',make_kernel(type='pow_dec
 design_posttrans <- design(
   data = dat,
   trend = trend_posttrans,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w~lR, m.d_pd~1, s.d_pi~1, m.w~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -135,7 +135,7 @@ trend_bases <- make_trend(make_base(type='centered', 'm', make_kernel(type='exp_
 design_bases <- design(
   data = dat,
   trend = trend_bases,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.d_ei~1, s.d_ed~1, m.w~1, s.w~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -156,7 +156,7 @@ trend_poly <- make_trend(make_base(type='add', 'm', make_kernel(type='poly3', 'c
 design_poly <- design(
   data = dat,
   trend = trend_poly,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.d1~1, m.d2~1, m.d3~1, s.d1~1, s.d2~1, s.d3~1, s.d4~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -182,7 +182,7 @@ trend_phases <- make_trend(make_base(type='lin', 'm', make_kernel(type='lin_incr
 design_phases <- design(
   data = dat,
   trend = trend_phases,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.d_ed~1, t0.d_pi~1, m.w~1, s.w~1, t0.w~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -205,7 +205,7 @@ trend_par_input <- make_trend(make_base(type='lin', 'm', make_kernel(type='lin_i
 design_par_input <- design(
   data = dat,
   trend = trend_par_input,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.w~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -226,7 +226,7 @@ trend_shared_premap <- make_trend(make_base(type='add', 'm', kernel=make_kernel(
 design_shared_premap <- design(
   data = dat,
   trend = trend_shared_premap,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, shrd~1, m.d2~1, m.d3~1, s.d2~1, s.d3~1, s.d4~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -249,7 +249,7 @@ trend_shared_posttransform <- make_trend(make_base(type='add', 'm', kernel=make_
 design_shared_posttransform <- design(
   data = dat,
   trend = trend_shared_posttransform,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, shrd~1, m.d2~1, m.d3~1, s.d2~1, s.d3~1, s.d4~1),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR, report_p_vector=FALSE
@@ -273,7 +273,7 @@ design_cond <- design(
   covariates = c("trial2"),
   matchfun = matchfun,
   trend = trend_cond,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.q0~1, m.alpha~1, m.w~1),
   contrasts = list(lM = ADmat),
   model = LNR, report_p_vector=FALSE
 )
@@ -304,7 +304,7 @@ design_mult <- design(
   covariates = c("covariate1", "covariate2"),
   matchfun = matchfun,
   trend = trend_mult,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.d_ei~1, m.q0~1, m.alpha~1, m.w_exp_incr~1, m.w_delta~1),
   contrasts = list(lM = ADmat),
   model = LNR, report_p_vector=FALSE
 )
@@ -336,7 +336,7 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
                       covariates = c('covariate1', 'covariate2'),
                       matchfun = matchfun,
                       trend = trend,
-                      formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+                      formula = list(m ~ lM, s ~ 1, t0 ~ 1, m.q0~1, m.alpha~1, m.w_map1~1, m.w_map2~1),
                       contrasts = list(lM = ADmat),
                       model = LNR, report_p_vector = FALSE)
 set.seed(123)
