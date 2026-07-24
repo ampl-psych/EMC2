@@ -1496,6 +1496,21 @@ make_data_unconditional <- function(data, pars, design, model,
   has_feedback <- length(kernels_with_feedback) > 0
 
   has_ffunctions <- !is.null(design$Ffunctions)
+  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
+  # By default, ffunctions are assumed to be applied post-trial (after R and rt are recorded).
+  # Functions marked 'pretrial' will be applied pretrial
+  if(has_ffunctions) {
+    ffunctions <- design$Ffunctions
+    ffunctions_pre <- ffunctions[sapply(ffunctions, function(x) { isTRUE(attr(x, 'pretrial'))})]
+    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) { !isTRUE(attr(x, 'pretrial'))})]
+    has_ffunctions_pre <- length(ffunctions_pre) > 0
+    has_ffunctions_post <- length(ffunctions_post) > 0
+    for(i in names(design$Ffunctions)) {
+      dadm_full[[i]][] <- NA  # Set all columns corresponding to function outputs to NA - no lingering empirical data
+    }
+  }
+  # dadm_full$rt[] <- NA
+  # dadm_full$R[] <- NA
 
   # -----------------------------------------------------------------------
   # Step 3: Per-subject, per-trial loop.
@@ -1597,14 +1612,15 @@ make_data_unconditional <- function(data, pars, design, model,
       #     dadm_subj_df[[i]][idx_curr] <- result
       #   }
       # }
-      if (has_ffunctions) {
+      if (has_ffunctions_pre) {
         dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(design$Ffunctions)) {
-          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+        for (i in names(ffunctions_pre)) {
+          result_full             <- ffunctions_pre[[i]](dadm_ctx)
           result_curr             <- utils::tail(result_full, length(idx_curr))
+          dadm_ctx[[i]]           <- result_full
           dadm_current[[i]]       <- result_curr
           dadm_subj_df[[i]][idx_curr] <- result_curr
         }
@@ -1690,18 +1706,18 @@ make_data_unconditional <- function(data, pars, design, model,
       dadm_subj_df[[R_col]][idx_curr]  <- Rrt[, "R"]
       dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
 
-      # 9. Feedback functions (trend)
-      if (has_feedback) {
-        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
-        class(dadm_current) <- "data.frame"
-        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
-
-        for (kernel in kernels_with_feedback) {
-          for (col_name in names(kernel$feedback)) {
-            dadm_subj_df[[col_name]][idx_curr] <- kernel$feedback[[col_name]](dadm_current)
-          }
-        }
-      }
+      # # 9. Feedback functions (trend)
+      # if (has_feedback) {
+      #   dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
+      #   class(dadm_current) <- "data.frame"
+      #   attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+      #
+      #   for (kernel in kernels_with_feedback) {
+      #     for (col_name in names(kernel$feedback)) {
+      #       dadm_subj_df[[col_name]][idx_curr] <- kernel$feedback[[col_name]](dadm_current)
+      #     }
+      #   }
+      # }
 
       # 10. Ffunction pass 2: runs after simulation and feedback.
       #     Handles Ffunctions that depend on the current trial's R, rt, or
@@ -1709,13 +1725,14 @@ make_data_unconditional <- function(data, pars, design, model,
       #     longer needed this trial); results are available to pass 1 of
       #     the next trial.
       #     Now context-aware
-      if (has_ffunctions) {
+      if (has_ffunctions_post) {
         dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(design$Ffunctions)) {
-          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+        for (i in names(ffunctions_post)) {
+          result_full             <- ffunctions_post[[i]](dadm_ctx)
+          dadm_ctx[[i]]           <- result_full
           dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
         }
       }

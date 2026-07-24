@@ -615,6 +615,7 @@ design_model <- function(data,design,model=NULL,
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
+    if(i %in% names(da)) next  # SM don't overwrite existing columns
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da[,i] <- newF
   }
