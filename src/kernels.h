@@ -21,6 +21,7 @@ struct KernelParsView {
 struct KernelArgs {
   const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
   int grid_res = 100;
+  const uint8_t* is_first_level_comp = nullptr;  // push mode only; null = filter mode
   // Future extensible fields go here, e.g.:
   // const double* some_other_col = nullptr;
 };
@@ -277,12 +278,14 @@ protected:
   double pe_ = NA_REAL;            // latest PE
   std::vector<double> pes_;        // PE per trial
   const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
+  const uint8_t* is_first_level_comp_ = nullptr;  // null = filter mode
 
 public:
   virtual ~DeltaKernel() {}
 
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
+    is_first_level_comp_ = args.is_first_level_comp;
   }
 
   // const std::vector<double>& get_pes() const {
@@ -658,32 +661,57 @@ struct SimpleDelta : DeltaKernel {
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
              const double* cov_ptr   = covariate.colptr(0);
+             const uint8_t* fl        = is_first_level_comp_;  // null in filter mode
 
              int row0 = comp_idx[0];
              q_       = q0_col[row0];
              out_[0]  = q_;
 
+             double pending_q = q_;
+
              for (int j = 0; j < n_comp - 1; ++j) {
-               int r    = comp_idx[j];
-               // --- RESET (before PE) ---
+               int r = comp_idx[j];
+
+               // commit pending update at trial boundaries (push mode only)
+               if (fl && fl[j]) {
+                 q_ = pending_q;
+                 out_[j] = q_;
+               }
+
+               // reset (before PE, as before)
                if (q_reset_ && q_reset_[r]) {
-                 q_ = q0_col[r];
-                 out_[j] = q_;           // overwrite with reset value
+                 q_       = q0_col[r];
+                 pending_q = q_;
+                 out_[j]  = q_;
                }
 
                double x = cov_ptr[r];
-
                if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  double pe    = x - q_;
                  pes_[j]      = pe;
-                 q_          += alpha * pe;
+                 pending_q    = q_ + alpha * pe;  // hold; don't commit yet
                } else {
-                 pes_[j] = NA_REAL;
+                 pes_[j]  = NA_REAL;
+                 // pending_q unchanged: no update fired on this row
                }
-               out_[j + 1] = q_;
+               if (!fl) {
+                 q_ = pending_q;   // filter mode: commit immediately every row
+               }
+
+               out_[j + 1] = q_;  // next row sees pre-update Q until boundary commits it
              }
 
+             // handle last row
+             int r_last = comp_idx[n_comp - 1];
+             if (fl && fl[n_comp - 1]) {
+               q_ = pending_q;
+               out_[n_comp - 1] = q_;
+             }
+             if (q_reset_ && q_reset_[r_last]) {
+               q_ = q0_col[r_last];
+               out_[n_comp - 1] = q_;
+             }
              mark_run_complete();
            }
 };
@@ -717,17 +745,28 @@ struct DeltaDecoupled : DeltaKernel {
              const double* alpha_col = kernel_pars.cols[1];
              const double* lambda_col = kernel_pars.cols[2];
              const double* cov_ptr   = covariate.colptr(0);
+             const uint8_t* fl         = is_first_level_comp_;
 
              int row0 = comp_idx[0];
              q_       = q0_col[row0];
              out_[0]  = q_;
 
+             double pending_q = q_;
+
              for (int j = 0; j < n_comp - 1; ++j) {
                int r    = comp_idx[j];
-               // --- RESET (before PE) ---
+
+               // commit pending update at trial boundaries (push mode only)
+               if (fl && fl[j]) {
+                 q_      = pending_q;
+                 out_[j] = q_;
+               }
+
+               // reset (before PE)
                if (q_reset_ && q_reset_[r]) {
-                 q_ = q0_col[r];
-                 out_[j] = q_;           // overwrite with reset value
+                 q_        = q0_col[r];
+                 pending_q = q_;
+                 out_[j]   = q_;
                }
 
                double x = cov_ptr[r];
@@ -737,15 +776,30 @@ struct DeltaDecoupled : DeltaKernel {
                  double lambda = lambda_col[r];
                  double term1 = alpha*x;
                  double term2 = lambda*q_;
-                 q_ += term1 - term2;
+                 pending_q += term1 - term2;
                  double pe    = x - q_;  // bit questionable what the RPE is in this case though
                  pes_[j]      = pe;
                  // q_          += alpha * pe;
                } else {
                  pes_[j] = NA_REAL;
                }
+
+               if (!fl) q_ = pending_q;  // filter mode: commit immediately
+
                out_[j + 1] = q_;
              }
+
+             // handle last row
+             int r_last = comp_idx[n_comp - 1];
+             if (fl && fl[n_comp - 1]) {
+               q_              = pending_q;
+               out_[n_comp - 1] = q_;
+             }
+             if (q_reset_ && q_reset_[r_last]) {
+               q_              = q0_col[r_last];
+               out_[n_comp - 1] = q_;
+             }
+
 
              mark_run_complete();
            }
@@ -769,19 +823,28 @@ struct Delta2LR : DeltaKernel {
              const double* q0_col       = kernel_pars.cols[0];
              const double* alphaPos_col = kernel_pars.cols[1];
              const double* alphaNeg_col = kernel_pars.cols[2];
+             const uint8_t* fl           = is_first_level_comp_;
 
              int row0 = comp_idx[0];
              out_[0] = q_ = q0_col[row0];
 
              double pe = NA_REAL;
+             double pending_q = q_;
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
 
-               // --- RESET (before PE) ---
+               // commit pending update at trial boundaries (push mode only)
+               if (fl && fl[j]) {
+                 q_      = pending_q;
+                 out_[j] = q_;
+               }
+
+               // reset (before PE)
                if (q_reset_ && q_reset_[r]) {
-                 q_ = q0_col[r];
-                 out_[j] = q_;           // overwrite with reset value
+                 q_        = q0_col[r];
+                 pending_q = q_;
+                 out_[j]   = q_;
                }
 
                double x = covariate(r,0);
@@ -790,13 +853,25 @@ struct Delta2LR : DeltaKernel {
                  double alphaNeg = alphaNeg_col[r];
                  pe = x - q_;
                  double alpha = (pe > 0.0) ? alphaPos : alphaNeg;
-                 q_ += alpha * pe;
+                 pending_q       = q_ + alpha * pe;  // hold; don't commit yet
                } else {
                  pe = NA_REAL;
                }
+               if (!fl) q_ = pending_q;  // filter mode: commit immediately
 
                pes_[j] = pe;           // compressed index
                out_[j + 1] = q_;
+             }
+
+             // handle last row
+             int r_last = comp_idx[n_comp - 1];
+             if (fl && fl[n_comp - 1]) {
+               q_              = pending_q;
+               out_[n_comp - 1] = q_;
+             }
+             if (q_reset_ && q_reset_[r_last]) {
+               q_              = q0_col[r_last];
+               out_[n_comp - 1] = q_;
              }
 
              mark_run_complete();
@@ -809,9 +884,11 @@ struct Delta2Kernel : SequentialKernel {
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
   const int* q_reset_ = nullptr;
+  const uint8_t* is_first_level_comp_ = nullptr;  // push mode only
 
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
+    is_first_level_comp_ = args.is_first_level_comp;
   }
 
   // [compressed trial][0 = fast PE, 1 = slow PE]
@@ -838,31 +915,54 @@ struct Delta2Kernel : SequentialKernel {
                           (int)kernel_pars.cols.size());
              }
 
-             int n_comp = comp_idx.size();
+             const int n_comp = static_cast<int>(comp_idx.size());
+             if (n_comp <= 0) {
+               out_.clear();
+               q_fast_.clear(); q_slow_.clear();
+               pes_fast_.clear(); pes_slow_.clear();
+               return;
+             }
+
              out_.assign(n_comp, NA_REAL);
              q_fast_.assign(n_comp, NA_REAL);
              q_slow_.assign(n_comp, NA_REAL);
              pes_fast_.assign(n_comp, NA_REAL);
              pes_slow_.assign(n_comp, NA_REAL);
 
-             const double* q0_col        = kernel_pars.cols[0];
-             const double* alphaFast_col = kernel_pars.cols[1];
-             const double* propSlow_col  = kernel_pars.cols[2];
-             const double* dSwitch_col   = kernel_pars.cols[3];
+             const double*  q0_col        = kernel_pars.cols[0];
+             const double*  alphaFast_col = kernel_pars.cols[1];
+             const double*  propSlow_col  = kernel_pars.cols[2];
+             const double*  dSwitch_col   = kernel_pars.cols[3];
+             const uint8_t* fl            = is_first_level_comp_;
 
              int row0 = comp_idx[0];
              out_[0] = qFast_ = qSlow_ = q_ = q0_col[row0];
+             q_fast_[0] = qFast_;
+             q_slow_[0] = qSlow_;
+
+             double pending_q     = q_;
+             double pending_qFast = qFast_;
+             double pending_qSlow = qSlow_;
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
 
-               // --- RESET (before PE): both trackers reset to q0 ---
-               if (q_reset_ && q_reset_[r]) {
-                 qFast_ = qSlow_ = q_ = q0_col[r];
-                 out_[j] = q_;           // overwrite with reset value
+               // commit pending update at trial boundaries (push mode only)
+               if (fl && fl[j]) {
+                 qFast_  = pending_qFast;
+                 qSlow_  = pending_qSlow;
+                 q_      = pending_q;
+                 out_[j] = q_;
                }
 
-               double x = covariate(r,0);
+               // reset (before PE): all trackers
+               if (q_reset_ && q_reset_[r]) {
+                 qFast_ = qSlow_ = q_ = q0_col[r];
+                 pending_qFast = pending_qSlow = pending_q = q_;
+                 out_[j] = q_;
+               }
+
+               double x      = covariate(r, 0);
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
 
@@ -875,18 +975,42 @@ struct Delta2Kernel : SequentialKernel {
                  peFast = x - qFast_;
                  peSlow = x - qSlow_;
 
-                 qFast_ += alphaFast * peFast;
-                 qSlow_ += alphaSlow * peSlow;
+                 pending_qFast = qFast_ + alphaFast * peFast;
+                 pending_qSlow = qSlow_ + alphaSlow * peSlow;
 
-                 double diff = std::abs(qFast_ - qSlow_);
-                 q_ = (diff > dSwitch) ? qFast_ : qSlow_;
+                 double diff = std::abs(pending_qFast - pending_qSlow);
+                 pending_q   = (diff > dSwitch) ? pending_qFast : pending_qSlow;
                }
-               q_fast_[j+1] = qFast_;  // compressed index
-               q_slow_[j+1] = qSlow_;
 
-               pes_fast_[j] = peFast;  // compressed index
-               pes_slow_[j] = peSlow;
-               out_[j + 1] = q_;
+               if (!fl) {
+                 // filter mode: commit immediately
+                 qFast_ = pending_qFast;
+                 qSlow_ = pending_qSlow;
+                 q_     = pending_q;
+               }
+
+               q_fast_[j + 1]  = qFast_;
+               q_slow_[j + 1]  = qSlow_;
+               pes_fast_[j]    = peFast;
+               pes_slow_[j]    = peSlow;
+               out_[j + 1]     = q_;
+             }
+
+             // handle last row
+             int r_last = comp_idx[n_comp - 1];
+             if (fl && fl[n_comp - 1]) {
+               qFast_ = pending_qFast;
+               qSlow_ = pending_qSlow;
+               q_     = pending_q;
+               out_[n_comp - 1]    = q_;
+               q_fast_[n_comp - 1] = qFast_;
+               q_slow_[n_comp - 1] = qSlow_;
+             }
+             if (q_reset_ && q_reset_[r_last]) {
+               qFast_ = qSlow_ = q_ = q0_col[r_last];
+               out_[n_comp - 1]    = q_;
+               q_fast_[n_comp - 1] = qFast_;
+               q_slow_[n_comp - 1] = qSlow_;
              }
 
              mark_run_complete();
@@ -949,6 +1073,8 @@ private:
 public:
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
+    if (args.is_first_level_comp != nullptr)
+      Rcpp::stop("RescorlaWagnerKernel does not support at_mode = 'push'.");
   }
 
   void reset() override {
@@ -1221,6 +1347,11 @@ public:
     return (code >= 1 && code <= 3);
   }
 
+  void set_kernel_args(const KernelArgs& args) override {
+    if (args.is_first_level_comp != nullptr)
+      Rcpp::stop("DBM/BetaBinomial/TPM kernels do not support at_mode = 'push'.");
+  }
+
   KernelOutput get_output_stream(int code) const override {
     if (code == 3) ensure_surprise(); // compute surprise the moment it is requested, not before
     const std::vector<double>* src = nullptr;
@@ -1433,6 +1564,8 @@ private:
 public:
   void set_kernel_args(const KernelArgs& args) override {
     if (args.grid_res > 0) grid_res_ = args.grid_res;
+    if (args.is_first_level_comp != nullptr)
+      Rcpp::stop("DBMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,
@@ -1564,6 +1697,8 @@ private:
 public:
   void set_kernel_args(const KernelArgs& args) override {
     if (args.grid_res > 0) grid_res_ = args.grid_res;
+    if (args.is_first_level_comp != nullptr)
+      Rcpp::stop("TPMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,

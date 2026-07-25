@@ -25,9 +25,11 @@ inline TrendPhase parse_phase(const std::string& ph) {
   return TrendPhase::Premap; // unreachable
 }
 
+
 // =============================================================================
 // KernelSpec  —  mirrors emc2_kernel; pure C++ after construction
 // =============================================================================
+enum class AtMode { Filter, Push };
 
 struct KernelSpec {
   // identity
@@ -45,6 +47,11 @@ struct KernelSpec {
   // 'at' filter
   bool        has_at = false;
   std::string at;
+
+  // What to do with 'at'? Either filter (remove rows that are not the first level of the at factor)
+  // or 'push' -- don't filter, but only apply update to the next trial that corresponds to the first level of the at factor
+  AtMode               at_mode = AtMode::Filter;
+  std::vector<uint8_t> is_first_level_comp;  // length = comp_index.size()
 
   // finalised prefixed parameter names
   std::vector<std::string> pnames;
@@ -72,6 +79,8 @@ struct KernelSpec {
     kernel_args = KernelArgs{};
     if (!q_reset_col.empty())
       kernel_args.q_reset = q_reset_col.data();
+    if (!is_first_level_comp.empty())
+      kernel_args.is_first_level_comp = is_first_level_comp.data();
   }
 };
 
