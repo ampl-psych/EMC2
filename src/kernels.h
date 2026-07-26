@@ -1355,15 +1355,12 @@ public:
     surprise_computed_ = false;
   }
 
-  void set_kernel_args(const KernelArgs& args) override {
-    belief_reset_ = args.belief_reset;
-  }
-
   bool has_output_stream(int code) const override {
     return (code >= 1 && code <= 4);
   }
 
   void set_kernel_args(const KernelArgs& args) override {
+    belief_reset_ = args.belief_reset;
     if (args.is_first_level_comp != nullptr)
       Rcpp::stop("DBM/BetaBinomial/TPM kernels do not support at_mode = 'push'.");
   }
