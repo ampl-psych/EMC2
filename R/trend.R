@@ -43,6 +43,21 @@
 #'   factor column name (e.g. `"lR"`), the kernel is applied only to entries
 #'   corresponding to the first level of that factor and fed forward to the
 #'   other levels. Defaults to `"lR"`. For DDMs, `at` should be set to `NULL`.
+#' @param at_mode Controls how the `at` factor is used during kernel computation.
+#'   \describe{
+#'     \item{`"filter"` (default)}{Only rows corresponding to the first level of
+#'       `at` are passed to the kernel. The resulting Q-value is then broadcast
+#'       to all other rows within the same trial. Use this when all accumulators
+#'       share the same covariate value on a given trial.}
+#'     \item{`"push"`}{All rows are passed to the kernel, allowing each
+#'       accumulator row to carry a different covariate value. Q-value updates
+#'       are computed per row but only take effect at the start of the
+#'       \emph{next} trial (i.e. the next first-level row of `at`), ensuring
+#'       that within-trial updates do not contaminate Q-values on other rows of
+#'       the same trial. Use this when covariate values differ across
+#'       accumulators within a trial (e.g. per-symbol feedback in RL models
+#'       with multiple accumulators).}
+#'   }
 #'
 #' @return An object of class `emc2_kernel`.
 #' @seealso [make_base()], [make_trend()], [trend_help()]
@@ -52,7 +67,8 @@ make_kernel <- function(cov_names,
                         par_input          = NULL,
                         kernel_args        = NULL,
                         custom_kernel      = NULL,
-                        at                 = "lR") {
+                        at                 = "lR",
+                        at_mode            = "filter") {
 
   # ---- validate kernel type ----
   known <- names(trend_help(type, return_types = TRUE)$kernels)
@@ -61,6 +77,12 @@ make_kernel <- function(cov_names,
 
   if (identical(type, "custom") && is.null(custom_kernel))
     stop("custom_kernel must be provided when type = 'custom'.")
+
+  # validate at_mode
+  if (!at_mode %in% c("filter", "push"))
+    stop("at_mode must be 'filter' or 'push'.")
+  if (at_mode == "push" && is.null(at))
+    stop("at_mode = 'push' requires 'at' to specify a factor column.")
 
   # ---- normalise cov_names / par_input ----
   if (is.null(cov_names)) cov_names <- character(0)
@@ -110,6 +132,7 @@ make_kernel <- function(cov_names,
       kernel_args        = kernel_args,
       kernel_pointer     = if (!is.null(custom_kernel)) custom_kernel$kernel_pointer else NULL,
       at                 = at,
+      at_mode            = at_mode,
       sequential         = type %in% .sequential_kernels(),
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
@@ -1409,6 +1432,10 @@ make_data_unconditional <- function(data, pars, design, model,
   ffun_cols   <- names(design$Ffunctions)
   p_types     <- names(design$Flist)
 
+  #
+  formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
+  key_cols <- union(factor_cols, intersect(ffun_cols, formula_vars))
+
   pnames <- names(design$Flist)
   if (!is.list(design$Clist[[1]])) {
     design$Clist <- stats::setNames(
@@ -1427,23 +1454,15 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
-  uses_ffun <- sapply(p_types, function(x) {
-    any(all.vars(design$Flist[[x]]) %in% ffun_cols)
-  })
-  cached_pars   <- p_types[!uses_ffun]
-  uncached_pars <- p_types[ uses_ffun]
-
-  # Split parameter_design output rows into cached vs uncached
-  # (uncached if any non-zero weight column is a function)
   cached_pd_pars <- if (!is.null(design$parameter_design)) rownames(design$parameter_design$weights) else character(0)
-  uncached_pd_pars <- character(0)
 
+  # design matrix cache -- every unique combination of ffactors (key) returns a design matrix. If not yet existent, auto-create
   make_designs_cached <- local({
     cache <- list()
     function(dadm_slice, key) {
       if (is.null(cache[[key]])) {
         regular <- lapply(
-          stats::setNames(cached_pars, cached_pars),
+          stats::setNames(p_types, p_types),
           function(x) make_dm(design$Flist[[x]], da = dadm_slice,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
@@ -1458,26 +1477,10 @@ make_data_unconditional <- function(data, pars, design, model,
         cache[[key]] <<- c(regular, pd_cached)
       }
 
-      fresh_regular <- if (length(uncached_pars) > 0) {
-        lapply(
-          stats::setNames(uncached_pars, uncached_pars),
-          function(x) make_dm(design$Flist[[x]], da = dadm_slice,
-                              Fcovariates = design$Fcovariates,
-                              compress_dms = FALSE)
-        )
-      } else list()
-
-      all_designs <- c(cache[[key]], fresh_regular)
-      pd_names    <- cached_pd_pars
-      all_designs[c(p_types, pd_names[pd_names %in% names(all_designs)])]
-      # message("p_types: ", paste(p_types, collapse=", "))
-      # message("names(all_designs): ", paste(names(all_designs), collapse=", "))
-      # message("ffun_cols: ", paste(ffun_cols, collapse=", "))
-      # message("cached_pars: ", paste(cached_pars, collapse=", "))
-      # message("uncached_pars: ", paste(uncached_pars, collapse=", "))
+      pd_names <- cached_pd_pars
+      cache[[key]][c(p_types, pd_names[pd_names %in% names(cache[[key]])])]
     }
   })
-
 
   # Identify whether any trend has covariate coding
   trend        <- model_list$trend  # list(kernels = list(...), bases = list(...))
@@ -1489,13 +1492,22 @@ make_data_unconditional <- function(data, pars, design, model,
   } else list()
   has_covariate_coding <- length(bases_with_coding) > 0
 
-  # Step 9: feedback — collect all kernels that have feedback functions
-  kernels_with_feedback <- if (has_trend) {
-    Filter(function(k) !is.null(k$feedback), trend$kernels)
-  } else list()
-  has_feedback <- length(kernels_with_feedback) > 0
-
   has_ffunctions <- !is.null(design$Ffunctions)
+  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
+  # By default, ffunctions are assumed to be applied post-trial (after R and rt are recorded).
+  # Functions marked 'pretrial' will be applied pretrial
+  if(has_ffunctions) {
+    ffunctions <- design$Ffunctions
+    ffunctions_pre <- ffunctions[sapply(ffunctions, function(x) { isTRUE(attr(x, 'pretrial'))})]
+    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) { !isTRUE(attr(x, 'pretrial'))})]
+    has_ffunctions_pre <- length(ffunctions_pre) > 0
+    has_ffunctions_post <- length(ffunctions_post) > 0
+    for(i in names(ffunctions_pre)) {
+      dadm_full[[i]][] <- NA  # Set all columns corresponding to pre-trial function outputs to NA - no lingering empirical data
+    }
+  }
+  # dadm_full$rt[] <- NA
+  # dadm_full$R[] <- NA
 
   # -----------------------------------------------------------------------
   # Step 3: Per-subject, per-trial loop.
@@ -1590,21 +1602,15 @@ make_data_unconditional <- function(data, pars, design, model,
       #    previous trial's R/rt/feedback, or purely on design factors).
       #    Updates dadm_current and dadm_subj_df so key + make_designs_cached
       #    see the correct values.
-      # if (has_ffunctions) {
-      #   for (i in names(design$Ffunctions)) {
-      #     result <- design$Ffunctions[[i]](dadm_current)
-      #     dadm_current[[i]]           <- result
-      #     dadm_subj_df[[i]][idx_curr] <- result
-      #   }
-      # }
-      if (has_ffunctions) {
+      if (has_ffunctions_pre) {
         dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(design$Ffunctions)) {
-          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+        for (i in names(ffunctions_pre)) {
+          result_full             <- ffunctions_pre[[i]](dadm_ctx)
           result_curr             <- utils::tail(result_full, length(idx_curr))
+          dadm_ctx[[i]]           <- result_full
           dadm_current[[i]]       <- result_curr
           dadm_subj_df[[i]][idx_curr] <- result_curr
         }
@@ -1612,15 +1618,20 @@ make_data_unconditional <- function(data, pars, design, model,
 
 
       # 3. Compute condition key from updated dadm_subj_df
-      key <- paste(vapply(factor_cols, function(fc)
-        as.integer(dadm_subj_df[[fc]][idx_curr[1]]),
-        integer(1)), collapse = "_")
+      key <- paste(sapply(key_cols, function(fc) {
+        val <- dadm_subj_df[[fc]][idx_curr[1]]
+        if (is.na(val)) stop(sprintf(
+          "Column '%s' is NA for subject '%s' trial %d. Check that empirical data contains no missing values in Ffunction columns.",
+          fc, subj, current_trial
+        ))
+        else if (is.logical(val)) as.character(as.integer(val))
+        else if (is.factor(val)) as.character(as.integer(val))
+        else as.character(val)
+      }), collapse = "_")
       if (nchar(key) == 0) key <- "intercept_only"
-      # key <- paste(vapply(factor_cols, function(fc)
-      #   as.integer(dadm_subj_df[[fc]][idx_curr[1]]),
-      #   integer(1)), collapse = "_")
 
       # 4. Get current-trial designs (cached + fresh) and write into prefix
+      # Only write pre-computable uncached pars; post pars written after step 10
       designs_current <- make_designs_cached(dadm_current, key)
       for (nm in names(designs_current)) {
         designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
@@ -1688,20 +1699,7 @@ make_data_unconditional <- function(data, pars, design, model,
       }
 
       dadm_subj_df[[R_col]][idx_curr]  <- Rrt[, "R"]
-      dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
-
-      # 9. Feedback functions (trend)
-      if (has_feedback) {
-        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
-        class(dadm_current) <- "data.frame"
-        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
-
-        for (kernel in kernels_with_feedback) {
-          for (col_name in names(kernel$feedback)) {
-            dadm_subj_df[[col_name]][idx_curr] <- kernel$feedback[[col_name]](dadm_current)
-          }
-        }
-      }
+      if('rt'%in%colnames(Rrt)) dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
 
       # 10. Ffunction pass 2: runs after simulation and feedback.
       #     Handles Ffunctions that depend on the current trial's R, rt, or
@@ -1709,14 +1707,38 @@ make_data_unconditional <- function(data, pars, design, model,
       #     longer needed this trial); results are available to pass 1 of
       #     the next trial.
       #     Now context-aware
-      if (has_ffunctions) {
+      if (has_ffunctions_post) {
         dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(design$Ffunctions)) {
-          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+        for (i in names(ffunctions_post)) {
+          result_full             <- ffunctions_post[[i]](dadm_ctx)
+          dadm_ctx[[i]]           <- result_full
           dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
+        }
+
+        # Update design matrices for parameters that depend on ffunctions_post (should be only learning-related)
+        key_post <- paste(sapply(key_cols, function(fc) {
+          val <- dadm_subj_df[[fc]][idx_curr[1]]
+          if (is.na(val)) stop(sprintf(
+            "Column '%s' is NA for subject '%s' trial %d. Check that empirical data contains no missing values in Ffunction columns.",
+            fc, subj, current_trial
+          ))
+          else if (is.logical(val)) as.character(as.integer(val))
+          else if (is.factor(val)) as.character(as.integer(val))
+          else as.character(val)
+        }), collapse = "_")
+        if (nchar(key_post) == 0) key_post <- "intercept_only"
+
+        # to design matrix
+        dadm_current_post <- lapply(dadm_subj_df, `[`, idx_curr)
+        class(dadm_current_post) <- "data.frame"
+        attr(dadm_current_post, "row.names") <- .set_row_names(length(idx_curr))
+
+        designs_current_post <- make_designs_cached(dadm_current_post, key_post)
+        for (nm in names(designs_current_post)) {
+          designs_prefix[[nm]][idx_curr, ] <- designs_current_post[[nm]]
         }
       }
 
@@ -1747,7 +1769,11 @@ make_data_unconditional <- function(data, pars, design, model,
     first_lR <- levels(dadm_full$lR)[1]
     dadm_full <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
   }
-  dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
+  if(!is.na(rt_col)) {
+    dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
+  } else {
+    dadm_full <- dadm_full[, unique(c(includeColumns, "R")), drop = FALSE]
+  }
   dadm_full <- dadm_full[, !colnames(dadm_full) %in% c("lR", "lM"), drop = FALSE]
 
   list(data = dadm_full, trialwise_parameters = trialwise_parameters)

@@ -10,7 +10,8 @@ make_kernel(
   par_input = NULL,
   kernel_args = NULL,
   custom_kernel = NULL,
-  at = "lR"
+  at = "lR",
+  at_mode = "filter"
 )
 }
 \arguments{
@@ -40,6 +41,22 @@ Required when \code{kernel = "custom"}.}
 factor column name (e.g. \code{"lR"}), the kernel is applied only to entries
 corresponding to the first level of that factor and fed forward to the
 other levels. Defaults to \code{"lR"}. For DDMs, \code{at} should be set to \code{NULL}.}
+
+\item{at_mode}{Controls how the \code{at} factor is used during kernel computation.
+\describe{
+\item{\code{"filter"} (default)}{Only rows corresponding to the first level of
+\code{at} are passed to the kernel. The resulting Q-value is then broadcast
+to all other rows within the same trial. Use this when all accumulators
+share the same covariate value on a given trial.}
+\item{\code{"push"}}{All rows are passed to the kernel, allowing each
+accumulator row to carry a different covariate value. Q-value updates
+are computed per row but only take effect at the start of the
+\emph{next} trial (i.e. the next first-level row of \code{at}), ensuring
+that within-trial updates do not contaminate Q-values on other rows of
+the same trial. Use this when covariate values differ across
+accumulators within a trial (e.g. per-symbol feedback in RL models
+with multiple accumulators).}
+}}
 }
 \value{
 An object of class \code{emc2_kernel}.

@@ -79,10 +79,32 @@ static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data)
     if (ks.expand_idx[i] == 0)
       Rf_error("build_first_level: rows before first 'at' level");
 
-  ks.comp_index.clear();
-  ks.comp_index.reserve(count);
-  for (int i = 0; i < n; ++i)
-    if (ks.first_level[i]) ks.comp_index.push_back(i);
+  // Filter mode - only pass rows corresponding to the first level of the at factor (default)
+  if (ks.at_mode == AtMode::Filter) {
+    // comp_index = first-level rows only
+    ks.comp_index.clear();
+    ks.comp_index.reserve(count);
+    for (int i = 0; i < n; ++i)
+      if (ks.first_level[i]) ks.comp_index.push_back(i);
+
+    // is_first_level_comp: all true (trivially, every comp row is first-level)
+    ks.is_first_level_comp.assign(count, 1);
+
+  } else {
+    // push = pass all rows, but only apply update to *next* first-level of at
+    // push mode: comp_index = all rows
+    ks.comp_index.resize(n);
+    std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
+
+    // is_first_level_comp: compressed boolean, same length as comp_index
+    ks.is_first_level_comp.resize(n);
+    for (int i = 0; i < n; ++i)
+      ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
+  }
+  // ks.comp_index.clear();
+  // ks.comp_index.reserve(count);
+  // for (int i = 0; i < n; ++i)
+  //   if (ks.first_level[i]) ks.comp_index.push_back(i);
 }
 
 static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
@@ -245,6 +267,18 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
     if (k_lst.containsElementNamed("at") && !Rf_isNull(k_lst["at"])) {
       ks.has_at = true;
       ks.at     = list_str(k_lst, "at");
+    }
+    // at_mode: "filter" (default) or "push"
+    {
+      std::string mode_str = list_str(k_lst, "at_mode");  // "" if absent
+      if (mode_str.empty() || mode_str == "filter") {
+        ks.at_mode = AtMode::Filter;
+      } else if (mode_str == "push") {
+        ks.at_mode = AtMode::Push;
+      } else {
+        Rf_error("KernelSpec '%s': unknown at_mode '%s' (must be 'filter' or 'push')",
+                 ks.kernel_id.c_str(), mode_str.c_str());
+      }
     }
 
     if (ks.kernel_type == KernelType::Custom) {
@@ -463,7 +497,8 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
     kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
               ks.kernel_input, ks.comp_index);
-    if (ks.has_at) {
+    if (ks.has_at && ks.at_mode == AtMode::Filter) {
+      // only expand in filter mode; push mode output is already full-length
       kptr->set_expand_idx(ks.expand_idx);
       kptr->do_expand(ks.expand_idx);
     }
@@ -483,7 +518,8 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
       kptr->reset();
       kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
                 k_rt.slot_inputs[s], ks.comp_index);
-      if (ks.has_at) {
+      // only expand in filter mode; push mode output is already full-length
+      if (ks.has_at && ks.at_mode == AtMode::Filter) {
         kptr->set_expand_idx(ks.expand_idx);
         kptr->do_expand(ks.expand_idx);
       }
