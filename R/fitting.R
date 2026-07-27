@@ -805,28 +805,10 @@ make_emc <- function(data,design,model=NULL,
       }
     }
   }
-  # Identifiability check: warn about sampled parameters that have no effect on
-  # the likelihood (all-zero mapped design column). In a joint model a parameter
-  # is only unidentified if it is zero in every data set that contains it, so
-  # aggregate across dadm_list. Catching this here avoids losing hours to a fit
-  # that later crashes when the group-level covariance diverges.
-  sp_list <- lapply(dadm_list, function(d) attr(d, "sampled_p_names"))
-  if (all(lengths(sp_list) > 0)) {
-    present   <- table(unlist(sp_list))
-    zero_hits <- table(unlist(lapply(dadm_list, function(d) attr(d, "zero_effect_pars"))))
-    if (length(zero_hits) > 0) {
-      unident <- names(zero_hits)[as.integer(zero_hits) == as.integer(present[names(zero_hits)])]
-      if (length(unident) > 0) {
-        warning("The following parameter(s) have no effect on the likelihood ",
-                "(their mapped design column is all zero) and are unidentified:\n  ",
-                paste(unident, collapse = ", "),
-                "\nCheck the contrast/design matrices for these parameters, or add ",
-                "them to `constants`. Leaving an unidentified parameter free lets the ",
-                "group-level variance diverge, which typically crashes the sampler ",
-                "mid-run.", call. = FALSE)
-      }
-    }
-  }
+  # Warn before fitting about parameters (or linear combinations) that are
+  # unidentified across the (joint) model, so a fit that would later diverge on
+  # an ill-conditioned group covariance fails fast with a clear message instead.
+  warn_identifiability(dadm_list)
 
   # Make sure class retains following changes
   class(design) <- "emc.design"

@@ -576,6 +576,93 @@ rt_check_function <- function(data){
 }
 
 
+# Assess identifiability of a design from its mapped design matrices (the list
+# stored in attr(dadm, "designs")). Returns:
+#   $zero_effect_pars : sampled parameters whose design column is all zero (no
+#                       effect on the likelihood; a parameter counts as
+#                       identified if it is non-zero in any block).
+#   $collinear_pars   : exact linear dependencies among the remaining sampled
+#                       columns, each as a readable string like
+#                       "+1*B_Ea +1*B_Eb -1*B_Eab" (which maps to zero).
+# Both make a parameter (or combination) structurally unidentified, which lets
+# the group-level covariance diverge and crash the sampler; make_emc aggregates
+# these across (joint) data sets and warns before fitting.
+design_identifiability <- function(designs, sampled_p_names, constants = NULL) {
+  # All-zero columns
+  nonzero_p <- character(0); all_p <- character(0)
+  for (x in designs) {
+    pcol <- !is.na(attr(x, "assign"))
+    if (!any(pcol)) next
+    xp <- x[, pcol, drop = FALSE]
+    all_p <- c(all_p, colnames(xp))
+    nonzero_p <- c(nonzero_p, colnames(xp)[colSums(abs(xp)) != 0])
+  }
+  zero_effect_pars <- intersect(setdiff(unique(all_p), unique(nonzero_p)), sampled_p_names)
+
+  # Exact linear dependencies among the remaining sampled columns. Skip the
+  # all-zero columns (reported above) to avoid double-reporting.
+  collinear_deps <- character(0)
+  for (x in designs) {
+    pcol <- !is.na(attr(x, "assign"))
+    if (!any(pcol)) next
+    keep <- setdiff(colnames(x)[pcol], c(names(constants), zero_effect_pars))
+    if (length(keep) < 2) next
+    xp <- unique(x[, keep, drop = FALSE])          # unique rows preserve column rank
+    # nv = ncol so the full right-singular basis (including the null space) is
+    # returned even when there are fewer unique rows than columns. Singular values
+    # past min(dim) are implicitly zero, so pad before thresholding.
+    sv <- svd(xp, nu = 0, nv = ncol(xp))
+    d <- c(sv$d, rep(0, ncol(xp) - length(sv$d)))
+    tol <- max(1e-8 * max(d), max(dim(xp)) * .Machine$double.eps * max(d))
+    for (j in which(d <= tol)) {
+      v <- sv$v[, j]
+      v <- v / v[which.max(abs(v))]                # scale so the largest coef is 1
+      inv <- abs(v) > 1e-6
+      collinear_deps <- c(collinear_deps,
+                          paste(sprintf("%+.2g*%s", v[inv], keep[inv]), collapse = " "))
+    }
+  }
+  list(zero_effect_pars = zero_effect_pars, collinear_pars = unique(collinear_deps))
+}
+
+# Aggregate the per-data-set identifiability info stored on each dadm and warn
+# about parameters/combinations that are unidentified across the whole (joint)
+# model. In a joint model a parameter is only unidentified if it is zero in every
+# data set that contains it.
+warn_identifiability <- function(dadm_list) {
+  sp_list <- lapply(dadm_list, function(d) attr(d, "sampled_p_names"))
+  if (!all(lengths(sp_list) > 0)) return(invisible(NULL))  # e.g. custom likelihoods
+
+  present   <- table(unlist(sp_list))
+  zero_hits <- table(unlist(lapply(dadm_list, function(d) attr(d, "zero_effect_pars"))))
+  if (length(zero_hits) > 0) {
+    unident <- names(zero_hits)[as.integer(zero_hits) == as.integer(present[names(zero_hits)])]
+    if (length(unident) > 0) {
+      warning("The following parameter(s) have no effect on the likelihood ",
+              "(their mapped design column is all zero) and are unidentified:\n  ",
+              paste(unident, collapse = ", "),
+              "\nCheck the contrast/design matrices for these parameters, or add ",
+              "them to `constants`. Leaving an unidentified parameter free lets the ",
+              "group-level variance diverge, which typically crashes the sampler ",
+              "mid-run.", call. = FALSE)
+    }
+  }
+
+  deps <- unique(unlist(lapply(dadm_list, function(d) attr(d, "collinear_pars"))))
+  if (length(deps) > 0) {
+    warning("The following linear combination(s) of sampled parameters have no ",
+            "effect on the likelihood, so those parameters are jointly ",
+            "unidentified (collinear design columns):\n  ",
+            paste0(deps, " = 0", collapse = "\n  "),
+            "\nDrop or constrain one parameter from each dependency, or revise the ",
+            "contrast/design matrices. Leaving a collinear set free lets the ",
+            "group-level covariance become singular and crash the sampler mid-run.",
+            call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
@@ -738,21 +825,11 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
 
-  # Record sampled parameters whose mapped design column is all zero: they make
-  # no contribution to the likelihood and are structurally unidentified. A
-  # parameter appearing in several design matrices counts as identified if any
-  # occurrence is non-zero. make_emc aggregates this across (joint) data sets.
-  nonzero_p <- character(0); all_p <- character(0)
-  for (x in out) {
-    ass <- attr(x, "assign")
-    pcol <- !is.na(ass)
-    if (!any(pcol)) next
-    xp <- x[, pcol, drop = FALSE]
-    all_p <- c(all_p, colnames(xp))
-    nonzero_p <- c(nonzero_p, colnames(xp)[colSums(abs(xp)) != 0])
-  }
-  zero_effect_pars <- setdiff(unique(all_p), unique(nonzero_p))
-  attr(dadm,"zero_effect_pars") <- intersect(zero_effect_pars, sampled_p_names)
+  # Record identifiability info (all-zero columns and exact collinear
+  # dependencies) so make_emc can warn before a fit that would otherwise diverge.
+  ident <- design_identifiability(out, sampled_p_names, design$constants)
+  attr(dadm,"zero_effect_pars") <- ident$zero_effect_pars
+  attr(dadm,"collinear_pars")   <- ident$collinear_pars
   if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",

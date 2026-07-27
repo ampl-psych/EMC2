@@ -47,6 +47,23 @@ test_that("make_emc does not warn for a well-identified design", {
   expect_no_warning(make_emc(forstmann, des, type = "standard", compress = FALSE))
 })
 
+# Collinearity: a linear combination of sampled parameters that maps to zero is
+# jointly unidentified even when no single column is all zero. This is the
+# generalisation of the all-zero-column check and would not be caught by it.
+test_that("make_emc warns about collinear (rank-deficient) design blocks", {
+  ADmat <- matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))
+  # 3-level factor with a rank-2, 3-column contrast: column 'ab' = 'a' + 'b'
+  Z <- matrix(c(1, 0, -1,  0, 1, -1,  1, 1, -2), nrow = 3, ncol = 3,
+              dimnames = list(NULL, c("a", "b", "ab")))
+  des <- design(data = forstmann, model = LBA, matchfun = function(d) d$S == d$lR,
+                formula = list(v ~ lM, B ~ E, A ~ 1, t0 ~ 1, sv ~ 1),
+                contrasts = list(v = list(lM = ADmat), B = list(E = Z)),
+                constants = c(sv = log(1)), report_p_vector = FALSE)
+  # names the collinear parameters (B_Ea, B_Eb, B_Eab) in the reported dependency
+  expect_warning(make_emc(forstmann, des, type = "standard", compress = FALSE),
+                 "B_Eab")
+})
+
 # A per-chain failure inside the parallel sampler must produce an informative
 # error naming the chain and reason, not a cryptic downstream crash.
 test_that("check_chain_failures reports which chain failed and why", {
