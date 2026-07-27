@@ -105,9 +105,11 @@ fill_samples <- function(samples, group_level, proposals, j = 1, n_pars, type, .
 #   sampler: The sampler object
 #   alpha: Acceptance probability
 #   type: Type of sampler
-gibbs_step <- function(sampler, alpha, type, ...) {
+gibbs_step <- function(sampler, alpha, type, ridge = FALSE, ...) {
+  # ridge is only used by the standard variant's group-covariance inversion; the
+  # other variants ignore it (retry / carry-forward still protect them).
   switch(type,
-    "standard" = gibbs_step_standard(sampler, alpha, ...),
+    "standard" = gibbs_step_standard(sampler, alpha, ridge = ridge, ...),
     "single" = gibbs_step_single(sampler, alpha, ...),
     "factor" = gibbs_step_factor(sampler, alpha, ...),
     "infnt_factor" = gibbs_step_infnt_factor(sampler, alpha, ...),

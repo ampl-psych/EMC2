@@ -502,7 +502,30 @@ fill_samples_standard <- function(samples, group_level, proposals, j = 1, n_pars
   return(samples)
 }
 
-gibbs_step_standard <- function(sampler, alpha) {
+# Invert a group covariance, optionally ridging it first so a near-singular
+# matrix does not make solve() fail. ridge = FALSE -> plain solve (may error, as
+# before); TRUE -> cap the condition number at 1e10; a number -> use that cap.
+# Returns the (possibly regularised) covariance, its inverse, and a flag.
+regularise_and_invert <- function(m, ridge = FALSE) {
+  if (isFALSE(ridge) || is.null(ridge)) {
+    return(list(cov = m, inv = solve(m), ridged = FALSE))
+  }
+  cap <- if (isTRUE(ridge)) 1e10 else ridge
+  ev <- eigen(m, symmetric = TRUE)
+  d <- ev$values
+  floor_val <- max(d) / cap
+  if (min(d) < floor_val) {
+    d <- pmax(d, floor_val)
+    V <- ev$vectors
+    cov_reg <- V %*% (d * t(V))
+    inv_reg <- V %*% ((1 / d) * t(V))
+    dimnames(cov_reg) <- dimnames(inv_reg) <- dimnames(m)
+    return(list(cov = cov_reg, inv = inv_reg, ridged = TRUE))
+  }
+  list(cov = m, inv = solve(m), ridged = FALSE)
+}
+
+gibbs_step_standard <- function(sampler, alpha, ridge = FALSE) {
   #
   # alpha:  (p x n) subject-level parameter matrix
   #
@@ -772,7 +795,9 @@ gibbs_step_standard <- function(sampler, alpha) {
     tvar_new[cbind(unblocked_idx, unblocked_idx)] <- tvar_diag
   }
 
-  tvinv_new <- solve(tvar_new)
+  reg <- regularise_and_invert(tvar_new, ridge)
+  tvar_new  <- reg$cov
+  tvinv_new <- reg$inv
 
   block_dim <- integer(p)
   block_dim[unblocked_idx] <- 1
@@ -801,6 +826,7 @@ gibbs_step_standard <- function(sampler, alpha) {
     out$s <- s_new
     out$a_half_s <- a_half_s_new
   }
+  attr(out, "ridged") <- isTRUE(reg$ridged)
   return(out)
 }
 

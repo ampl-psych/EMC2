@@ -432,7 +432,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
-                       trim = TRUE, r_cores = 1)
+                       trim = TRUE, on_singular = NULL, r_cores = 1)
   t_start <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
@@ -467,7 +467,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
-                   r_cores = dots$r_cores)
+                   on_singular = dots$on_singular, r_cores = dots$r_cores)
   }
   if (verbose) {
     # Re-use check_progress to get final Rhat and ESS for the sample stage,

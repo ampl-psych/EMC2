@@ -78,3 +78,50 @@ test_that("check_chain_failures reports which chain failed and why", {
   expect_error(check_chain_failures(list(good[[1]], NULL), "sample", NULL),
                "Sampling failed in 1 of 2 chain")
 })
+
+# on_singular: recovery from a singular group covariance during sampling.
+test_that("resolve_on_singular fills defaults and validates", {
+  d <- resolve_on_singular(NULL)
+  expect_identical(d$max_retries, 0)
+  expect_identical(d$on_exhausted, "error")
+  expect_false(d$ridge)
+  expect_true(resolve_on_singular(list(ridge = TRUE))$ridge)
+  expect_error(resolve_on_singular(list(bad_field = 1)), "unknown")
+  expect_error(resolve_on_singular(list(on_exhausted = "nope")))
+})
+
+test_that("regularise_and_invert ridges only near-singular covariances", {
+  singular <- matrix(c(1, 1, 1, 1), 2, 2)
+  expect_error(regularise_and_invert(singular, FALSE))          # plain solve fails
+  r <- regularise_and_invert(singular, TRUE)
+  expect_true(r$ridged)
+  expect_true(all(is.finite(r$inv)))
+  # well-conditioned: untouched, exact inverse
+  w <- regularise_and_invert(diag(c(2, 4)), TRUE)
+  expect_false(w$ridged)
+  expect_equal(w$inv, diag(c(1/2, 1/4)))
+})
+
+test_that("is_singular_error recognises the covariance failure", {
+  expect_true(is_singular_error(simpleError("system is computationally singular: reciprocal condition number = 1e-16")))
+  expect_true(is_singular_error(simpleError("Lapack routine dgesv: system is exactly singular")))
+  expect_false(is_singular_error(simpleError("some unrelated error")))
+})
+
+test_that("robust_gibbs_step retries then gives up", {
+  n <- 0
+  orig <- EMC2:::gibbs_step
+  assignInNamespace("gibbs_step", function(sampler, alpha, type, ridge = FALSE, ...) {
+    n <<- n + 1
+    if (n <= 2) stop("system is computationally singular")
+    list(ok = TRUE)
+  }, ns = "EMC2")
+  on.exit(assignInNamespace("gibbs_step", orig, ns = "EMC2"), add = TRUE)
+
+  n <- 0
+  res <- robust_gibbs_step(NULL, NULL, "standard", resolve_on_singular(list(max_retries = 5)))
+  expect_true(isTRUE(res$ok))
+  expect_identical(n, 3)                       # 2 failures + 1 success
+  n <- 0
+  expect_null(robust_gibbs_step(NULL, NULL, "standard", resolve_on_singular(list(max_retries = 1))))
+})

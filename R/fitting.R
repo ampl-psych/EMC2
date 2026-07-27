@@ -65,6 +65,12 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
 #' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
+#' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
+#' covariance becomes computationally singular during sampling. `NULL` errors immediately.
+#' A list may set `max_retries` (integer, re-draw the group step on failure), `on_exhausted`
+#' (`"error"` or `"carry_forward"` the previous group parameters), `max_carry_forward`
+#' (consecutive carried-forward iterations before giving up), and `ridge` (`FALSE`, `TRUE`,
+#' or a numeric condition-number cap; regularises the covariance so the inversion cannot fail).
 #' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
 #' @export
 #' @return An emc object
@@ -85,7 +91,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE, r_cores=1){
+                    thin = FALSE, trim = TRUE, on_singular = NULL, r_cores=1){
   if(length(emc) == 1) stop("run_emc() currently requires n_chains > 1.")
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
@@ -123,7 +129,7 @@ run_emc <- function(emc, stage, stop_criteria,
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
-                             r_cores = r_cores)
+                             on_singular = on_singular, r_cores = r_cores)
 
     # A chain that errors inside the parallel sampler comes back as a try-error
     # (or a value with no $samples) rather than a sampler object. Report which
@@ -193,7 +199,7 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1, r_cores = 1)
+                       particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1)
 {
   particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
@@ -203,7 +209,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
                        n_cores = n_cores, tune = tune, verbose = verbose,
-                       verboseProgress = verboseProgress, r_cores = r_cores)
+                       verboseProgress = verboseProgress, on_singular = on_singular, r_cores = r_cores)
   return(sampler)
 }
 
