@@ -22,6 +22,7 @@ plot_cdf(
   posterior_args = list(),
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
+  main = NULL,
   ...
 )
 }
@@ -60,6 +61,11 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
 
 \item{add_percentiles}{Vector of integers giving percentiles to plot as points, NULL stops plotting.}
+
+\item{main}{Optional panel title(s). A single string is prefixed to each
+panel's group key (\code{""} blanks the title, the default is the group key).
+A character vector with one element per panel sets each panel's title
+verbatim; its length must then equal the number of panels drawn.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }
