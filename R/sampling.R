@@ -359,8 +359,8 @@ run_stage <- function(pmwgs,
       "; no on_singular recovery was active (see ?fit `on_singular`)"
     stop(conditionMessage(e),
          sprintf("\n  [context: '%s' stage, iteration %d of %d%s]", stage, i, iter, recov),
-         sprintf("\n  [parameters with the largest group variance: %s]",
-                 top_diverging_pars(pmwgs$samples, max(start_iter, j - 1))),
+         "\n  parameters with the largest group variance:\n    ",
+         top_diverging_pars(pmwgs$samples, max(start_iter, j - 1)),
          call. = FALSE)
   })
   attr(pmwgs$samples, "pm_settings") <- pm_settings

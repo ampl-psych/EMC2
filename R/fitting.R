@@ -989,10 +989,14 @@ check_chain_failures <- function(chains, stage, fileName = NULL){
            "(shown above) hit inside a chain. Read the underlying message and context; ",
            "if it looks like a bug rather than your model/data, please report it.")
   }
+  # Wrap the advice to ~80 columns so it is readable; the saved-file note gets
+  # its own line.
+  advice <- paste(strwrap(advice, width = 80), collapse = "\n")
+  if (nzchar(saved)) advice <- paste0(advice, "\n", trimws(saved))
   stop("Sampling failed in ", sum(failed), " of ", length(chains),
        " chain(s) during the '", stage, "' stage:\n",
        paste(reasons, collapse = "\n"),
-       "\n\n", advice, saved, call. = FALSE)
+       "\n\n", advice, call. = FALSE)
 }
 
 #' Strip all entries except samples from EMC list entries
