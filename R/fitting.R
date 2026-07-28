@@ -976,7 +976,7 @@ check_chain_failures <- function(chains, stage, fileName = NULL){
   # Tailor the advice to what actually failed, rather than always blaming the
   # covariance. The per-chain reasons now carry context (iteration + on_singular
   # recovery so far + diverging parameters) added in run_stage.
-  singular_like <- any(grepl("singular|reciprocal condition|positive definite|ill-conditioned|Lapack",
+  singular_like <- any(grepl("singular|reciprocal condition|not positive|leading minor|positive definite|ill-conditioned|Lapack",
                              reasons, ignore.case = TRUE))
   advice <- if (singular_like) {
     paste0("The group-level covariance became ill-conditioned, usually from an ",

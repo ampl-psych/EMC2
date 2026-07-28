@@ -105,6 +105,9 @@ test_that("regularise_and_invert ridges only near-singular covariances", {
 test_that("is_singular_error recognises the covariance failure", {
   expect_true(is_singular_error(simpleError("system is computationally singular: reciprocal condition number = 1e-16")))
   expect_true(is_singular_error(simpleError("Lapack routine dgesv: system is exactly singular")))
+  # chol() non-PD failure, both the old and the R >= 4.x wording
+  expect_true(is_singular_error(simpleError("the leading minor of order 38 is not positive")))
+  expect_true(is_singular_error(simpleError("the leading minor of order 3 is not positive definite")))
   expect_false(is_singular_error(simpleError("some unrelated error")))
 })
 

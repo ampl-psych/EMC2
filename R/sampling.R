@@ -198,9 +198,12 @@ resolve_on_singular <- function(on_singular) {
   out
 }
 
-# Is this error the recoverable group-covariance-singular failure?
+# Is this error the recoverable group-covariance failure? Covers solve()
+# ("computationally singular") and chol() non-positive-definite failures. Note R
+# >= 4.x reports the latter as "the leading minor of order N is not positive"
+# (without "definite"), so match "not positive" and "leading minor" too.
 is_singular_error <- function(e) {
-  grepl("singular|reciprocal condition|not positive definite|Lapack|infinite or missing",
+  grepl("singular|reciprocal condition|not positive|leading minor|positive definite|Lapack|infinite or missing",
         conditionMessage(e), ignore.case = TRUE)
 }
 
