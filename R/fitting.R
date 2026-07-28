@@ -973,14 +973,26 @@ check_chain_failures <- function(chains, stage, fileName = NULL){
   }, character(1))
   saved <- if(!is.null(fileName)) paste0(" The fit up to the previous stage was saved to '",
                                          fix_fileName(fileName), "'.") else ""
+  # Tailor the advice to what actually failed, rather than always blaming the
+  # covariance. The per-chain reasons now carry context (iteration + on_singular
+  # recovery so far + diverging parameters) added in run_stage.
+  singular_like <- any(grepl("singular|reciprocal condition|positive definite|ill-conditioned|Lapack",
+                             reasons, ignore.case = TRUE))
+  advice <- if (singular_like) {
+    paste0("The group-level covariance became ill-conditioned, usually from an ",
+           "unidentified or weakly-identified parameter (see the diverging parameters ",
+           "listed above). Options: check for unidentified parameters, use a tighter ",
+           "prior or fewer free parameters, or set the `on_singular` argument of fit() ",
+           "to retry / carry_forward / ridge.")
+  } else {
+    paste0("This is not the known singular-covariance failure but some other error ",
+           "(shown above) hit inside a chain. Read the underlying message and context; ",
+           "if it looks like a bug rather than your model/data, please report it.")
+  }
   stop("Sampling failed in ", sum(failed), " of ", length(chains),
        " chain(s) during the '", stage, "' stage:\n",
        paste(reasons, collapse = "\n"),
-       "\n\nThis usually means the group-level covariance became ill-conditioned ",
-       "(often from an unidentified parameter) or the likelihood hit a numerical ",
-       "problem. Inspect the group variances / Rhat of the saved fit, check for ",
-       "unidentified parameters, and consider a tighter prior or fewer free ",
-       "parameters.", saved, call. = FALSE)
+       "\n\n", advice, saved, call. = FALSE)
 }
 
 #' Strip all entries except samples from EMC list entries

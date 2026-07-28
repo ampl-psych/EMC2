@@ -281,6 +281,11 @@ run_stage <- function(pmwgs,
   block_idx <- block_variance_idx(tune$components)
   # Group-covariance recovery bookkeeping (only active when on_singular is set)
   last_good_pars <- NULL; consec_cf <- 0L; n_cf <- 0L; n_ridge <- 0L
+  i <- 0L; j <- start_iter
+  # Any error in the loop is enriched with where it happened and what the
+  # on_singular recovery had done so far, so a chain failure is actually
+  # diagnostic instead of a bare R message.
+  tryCatch(
   # Main iteration loop
   for (i in 1:iter) {
     if (verboseProgress) {
@@ -297,19 +302,20 @@ run_stage <- function(pmwgs,
       # give up with a diagnosis of the diverging parameters.
       if (on_singular$on_exhausted == "carry_forward" && !is.null(last_good_pars)) {
         consec_cf <- consec_cf + 1L; n_cf <- n_cf + 1L
+        # Terse message; the loop's error handler adds stage/iteration context and
+        # the diverging parameters, and check_chain_failures adds the advice.
         if (consec_cf > on_singular$max_carry_forward) {
-          stop("Group covariance singular for ", consec_cf, " consecutive iterations in the '",
-               stage, "' stage; giving up. Parameters with the largest group variance (likely ",
-               "unidentified): ", top_diverging_pars(pmwgs$samples, j - 1), call. = FALSE)
+          stop("group covariance singular for ", consec_cf,
+               " consecutive iterations; giving up (on_singular carry_forward)", call. = FALSE)
         }
         pars <- last_good_pars
-        pars$alpha <- pmwgs$samples$alpha[!nuisance,,j-1, drop = FALSE]
+        # gibbs_step returns alpha as a 2-D (p x n) matrix, so match that shape
+        # here (the raw sample slice is 3-D and breaks the downstream indexing).
+        a <- pmwgs$samples$alpha[!nuisance, , j - 1, drop = FALSE]
+        pars$alpha <- matrix(a, nrow = dim(a)[1], ncol = dim(a)[2],
+                             dimnames = list(pmwgs$par_names[!nuisance], NULL))
       } else {
-        stop("Group covariance became computationally singular in the '", stage,
-             "' stage. Parameters with the largest group variance: ",
-             top_diverging_pars(pmwgs$samples, j - 1),
-             ". See the `on_singular` argument of fit() to retry, carry forward, or ridge.",
-             call. = FALSE)
+        stop("group covariance became computationally singular", call. = FALSE)
       }
     } else {
       consec_cf <- 0L
@@ -342,6 +348,18 @@ run_stage <- function(pmwgs,
     pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = pars,
                                                proposals = proposals, j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
   }
+  ,
+  error = function(e) {
+    recov <- if (n_ridge > 0 || n_cf > 0)
+      sprintf("; on_singular recovery so far: %d ridged, %d carried forward (%d consecutive)",
+              n_ridge, n_cf, consec_cf) else
+      "; no on_singular recovery was active (see ?fit `on_singular`)"
+    stop(conditionMessage(e),
+         sprintf("\n  [context: '%s' stage, iteration %d of %d%s]", stage, i, iter, recov),
+         sprintf("\n  [parameters with the largest group variance: %s]",
+                 top_diverging_pars(pmwgs$samples, max(start_iter, j - 1))),
+         call. = FALSE)
+  })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
   if (verboseProgress) close(pb)
   if (verbose && (n_cf > 0 || n_ridge > 0)) {
