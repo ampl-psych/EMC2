@@ -72,7 +72,7 @@
       compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
                 MD wMD  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
-      blocked -527   1 6464    1 10028     1       3565  2899  -620 -665
+      blocked -527   1 6464    1 10029     1       3565  2899  -620 -665
 
 # run_single
 

@@ -477,7 +477,7 @@ void c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
   }
 }
 
-void c_log_likelihood_MRI(NumericMatrix pars, NumericVector y,
+void c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y,
                           int n, int m,
                           double* ll_buf)             // size = n
 {
@@ -489,9 +489,9 @@ void c_log_likelihood_MRI(NumericMatrix pars, NumericVector y,
 }
 
 
-void c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y,
-                                int n, int m,
-                                double* ll_buf)        // size = n
+void c_log_likelihood_MRI_ar1(NumericMatrix pars, NumericVector y,
+                              int n, int m,
+                              double* ll_buf)        // size = n
 {
   // First observation: stationary variance
   double s = 0.0;
@@ -643,7 +643,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
       // Fill log-likelihood buffer
-      if (is_ar1) c_log_likelihood_MRI(pars, y, n_trials, n_pars, ll_buf.data());
+      if (is_ar1) c_log_likelihood_MRI_ar1(pars, y, n_trials, n_pars, ll_buf.data());
       else        c_log_likelihood_MRI_white(pars, y, n_trials, n_pars, ll_buf.data());
 
       // Check for bound violations (fills is_ok)
@@ -725,9 +725,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   }
 
   return result;
-  // NumericVector out(n_particles);
-  // for(int i = 0; i < n_particles; i++) out[i] = result(0,i);
-  // return(out);
 }
 
 
