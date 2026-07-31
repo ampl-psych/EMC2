@@ -271,115 +271,317 @@ run_stage <- function(pmwgs,
 }
 
 
-new_particle <- function (s, data, pm_settings, eff_mu = NULL,
-                          eff_var = NULL, chains_mu = NULL,
-                          chains_var = NULL, prev_ll,
-                          parameters, model = NULL, stage,
-                          type, tune, r_cores = 1)
+safe_chol <- function(x) {
+  tryCatch(
+    chol(x),
+    error = function(e) NULL
+  )
+}
+
+# # Fast multivariate normal log-density using precomputed Cholesky
+# # chol_sigma: upper triangular Cholesky factor of the covariance matrix
+# # Returns a vector of log-densities, one per row of x
+fast_log_dmvnorm <- function(x, mu, chol_sigma, sigma_fallback = NULL) {
+  if (is.null(chol_sigma)) {
+    return(mvtnorm::dmvnorm(x, mu, sigma_fallback, log = TRUE))
+  }
+  if (!is.matrix(x)) x <- matrix(x, nrow = 1L)
+  k    <- length(mu)
+  diff <- sweep(x, 2L, mu)
+  z    <- backsolve(chol_sigma, t(diff), transpose = TRUE)  # solve U*z = diff^T
+  -0.5 * colSums(z^2) - sum(log(diag(chol_sigma))) - 0.5 * k * log(2 * pi)
+}
+
+# fast_rmvnorm <- function(n, mu, chol_sigma, sigma_fallback = NULL) {
+#   if (is.null(chol_sigma)) {
+#     return(mvtnorm::rmvnorm(n, mu, sigma_fallback))
+#   }
+#   k <- length(mu)
+#   sweep(matrix(rnorm(n * k), nrow = n) %*% chol_sigma, 2L, mu, "+")
+# }
+
+fast_rmvnorm <- function(n, mu, chol_sigma, sigma_fallback = NULL) {
+  if (is.null(chol_sigma)) {
+    return(mvtnorm::rmvnorm(n, mu, sigma_fallback))
+  }
+  k <- length(mu)
+  matrix(rnorm(n * k), nrow = n) %*% chol_sigma + rep(mu, each = n)
+}
+
+# fast_rmvnorm <- function(n, mu, chol_sigma, sigma_fallback = NULL) {
+#   if (is.null(chol_sigma)) {
+#     return(mvtnorm::rmvnorm(n, mu, sigma_fallback))
+#   }
+#   k <- length(mu)
+#   mu + matrix(rnorm(n * k), nrow = n) %*% chol_sigma
+# }
+
+particle_draws <- function(n, mu, covar, alpha = NULL, tau = NULL) {
+  if (n <= 0) {
+    return(NULL)
+  }
+  if (is.null(dim(covar)) && length(covar) == 1L) {
+    covar <- matrix(covar, nrow = 1L, ncol = 1L)
+  }
+  if (is.null(alpha)) {
+    return(fast_rmvnorm(n, mu, chol(covar)))
+  }
+}
+
+new_particle <- function(s, data, pm_settings, eff_mu = NULL,
+                         eff_var = NULL, chains_mu = NULL,
+                         chains_var = NULL, prev_ll,
+                         parameters, model = NULL, stage,
+                         type, tune, r_cores = 1)
 {
   group_pars <- get_group_level(parameters, s, type)
   unq_components <- unique(tune$components)
   proposal_out <- numeric(length(group_pars$mu))
-  group_mu <- group_pars$mu
+  group_mu  <- group_pars$mu
   group_var <- group_pars$var
-  subj_mu <- parameters$alpha[,s]
-  out_lls <- numeric(length(unq_components))
+  subj_mu   <- parameters$alpha[, s]
+  out_lls   <- numeric(length(unq_components))
   particle_multiplier <- 1
+
   # Set the proposals
-  if(stage == "preburn"){
-    Mus <- list(group_mu, subj_mu)
+  if (stage == "preburn") {
+    Mus    <- list(group_mu, subj_mu)
     Sigmas <- list(group_var, group_var)
-    # For preburn use a lot of proposals, to increase initial search a bit
     particle_multiplier <- 2
-  } else if(stage == "burn"){ # Burn
-    Mus <- list(group_mu, subj_mu, subj_mu)
+  } else if (stage == "burn") {
+    Mus    <- list(group_mu, subj_mu, subj_mu)
     Sigmas <- list(group_var, group_var, chains_var)
-  } else if(stage == "adapt"){
-    Mus <- list(group_mu, subj_mu, chains_mu)
+  } else if (stage == "adapt") {
+    Mus    <- list(group_mu, subj_mu, chains_mu)
     Sigmas <- list(group_var, chains_var, chains_var)
-  } else{ # Sample
-    Mus <- list(group_mu, subj_mu, chains_mu, eff_mu)
+  } else { # sample
+    Mus    <- list(group_mu, subj_mu, chains_mu, eff_mu)
     Sigmas <- list(group_var, chains_var, chains_var, eff_var)
   }
   n_proposals <- length(Mus)
-  for(i in unq_components){
+
+  # Precompute full-covariance Cholesky once
+  # chol_group_full <- chol(group_var)
+  multi_component <- length(unq_components) > 1L
+
+  for (i in unq_components) {
     # Add 1 to epsilons such that prior/group-level proposals aren't scaled
     epsilons <- c(1, pm_settings[[i]]$epsilon)
-    idx <- tune$components == i
+    idx      <- tune$components == i
+
+    sigmas_scaled <- vector("list", n_proposals)
+    chols         <- vector("list", n_proposals)
+    for (j in seq_len(n_proposals)) {
+      sigmas_scaled[[j]] <- Sigmas[[j]][idx, idx, drop = FALSE] * epsilons[j]^2
+      chols[[j]]         <- safe_chol(sigmas_scaled[[j]])
+    }
+
     # Draw new proposals for each component
-    particle_numbers <- numbers_from_proportion(pm_settings[[i]]$mix, pm_settings[[i]]$n_particles*particle_multiplier)
-    proposals <- vector("list", n_proposals +1)
-    proposals[[1]] <- subj_mu[idx]
-    for(j in 1:n_proposals){
-      # Fill up the proposals
-      proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * (epsilons[j]^2))
+    particle_numbers <- numbers_from_proportion(
+      pm_settings[[i]]$mix,
+      pm_settings[[i]]$n_particles * particle_multiplier
+    )
+
+    proposals    <- vector("list", n_proposals + 1L)
+    proposals[[1]] <- unname(subj_mu[idx])
+    for (j in seq_len(n_proposals)) {
+      proposals[[j + 1L]] <- fast_rmvnorm(particle_numbers[j], Mus[[j]][idx], chols[[j]],
+                                          sigma_fallback = sigmas_scaled[[j]])
     }
     proposals <- do.call(rbind, proposals)
 
-    # Non -used proposals (for prior calculations)
     # Rejoin new proposals with current MCMC values for other components
-    if(any(!idx)){
+    if (any(!idx)) {
       proposals_other <- do.call(rbind, rep(list(subj_mu[!idx]), nrow(proposals)))
       colnames(proposals_other) <- names(subj_mu)[!idx]
-      colnames(proposals) <- names(subj_mu)[idx]
+      colnames(proposals)       <- names(subj_mu)[idx]
       proposals <- cbind(proposals, proposals_other)
       proposals <- proposals[, names(subj_mu), drop = FALSE]
-    } else{
+    } else {
       colnames(proposals) <- names(subj_mu)
     }
 
-    # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
-    # Sometimes we may also want to block within a model if it has very high dimensionality
-    shared_idx <- tune$shared_ll_idx[idx][1]
-    is_shared <- shared_idx == tune$shared_ll_idx
-
     # Calculate likelihoods
-    if(tune$components[length(tune$components)] > 1){
+    shared_idx <- tune$shared_ll_idx[idx][1]
+    is_shared  <- shared_idx == tune$shared_ll_idx
+
+    if (tune$components[length(tune$components)] > 1L) {
       lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
                             component = shared_idx, r_cores = r_cores)
-    } else{
+    } else {
       lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
                             r_cores = r_cores)
     }
-    lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
-    # Prior density
-    lp <- mvtnorm::dmvnorm(
-      x = proposals[, idx, drop = FALSE],
-      mean = group_mu[idx],
-      sigma = group_var[idx, idx, drop = FALSE],
-      log = TRUE
-    )
-    if(length(unq_components) > 1){
-      prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+    lw_total <- lw + prev_ll - lw[1]
+
+    # Prior log-density — reuses chol_group_idx
+    lp <- fast_log_dmvnorm(proposals[, idx, drop = FALSE], group_mu[idx],
+                           chols[[1]],
+                           sigma_fallback = group_var[idx, idx, drop = FALSE])
+
+    # Full prior density (multi-component only) — reuses chol_group_full
+    if (multi_component) {
+      prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu,
+                                        sigma = group_var, log = TRUE)
     } else{
       prior_density <- lp
     }
-    # We can start from 2, since first proposal is prior density
-    lm <- pm_settings[[i]]$mix[1]*exp(lp)
-    for(k in 2:length(Sigmas)){
-      # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings[[i]]$mix[k] * mvtnorm::dmvnorm(
-        x = proposals[, idx, drop = FALSE],
-        mean = Mus[[k]][idx],
-        sigma = Sigmas[[k]][idx, idx, drop = FALSE] * (epsilons[k]^2)
-      )
-    }
-    # Avoid infinite values
-    lm <- log(lm)
-    infnt_idx <- is.infinite(lm)
-    lm[infnt_idx] <- min(lm[!infnt_idx])
-    # Calculate weights and center
-    l <- lw_total + prior_density - lm
-    weights <- exp(l - max(l))
-    # Do MH step and return everything
-    idx_ll <- sample(x = sum(particle_numbers) + 1, size = 1, prob = weights)
 
-    out_lls[i] <- lw[idx_ll]
-    proposal_out[idx] <- proposals[idx_ll,idx]
-    pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
+    # Mixture log-density lm
+    lm <- pm_settings[[i]]$mix[1] * exp(lp)
+    for (k in 2:length(Sigmas)) {
+      # chols[[k]] holds the Cholesky for Sigmas[[k]][idx,idx] * epsilons[k]^2
+      lm <- lm + pm_settings[[i]]$mix[k] *
+        exp(fast_log_dmvnorm(
+          x              = proposals[, idx, drop = FALSE],
+          mu             = Mus[[k]][idx],
+          chol_sigma     = chols[[k]],
+          sigma_fallback = sigmas_scaled[[k]]
+        ))
+    }
+    lm <- log(lm)
+    infnt_idx    <- is.infinite(lm)
+    lm[infnt_idx] <- min(lm[!infnt_idx])
+
+    # Weights and MH step
+    l       <- lw_total + prior_density - lm
+    weights <- exp(l - max(l))
+    idx_ll  <- sample(x = sum(particle_numbers) + 1L, size = 1L, prob = weights)
+
+    # cat(sprintf("[i=%d] lp[1:3]: %s\n",    i, paste(round(lp[1:3], 4),    collapse=",")))
+    # cat(sprintf("[i=%d] lm[1:3]: %s\n",    i, paste(round(lm[1:3], 4),    collapse=",")))
+    # cat(sprintf("[i=%d] prior_density[1:3]: %s\n", i, paste(round(prior_density[1:3], 4), collapse=",")))
+    # cat(sprintf("[i=%d] lw_total[1:3]: %s\n", i, paste(round(lw_total[1:3], 4), collapse=",")))
+    # cat(sprintf("[i=%d] weights[1:5]: %s\n", i, paste(round(weights[1:5]/sum(weights), 4), collapse=",")))
+
+    out_lls[i]        <- lw[idx_ll]
+    proposal_out[idx] <- proposals[idx_ll, idx]
+    pm_settings[[i]]  <- update_pm_settings(pm_settings[[i]], idx_ll, weights,
+                                            particle_numbers, tune, sum(idx))
   }
+
   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 }
+
+# new_particle <- function (s, data, pm_settings, eff_mu = NULL,
+#                           eff_var = NULL, chains_mu = NULL,
+#                           chains_var = NULL, prev_ll,
+#                           parameters, model = NULL, stage,
+#                           type, tune, r_cores = 1)
+# {
+#   group_pars <- get_group_level(parameters, s, type)
+#   unq_components <- unique(tune$components)
+#   proposal_out <- numeric(length(group_pars$mu))
+#   group_mu <- group_pars$mu
+#   group_var <- group_pars$var
+#   subj_mu <- parameters$alpha[,s]
+#   out_lls <- numeric(length(unq_components))
+#   particle_multiplier <- 1
+#   # Set the proposals
+#   if(stage == "preburn"){
+#     Mus <- list(group_mu, subj_mu)
+#     Sigmas <- list(group_var, group_var)
+#     # For preburn use a lot of proposals, to increase initial search a bit
+#     particle_multiplier <- 2
+#   } else if(stage == "burn"){ # Burn
+#     Mus <- list(group_mu, subj_mu, subj_mu)
+#     Sigmas <- list(group_var, group_var, chains_var)
+#   } else if(stage == "adapt"){
+#     Mus <- list(group_mu, subj_mu, chains_mu)
+#     Sigmas <- list(group_var, chains_var, chains_var)
+#   } else{ # Sample
+#     Mus <- list(group_mu, subj_mu, chains_mu, eff_mu)
+#     Sigmas <- list(group_var, chains_var, chains_var, eff_var)
+#   }
+#   n_proposals <- length(Mus)
+#
+#   for(i in unq_components){
+#     # Add 1 to epsilons such that prior/group-level proposals aren't scaled
+#     epsilons <- c(1, pm_settings[[i]]$epsilon)
+#     idx <- tune$components == i
+#     # Draw new proposals for each component
+#     particle_numbers <- numbers_from_proportion(pm_settings[[i]]$mix, pm_settings[[i]]$n_particles*particle_multiplier)
+#     proposals <- vector("list", n_proposals +1)
+#     proposals[[1]] <- subj_mu[idx]
+#     for(j in 1:n_proposals){
+#       # Fill up the proposals
+#       proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * (epsilons[j]^2))
+#     }
+#     proposals <- do.call(rbind, proposals)
+#
+#     # Non -used proposals (for prior calculations)
+#     # Rejoin new proposals with current MCMC values for other components
+#     if(any(!idx)){
+#       proposals_other <- do.call(rbind, rep(list(subj_mu[!idx]), nrow(proposals)))
+#       colnames(proposals_other) <- names(subj_mu)[!idx]
+#       colnames(proposals) <- names(subj_mu)[idx]
+#       proposals <- cbind(proposals, proposals_other)
+#       proposals <- proposals[, names(subj_mu), drop = FALSE]
+#     } else{
+#       colnames(proposals) <- names(subj_mu)
+#     }
+#
+#     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
+#     # Sometimes we may also want to block within a model if it has very high dimensionality
+#     shared_idx <- tune$shared_ll_idx[idx][1]
+#     is_shared <- shared_idx == tune$shared_ll_idx
+#
+#     # Calculate likelihoods
+#     if(tune$components[length(tune$components)] > 1){
+#       lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
+#                             component = shared_idx, r_cores = r_cores)
+#     } else{
+#       lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
+#                             r_cores = r_cores)
+#     }
+#     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
+#     # Prior density
+#     lp <- mvtnorm::dmvnorm(
+#       x = proposals[, idx, drop = FALSE],
+#       mean = group_mu[idx],
+#       sigma = group_var[idx, idx, drop = FALSE],
+#       log = TRUE
+#     )
+#     if(length(unq_components) > 1){
+#       prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+#     } else{
+#       prior_density <- lp
+#     }
+#     # We can start from 2, since first proposal is prior density
+#     lm <- pm_settings[[i]]$mix[1]*exp(lp)
+#     for(k in 2:length(Sigmas)){
+#       # Prior density is updated separately so start at 2
+#       lm <- lm + pm_settings[[i]]$mix[k] * mvtnorm::dmvnorm(
+#         x = proposals[, idx, drop = FALSE],
+#         mean = Mus[[k]][idx],
+#         sigma = Sigmas[[k]][idx, idx, drop = FALSE] * (epsilons[k]^2)
+#       )
+#     }
+#     # Avoid infinite values
+#     lm <- log(lm)
+#     infnt_idx <- is.infinite(lm)
+#     lm[infnt_idx] <- min(lm[!infnt_idx])
+#
+#
+#
+#
+#     # Calculate weights and center
+#     l <- lw_total + prior_density - lm
+#     weights <- exp(l - max(l))
+#     # Do MH step and return everything
+#     idx_ll <- sample(x = sum(particle_numbers) + 1, size = 1, prob = weights)
+#
+#     # cat(sprintf("[i=%d] lp[1:3]: %s\n",    i, paste(round(lp[1:3], 4),    collapse=",")))
+#     # cat(sprintf("[i=%d] lm[1:3]: %s\n",    i, paste(round(lm[1:3], 4),    collapse=",")))
+#     # cat(sprintf("[i=%d] prior_density[1:3]: %s\n", i, paste(round(prior_density[1:3], 4), collapse=",")))
+#     # cat(sprintf("[i=%d] lw_total[1:3]: %s\n", i, paste(round(lw_total[1:3], 4), collapse=",")))
+#     # cat(sprintf("[i=%d] weights[1:5]: %s\n", i, paste(round(weights[1:5]/sum(weights), 4), collapse=",")))
+#     out_lls[i] <- lw[idx_ll]
+#     proposal_out[idx] <- proposals[idx_ll,idx]
+#     pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
+#   }
+#   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
+# }
 
 
 update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_numbers,

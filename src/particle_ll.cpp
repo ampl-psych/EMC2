@@ -928,8 +928,10 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   // ---------------------------------------------------------------------------
   // Parallel particle loop — zero Rcpp API calls inside
   // ---------------------------------------------------------------------------
+
+// #pragma omp parallel for schedule(dynamic, 4) num_threads(n_threads_used)
 #pragma omp parallel for schedule(static) num_threads(n_threads_used)
-  for (int i = 0; i < n_particles; ++i) {
+for (int i = 0; i < n_particles; ++i) {
 #ifdef _OPENMP
     const int tid = omp_get_thread_num();
 #else
