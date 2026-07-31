@@ -1,6 +1,6 @@
 #!/bin/sh
 # configure — build-time options for EMC2
-# Generated from configure (hand-written).
+# Hand-written; do not replace with autoconf output.
 #
 # Usage:
 #   R CMD INSTALL .
@@ -15,8 +15,7 @@
 #  Defaults                                                                    #
 # --------------------------------------------------------------------------- #
 PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
-FAST_MATH=no        # fast-math disabled by default (use --enable-fast-math)
-VEC_REPORT=no       # vectorisation report disabled by default
+FAST_MATH=no        # fast-math disabled by default
 ENABLE_NATIVE=no    # native optimizations disabled by default
 
 # --------------------------------------------------------------------------- #
@@ -40,8 +39,8 @@ configure options for EMC2:
                           Improves speed but may affect floating-point semantics.
                           Recommended only with --with-pnorm-mode=1 or =2.
 
-  --native                Add --march=native (default: disabled).
-                          Improves speed by applying more aggressive optimizations.
+  --native                Add -march=native (default: disabled).
+                          Improves speed via architecture-specific optimizations.
                           Disabled by default for CRAN compatibility.
 
   --help, -h              Show this help message and exit.
@@ -79,6 +78,29 @@ EOF
 done
 
 # --------------------------------------------------------------------------- #
+#  R's compiler — split binary from embedded flags (e.g. "g++ -std=gnu++17") #
+# --------------------------------------------------------------------------- #
+CXX_FULL="$(R CMD config CXX)"
+CXX_BIN="$(echo "$CXX_FULL"  | awk '{print $1}')"
+CXX_STD="$(echo "$CXX_FULL"  | cut -s -d' ' -f2-)"
+R_CXXFLAGS="$(R CMD config CXXFLAGS)"
+
+# --------------------------------------------------------------------------- #
+#  Extra user-requested flags                                                  #
+# --------------------------------------------------------------------------- #
+EXTRA_CXXFLAGS=""
+if [ "$FAST_MATH" = "yes" ]; then
+  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
+fi
+if [ "$ENABLE_NATIVE" = "yes" ]; then
+  # Only add -march=native if R's own CXXFLAGS don't already contain it
+  case "$R_CXXFLAGS" in
+    *-march=native*) ;;
+    *) EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native" ;;
+  esac
+fi
+
+# --------------------------------------------------------------------------- #
 #  Platform detection — Accelerate framework (macOS only)                     #
 # --------------------------------------------------------------------------- #
 ACCELERATE_LIBS=""
@@ -86,34 +108,25 @@ case "$(uname)" in
   Darwin) ACCELERATE_LIBS="-framework Accelerate" ;;
 esac
 
-# Optimization flags - need to be disabled by default for CRAN compatibility
-EXTRA_CXXFLAGS=""
-if [ "$FAST_MATH" = "yes" ]; then
-  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
-fi
-
-# Only enable aggressive optimization flags if explicitly requested
-if [ "$ENABLE_NATIVE" = "yes" ]; then
-  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -O3 -march=native"
-fi
-
 # --------------------------------------------------------------------------- #
-#  OpenMP detection — compile test                                            #
+#  OpenMP detection — compile test using R's own compiler                     #
 # --------------------------------------------------------------------------- #
 OMP_CXXFLAGS=""
 OMP_LIBS=""
 
-# Candidate flag sets to try, in order
+cat > /tmp/omp_test.cpp <<'OMPEOF'
+#include <omp.h>
+int main() { return omp_get_max_threads(); }
+OMPEOF
+
 case "$(uname)" in
   Darwin)
     for prefix in /opt/homebrew /usr/local; do
-      cat > /tmp/omp_test.cpp <<'EOF'
-#include <omp.h>
-int main() { return omp_get_max_threads(); }
-EOF
-      if "$CXX" -Xclang -fopenmp -I"${prefix}/opt/libomp/include" \
-                -L"${prefix}/opt/libomp/lib" -lomp \
-                /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
+      if $CXX_BIN $CXX_STD $R_CXXFLAGS \
+            -Xclang -fopenmp \
+            -I"${prefix}/opt/libomp/include" \
+            -L"${prefix}/opt/libomp/lib" -lomp \
+            /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
         OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/opt/libomp/include"
         OMP_LIBS="-L${prefix}/opt/libomp/lib -lomp"
         echo "configure: OpenMP enabled via ${prefix}/opt/libomp"
@@ -122,11 +135,9 @@ EOF
     done
     ;;
   *)
-    cat > /tmp/omp_test.cpp <<'EOF'
-#include <omp.h>
-int main() { return omp_get_max_threads(); }
-EOF
-    if "$CXX" -fopenmp /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
+    if $CXX_BIN $CXX_STD $R_CXXFLAGS \
+          -fopenmp \
+          /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
       OMP_CXXFLAGS="-fopenmp"
       OMP_LIBS="-fopenmp"
       echo "configure: OpenMP enabled via -fopenmp"
@@ -136,6 +147,9 @@ esac
 
 rm -f /tmp/omp_test.cpp /tmp/omp_test
 
+if [ -z "$OMP_LIBS" ]; then
+  echo "configure: OpenMP not available, building without it (single-threaded fallback)"
+fi
 
 # --------------------------------------------------------------------------- #
 #  Summary                                                                     #
@@ -147,6 +161,8 @@ echo "  native        : $ENABLE_NATIVE"
 echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
 echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
 echo "  OpenMP libs   : ${OMP_LIBS:-disabled}"
+echo "  Compiler      : $CXX_BIN $CXX_STD"
+echo "  R CXXFLAGS    : $R_CXXFLAGS"
 
 # --------------------------------------------------------------------------- #
 #  Write src/Makevars from src/Makevars.in                                    #
@@ -161,7 +177,9 @@ sed \
 
 echo "configure: src/Makevars written"
 
-## Also write into build_info.h.in, so that we can print how it was built from within emc
+# --------------------------------------------------------------------------- #
+#  Write inst/include/build_info.h from inst/include/build_info.h.in          #
+# --------------------------------------------------------------------------- #
 sed \
   -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
   -e "s|@FAST_MATH@|${FAST_MATH}|g" \
