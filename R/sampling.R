@@ -701,9 +701,21 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend)
+
+      backend   <- getOption("emc.ll_backend", default = "multiprocess")
+      n_threads <- getOption("emc.n_threads", default = 1)
+
+      if (backend == "multithreaded") {
+        lls <- calc_ll_multithreaded(proposals, dadm, constants = constants, designs = designs,
+                                     type = model$c_name, model$bound, model$transform,
+                                     model$pre_transform, p_types = p_types,
+                                     min_ll = log(1e-10), model$trend, n_threads = n_threads)
+      } else {
+        lls <- calc_ll(proposals, dadm, constants = constants, designs = designs,
+                       type = model$c_name, model$bound, model$transform,
+                       model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                       model$trend)
+      }
     }
   }
   return(lls)

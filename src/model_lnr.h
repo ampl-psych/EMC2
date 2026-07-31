@@ -115,15 +115,15 @@ void plnr_fast(const NumericVector& rts,
 
 // Hot path: gather → compute → scatter
 // Uses scratch.v for m, scratch.s for s — B, A, sv left unused.
-void dlnr_plnr_fast(const NumericVector& rts,
-                    const ParamTable& pt,
-                    const RaceSpec& spec,
+void dlnr_plnr_fast(const double*           rt,
+                    const int*              win_ptr,
+                    const ParamTable&       pt,
+                    const RaceSpec&         spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ ll_row,
-                    RaceScratch& scratch)
-{
-  const double* __restrict__ rt = rts.begin();
+                    double* __restrict__    ll_row,
+                    RaceScratch&            scratch)
+  {
   const double* __restrict__ m  = &pt.base(0, spec.col_m);
   const double* __restrict__ s  = &pt.base(0, spec.col_s);
   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);

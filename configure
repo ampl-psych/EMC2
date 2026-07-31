@@ -79,14 +79,6 @@ EOF
 done
 
 # --------------------------------------------------------------------------- #
-#  Derived flags                                                               #
-# --------------------------------------------------------------------------- #
-FAST_MATH_FLAGS=""
-if [ "$FAST_MATH" = "yes" ]; then
-  FAST_MATH_FLAGS="-ffast-math -fno-math-errno"
-fi
-
-# --------------------------------------------------------------------------- #
 #  Platform detection — Accelerate framework (macOS only)                     #
 # --------------------------------------------------------------------------- #
 ACCELERATE_LIBS=""
@@ -106,6 +98,46 @@ if [ "$ENABLE_NATIVE" = "yes" ]; then
 fi
 
 # --------------------------------------------------------------------------- #
+#  OpenMP detection — compile test                                            #
+# --------------------------------------------------------------------------- #
+OMP_CXXFLAGS=""
+OMP_LIBS=""
+
+# Candidate flag sets to try, in order
+case "$(uname)" in
+  Darwin)
+    for prefix in /opt/homebrew /usr/local; do
+      cat > /tmp/omp_test.cpp <<'EOF'
+#include <omp.h>
+int main() { return omp_get_max_threads(); }
+EOF
+      if "$CXX" -Xclang -fopenmp -I"${prefix}/opt/libomp/include" \
+                -L"${prefix}/opt/libomp/lib" -lomp \
+                /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
+        OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/opt/libomp/include"
+        OMP_LIBS="-L${prefix}/opt/libomp/lib -lomp"
+        echo "configure: OpenMP enabled via ${prefix}/opt/libomp"
+        break
+      fi
+    done
+    ;;
+  *)
+    cat > /tmp/omp_test.cpp <<'EOF'
+#include <omp.h>
+int main() { return omp_get_max_threads(); }
+EOF
+    if "$CXX" -fopenmp /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
+      OMP_CXXFLAGS="-fopenmp"
+      OMP_LIBS="-fopenmp"
+      echo "configure: OpenMP enabled via -fopenmp"
+    fi
+    ;;
+esac
+
+rm -f /tmp/omp_test.cpp /tmp/omp_test
+
+
+# --------------------------------------------------------------------------- #
 #  Summary                                                                     #
 # --------------------------------------------------------------------------- #
 echo "configure: EMC2 build configuration"
@@ -113,12 +145,16 @@ echo "  PNORM_MODE    : $PNORM_MODE"
 echo "  fast-math     : $FAST_MATH"
 echo "  native        : $ENABLE_NATIVE"
 echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
+echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
+echo "  OpenMP libs   : ${OMP_LIBS:-disabled}"
 
 # --------------------------------------------------------------------------- #
 #  Write src/Makevars from src/Makevars.in                                    #
 # --------------------------------------------------------------------------- #
 sed \
   -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
+  -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
+  -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
   src/Makevars.in > src/Makevars
@@ -130,6 +166,8 @@ sed \
   -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
   -e "s|@FAST_MATH@|${FAST_MATH}|g" \
   -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
+  -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
+  -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
   inst/include/build_info.h.in > inst/include/build_info.h

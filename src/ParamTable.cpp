@@ -40,21 +40,21 @@ Rcpp::CharacterVector names_excluding(const Rcpp::CharacterVector& names,
 //   auto all_but_premap       = param_names_excluding(pt, { &premap_set });
 //   auto all_but_premap_pretr = param_names_excluding(pt, { &premap_set, &pretransform_set });
 //
-std::unordered_set<std::string> param_names_excluding(const ParamTable& pt,
-                                                             std::initializer_list<const std::unordered_set<std::string>*> excludes)
+std::unordered_set<std::string> param_names_excluding(
+    const ParamTable& pt,
+    std::initializer_list<const std::unordered_set<std::string>*> excludes)
 {
-  using namespace Rcpp;
-  using std::string;
+  std::unordered_set<std::string> out;
+  out.reserve(pt.base_names.size());
 
-  // reuse the generic logic but on pt.base_names
-  CharacterVector base_names = pt.base_names;
-  CharacterVector kept = names_excluding(base_names, excludes);
-
-  std::unordered_set<string> out;
-  out.reserve(kept.size());
-  for (int i = 0; i < kept.size(); ++i) {
-    out.insert(as<string>(kept[i]));
+  for (const std::string& nm : pt.base_names) {
+    bool skip = false;
+    for (auto set_ptr : excludes) {
+      if (set_ptr && set_ptr->count(nm)) { skip = true; break; }
+    }
+    if (!skip) out.insert(nm);
   }
+
   return out;
 }
 

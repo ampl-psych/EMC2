@@ -16,22 +16,22 @@ using namespace Rcpp;
 // ---------------------------------------------------------------------------
 
 // Legacy per-accumulator fill (kept for drdm_fast / prdm_fast etc.)
-typedef void (*race_fast_fn)(const NumericVector& rts,
-              const ParamTable& pt,
-              const RaceSpec& spec,
-              const LogicalVector& winner,
-              double* raw);
+typedef void (*race_fast_fn)(const double*        rts_ptr,
+                             const ParamTable&    pt,
+                             const RaceSpec&      spec,
+                             const int*           win_ptr,
+                             double*              raw);
 
 // Combined pdf+cdf fill — hot path, takes pre-allocated scratch
-using race_combined_fn = void(*)(const NumericVector&,
-                              const ParamTable&,
-                              const RaceSpec&,
-                              const std::vector<int>& idx_win,
-                              const std::vector<int>& idx_los,
-                              double* __restrict__ raw,
-                              RaceScratch& scratch);
-
-// ---------------------------------------------------------------------------
+using race_combined_fn = void(*)(const double*           rts_ptr,
+                                 const int*              win_ptr,
+                                 const ParamTable&       pt,
+                                 const RaceSpec&         spec,
+                                 const std::vector<int>& idx_win,
+                                 const std::vector<int>& idx_los,
+                                 double* __restrict__    raw,
+                                 RaceScratch&            scratch);
+// -------- -------------------------------------------------------------------
 // RaceModelSetup
 // ---------------------------------------------------------------------------
 
@@ -56,8 +56,8 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.spec.col_s        = pt.base_index_for("s");
-    s.fill_pdf          = drdm_fast;
-    s.fill_cdf          = prdm_fast;
+    // s.fill_pdf          = drdm_fast;
+    // s.fill_cdf          = prdm_fast;
     s.fill_both         = drdm_prdm_fast;
   // } else if(type == "RDM-A0") {
   //   s.spec.col_v        = pt.base_index_for("v");
@@ -72,15 +72,15 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_B        = pt.base_index_for("B");
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.fill_pdf          = dlba_fast;
-    s.fill_cdf          = plba_fast;
+    // s.fill_pdf          = dlba_fast;
+    // s.fill_cdf          = plba_fast;
     s.fill_both         = dlba_plba_fast;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.fill_pdf          = dlnr_fast;
-    s.fill_cdf          = plnr_fast;
+    // s.fill_pdf          = dlnr_fast;
+    // s.fill_cdf          = plnr_fast;
     s.fill_both         = dlnr_plnr_fast;
   }
 

@@ -68,7 +68,7 @@ struct KernelSpec {
   SEXP custom_fun = R_NilValue;
 
   // data-derived fields — plain C++ after construction
-  mutable Mat              kernel_input;   // n_trials x (n_cov + n_par)
+  Mat                      kernel_input;   // n_trials x (n_cov + n_par)
   std::vector<bool>        first_level;    // length n_trials
   std::vector<int>         expand_idx;     // length n_trials
   std::vector<int>         comp_index;     // first-level row indices
@@ -158,6 +158,11 @@ struct KernelRuntime {
   // parallel: which par_input string to pull from ParamTable
   std::vector<int> par_input_param_col;     // slot index -> par_input[i]
 
+  // Owned copy of kernel_input for variadic kernels.
+  // Moved here from KernelSpec so TrendPlan is truly immutable (no mutable fields),
+  // and each thread's KernelRuntime has its own buffer.
+  Mat kernel_input;
+
   // convenience: number of slots
   int n_slots() const { return (int)kernel_ptrs.size(); }
 
@@ -184,6 +189,7 @@ struct TrendRuntime {
   std::vector<BaseRuntime> pretransform_bases;
   std::vector<BaseRuntime> posttransform_bases;
 
+  TrendRuntime() = default;
   explicit TrendRuntime(const TrendPlan& plan);
 
   bool has_premap()        const { return plan->has_premap(); }
@@ -226,4 +232,9 @@ inline KernelParsView make_kernel_pars_view(const ParamTable& pt,
   return view;
 }
 
+// For copying
+TrendRuntime clone_trend_runtime(const TrendRuntime& src, const ParamTable& pt_local);
+
 #endif // TREND_ENGINE_H
+
+

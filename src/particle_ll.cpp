@@ -1,3 +1,7 @@
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <Rcpp.h>
 #include <unordered_map>
 
@@ -30,14 +34,19 @@ struct PipelineCache {
   std::vector<TransformSpec>      premap_specs;       // empty if no premap trend
   std::vector<TransformSpec>      pretransform_specs; // empty if no pretransform trend
 
-  Rcpp::LogicalVector mask_premap;          // regular premap designs
-  Rcpp::LogicalVector mask_premap_reparam;  // reparam targets that are premap
-  Rcpp::LogicalVector mask_map;             // regular main designs
-  Rcpp::LogicalVector mask_reparam;         // reparam in main step
+  // Masks — std::vector<bool> so safe inside OpenMP regions
+  std::vector<bool> mask_premap;            // regular premap designs
+  std::vector<bool> mask_premap_reparam;    // reparam targets that are premap
+  std::vector<bool> mask_map;               // regular main designs
+  std::vector<bool> mask_reparam;           // reparam in main step
+
+  // Design matrix raw data — extracted once at construction, no SEXP after that
+  std::vector<DesignMatData> design_mats;
+  int n_designs = 0;
 };
 
 PipelineCache make_pipeline_cache(
-    const ParamTable& param_table,
+    ParamTable& param_table,
     const Rcpp::List& designs,
     const std::vector<TransformSpec>& transform_specs,
     TrendRuntime* trend_runtime_ptr)
@@ -62,6 +71,22 @@ PipelineCache make_pipeline_cache(
   Rcpp::CharacterVector dnames = designs.names();
   const int n_designs = dnames.size();
 
+  // --- Extract design matrix raw pointers ---
+  cache.n_designs = dnames.size();
+  cache.design_mats.resize(cache.n_designs);
+  for (int i = 0; i < cache.n_designs; ++i) {
+    if (designs[i] == R_NilValue) {
+      cache.design_mats[i].is_null = true;
+      continue;
+    }
+    Rcpp::NumericMatrix m = designs[i];
+    cache.design_mats[i].ptr    = m.begin();
+    cache.design_mats[i].nrow   = m.nrow();
+    cache.design_mats[i].ncol   = m.ncol();
+    cache.design_mats[i].is_null = false;
+  }
+  param_table.init_design_plan(designs);
+
   // Figure out which parameters are *targets* for reparameterisations
   std::unordered_set<std::string> reparam_set;
   for (int i = 0; i < n_designs; ++i) {
@@ -72,10 +97,11 @@ PipelineCache make_pipeline_cache(
     }
   }
 
-  cache.mask_premap         = Rcpp::LogicalVector(n_designs, false);
-  cache.mask_premap_reparam = Rcpp::LogicalVector(n_designs, false);
-  cache.mask_map            = Rcpp::LogicalVector(n_designs, false);
-  cache.mask_reparam        = Rcpp::LogicalVector(n_designs, false);
+  // Initialise all masks to false
+  cache.mask_premap.assign(n_designs, false);
+  cache.mask_premap_reparam.assign(n_designs, false);
+  cache.mask_map.assign(n_designs, false);
+  cache.mask_reparam.assign(n_designs, false);
 
   if (trend_runtime_ptr && trend_runtime_ptr->has_premap()) {
     Rcpp::LogicalVector base_premap = trend_runtime_ptr->premap_design_mask(designs);
@@ -187,11 +213,10 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
 // run_pars_pipeline — runs steps 3-7 in place on param_table
 // =============================================================================
 
-void run_pars_pipeline(ParamTable& param_table,
-                       const Rcpp::List& designs,
-                       TrendRuntime* trend_runtime,
+void run_pars_pipeline(ParamTable&          param_table,
+                       TrendRuntime*        trend_runtime,
                        const PipelineCache& cache)
-{
+  {
   if (trend_runtime) {
     // 0) Ensure kernels are reset
     trend_runtime->reset_all_kernels();
@@ -199,8 +224,8 @@ void run_pars_pipeline(ParamTable& param_table,
 
   // 1) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_premap()) {
-    param_table.map_from_designs(designs, cache.mask_premap);
-    param_table.map_from_designs(designs, cache.mask_premap_reparam);
+    param_table.map_from_designs(cache.design_mats, cache.mask_premap);
+    param_table.map_from_designs(cache.design_mats, cache.mask_premap_reparam);
     if (!cache.premap_specs.empty()) {
       c_do_transform_pt(param_table, cache.premap_specs);
     }
@@ -210,8 +235,8 @@ void run_pars_pipeline(ParamTable& param_table,
   }
 
   // 2) Map designs for remaining parameters
-  param_table.map_from_designs(designs, cache.mask_map);
-  param_table.map_from_designs(designs, cache.mask_reparam);
+  param_table.map_from_designs(cache.design_mats, cache.mask_map);
+  param_table.map_from_designs(cache.design_mats, cache.mask_reparam);
 
   // 3) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_pretransform()) {
@@ -357,57 +382,89 @@ inline double clamp_sum(const double* ll_ptr, const int n, const double min_ll,
 
 void c_log_likelihood_race(ParamTable& pt,
                            const RaceModelSetup& setup,
-                           const NumericVector& rts,
-                           const LogicalVector& winner,
-                           // const std::vector<int>& is_ok,
+                           const double* rts_ptr,
+                           const int*    win_ptr,
                            const std::vector<int>& idx_win,
                            const std::vector<int>& idx_los,
                            int n_acc,
-                           NumericVector& ll_row,
+                           double* ll_row_ptr,
+                           int     ll_row_size,
                            double* ll_buf,
                            RaceScratch& scratch)
 {
   const int n_winners = (int)idx_win.size();
 
-  double* ll_row_ptr = ll_row.begin();
-  // const int* ok_ptr = is_ok.data();
+  setup.fill_both(rts_ptr, win_ptr, pt, setup.spec,
+                  idx_win, idx_los, ll_row_ptr, scratch);
+  vec_log(ll_row_ptr, ll_row_size);
 
-  // 1) Fill log(pdf) for winners and log(1-cdf) for losers into ll_row.
-  //    fill_both stores pdf / (1-cdf); vec_log transforms the whole array
-  //    in one vectorised pass (vvlog on Apple, libmvec on Linux/x86).
-  //    Invalid inputs (<=0, nan) produce -inf or nan, which the clamp below
-  //    catches — no per-element branching needed.
-  //
-  //   // setup.fill_both() refers to gather-scatter implementations.
-  //   // on linux/x86, this is significantly faster. macOS/arm64 doesn't care
-
-  setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, ll_row_ptr, scratch);
-  vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
-
-  // 2) Per-trial log-likelihood into ll_trial.
   if (n_acc == 1) {
-    for (int t = 0; t < n_winners; ++t) {
-      const int i_win = idx_win[t];
-      ll_buf[t] = ll_row_ptr[i_win];
-    }
+    for (int t = 0; t < n_winners; ++t)
+      ll_buf[t] = ll_row_ptr[idx_win[t]];
   } else {
     for (int t = 0; t < n_winners; ++t) {
       const int base = t * n_acc;
-
-      // The current data format guarantees n_acc per trial, so we can just sum now
-      // ll_row_ptr contains either the log-PDF (winners) or log(1-CDF) (losers)
-      // Clamp here. There's a second clamp later on but not really needed probably
-      // SM changed his mind. do *not* clamp here. If we clamp here, a bad value (e.g., -inf) will be corrected and the whole trial might become min_ll + log(pdf) [winner!],
-      // whereas arguably it should be min_ll
-      // Only clamp at the end while reducing.
       double ll = 0.0;
-      for (int k = 0; k < n_acc; ++k) {
+      for (int k = 0; k < n_acc; ++k)
         ll += ll_row_ptr[base + k];
-      }
       ll_buf[t] = ll;
     }
   }
 }
+
+// void c_log_likelihood_race(ParamTable& pt,
+//                            const RaceModelSetup& setup,
+//                            const NumericVector& rts,
+//                            const LogicalVector& winner,
+//                            // const std::vector<int>& is_ok,
+//                            const std::vector<int>& idx_win,
+//                            const std::vector<int>& idx_los,
+//                            int n_acc,
+//                            NumericVector& ll_row,
+//                            double* ll_buf,
+//                            RaceScratch& scratch)
+// {
+//   const int n_winners = (int)idx_win.size();
+//
+//   double* ll_row_ptr = ll_row.begin();
+//   // const int* ok_ptr = is_ok.data();
+//
+//   // 1) Fill log(pdf) for winners and log(1-cdf) for losers into ll_row.
+//   //    fill_both stores pdf / (1-cdf); vec_log transforms the whole array
+//   //    in one vectorised pass (vvlog on Apple, libmvec on Linux/x86).
+//   //    Invalid inputs (<=0, nan) produce -inf or nan, which the clamp below
+//   //    catches — no per-element branching needed.
+//   //
+//   //   // setup.fill_both() refers to gather-scatter implementations.
+//   //   // on linux/x86, this is significantly faster. macOS/arm64 doesn't care
+//
+//   setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, ll_row_ptr, scratch);
+//   vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
+//
+//   // 2) Per-trial log-likelihood into ll_trial.
+//   if (n_acc == 1) {
+//     for (int t = 0; t < n_winners; ++t) {
+//       const int i_win = idx_win[t];
+//       ll_buf[t] = ll_row_ptr[i_win];
+//     }
+//   } else {
+//     for (int t = 0; t < n_winners; ++t) {
+//       const int base = t * n_acc;
+//
+//       // The current data format guarantees n_acc per trial, so we can just sum now
+//       // ll_row_ptr contains either the log-PDF (winners) or log(1-CDF) (losers)
+//       // Clamp here. There's a second clamp later on but not really needed probably
+//       // SM changed his mind. do *not* clamp here. If we clamp here, a bad value (e.g., -inf) will be corrected and the whole trial might become min_ll + log(pdf) [winner!],
+//       // whereas arguably it should be min_ll
+//       // Only clamp at the end while reducing.
+//       double ll = 0.0;
+//       for (int k = 0; k < n_acc; ++k) {
+//         ll += ll_row_ptr[base + k];
+//       }
+//       ll_buf[t] = ll;
+//     }
+//   }
+// }
 
 
 void c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
@@ -547,7 +604,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
                                             ctx.transform_specs, trend_runtime_ptr);
 
-
   // -----------------------------------------------------------------------
   // DDM
   // -----------------------------------------------------------------------
@@ -557,7 +613,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     for (int i = 0; i < n_particles; ++i) {
       // Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
       // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
@@ -584,7 +640,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     for (int i = 0; i < n_particles; ++i) {
       // Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
       // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
@@ -611,7 +667,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     for (int i = 0; i < n_particles; ++i) {
       // Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
       // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
@@ -639,7 +695,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     for (int i = 0; i < n_particles; ++i) {
       // Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
       // Fill log-likelihood buffer
@@ -664,9 +720,13 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     NumericVector lR     = data["lR"];
     IntegerVector expand = data.attr("expand");
     const int n_exp      = expand.size();
+    const int* exp_ptr   = expand.begin();
+
     NumericVector rts    = data["rt"];
-    LogicalVector winner = data["winner"];
-    int*           win_flag = LOGICAL(winner);
+    const double* rts_ptr = rts.begin();
+
+    LogicalVector winner  = data["winner"];
+    const int*    win_ptr = LOGICAL(winner);
 
     // Pre-read RACE info needed for phantom filtering
     const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
@@ -683,7 +743,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     idx_los.reserve(n_trials);
     // Identify which rows in the dadm correspond to winners, to losers, and which should be skipped entirely
     for (int i = 0; i < n_trials; ++i) {
-      if (win_flag[i]) {
+      if (win_ptr[i]) {
         idx_win.push_back(i);
       } else {
         // skip phantom accumulators — data-dependent, built once
@@ -694,7 +754,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     // const int n_winners = (int)idx_win.size();
 
     // Scratch buffers (reused across particles)
-    NumericVector ll_row(n_trials);                 // stores (log)likelihood of row in dadm
+    std::vector<double> ll_row(n_trials);           // stores (log)likelihood of row in dadm
     // ll_trial sized n_choice_trials; assumes n_winners <= n_choice_trials (one winner per trial at most)
     std::vector<double> ll_trial(n_choice_trials);  // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
 
@@ -706,11 +766,12 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     // Begin particle loop
     for (int i = 0; i < n_particles; ++i) {
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
       std::fill(ll_row.begin(), ll_row.end(), 1.0); // re-fill row-wise ll -- helps with RACE functionality (all trials skipped get likelihood = 1)
-      c_log_likelihood_race(ctx.param_table, setup, rts, winner,
-                            idx_win, idx_los, n_lR, ll_row, ll_trial.data(), scratch);
+      c_log_likelihood_race(ctx.param_table, setup, rts_ptr, win_ptr,
+                            idx_win, idx_los, n_lR,
+                            ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
       // Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
@@ -719,13 +780,199 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t * n_lR]) ll_trial[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_trial)
 
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
-      const double sum = expand_clamp_sum(ll_trial.data(), expand.begin(), n_exp, min_ll, tw);
+      const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
   }
 
   return result;
 }
+
+// [[Rcpp::export]]
+NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame data,
+                                    NumericVector constants, List designs, String type,
+                                    List bounds, List transforms, List pretransforms,
+                                    CharacterVector p_types, double min_ll,
+                                    Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                                    bool return_trialwise = false,
+                                    int n_threads = -1) {
+
+  // Only race models are parallelised for now; all others fall back to serial calc_ll
+  const bool is_race = (type != "DDM"            &&
+                        type != "ORDERED_PROBIT"  &&
+                        type != "ORDERED_LOGIT"   &&
+                        type != "MULTINOMIAL_LOGIT" &&
+                        type != "MRI"             &&
+                        type != "MRI_AR1");
+  if (!is_race) {
+    return calc_ll(particle_matrix, data, constants, designs, type, bounds,
+                   transforms, pretransforms, p_types, min_ll, trend,
+                   return_trialwise);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Thread count
+  // ---------------------------------------------------------------------------
+#ifdef _OPENMP
+  const int max_threads    = omp_get_max_threads();
+  const int n_threads_used = (n_threads <= 0) ? max_threads
+  : std::min(n_threads, max_threads);
+#else
+  if (n_threads > 1)
+    Rcpp::warning("calc_ll_multithreaded: OpenMP not available, running single-threaded.");
+  const int n_threads_used = 1;
+#endif
+
+  // ---------------------------------------------------------------------------
+  // Shared setup (identical to calc_ll)
+  // ---------------------------------------------------------------------------
+  const int n_particles     = particle_matrix.nrow();
+  const int n_trials        = data.nrow();
+  const bool has_lR         = (sum(contains(data.names(), "lR")) == 1);
+  const int n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_choice_trials = n_trials / n_lR;
+  const int out_rows        = return_trialwise ? n_choice_trials : 1;
+
+  NumericMatrix result(out_rows, n_particles);
+
+  PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
+                                              designs, transforms, pretransforms, trend);
+  TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
+
+  NumericMatrix   minmax   = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+  std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names,
+                                                           ctx.param_table, bounds);
+
+  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
+                                            ctx.transform_specs, trend_runtime_ptr);
+
+  // ---------------------------------------------------------------------------
+  // Race-specific shared setup
+  // ---------------------------------------------------------------------------
+  // Extract raw pointers from Rcpp vectors BEFORE the parallel region —
+  // no Rcpp types are touched inside the parallel loop.
+  IntegerVector expand   = data.attr("expand");
+  const int     n_exp    = expand.size();
+  const int*    exp_ptr  = expand.begin();
+
+  NumericVector rts    = data["rt"];
+  const double* rts_ptr = rts.begin();
+
+  LogicalVector winner  = data["winner"];
+  const int*    win_ptr = LOGICAL(winner);
+
+  NumericVector lR     = data["lR"];
+  const double* lR_ptr = lR.begin();
+
+  const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
+  NumericVector   NACC;
+  CharacterVector vals_NACC;
+  if (has_race_col) {
+    NACC      = data["RACE"];
+    vals_NACC = NACC.attr("levels");
+  }
+
+  std::vector<int> idx_win, idx_los;
+  idx_win.reserve(n_trials);
+  idx_los.reserve(n_trials);
+  for (int i = 0; i < n_trials; ++i) {
+    if (win_ptr[i]) {
+      idx_win.push_back(i);
+    } else {
+      if (has_race_col && lR_ptr[i] > atoi(vals_NACC[NACC[i] - 1])) continue;
+      idx_los.push_back(i);
+    }
+  }
+
+  RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+
+  // Pre-initialise design_plan to avoid lazy-init race inside map_from_designs
+  ctx.param_table.init_design_plan(designs);
+
+  // Raw pointer to result data — safe to write column i from thread i
+  double* result_ptr = result.begin();
+
+  // ---------------------------------------------------------------------------
+  // Per-thread clones — built serially before the parallel region
+  // ---------------------------------------------------------------------------
+  std::vector<ParamTable>                    pt_vec;
+  std::vector<std::unique_ptr<TrendRuntime>> tr_vec;
+  pt_vec.reserve(n_threads_used);
+  tr_vec.reserve(n_threads_used);
+
+  for (int t = 0; t < n_threads_used; ++t) {
+    pt_vec.push_back(ctx.param_table.deep_copy());
+    if (ctx.trend_runtime) {
+      tr_vec.push_back(std::make_unique<TrendRuntime>(
+          clone_trend_runtime(*ctx.trend_runtime, pt_vec.back())
+      ));
+    } else {
+      tr_vec.push_back(nullptr);
+    }
+  }
+
+  // Per-thread scratch — all plain std::vector, no Rcpp types
+  const int scratch_size = std::max((int)idx_win.size(), (int)idx_los.size());
+  std::vector<RaceScratch>         scratch_vec(n_threads_used);
+  std::vector<std::vector<double>> ll_row_vec(n_threads_used,   std::vector<double>(n_trials, 1.0));
+  std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
+  std::vector<std::vector<int>>    is_ok_vec(n_threads_used,    std::vector<int>(n_trials, 1));
+  // trialwise output buffer — written then copied to result, avoiding Rcpp inside loop
+  std::vector<std::vector<double>> tw_vec(n_threads_used,
+                                          std::vector<double>(return_trialwise ? n_choice_trials : 0));
+
+  for (int t = 0; t < n_threads_used; ++t)
+    scratch_vec[t].reserve(scratch_size);
+
+  // ---------------------------------------------------------------------------
+  // Parallel particle loop — zero Rcpp API calls inside
+  // ---------------------------------------------------------------------------
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+  for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+    const int tid = omp_get_thread_num();
+#else
+    const int tid = 0;
+#endif
+
+    ParamTable&          pt_local  = pt_vec[tid];
+    TrendRuntime*        tr_local  = tr_vec[tid].get();
+    RaceScratch&         scratch   = scratch_vec[tid];
+    std::vector<double>& ll_row    = ll_row_vec[tid];
+    std::vector<double>& ll_trial  = ll_trial_vec[tid];
+    std::vector<int>&    is_ok     = is_ok_vec[tid];
+
+    pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+    run_pars_pipeline(pt_local, tr_local, cache);
+
+    std::fill(ll_row.begin(),   ll_row.end(),   1.0);
+    std::fill(is_ok.begin(),    is_ok.end(),    1);
+
+    c_log_likelihood_race(pt_local, setup, rts_ptr, win_ptr,
+                          idx_win, idx_los, n_lR,
+                          ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
+
+    c_do_bound_pt(pt_local, bound_specs, is_ok);
+    lr_all(is_ok, n_lR);
+    for (int j = 0; j < n_choice_trials; ++j)
+      if (!is_ok[j * n_lR]) ll_trial[j] = min_ll;
+
+    if (return_trialwise) {
+      std::vector<double>& tw = tw_vec[tid];
+      expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+      // Write trialwise column i into result — raw pointer, no Rcpp
+      double* col = result_ptr + (ptrdiff_t)i * out_rows;
+      std::copy(tw.begin(), tw.end(), col);
+    } else {
+      const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+      result_ptr[i] = sum;  // out_rows == 1, column i is just element i
+    }
+  }
+
+  return result;
+}
+
 
 
 // [[Rcpp::export]]
@@ -757,7 +1004,7 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
   std::vector<int> kernel_codes(kernel_output_codes.begin(), kernel_output_codes.end());
 
   // Run pipeline (single particle — no loop needed)
-  run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+  run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
   // Extract and return
   if (return_kernel_matrix) {
@@ -769,3 +1016,33 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
   }
 }
 
+
+
+// [[Rcpp::export]]
+void omp_diagnostics(int n_threads = -1) {
+#ifdef _OPENMP
+  Rcpp::Rcout << "OpenMP is compiled in.\n";
+  Rcpp::Rcout << "omp_get_max_threads() = " << omp_get_max_threads() << "\n";
+  Rcpp::Rcout << "omp_get_num_procs()   = " << omp_get_num_procs()   << "\n";
+
+  if (n_threads > 0) omp_set_num_threads(n_threads);
+
+  std::vector<int> seen(omp_get_max_threads(), 0);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads > 0 ? n_threads : omp_get_max_threads())
+  for (int i = 0; i < 100; ++i) {
+    seen[omp_get_thread_num()] = 1;
+  }
+
+  int active = 0;
+  for (int t = 0; t < (int)seen.size(); ++t) {
+    if (seen[t]) {
+      Rcpp::Rcout << "  thread " << t << " was active\n";
+      ++active;
+    }
+  }
+  Rcpp::Rcout << "Total active threads: " << active << "\n";
+#else
+  Rcpp::Rcout << "OpenMP is NOT compiled in (_OPENMP not defined).\n";
+#endif
+}
