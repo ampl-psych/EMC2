@@ -65,14 +65,13 @@ Rcpp::NumericVector plba(Rcpp::NumericVector t,
 // ---------------------------------------------------------------------------
 // Function declarations — defined in model_LBA.cpp
 // ---------------------------------------------------------------------------
-
-void dlba_plba_fast(const Rcpp::NumericVector& rts,
-                    const ParamTable& pt,
-                    const RaceSpec& spec,
+void dlba_plba_fast(const double*           rt,
+                    const ParamTable&       pt,
+                    const RaceSpec&         spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ ll_row,
-                    RaceScratch& scratch);
+                    double* __restrict__    ll_row,
+                    RaceScratch&            scratch);
 
 void plba_fast(const Rcpp::NumericVector& rts,
                const ParamTable& pt,

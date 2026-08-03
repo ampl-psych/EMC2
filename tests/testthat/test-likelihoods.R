@@ -25,6 +25,9 @@ calc_lls <- function(emc, n_particles=1e3) {
     p_mat[1:(nrow(p_mat)/2),'A'] <- log(0)
   }
 
+  # lls_new <- EMC2:::calc_ll_multithreaded(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
+  #                                         model$bound, model$transform, model$pre_transform, p_types = p_types,
+  #                                         min_ll = log(1e-10), model$trend, n_threads=5)[1,]
   lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
                             model$bound, model$transform, model$pre_transform, p_types = p_types,
                             min_ll = log(1e-10), model$trend)[1,]

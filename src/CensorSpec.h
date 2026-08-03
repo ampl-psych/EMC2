@@ -56,10 +56,14 @@ struct CensorSpec {
   }
 
   void fill_censored_rows(const TruncSpec& trunc,
-                          //std::vector<double>& S_race_UT,
-                          //std::vector<double>& S_race_LT,
                           std::vector<double>& ll_trial,
                           const double min_ll) const;
+
+  // Update paramtable for multithreading
+  void rebind(ParamTable& pt, RaceScratch& scratch) {
+    this->pt      = &pt;
+    this->scratch = &scratch;
+  }
 };
 
 // CensorSpec make_censor_spec(const Rcpp::DataFrame& data,

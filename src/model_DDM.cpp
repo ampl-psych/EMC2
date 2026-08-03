@@ -538,15 +538,14 @@ static inline double ddm_logcdf_scalar(double rt, int R,
 
 
 
-void fill_ddm(const NumericVector& rts,
-              const IntegerVector& R,
+void fill_ddm(const double* rt_ptr,
+              const int* R_ptr,
               const ParamTable& pt,
               const RaceSpec& spec,
               const std::vector<int>& idx_all,
               double* __restrict__ ll_row)
 {
-  const double* __restrict__ rt_ptr = rts.begin();
-  const int*    __restrict__ R_ptr  = R.begin();
+  // const int*    __restrict__ R_ptr  = R.begin();
 
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
   const double* __restrict__ a   = &pt.base(0, spec.col_a);

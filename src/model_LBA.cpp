@@ -54,7 +54,7 @@ NumericVector plba(NumericVector t,
 // ---------------------------------------------------------------------------
 // Hot path: one-pass gather split on A, core dominates -> primary scratch
 // ---------------------------------------------------------------------------
-void dlba_plba_fast(const NumericVector& rts,
+void dlba_plba_fast(const double* rt,
                     const ParamTable& pt,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
@@ -63,7 +63,6 @@ void dlba_plba_fast(const NumericVector& rts,
                     RaceScratch& scratch)
 {
   // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
-  const double* __restrict__ rt  = rts.begin();
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
   const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
   const double* __restrict__ B   = &pt.base(0, spec.col_B);

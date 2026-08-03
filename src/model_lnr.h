@@ -29,13 +29,14 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
 
 
 // Hot path: gather → compute → scatter
-void dlnr_plnr_fast(const NumericVector& rts,
-                    const ParamTable& pt,
-                    const RaceSpec& spec,
+// Uses scratch.v for m, scratch.s for s — B, A, sv left unused.
+void dlnr_plnr_fast(const double*           rt,
+                    const ParamTable&       pt,
+                    const RaceSpec&         spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ ll_row,
-                    RaceScratch& scratch);
+                    double* __restrict__    ll_row,
+                    RaceScratch&            scratch);
 
 void plnr_fast(const NumericVector&    rts,
                const ParamTable&       pt,

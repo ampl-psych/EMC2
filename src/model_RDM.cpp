@@ -116,7 +116,7 @@ NumericVector pWald(NumericVector t, NumericVector v,
 
 
 // This new filling function checks whether A==0, if so --> runs digt0 and pigt0
-void drdm_prdm_fast(const NumericVector& rts,
+void drdm_prdm_fast(const double* rt,
                     const ParamTable& pt,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
@@ -125,7 +125,6 @@ void drdm_prdm_fast(const NumericVector& rts,
                     RaceScratch& scratch)
 {
   // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
-  const double* __restrict__ rt = rts.begin();
   const double* __restrict__ v  = &pt.base(0, spec.col_v);
   const double* __restrict__ B  = &pt.base(0, spec.col_B);
   const double* __restrict__ A  = &pt.base(0, spec.col_A);

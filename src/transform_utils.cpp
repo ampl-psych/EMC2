@@ -113,7 +113,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
 
     for (int k = 0; k < n_active; ++k) {
       int base_idx = pt.active_cols[k];
-      string colname = as<string>(pt.base_names[base_idx]);
+      const std::string& colname = pt.base_names[base_idx];
 
       TransformSpec sp;
       sp.col_idx = base_idx;
@@ -180,8 +180,8 @@ void c_do_bound_pt(const ParamTable& pt,
                    const std::vector<BoundSpec>& specs,
                    std::vector<int>& result)
 {
-  const Rcpp::NumericMatrix& base = pt.base;
-  const int nrows = base.nrow();
+  const Mat base = pt.base;
+  const int nrows = base.nrow;
 
   std::fill(result.begin(), result.begin() + nrows, 1);
   int* res = result.data();
@@ -288,7 +288,8 @@ std::vector<TransformSpec> filter_specs_by_param_set(
 
   for (const auto& sp : full_specs) {
     int base_idx = sp.col_idx;
-    std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    const std::string& nm = pt.base_names[base_idx];
+    // std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
     if (allowed.find(nm) != allowed.end()) {
       out.push_back(sp);
     }
@@ -307,7 +308,8 @@ std::vector<TransformSpec> complement_specs_for_premap(
 
   for (const auto& sp : full_specs) {
     int base_idx = sp.col_idx;
-    std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    // std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    const std::string& nm = pt.base_names[base_idx];
     if (premap_set.find(nm) == premap_set.end()) {
       out.push_back(sp);
     }

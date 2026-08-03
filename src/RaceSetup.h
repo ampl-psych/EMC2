@@ -16,14 +16,21 @@ using namespace Rcpp;
 // Dispatcher types
 // ---------------------------------------------------------------------------
 
-// Combined pdf+cdf fill — hot path, takes pre-allocated scratch
-using race_combined_fn = void(*)(const NumericVector&,
-                              const ParamTable&,
-                              const RaceSpec&,
-                              const std::vector<int>& idx_win,
-                              const std::vector<int>& idx_los,
-                              double* __restrict__ raw,
-                              RaceScratch& scratch);
+// // Combined pdf+cdf fill — hot path, takes pre-allocated scratch
+// using race_combined_fn = void(*)(const NumericVector&,
+//                               const ParamTable&,
+//                               const RaceSpec&,
+//                               const std::vector<int>& idx_win,
+//                               const std::vector<int>& idx_los,
+//                               double* __restrict__ raw,
+//                               RaceScratch& scratch);
+using race_combined_fn = void(*)(const double*           rts_ptr,
+                                 const ParamTable&       pt,
+                                 const RaceSpec&         spec,
+                                 const std::vector<int>& idx_win,
+                                 const std::vector<int>& idx_los,
+                                 double* __restrict__    raw,
+                                 RaceScratch&            scratch);
 
 // Survivor function, needed for censoring & truncation
 using survivor_fn = void(*)(const std::vector<int>& idx,
@@ -35,13 +42,13 @@ using survivor_fn = void(*)(const std::vector<int>& idx,
 
 // Survivor function with known responses, for censoring  (& GNG tasks)
 using survivor_with_response_fn = void(*)(const std::vector<int>&    idx,
-                                         const std::vector<int>&    winner,
-                                         const std::vector<double>& lower,
-                                         const std::vector<double>& upper,
-                                         int                        n_acc,
-                                         const ParamTable&          pt,
-                                         const RaceSpec&            spec,
-                                         double* __restrict__       out);
+                                          const std::vector<int>&    winner,
+                                          const std::vector<double>& lower,
+                                          const std::vector<double>& upper,
+                                          int                        n_acc,
+                                          const ParamTable&          pt,
+                                          const RaceSpec&            spec,
+                                          double* __restrict__       out);
 
 
 // ---------------------------------------------------------------------------

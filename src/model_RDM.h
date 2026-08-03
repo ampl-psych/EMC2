@@ -184,13 +184,14 @@ NumericVector pWald(NumericVector t, NumericVector v,
 //                const std::vector<int>& idx,
 //                double* __restrict__ ll_row);
 
-void drdm_prdm_fast(const NumericVector& rts,
-                    const ParamTable& pt,
-                    const RaceSpec& spec,
+// This new filling function checks whether A==0, if so --> runs digt0 and pigt0
+void drdm_prdm_fast(const double*           rt,
+                    const ParamTable&       pt,
+                    const RaceSpec&         spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ ll_row,
-                    RaceScratch& scratch);
+                    double* __restrict__    ll_row,
+                    RaceScratch&            scratch);
 
 void rdm_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,

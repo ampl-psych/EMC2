@@ -107,7 +107,7 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
 
 // Hot path: gather → compute → scatter
 // Uses scratch.v for m, scratch.s for s — B, A, sv left unused.
-void dlnr_plnr_fast(const NumericVector& rts,
+void dlnr_plnr_fast(const double* rt,
                     const ParamTable& pt,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
@@ -115,7 +115,6 @@ void dlnr_plnr_fast(const NumericVector& rts,
                     double* __restrict__ ll_row,
                     RaceScratch& scratch)
 {
-  const double* __restrict__ rt = rts.begin();
   const double* __restrict__ m  = &pt.base(0, spec.col_m);
   const double* __restrict__ s  = &pt.base(0, spec.col_s);
   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);

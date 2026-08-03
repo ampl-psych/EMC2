@@ -44,6 +44,12 @@ struct TruncSpec {
   // Fills p_lower / p_upper, reduces across accumulators, returns log Z per trial
   // (length n_trials, ready to subtract from ll_trial)
   void calculate_normalization_constant() const;
+
+  // Update paramtable for multithreading
+  void rebind(ParamTable& pt, RaceScratch& scratch) {
+    this->pt      = &pt;
+    this->scratch = &scratch;
+  }
 };
 
 TruncSpec make_trunc_spec(const Rcpp::DataFrame& data,

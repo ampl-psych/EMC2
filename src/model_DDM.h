@@ -33,7 +33,7 @@ struct my_params {
   };
 
 // Filler function for the DDM
-void fill_ddm(const NumericVector& rts,
+void fill_ddm(const double* rt,
               const IntegerVector& R,
               const ParamTable& pt,
               const RaceSpec& spec,
