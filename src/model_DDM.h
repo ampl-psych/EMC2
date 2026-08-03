@@ -57,6 +57,6 @@ void ddm_survivor_with_response(const std::vector<int>&    idx,
                                 const RaceSpec&            spec,
                                 double* __restrict__       out);
 
-NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, std::vector<int> is_ok);
+NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars);
 
 #endif // MODEL_DDM_H

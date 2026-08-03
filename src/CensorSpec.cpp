@@ -18,7 +18,7 @@ using namespace Rcpp;
 // 4. Fills S_upper in ll_trial
 // -----------------------------------------------------------------------------
 void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
-                                    NumericVector& ll_trial,
+                                    std::vector<double>& ll_trial,
                                     const double min_ll) const
 {
   // Fill p_lower: S_k(LC - t0) for active LC rows, 1.0 elsewhere (default -- at t=0, S=1)

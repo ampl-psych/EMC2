@@ -58,7 +58,7 @@ struct CensorSpec {
   void fill_censored_rows(const TruncSpec& trunc,
                           //std::vector<double>& S_race_UT,
                           //std::vector<double>& S_race_LT,
-                          NumericVector& ll_trial,
+                          std::vector<double>& ll_trial,
                           const double min_ll) const;
 };
 
