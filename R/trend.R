@@ -1722,7 +1722,7 @@ make_data_unconditional <- function(data, pars, design, model,
         trend                = model_list$trend,
         return_kernel_matrix = FALSE,
         return_all_pars      = TRUE
-      )
+      )[[1]]  # returns a list per particle
 
       if (tmp_return_trialwise && !is.null(model_list$trend)) {
         covariates <- get_pars_c_wrapper(
@@ -1737,7 +1737,7 @@ make_data_unconditional <- function(data, pars, design, model,
           return_kernel_matrix = TRUE,
           kernel_output_codes  = kernel_output_codes,
           return_all_pars      = TRUE
-        )
+        )[[1]]
         attr(pm, "trialwise_parameters") <- covariates
       }
 
