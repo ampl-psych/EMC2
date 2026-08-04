@@ -347,24 +347,30 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   # SM: Don't loop over mcmc particles (do this loop in C); loop over subjects here
   dadm_list <- dm_list(data)
   row_ids <- split(seq_len(nrow(data)), data$subjects)
+  out <- NULL
 
-  for(i in 1:n_subs) {
+  for (i in seq_len(n_subs)) {
     # par_mcmc is n_pars x n_subs x n_mcmc
     parameters <- t(matrix(par_mcmc[,i,,drop=FALSE], nrow=n_pars, ncol=n_mcmc))
     colnames(parameters) <- dimnames(par_mcmc)[[1]]
-    pars <- get_pars_singlesub_oo(parameters, dadm_list[[i]], model(), return_all_pars=TRUE)
+    pars_list <- get_pars_singlesub_oo(parameters, dadm_list[[i]], model(), return_all_pars=TRUE)
 
-    if (!add_recalculated) {
-      base_names <- intersect(names(model()$p_types), dimnames(pars)[[3]])
-      pars <- pars[,, base_names, drop = FALSE]
+    # not yet sure how many columns will be returned - so get from first subject
+    if(is.null(out)) {
+      par_names <- colnames(pars_list[[1]])
+      out <- array(NA_real_, dim = c(nrow(data), n_mcmc, length(par_names)),
+                   dimnames = list(NULL, NULL, par_names))
     }
 
-    if(i == 1) {
-      out <- array(NA_real_, dim = c(nrow(data), n_mcmc, dim(pars)[3]),
-                   dimnames = list(NULL, NULL, dimnames(pars)[[3]]))
-      }
-    out[row_ids[[i]],,] <- pars
+    # fill
+    row_idx <- row_ids[[i]]
+    for (k in seq_len(n_mcmc)) out[row_idx, k, ] <- pars_list[[k]]
   }
+  if (!add_recalculated) {
+    base_names <- intersect(names(model()$p_types), dimnames(out)[[3]])
+    out <- out[,, base_names, drop = FALSE]
+  }
+
   return(list(data = data, pars = out))
 }
 

@@ -234,20 +234,10 @@ get_pars_singlesub_oo <- function(p, dadm, model,
   ord <- c(intersect(base_names, colnames(first_pars)), setdiff(colnames(first_pars), base_names))
   col_idx <- if (identical(ord, colnames(first_pars))) NULL else match(ord, colnames(first_pars))
   # Ttransform and reordering per element
-  pars_list <- lapply(pars_list, function(pars) {
+  lapply(pars_list, function(pars) {
     pars <- model_list$Ttransform(pars, dadm)
     .oo_reorder_public_pars(pars, model_list, col_idx)
   })
-
-  # Return n_data_rows x n_particles x n_pars array
-  n_rows <- nrow(pars_list[[1]])
-  n_pars <- ncol(pars_list[[1]])
-  par_names <- colnames(pars_list[[1]])
-
-  out <- array(NA_real_, dim = c(n_rows, n_particles, n_pars),
-               dimnames = list(NULL, NULL, par_names))
-  for (k in seq_len(n_particles)) out[, k, ] <- pars_list[[k]]
-  out
 }
 
 
