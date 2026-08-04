@@ -583,28 +583,27 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     }
 
     for (int i = 0; i < n_particles; ++i) {
-      // Map p_vector to trialwise parameters
+      // 1) Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
-      // NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
-      // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+      // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
       c_log_likelihood_DDM(rts_ptr, Rs_ptr, ctx.param_table, setup.spec, idx_all, ll_buf.data());
 
-      // Trialwise truncation correction
+      // 3) Trialwise truncation correction
       if (trunc.any()) {
         trunc.calculate_normalization_constant();
         for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
       }
-      // Fill in trialwise censor probabilities
+      // 4) Fill in trialwise censor probabilities
       if (censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
 
-      // Check for bound violations (fills is_ok)
+      // 5) Check for bound violations (fills is_ok)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
       for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
 
-      // Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
+      // 6) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = expand_clamp_sum(ll_buf.data(), expand.begin(), n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
@@ -618,21 +617,21 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     const int      n_exp     = expand.size();
     const bool     is_probit = (type == "ORDERED_PROBIT");
     for (int i = 0; i < n_particles; ++i) {
-      // Map p_vector to trialwise parameters
+      // 1) Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
-      // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+      // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
       c_log_likelihood_ordered(pars, data, n_lR, is_probit, ll_buf.data());
 
-      // Handle not-ok parameter values (out of bound)
+      // 3) Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
       lr_all(is_ok, n_lR);                                 // make sure the ok value is shared across accumulators / levels or lR
       for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t * n_lR]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
 
-      // Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
+      // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = expand_clamp_sum(ll_buf.data(), expand.begin(), n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
@@ -645,21 +644,21 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     IntegerVector expand = data.attr("expand");
     const int     n_exp  = expand.size();
     for (int i = 0; i < n_particles; ++i) {
-      // Map p_vector to trialwise parameters
+      // 1) Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
-      // calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+      // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
       c_log_likelihood_multinomial_logit(pars, data, n_lR, ll_buf.data());
 
-      // Handle not-ok parameter values (out of bound)
+      // 3) Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
       lr_all(is_ok, n_lR);                                 // make sure the ok value is shared across accumulators / levels or lR
       for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t * n_lR]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
 
-      // Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
+      // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = expand_clamp_sum(ll_buf.data(), expand.begin(), n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
@@ -673,21 +672,21 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     NumericVector y      = extract_y(data);
     const bool    is_ar1 = (type == "MRI_AR1");
     for (int i = 0; i < n_particles; ++i) {
-      // Map p_vector to trialwise parameters
+      // 1) Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
       NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
-      // Fill log-likelihood buffer
+      // 2) Fill log-likelihood buffer
       if (is_ar1) c_log_likelihood_MRI_ar1(pars, y, n_rows, n_pars, ll_buf.data());
       else        c_log_likelihood_MRI_white(pars, y, n_rows, n_pars, ll_buf.data());
 
-      // Check for bound violations (fills is_ok)
+      // 3) Check for bound violations (fills is_ok)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
       for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
 
-      // Determine output location (tw is a pointer to the correct address in result) and protect via clamp, sum [[no expanding here, compression doesn't work for MRI]]
+      // 4) Determine output location (tw is a pointer to the correct address in result) and protect via clamp, sum [[no expanding here, compression doesn't work for MRI]]
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = clamp_sum(ll_buf.data(), n_rows, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
@@ -757,29 +756,40 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
     // Begin particle loop
     for (int i = 0; i < n_particles; ++i) {
+      // 1) Map p_vector to trialwise parameters
       if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
+      // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
       std::fill(ll_row.begin(), ll_row.end(), 1.0); // re-fill row-wise ll -- helps with RACE functionality (all trials skipped get likelihood = 1)
       c_log_likelihood_race(ctx.param_table, setup, rts_ptr,
                             idx_win, idx_los, n_lR,
                             ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
-      // Handle truncation, censoring
+      // 3) Handle truncation, censoring
       if (trunc.any()) {
         trunc.calculate_normalization_constant();
         for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];
       }
       if (censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);
 
-      // Handle not-ok parameter values (out of bound)
+      // 4) Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-      lr_all(is_ok, n_lR);                                 // make sure the ok value is shared across accumulators / levels or lR
-      for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
+      // lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
+      for(int t=0; t < n_choice_trials; t++) {
+        for(int k=0; k < n_lR; k++) {
+          if(!is_ok[t * n_lR + k]) {
+            // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
+            ll_trial[t] = min_ll;
+            break;  // no need to check remaining accumulators for this trial
+          }
+        }
+      }
+      // for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
       // for (int t = 0; t < (int)idx_win.size(); ++t) if (!is_ok[idx_win[t]]) ll_trial[t] = min_ll;
 
-      // Expand, clamp, sum, etc
+      // 5) Expand, clamp, sum, etc
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
@@ -959,10 +969,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     IntegerVector expand   = data.attr("expand");
     const int     n_exp    = expand.size();
     const int*    exp_ptr  = expand.begin();
-
     NumericVector rts    = data["rt"];
     const double* rts_ptr = rts.begin();
-
     LogicalVector winner  = data["winner"];
     const int*    win_flag = LOGICAL(winner);
 
@@ -1056,8 +1064,16 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
 
       c_do_bound_pt(pt_local, bound_specs, is_ok);
-      lr_all(is_ok, n_lR);
-      for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
+      // lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
+      for(int t=0; t < n_choice_trials; t++) {
+        for(int k=0; k < n_lR; k++) {
+          if(!is_ok[t * n_lR + k]) {
+            // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
+            ll_trial[t] = min_ll;
+            break;  // no need to check remaining accumulators for this trial
+          }
+        }
+      }
 
       if (return_trialwise) {
         std::vector<double>& tw = tw_vec[tid];
