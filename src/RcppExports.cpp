@@ -528,7 +528,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_pars_c_wrapper
-NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes);
+List get_pars_c_wrapper(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes);
 RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
