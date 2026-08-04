@@ -776,18 +776,17 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       // 4) Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
       c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-      // lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
-      for(int t=0; t < n_choice_trials; t++) {
-        for(int k=0; k < n_lR; k++) {
-          if(!is_ok[t * n_lR + k]) {
-            // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
-            ll_trial[t] = min_ll;
-            break;  // no need to check remaining accumulators for this trial
-          }
-        }
-      }
-      // for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
-      // for (int t = 0; t < (int)idx_win.size(); ++t) if (!is_ok[idx_win[t]]) ll_trial[t] = min_ll;
+      lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
+      for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
+      // for(int t=0; t < n_choice_trials; t++) {
+      //   for(int k=0; k < n_lR; k++) {
+      //     if(!is_ok[t * n_lR + k]) {
+      //       // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
+      //       ll_trial[t] = min_ll;
+      //       break;  // no need to check remaining accumulators for this trial
+      //     }
+      //   }
+      // }
 
       // 5) Expand, clamp, sum, etc
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
@@ -1064,16 +1063,17 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
 
       c_do_bound_pt(pt_local, bound_specs, is_ok);
-      // lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
-      for(int t=0; t < n_choice_trials; t++) {
-        for(int k=0; k < n_lR; k++) {
-          if(!is_ok[t * n_lR + k]) {
-            // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
-            ll_trial[t] = min_ll;
-            break;  // no need to check remaining accumulators for this trial
-          }
-        }
-      }
+      lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
+      for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
+      // for(int t=0; t < n_choice_trials; t++) {
+      //   for(int k=0; k < n_lR; k++) {
+      //     if(!is_ok[t * n_lR + k]) {
+      //       // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
+      //       ll_trial[t] = min_ll;
+      //       break;  // no need to check remaining accumulators for this trial
+      //     }
+      //   }
+      // }
 
       if (return_trialwise) {
         std::vector<double>& tw = tw_vec[tid];
