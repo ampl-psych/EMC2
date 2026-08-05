@@ -21,6 +21,7 @@ plot_density(
   legendpos = c("topright", "top"),
   posterior_args = list(),
   prior_args = list(),
+  density_over = "rt",
   ...
 )
 }
@@ -57,6 +58,9 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{posterior_args}{Optional list of graphical parameters for posterior lines/ribbons.}
 
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
+
+\item{density_over}{Name of the numeric column whose density or CDF is plotted.
+Defaults to \code{"rt"}.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }

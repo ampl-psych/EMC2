@@ -49,7 +49,7 @@
 </defs>
 <g clip-path='url(#cpMC4wMHwyNDAuMDB8MC4wMHwyODguMDA=)'>
 <text x='129.50' y='22.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='65.01px' lengthAdjust='spacingAndGlyphs'>S=left E=speed</text>
-<text x='129.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='129.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(8.55,139.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <defs>
@@ -126,7 +126,7 @@
 </defs>
 <g clip-path='url(#cpMjQwLjAwfDQ4MC4wMHwwLjAwfDI4OC4wMA==)'>
 <text x='369.50' y='22.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='68.17px' lengthAdjust='spacingAndGlyphs'>S=left E=neutral</text>
-<text x='369.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='369.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(248.55,139.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <g clip-path='url(#cpMjc4Ljk3fDQ2MC4wNHwzOC45N3wyMzkuNTM=)'>
@@ -198,7 +198,7 @@
 </defs>
 <g clip-path='url(#cpNDgwLjAwfDcyMC4wMHwwLjAwfDI4OC4wMA==)'>
 <text x='609.50' y='22.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='77.15px' lengthAdjust='spacingAndGlyphs'>S=left E=accuracy</text>
-<text x='609.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='609.50' y='275.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(488.55,139.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <g clip-path='url(#cpNTE4Ljk3fDcwMC4wNHwzOC45N3wyMzkuNTM=)'>
@@ -270,7 +270,7 @@
 </defs>
 <g clip-path='url(#cpMC4wMHwyNDAuMDB8Mjg4LjAwfDU3Ni4wMA==)'>
 <text x='129.50' y='310.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='70.82px' lengthAdjust='spacingAndGlyphs'>S=right E=speed</text>
-<text x='129.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='129.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(8.55,427.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <g clip-path='url(#cpMzguOTd8MjIwLjA0fDMyNi45N3w1MjcuNTM=)'>
@@ -342,7 +342,7 @@
 </defs>
 <g clip-path='url(#cpMjQwLjAwfDQ4MC4wMHwyODguMDB8NTc2LjAw)'>
 <text x='369.50' y='310.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='73.98px' lengthAdjust='spacingAndGlyphs'>S=right E=neutral</text>
-<text x='369.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='369.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(248.55,427.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <g clip-path='url(#cpMjc4Ljk3fDQ2MC4wNHwzMjYuOTd8NTI3LjUz)'>
@@ -414,7 +414,7 @@
 </defs>
 <g clip-path='url(#cpNDgwLjAwfDcyMC4wMHwyODguMDB8NTc2LjAw)'>
 <text x='609.50' y='310.75' text-anchor='middle' style='font-size: 9.50px; font-weight: bold; font-family: sans;' textLength='82.96px' lengthAdjust='spacingAndGlyphs'>S=right E=accuracy</text>
-<text x='609.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>RT</text>
+<text x='609.50' y='563.64' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='4.84px' lengthAdjust='spacingAndGlyphs'>rt</text>
 <text transform='translate(488.55,427.25) rotate(-90)' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='51.50px' lengthAdjust='spacingAndGlyphs'>Defective CDF</text>
 </g>
 <g clip-path='url(#cpNTE4Ljk3fDcwMC4wNHwzMjYuOTd8NTI3LjUz)'>

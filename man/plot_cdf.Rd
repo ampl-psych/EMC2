@@ -22,6 +22,7 @@ plot_cdf(
   posterior_args = list(),
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
+  density_over = "rt",
   ...
 )
 }
@@ -60,6 +61,9 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
 
 \item{add_percentiles}{Vector of integers giving percentiles to plot as points, NULL stops plotting.}
+
+\item{density_over}{Name of the numeric column whose density or CDF is plotted.
+Defaults to \code{"rt"}.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }
