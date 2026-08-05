@@ -1,4 +1,4 @@
-# joint
+# fmri_emc
 
     Code
       init_chains(fmri_emc, particles = 10, cores_for_chains = 1)[[1]]$samples
@@ -7,20 +7,20 @@
       , , 1
       
                          1
-      accuracy -0.33494630
-      cond1     0.76885869
-      rt        1.18309882
-      constant  1.06800673
-      rho       0.02453892
-      sd        0.50453671
+      accuracy  0.15719342
+      cond1    -2.06540724
+      rt       -0.44054688
+      constant  0.00395328
+      rho      -0.53711605
+      sd       -0.01260453
       
       
       $stage
       [1] "init"
       
       $subj_ll
-             [,1]
-      1 -169.1036
+            [,1]
+      1 -178.386
       
       $idx
       [1] 1

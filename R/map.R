@@ -349,6 +349,8 @@ generate_design_equations <- function(design_matrix,
   cat("  ", factor_header_str, "  ", eq_header, "\n", sep="")
 
   ## SM: Add trend info
+  has_premap <- !is.null(trend) && any(vapply(trend$bases, function(b) b$phase == "premap", logical(1)))
+  has_pretransform <- !is.null(trend) && any(vapply(trend$bases, function(b) b$phase == "pretransform", logical(1)))
   formatted_trends <- verbal_trend(design_matrix, trend)
   ## If premap, then the design matrix column name has been replace.
   ## else: add a component to the end of the equation string, either before or after the
@@ -366,15 +368,15 @@ generate_design_equations <- function(design_matrix,
 
     closing_parenthesis <- ')'
     if(length(formatted_trends) > 0) {
-      if(!attr(trend, 'premap')) {
-        if(transform == 'identity' || attr(trend, 'pretransform')) {
+      if(!has_premap) {
+        if(transform == 'identity' || has_pretransform) {
           for(trend_name in names(trend)) {
             eq_strings[i] <- paste0(eq_strings[i], ' + ', paste0(trend_name, '_t'))
           }
         }
       }
 
-      if(!attr(trend, 'pretransform') & !attr(trend, 'premap')) {
+      if(!has_pretransform & !has_premap) {
         for(trend_name in names(trend)) {
           closing_parenthesis <- paste0(closing_parenthesis, ' + ', paste0(trend_name, '_t'))
         }
@@ -396,29 +398,69 @@ generate_design_equations <- function(design_matrix,
   }
 }
 
+
 add_transforms_to_trend_pnames <- function(trend, transforms, pre_transforms) {
-  ## bit hacky, but change trend par names by adding pre_transforms and transforms here
-  for(trend_n in 1:length(trend)) {
-    idx <- trend[[trend_n]]$trend_pnames %in% names(pre_transforms)
-    for(i in which(idx)) {
-      pname <- trend[[trend_n]]$trend_pnames[i]
-      this_transform <- pre_transforms[pname]
-      if(this_transform != 'identity') {
-        ## also update name of transform
-        if(pname %in% names(transforms)) names(transforms)[names(transforms)==pname] <- paste0(this_transform, '(', pname, ')')
-        trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', pname, ')')
+  decorate <- function(pnames) {
+    for (i in seq_along(pnames)) {
+      pname <- pnames[i]
+      # pre_transform first
+      if (pname %in% names(pre_transforms)) {
+        cur <- pre_transforms[[pname]]
+        if (!is.null(cur) && cur != "identity") {
+          new_pname <- paste0(cur, "(", pname, ")")
+          # also update the transform key so the outer transform wraps correctly
+          if (pname %in% names(transforms))
+            names(transforms)[names(transforms) == pname] <<- new_pname
+          pnames[i] <- new_pname
+          pname     <- new_pname
+        }
+      }
+      # then transform
+      if (pname %in% names(transforms)) {
+        cur <- transforms[[pname]]
+        if (!is.null(cur) && cur != "identity")
+          pnames[i] <- paste0(cur, "(", pname, ")")
       }
     }
-    # same trick
-    idx <- trend[[trend_n]]$trend_pnames %in% names(transforms)
-    for(i in which(idx)) {
-      this_transform <- (transforms)[trend[[trend_n]]$trend_pnames[i]]
-      if(this_transform != 'identity') trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', trend[[trend_n]]$trend_pnames[i], ')')
-    }
+    pnames
   }
 
-  return(trend)
+  for (kid in names(trend$kernels))
+    trend$kernels[[kid]]$pnames <- decorate(trend$kernels[[kid]]$pnames)
+  for (i in seq_along(trend$bases))
+    trend$bases[[i]]$pnames <- decorate(trend$bases[[i]]$pnames)
+
+  trend
 }
+
+
+# # add_transforms_to_trend_pnames <- function(trend, transforms, pre_transforms) {
+#   ## bit hacky, but change trend par names by adding pre_transforms and transforms here
+#   for(base_n in seq_along(trend$bases)) {
+#     idx <- trend$bases[[base_n]]$pnames %in% names(pre_transforms)
+#
+#   }
+#   for(trend_n in 1:length(trend)) {
+#     idx <- trend[[trend_n]]$trend_pnames %in% names(pre_transforms)
+#     for(i in which(idx)) {
+#       pname <- trend[[trend_n]]$trend_pnames[i]
+#       this_transform <- pre_transforms[pname]
+#       if(this_transform != 'identity') {
+#         ## also update name of transform
+#         if(pname %in% names(transforms)) names(transforms)[names(transforms)==pname] <- paste0(this_transform, '(', pname, ')')
+#         trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', pname, ')')
+#       }
+#     }
+#     # same trick
+#     idx <- trend[[trend_n]]$trend_pnames %in% names(transforms)
+#     for(i in which(idx)) {
+#       this_transform <- (transforms)[trend[[trend_n]]$trend_pnames[i]]
+#       if(this_transform != 'identity') trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', trend[[trend_n]]$trend_pnames[i], ')')
+#     }
+#   }
+#
+#   return(trend)
+# }
 
 verbal_dm <- function(design){
   map <- attr(sampled_pars(design, add_da = TRUE, doMap = TRUE), "map")
@@ -426,12 +468,17 @@ verbal_dm <- function(design){
   transforms <- design$model()$transform$func
   pre_transforms <- design$model()$pre_transform$func
   trend_all <- design$model()$trend
+
   if(!is.null(trend_all)) trend_all <- add_transforms_to_trend_pnames(trend_all, transforms=transforms, pre_transforms=pre_transforms)
 
   for(i in 1:length(map)){
     m <- map[[i]]
+    mnd <- map_no_da[[i]]
     # Skip if single-column and no trend references this parameter
-    if ((ncol(m) == 1) && (is.null(trend_all) || !any(colnames(m) %in% names(trend_all)))) next
+    has_trend <- !is.null(trend_all) && any(vapply(trend_all$bases, function(b) b$target_parameter %in% colnames(mnd), logical(1)))
+
+    if (ncol(m) == 1 && !has_trend) next
+#    if ((ncol(m) == 1) && (is.null(trend_all) || !any(colnames(m) %in% names(trend_all)))) next
 
     cat(paste0("$", names(map)[i]), "\n")
 
@@ -440,25 +487,48 @@ verbal_dm <- function(design){
     trends_to_pass <- NULL
     if(!is.null(trend_all)) {
       # Select trends targeting this parameter (by name in map_no_da)
-      trend_idx <- names(trend_all) %in% colnames(mnd)
-      if (any(trend_idx)) {
-        trends_to_pass <- trend_all[trend_idx]
-        phases <- vapply(trends_to_pass, function(x) x$phase, character(1))
-        has_premap <- any(phases == "premap")
+      #trend_idx <- names(trend_all) %in% colnames(mnd)
+      matching_bases <- Filter(function(b) b$target_parameter %in% colnames(mnd), trend_all$bases)
+
+      if (length(matching_bases) > 0) {
+        relevant_kernel_ids <- unique(vapply(matching_bases, `[[`, character(1), "kernel_id"))
+        trends_to_pass <- structure(
+          list(kernels = trend_all$kernels[relevant_kernel_ids],
+               bases   = matching_bases),
+          class = "emc2_trend")
+
+        phases           <- vapply(matching_bases, `[[`, character(1), "phase")
+        has_premap       <- any(phases == "premap")
         has_pretransform <- any(phases == "pretransform")
+
+        # trends_to_pass <- trend_all[trend_idx]
+        # phases <- vapply(trends_to_pass, function(x) x$phase, character(1))
+        # has_premap <- any(phases == "premap")
+        # has_pretransform <- any(phases == "pretransform")
 
         # If any trend is premap, suffix the parameter names in the design matrices
         if (has_premap) {
-          in_m <- colnames(m) %in% names(trends_to_pass)
+          premap_pars <- vapply(
+            Filter(function(b) b$phase == "premap", matching_bases),
+            `[[`, character(1), "target_parameter"
+          )
+
+          in_m <- colnames(m) %in% premap_pars #names(trends_to_pass)
           if (any(in_m)) colnames(m)[in_m] <- paste0(colnames(m)[in_m], '_t')
-          in_mnd <- colnames(mnd) %in% names(trends_to_pass)
+          in_mnd <- colnames(mnd) %in% premap_pars #names(trends_to_pass)
           if (any(in_mnd)) colnames(mnd)[in_mnd] <- paste0(colnames(mnd)[in_mnd], '_t')
-          names(trends_to_pass) <- paste0(names(trends_to_pass), '_t')
+
+          for(j in seq_along(trends_to_pass$bases)) {
+            if(trends_to_pass$bases[[j]]$phase == "premap") {
+              trends_to_pass$bases[[j]]$target_parameter <- paste0(trends_to_pass$bases[[j]]$target_parameter, "_t")
+            }
+          }
+#          names(trends_to_pass) <- paste0(names(trends_to_pass), '_t')
         }
 
-        # Attach concise flags used downstream
-        attr(trends_to_pass, 'premap') <- has_premap
-        attr(trends_to_pass, 'pretransform') <- has_pretransform
+        # # Attach concise flags used downstream
+        # attr(trends_to_pass, 'premap') <- has_premap
+        # attr(trends_to_pass, 'pretransform') <- has_pretransform
       }
     }
 

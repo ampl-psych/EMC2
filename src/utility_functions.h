@@ -324,7 +324,5 @@ void lr_all(std::vector<int>& ok, int n_side)
   }
 }
 
-
-
 #endif
 

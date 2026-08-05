@@ -2,202 +2,60 @@
 % Please edit documentation in R/trend.R
 \name{make_trend}
 \alias{make_trend}
-\title{Create a trend specification for model parameters}
+\title{Create a trend specification}
 \usage{
-make_trend(
-  par_names,
-  cov_names = NULL,
-  kernels,
-  bases = NULL,
-  shared = NULL,
-  trend_pnames = NULL,
-  phase = "premap",
-  par_input = NULL,
-  at = "lR",
-  maps = NULL,
-  custom_trend = NULL,
-  kernel_args = NULL,
-  per_covariate_pars = NULL
-)
+make_trend(..., shared = NULL)
 }
 \arguments{
-\item{par_names}{Character vector specifying which parameters to apply trend to}
+\item{...}{One or more \code{emc2_base} objects created by \code{\link[=make_base]{make_base()}}.}
 
-\item{cov_names}{Character vector specifying which covariates to use for each trend}
-
-\item{kernels}{Character vector specifying which kernel function to use for each trend}
-
-\item{bases}{Optional character vector specifying which base function to use for each trend}
-
-\item{shared}{Named list with entries the parameter names to be shared and the names the new names of the shared parameter.}
-
-\item{trend_pnames}{Optional character vector specifying custom parameter names}
-
-\item{phase}{Character vector (length 1 or \code{length(par_names)}) specifying the phase for each trend entry;
-one of "premap", "pretransform", or "posttransform". Defaults to "premap".}
-
-\item{par_input}{Optional character vector(s) of parameter names to use as additional inputs for the trend}
-
-\item{at}{If NULL, trend is applied to every row in the \code{dadm}. If a factor name (e.g., "lR"), trend is applied only to entries
-corresponding to the first level of that factor, and fed forward to the other levels of that factor. Defaults to "lR". For DDMs, \code{at} should be set to NULL.}
-
-\item{maps}{List of functions that create matrices with which to multiply the covariates before applying the base. See details.}
-
-\item{custom_trend}{A trend registered with \code{register_trend}}
-
-\item{kernel_args}{Optional named list of kernel-specific arguments, aligned with \code{par_names}.
-Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
-Currently supported arguments:
-\describe{
-\item{\code{q_reset_column}}{For delta-family kernels (\code{"delta"}, \code{"delta2kernel"},
-\code{"delta2lr"}) only. Name of a logical or integer column in \code{data} indicating
-trials on which the Q-value should be reset to \code{q0} before the prediction error
-is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
-}}
-
-\item{per_covariate_pars}{Optional vector of parameter names that should be estimated separately for each covariate}
+\item{shared}{Optional named list for parameter sharing across bases or
+kernels. Each entry maps a new shared name to a character vector of
+existing prefixed parameter names that should all resolve to that single
+name. Example: \code{list(alpha = c("v.alpha", "B.alpha"))}. Validation is
+performed: all referenced names must exist in the assembled parameter set.}
 }
 \value{
-A list containing the trend specifications for each parameter
+An object of class \code{emc2_trend} with components:
+\describe{
+\item{\code{kernels}}{Named list of \code{emc2_kernel} objects keyed by
+\code{kernel_id}. Each has finalised \code{pnames} (prefixed parameter names)
+and \code{transforms} slots.}
+\item{\code{bases}}{List of \code{emc2_base} objects, each with finalised
+\code{pnames} and \code{transforms} slots.}
+\item{\code{sequential}}{Logical; \code{TRUE} if any kernel is from the delta
+family and requires trial-by-trial sequential updating.}
+}
 }
 \description{
-Create a trend specification for model parameters
+Combines one or more \code{\link[=make_base]{make_base()}} specifications (each of which references
+a \code{\link[=make_kernel]{make_kernel()}}) into a complete trend object ready for use in \code{\link[=design]{design()}}.
 }
 \details{
-The \code{maps} argument accepts one or more functions that translate trial-level
-covariates into accumulator-specific predictors.
+\subsection{Parameter naming}{
 
-Example of a minimal map function:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{advantage_map <- function(dadm, cov_names) \{
-  lS      <- paste0('cov', ifelse(dadm$lR == 'left',  dadm$cov_left,  dadm$cov_right))
-  lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left,  dadm$cov_right))
-  plus  <- sapply(cov_names, function(x) ifelse(lS      == x,  1, 0))
-  minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
-  plus + minus
-\}
-}\if{html}{\out{</div>}}
-
-Multiple maps may be supplied, in which case the model will create a separate
-base parameter for each map. See more examples below.
+Parameter names are assembled in \code{make_trend()} by combining the
+\code{target_parameter} of the first base that references a given kernel with
+the kernel's generic parameter names (e.g. \code{q0}, \code{alpha} → \code{v.q0},
+\code{v.alpha}). Base parameters are prefixed with their own \code{target_parameter}
+(e.g. \code{v.w}).
+}
 }
 \examples{
-# Put trend on B and v parameters
-trend <- make_trend(
-  par_names = c("B", "v"),
-  cov_names = "strial",
-  kernels = c("exp_incr", "poly3"),
-  phase = "premap",
-  shared = list(shrd = list("B.B0", "v.d1"))
-)
+# Simple trend on v with a delta kernel
+k <- make_kernel(cov_names = "reward", type="delta", )
+b <- make_base(target_parameter = "v", type="lin", kernel = k)
+trend <- make_trend(b)
 get_trend_pnames(trend)
 
+# Reusing one kernel for two parameters
+k    <- make_kernel(cov_names = "reward", type="delta")
+b_v  <- make_base(target_parameter = "v", type="lin", kernel = k, kernel_output = 1L)
+b_B  <- make_base(target_parameter = "B", type="add", kernel = k, kernel_output = 2L)
+trend <- make_trend(b_v, b_B)
+get_trend_pnames(trend)
 
-# Using covariate maps
-
-# Covariate maps allow you to specify how trial-by-trial covariates influence
-# model parameters for each accumulator. The example below uses a simple data
-# frame with two trials. `cov_left` and `cov_right` specify which covariates
-# correspond to the left and right accumulators on each trial. `S` indicates the
-# correct response, and `cov1`–`cov4` contain the actual covariate values.
-
-data <- data.frame(
-  subjects = rep(1, 2),
-  S        = c('left', 'right'),
-  cov_left = c('1', '4'),
-  cov_right= c('3', '2'),
-  rt       = c(1.2, 0.8),
-  R        = factor(c('left', 'right')),
-  cov1     = c(1, NA),
-  cov2     = c(NA, 1),
-  cov3     = c(NA, 1),
-  cov4     = c(1, 1)
-)
-
-# A covariate map function must take `dadm` and `cov_names` as inputs and return
-# a matrix of size (nrow(dadm), length(cov_names)), coding how each covariate
-# contributes to each accumulator.
-
-advantage_map <- function(dadm, cov_names) {
-
-  # Which stimulus does the accumulator correspond to on each trial?
-  lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
-
-  # Which stimulus does the *other* accumulator correspond to?
-  lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
-
-  # Build indicator matrices
-  map_plus1 <- sapply(cov_names, function(col) ifelse(lS     == col,  1, 0))
-  map_minus1<- sapply(cov_names, function(col) ifelse(lSother == col, -1, 0))
-
-  map_plus1 + map_minus1
 }
-
-# A covariate map function can be supplied to make_trend(), which creates the mapping
-# specification for the model for each participant. Here, a single map ('differences') is provided.
-
-trend <- make_trend(
-  par_names = 'v',
-  kernels   = 'delta',
-  bases     = 'lin',
-  cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
-  maps      = list('differences' = advantage_map),
-  at        = 'lR'
-)
-
-design_RDM <- design(
-  model  = RDM,
-  data   = data,
-  formula= list(B ~ 1, v ~ 1, t0 ~ 1),
-  trend  = trend
-)
-
-emc <- make_emc(data, design_RDM, type = 'single')
-
-# The resulting covariate maps for each subject are attached to the `dadm`:
-attr(emc[[1]]$data[[1]], 'covariate_maps')
-# And to confirm that this mapping is correct, compare with the corresponding `dadm`
-emc[[1]]$data[[1]]
-
-# You can also provide multiple covariate maps. Each additional map introduces
-# a separate base parameter. For example, the following `sum_map` is suitable
-# for RL-ARD–type models:
-
-sum_map <- function(dadm, cov_names) {
-  # Which stimulus does the accumulator correspond to on each trial?
-  lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
-  # Which stimulus does the *other* accumulator correspond to?
-  lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
-
-  # Indicator matrices (note: both are added rather than subtracted)
-  map_this  <- sapply(cov_names, function(col) ifelse(lS      == col, 1, 0))
-  map_other <- sapply(cov_names, function(col) ifelse(lSother == col, 1, 0))
-
-  map_this + map_other
-}
-
-trend <- make_trend(
-  par_names = 'v',
-  kernels   = 'delta',
-  bases     = 'lin',
-  cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
-  maps      = list('differences' = advantage_map,
-                   'sums'        = sum_map),
-  at        = 'lR'
-)
-
-design_RDM <- design(
-  model  = RDM,
-  data   = data,
-  formula= list(B ~ 1, v ~ 1, t0 ~ 1),
-  trend  = trend
-)
-
-emc <- make_emc(data, design_RDM, type = 'single')
-
-# Now the dadm contains two covariate maps, and the model includes two
-# corresponding base parameters (e.g., v.w1 and v.w2):
-attr(emc[[1]]$data[[1]], 'covariate_maps')
-
-
+\seealso{
+\code{\link[=make_kernel]{make_kernel()}}, \code{\link[=make_base]{make_base()}}, \code{\link[=trend_help]{trend_help()}}
 }

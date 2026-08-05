@@ -47,15 +47,16 @@
   )
 }
 
-.oo_reorder_public_pars <- function(pars, model_list) {
-  base_names <- names(model_list$p_types)
-  ord <- c(intersect(base_names, colnames(pars)), setdiff(colnames(pars), base_names))
-  if (identical(ord, colnames(pars))) {
-    return(pars)
+.oo_reorder_public_pars <- function(pars, model_list, col_idx = NULL) {
+  if (is.null(col_idx)) {
+    base_names <- names(model_list$p_types)
+    ord <- c(intersect(base_names, colnames(pars)), setdiff(colnames(pars), base_names))
+    if (identical(ord, colnames(pars))) return(pars)
+    col_idx <- match(ord, colnames(pars))
   }
 
   ok <- attr(pars, "ok")
-  pars <- pars[, ord, drop = FALSE]
+  pars <- pars[, col_idx, drop = FALSE]
   attr(pars, "ok") <- ok
   pars
 }
@@ -111,6 +112,7 @@
   p
 }
 
+## used for parameter matrices with multiple particpants (ie one row in p per participant)
 get_pars_oo <- function(p, dadm, model,
                         pretransformed = FALSE,
                         constants_included = FALSE,
@@ -142,7 +144,7 @@ get_pars_oo <- function(p, dadm, model,
       return_kernel_matrix = return_kernel_matrix,
       return_all_pars = return_all_pars,
       kernel_output_codes = kernel_output_codes
-    )
+    )[[1]]  # now returns a list
   }
 
   if (!("subjects" %in% names(dadm)) || nrow(particle_matrix) == 1L) {
@@ -169,9 +171,9 @@ get_pars_oo <- function(p, dadm, model,
     row_idx <- dadm$subjects == used_subjects[i]
     row_ids[[i]] <- which(row_idx)
     cur_dadm <- dadm[row_idx, , drop = FALSE]
-    cm <- attr(dadm, "covariate_maps")
+    cm <- attr(dadm, "covariate_coding")
     if (!is.null(cm)) {
-      attr(cur_dadm, "covariate_maps") <- lapply(cm, function(m) m[row_idx, , drop = FALSE])
+      attr(cur_dadm, "covariate_coding") <- lapply(cm, function(m) m[row_idx, , drop = FALSE])
     }
     pieces[[i]] <- call_one(cur_particles = particle_matrix[i, , drop = FALSE], cur_dadm = cur_dadm, row_idx = row_idx)
   }
@@ -188,6 +190,54 @@ get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE) {
   model_list <- .oo_model_list(model)
   pars <- get_pars_oo(p_vector, dadm, model_list, return_all_pars=return_all_pars)
   pars <- model_list$Ttransform(pars, dadm)
-  pars <- add_bound(pars, model_list$bound, dadm$lR)
+  # pars <- add_bound(pars, model_list$bound, dadm$lR) # now handled in get_pars_wrapper
   .oo_reorder_public_pars(pars, model_list)
 }
+
+get_pars_singlesub_oo <- function(p, dadm, model,
+                                  pretransformed = FALSE,
+                                  constants_included = FALSE,
+                                  return_kernel_matrix = FALSE,
+                                  return_all_pars = FALSE,
+                                  kernel_output_codes = 1L) {
+  model_list <- .oo_model_list(model)
+  particle_matrix <- .oo_particle_matrix(p, dadm, keep_all_columns = constants_included)
+  constants <- attr(dadm, "constants")
+  if (constants_included || is.null(constants)) {
+    constants <- NA
+  }
+  pretransforms <- if (pretransformed) {
+    .oo_identity_transform(colnames(particle_matrix))
+  } else {
+    model_list$pre_transform
+  }
+
+  designs <- get_designs_expanded(dadm, model)
+
+  pars_list <- get_pars_c_wrapper(particle_matrix = particle_matrix,
+                             data = dadm,
+                             constants = constants,
+                             designs = designs,
+                             bounds = model_list$bound,
+                             transforms = model_list$transform,
+                             pretransforms = pretransforms,
+                             trend = model_list$trend,
+                             return_kernel_matrix = return_kernel_matrix,
+                             return_all_pars = return_all_pars,
+                             kernel_output_codes = kernel_output_codes)
+  # pars_list[[k]] is n_data_rows x n_pars for particle k
+  # Apply Ttransform and add_bound per particle, then stack into array
+  n_particles <- length(pars_list)
+  # compute order of returning once
+  first_pars <- model_list$Ttransform(pars_list[[1]], dadm)
+  base_names <- names(model_list$p_types)
+  ord <- c(intersect(base_names, colnames(first_pars)), setdiff(colnames(first_pars), base_names))
+  col_idx <- if (identical(ord, colnames(first_pars))) NULL else match(ord, colnames(first_pars))
+  # Ttransform and reordering per element
+  lapply(pars_list, function(pars) {
+    pars <- model_list$Ttransform(pars, dadm)
+    .oo_reorder_public_pars(pars, model_list, col_idx)
+  })
+}
+
+

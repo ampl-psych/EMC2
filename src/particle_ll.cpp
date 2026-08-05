@@ -149,9 +149,9 @@ PipelineContext make_pipeline_context(
 
   // 5. Trend objects and keep_names
   if (!trend.isNull()) {
-    ctx.trend_plan.reset(new TrendPlan(trend, data));
+    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data));
     ctx.trend_runtime.reset(new TrendRuntime(*ctx.trend_plan));
-    ctx.trend_runtime->bind_all_ops_to_paramtable(ctx.param_table);
+    ctx.trend_runtime->bind_all_to_paramtable(ctx.param_table);
 
     Rcpp::CharacterVector dnames = designs.names();
     const auto& trend_params = ctx.trend_runtime->all_trend_params();
@@ -204,8 +204,8 @@ void run_pars_pipeline(ParamTable& param_table,
     if (!cache.premap_specs.empty()) {
       c_do_transform_pt(param_table, cache.premap_specs);
     }
-    for (TrendOpRuntime& op : trend_runtime->premap_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->premap_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 
@@ -218,8 +218,8 @@ void run_pars_pipeline(ParamTable& param_table,
     if (!cache.pretransform_specs.empty()) {
       c_do_transform_pt(param_table, cache.pretransform_specs);
     }
-    for (TrendOpRuntime& op : trend_runtime->pretransform_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->pretransform_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 
@@ -228,8 +228,8 @@ void run_pars_pipeline(ParamTable& param_table,
 
   // 5) Posttransform trends
   if (trend_runtime && trend_runtime->has_posttransform()) {
-    for (TrendOpRuntime& op : trend_runtime->posttransform_ops) {
-      trend_runtime->apply_base_for_op(op, param_table);
+    for (BaseRuntime& base : trend_runtime->posttransform_bases) {
+      trend_runtime->apply_base(base, param_table);
     }
   }
 }
@@ -672,43 +672,69 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
 
 // [[Rcpp::export]]
-NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
-                                 DataFrame data,
-                                 NumericVector constants,
-                                 List designs,
-                                 List bounds,
-                                 List transforms,
-                                 List pretransforms,
-                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                                 bool return_kernel_matrix = false,
-                                 bool return_all_pars = false,
-                                 IntegerVector kernel_output_codes = 1)
+List get_pars_c_wrapper(NumericMatrix particle_matrix,
+                        DataFrame data,
+                        NumericVector constants,
+                        List designs,
+                        List bounds,
+                        List transforms,
+                        List pretransforms,
+                        Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                        bool return_kernel_matrix = false,
+                        bool return_all_pars = false,
+                        IntegerVector kernel_output_codes = 1)
 {
   if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
   }
+  const int n_trials    = data.nrow();
+  const int n_particles = particle_matrix.nrow();
+  const bool has_lR     = (sum(contains(data.names(), "lR")) == 1);
+  const int n_lR        = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
 
   // Shared setup
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
                                               designs, transforms, pretransforms, trend);
   TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
 
-  // Pipeline cache
-  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs, ctx.transform_specs, trend_runtime_ptr);
+  // Pipeline cache (built once, reused across particles)
+  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
+                                            ctx.transform_specs, trend_runtime_ptr);
 
   // kernel_output_codes: IntegerVector -> std::vector<int>
   std::vector<int> kernel_codes(kernel_output_codes.begin(), kernel_output_codes.end());
 
-  // Run pipeline (single particle — no loop needed)
-  run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+  NumericMatrix   minmax   = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+  std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names, ctx.param_table, bounds);
+  std::vector<int> is_ok(n_trials, 1);
 
-  // Extract and return
-  if (return_kernel_matrix) {
-    return get_covariate_matrix(ctx.param_table, trend_runtime_ptr, kernel_codes);
-  } else if (return_all_pars) {
-    return get_all_pars(ctx.param_table);
-  } else {
-    return get_pars_matrix(ctx.param_table, ctx.keep_names);
+  List result(n_particles);
+
+  for (int i = 0; i < n_particles; ++i) {
+    // Update param_table for this particle (skip refill on first particle)
+    if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+    run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+
+    std::fill(is_ok.begin(), is_ok.end(), 1);
+    c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
+    if(n_lR > 1) lr_all(is_ok, n_lR);
+
+    // Convert is_ok to LogicalVector for the attribute
+    LogicalVector ok_attr(is_ok.begin(), is_ok.end());
+    // Extract and store
+    NumericMatrix mat;
+    if (return_kernel_matrix) {
+      mat = get_covariate_matrix(ctx.param_table, trend_runtime_ptr, kernel_codes);
+    } else if (return_all_pars) {
+      mat = get_all_pars(ctx.param_table);
+    } else {
+      mat = get_pars_matrix(ctx.param_table, ctx.keep_names);
+    }
+
+    mat.attr("ok") = ok_attr;
+    result[i] = mat;
   }
-}
 
+  return result;
+}

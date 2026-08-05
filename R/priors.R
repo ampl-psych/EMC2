@@ -616,13 +616,20 @@ predict.emc.prior <- function(object, data = NULL, n_post = 50, n_cores = 1,
     in_bounds <- !sapply(simDat, is.logical)
     if (all(!in_bounds)) stop("All prior samples fall outside of model bounds, choose a more informative prior")
     if (sum(!in_bounds) > (length(in_bounds) / 2)) warning("Most prior samples fall outside of model bounds, choose a more informative prior")
+    post_idx <- 1:n_post
     if (any(!in_bounds)) {
       good_post <- sample(1:n_post, sum(!in_bounds))
       simDat[!in_bounds] <- suppressWarnings(mclapply(good_post, function(i) {
         do.call(make_data, c(list(samps[(1 + ((i - 1) * n_subjects)):(i * n_subjects), ], design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
       }, mc.cores = n_cores))
+      post_idx[!in_bounds] <- good_post
     }
-    out <- cbind(postn = rep(1:n_post, times = unlist(lapply(simDat, function(x) dim(x)[1]))), do.call(rbind, simDat))
+    # datasets with parameter values outside model bounds should can't be used
+    still_in_bounds <- !sapply(simDat, is.logical)
+    out <- cbind(postn = rep(post_idx[still_in_bounds],
+                             times = unlist(lapply(simDat[still_in_bounds],
+                                                   function(x) dim(x)[1]))), do.call(rbind, simDat[still_in_bounds]))
+    # out <- cbind(postn = rep(post_idx, times = unlist(lapply(simDat, function(x) dim(x)[1]))), do.call(rbind, simDat))
     attr(out, "pars") <- samps
     post_out[[k]] <- out
   }
