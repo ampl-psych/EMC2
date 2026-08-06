@@ -496,7 +496,7 @@ dPSDM <- function(rt, R, pars) {
   t0 <- pars[, "t0"]
   a <- pars[, "a"]
   v <- pars[, "v"]
-  theta1 <- pars[, "theta1"] * pi
+  theta1 <- pars[, "theta"] * pi
   sigma <- pars[, "s"]
   sv <- if ("sv" %in% colnames(pars)) as.numeric(pars[, "sv"]) else rep(0, n)
 
@@ -816,7 +816,7 @@ HSDM <- function() {
 #' | Parameter | Transform | Natural scale | Default   | Interpretation |
 #' |-----------|-----------|---------------|-----------|----------------|
 #' | v         | log       | [0, Inf)      | log(1)    | Drift magnitude |
-#' | theta1    | pnorm     | [0, 1)        | qnorm(.5) | Drift polar angle, mapped to 0..pi |
+#' | theta     | pnorm     | [0, 1)        | qnorm(.5) | Drift polar angle, mapped to 0..pi |
 #' | a         | log       | [0, Inf)      | log(1)    | Boundary radius |
 #' | t0        | log       | [0, Inf)      | log(0)    | Non-decision time |
 #' | s         | log       | [0, Inf)      | log(1)    | Diffusion scale |
@@ -833,7 +833,7 @@ PSDM <- function() {
     c_name = "PSDM",
     p_types = c(
       "v" = log(1),
-      "theta1" = qnorm(0.5),
+      "theta" = qnorm(0.5),
       "a" = log(1),
       "t0" = log(0),
       "s" = log(1),
@@ -841,7 +841,7 @@ PSDM <- function() {
     ),
     transform = list(func = c(
       v = "exp",
-      theta1 = "pnorm",
+      theta = "pnorm",
       a = "exp",
       t0 = "exp",
       s = "exp",
@@ -850,7 +850,7 @@ PSDM <- function() {
     bound = list(
       minmax = cbind(
         v = c(0, 10),
-        theta1 = c(1e-4, 1 - 1e-4),
+        theta = c(1e-4, 1 - 1e-4),
         a = c(1e-4, 7),
         t0 = c(0.05, Inf),
         s = c(1e-4, Inf),

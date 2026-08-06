@@ -18,7 +18,7 @@ All parameters not specified in the \code{formula} of \code{design()} are
 assumed constant with the defaults in \code{p_types}.\tabular{lllll}{
    Parameter \tab Transform \tab Natural scale \tab Default \tab Interpretation \cr
    v \tab log \tab [0, Inf) \tab log(1) \tab Drift magnitude \cr
-   theta1 \tab pnorm \tab [0, 1) \tab qnorm(.5) \tab Drift polar angle, mapped to 0..pi \cr
+   theta \tab pnorm \tab [0, 1) \tab qnorm(.5) \tab Drift polar angle, mapped to 0..pi \cr
    a \tab log \tab [0, Inf) \tab log(1) \tab Boundary radius \cr
    t0 \tab log \tab [0, Inf) \tab log(0) \tab Non-decision time \cr
    s \tab log \tab [0, Inf) \tab log(1) \tab Diffusion scale \cr

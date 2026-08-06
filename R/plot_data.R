@@ -34,14 +34,14 @@ check_data_plot <- function(data, defective_factor, subject, factors,
   if (!is.null(factors) && !all(factors %in% names(data))) {
     stop("factors must name factors in data")
   }
-  n_bins <- 4
-  for(fact in factors){
-    if(is.numeric(data[,fact])){
-      if(length(unique(data[,fact])) > 6){
-        quartile_breaks <- quantile(unique(data[,fact]), probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
-        # Bin the data into quartiles using these breakpoints
-        data[,fact] <- cut(data[,fact], breaks = quartile_breaks, include.lowest = TRUE, labels = paste0("Q", 1:n_bins))
-      }
+  for(fact in unique(c(factors, defective_factor))){
+    if(is.numeric(data[[fact]])){
+      values <- unique(data[[fact]][is.finite(data[[fact]])])
+      if(length(values) >= 4){
+        breaks <- quantile(values, probs = 0:4/4)
+        data[[fact]] <- cut(data[[fact]], breaks = breaks, include.lowest = TRUE,
+                            labels = paste0("Q", 1:4))
+      } else data[[fact]] <- factor(data[[fact]])
     }
   }
   # Handle subject argument
@@ -781,6 +781,11 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
                          legendpos = c("topright", "top"),
                          posterior_args = list(), prior_args = list(),
                          density_over = "rt", ...) {
+  if (identical(density_over, defective_factor)) {
+    functions <- c(functions, list(.all = function(x) 1))
+    defective_factor <- ".all"
+  }
+
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor, subject, n_cores, n_post, functions,
@@ -988,7 +993,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       }
     }
     # Add legends
-    if(!is.na(legendpos[1])){
+    if(!is.na(legendpos[1]) && length(defective_levels) > 1){
       legend(legendpos[1], legend = defective_levels, lty = line_types, col = "black",
              title = defective_factor, bty = "n")
     }
@@ -1042,9 +1047,10 @@ get_def_cdf <- function(x, defective_factor, dots, density_over = "rt") {
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. `c(0.025, 0.975)`).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
-#' @param factors Character vector of factor names to aggregate over;
-#' defaults to plotting full data set ungrouped by factors if `NULL`.
-#' @param defective_factor Name of the factor used for the defective CDF (default "R").
+#' @param factors Character vector of factor names to aggregate over. Numeric
+#' variables are split into quartiles, unless they have fewer than four values.
+#' @param defective_factor Name of the factor used for the defective CDF (default
+#' `"R"`). Numeric variables are grouped in the same way as `factors`.
 #' @param density_over Name of the numeric column whose density or CDF is plotted.
 #' Defaults to `"rt"`.
 #' @param n_cores Number of CPU cores to use if generating predictives from an `emc` object.
@@ -1086,6 +1092,11 @@ plot_cdf <- function(input,
                      add_percentiles=c(10,50,90),
                      density_over = "rt",
                      ...) {
+
+  if (identical(density_over, defective_factor)) {
+    functions <- c(functions, list(.all = function(x) 1))
+    defective_factor <- ".all"
+  }
 
   # 1) prep_data_plot
   if (!is.null(add_percentiles)) {
@@ -1386,7 +1397,7 @@ plot_cdf <- function(input,
     }
 
     # Factor-level legend
-    if(!is.na(legendpos[1])){
+    if(!is.na(legendpos[1]) && length(defective_levels) > 1){
       if (is.null(dots$defective_legend))
         legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
                 title=defective_factor, bty="n") else

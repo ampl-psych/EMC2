@@ -15,13 +15,13 @@ make_snapshot_emc <- function(data, design) {
 cdm_design <- make_circular_design(CDM, c("v", "theta", "a", "t0", "s", "sv"))
 sdm_design <- make_circular_design(SDM, c("v", "theta1", "theta2", "a", "t0", "s", "sv"))
 hsdm_design <- make_circular_design(HSDM, c("v", "theta1", "theta2", "theta3", "a", "t0", "s", "sv"))
-psdm_design <- make_circular_design(PSDM, c("v", "theta1", "a", "t0", "s", "sv"))
+psdm_design <- make_circular_design(PSDM, c("v", "theta", "a", "t0", "s", "sv"))
 phsdm_design <- make_circular_design(PHSDM, c("v", "theta1", "theta2", "a", "t0", "s", "sv"))
 
 cdm_pars <- c(v = log(1.1), theta = qnorm(0.55), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
 sdm_pars <- c(v = log(1.1), theta1 = qnorm(0.35), theta2 = qnorm(0.6), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
 hsdm_pars <- c(v = log(1.0), theta1 = qnorm(0.32), theta2 = qnorm(0.57), theta3 = qnorm(0.66), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
-psdm_pars <- c(v = log(1.0), theta1 = qnorm(0.38), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
+psdm_pars <- c(v = log(1.0), theta = qnorm(0.38), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
 phsdm_pars <- c(v = log(1.0), theta1 = qnorm(0.33), theta2 = qnorm(0.58), a = log(1.0), t0 = log(0.2), s = log(1.0), sv = log(0.1))
 
 RNGkind("L'Ecuyer-CMRG")
@@ -141,7 +141,7 @@ test_that("PHSDM simulates and initializes", {
 #   expect_equal(hsdm_mass, blended_hsdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
 #
 #   psdm_nat <- matrix(c(0, 0.38, 1.0, 0.2, 1.0, 0), nrow = 1)
-#   colnames(psdm_nat) <- c("v", "theta1", "a", "t0", "s", "sv")
+#   colnames(psdm_nat) <- c("v", "theta", "a", "t0", "s", "sv")
 #   psdm_grid <- seq(0, pi, length.out = 1201)
 #   psdm_mass <- trapz1d(psdm_grid, dPSDM(rep(rt, length(psdm_grid)), psdm_grid, repeat_pars(psdm_nat, length(psdm_grid))) * sin(psdm_grid))
 #   expect_equal(psdm_mass, blended_sdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
@@ -165,6 +165,7 @@ test_that("PHSDM simulates and initializes", {
 #   hidden_r2 <- seq(-pi, pi, length.out = 1000)
 #   sdm_marginal <- trapz1d(hidden_r2, dSDM(rep(rt, length(hidden_r2)), rep(r1, length(hidden_r2)), hidden_r2, repeat_pars(sdm_nat, length(hidden_r2))))
 #   psdm_nat <- sdm_nat[, c("v", "theta1", "a", "t0", "s", "sv"), drop = FALSE]
+#   colnames(psdm_nat)[2] <- "theta"
 #   expect_equal(dPSDM(rt, r1, psdm_nat), sdm_marginal, tolerance = 1e-4)
 #
 #   hsdm_nat <- matrix(c(1.2, 0.31, 0.48, 0.66, 1.05, 0.15, 1.0, 0.12), nrow = 1)

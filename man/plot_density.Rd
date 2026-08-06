@@ -38,10 +38,11 @@ plot_density(
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{factors}{Character vector of factor names to aggregate over;
-defaults to plotting full data set ungrouped by factors if \code{NULL}.}
+\item{factors}{Character vector of factor names to aggregate over. Numeric
+variables are split into quartiles, unless they have fewer than four values.}
 
-\item{defective_factor}{Name of the factor used for the defective CDF (default "R").}
+\item{defective_factor}{Name of the factor used for the defective CDF (default
+\code{"R"}). Numeric variables are grouped in the same way as \code{factors}.}
 
 \item{n_cores}{Number of CPU cores to use if generating predictives from an \code{emc} object.}
 

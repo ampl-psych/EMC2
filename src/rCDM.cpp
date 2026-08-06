@@ -435,13 +435,13 @@ DataFrame rPSDM(NumericMatrix pars,
   if (cn.size() == 0) stop("pars must have column names.");
 
   const int idx_v = column_index(cn, "v");
-  const int idx_th1 = column_index(cn, "theta1");
+  const int idx_th1 = column_index(cn, "theta");
   const int idx_a = column_index(cn, "a");
   const int idx_t0 = column_index(cn, "t0");
   const int idx_sigma = column_index(cn, "s");
   const int idx_sv = column_index(cn, "sv");
   if (idx_v < 0 || idx_th1 < 0 || idx_a < 0 || idx_t0 < 0 || idx_sigma < 0) {
-    stop("pars must contain columns v, theta1, a, t0, s.");
+    stop("pars must contain columns v, theta, a, t0, s.");
   }
 
   NumericVector v = pars(_, idx_v);
