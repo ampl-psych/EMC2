@@ -89,7 +89,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
         string name = as<string>(fnames[i]);
         string f    = as<string>(func_charvec[i]);
         TransformCode code = IDENTITY;
-        if (f == "exp")      code = EXP;
+        if (f == "exp")        code = EXP;
         else if (f == "pnorm") code = PNORM;
         codeMap.emplace(name, code);
       }
@@ -195,12 +195,21 @@ void c_do_bound_pt(const ParamTable& pt,
 
     const double* col = &base(0, col_idx);
 
+    if (pt.col_is_constant[bs.col_idx]) {
+      // value is constant across trials - check the first, then fill ok with the result
+      const double v = col[0];
+      bool ok = (v > bs.min_val && v < bs.max_val);
+      if (bs.has_exception) ok = ok || (v == bs.exception_val);
+      if (!ok) std::fill(res, res + nrows, 0);
+    } else {
+      // values vary across trials - check all
 #pragma omp simd
-    for (int i = 0; i < nrows; ++i) {
-      const double v = col[i];
-      bool ok = (v > min_v && v < max_v);
-      if (has_exc) ok = ok || (v == exc_val);
-      res[i] = res[i] & (ok ? 1 : 0);
+      for (int i = 0; i < nrows; ++i) {
+        const double v = col[i];
+        bool ok = (v > min_v && v < max_v);
+        if (has_exc) ok = ok || (v == exc_val);
+        res[i] = res[i] & (ok ? 1 : 0);
+      }
     }
   }
 }
@@ -257,22 +266,34 @@ void c_do_transform_pt(ParamTable& pt,
 
     double* __restrict__ col = &pt.base(0, col_idx);
 
-    switch (c) {
-    case EXP: {
-      vec_exp_offset(col, nrow, lw);
+    if (pt.col_is_constant[col_idx]) {
+      // values are constant across trials - transform once, fill
+      double val = col[0];
+      switch (sp.code) {
+      case EXP:   val = std::exp(val) + lw; break;
+      case PNORM: val = lw + (up - lw) * PNORM_STD(val, true, false); break;
+      default: break;
+      }
+      std::fill(col, col + nrow, val);
+    } else {
+      // values vary between trials - check all trials
+      switch (c) {
+      case EXP: {
+        vec_exp_offset(col, nrow, lw);
+        break;
+      }
+      case PNORM: {
+      const double range = up - lw;
+      for (int i = 0; i < nrow; ++i) {
+        col[i] = lw + range * PNORM_STD(col[i], true, false);
+        // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
+      }
       break;
-    }
-    case PNORM: {
-    const double range = up - lw;
-    for (int i = 0; i < nrow; ++i) {
-      col[i] = lw + range * PNORM_STD(col[i], true, false);
-      // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
-    }
-    break;
-    }
-    case IDENTITY:
-    default:
-      break;
+      }
+      case IDENTITY:
+      default:
+        break;
+      }
     }
   }
 }
@@ -348,7 +369,8 @@ std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
 
     // 3) Create BoundSpec for each column in minmax
     const int ncols = minmax_colnames.size();
-    std::vector<BoundSpec> specs(ncols);
+    std::vector<BoundSpec> specs;
+    specs.reserve(ncols);  // reserve, don't resize
 
     for (int j = 0; j < ncols; ++j) {
       string var_name = as<string>(minmax_colnames[j]);
@@ -370,7 +392,9 @@ std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
         s.exception_val = NA_REAL;  // same as before
       }
 
-      specs[j] = s;
+      // don't make a spec at all if bounds are -Inf and +inf -- Skips a loop over all particles with pointless checks
+      if (std::isinf(s.min_val) && std::isinf(s.max_val) && !s.has_exception) continue;
+      specs.push_back(s);  // only adds when not skipped
     }
 
     return specs;

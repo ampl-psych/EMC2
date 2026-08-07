@@ -19,18 +19,14 @@ struct DesignEntry {
   int  out_idx              = -1;
   std::vector<int> coef_idx;
   bool uses_self            = false;
-};
+  bool dm_is_constant       = false;  // true if every column of the design matrix is constant
 
-// ---------------------------------------------------------------------------
-// DesignCache: pre-extracts all design matrix data pointers and dimensions
-// from a Rcpp::List of design matrices before entering any parallel region.
-// After construction, no Rcpp/SEXP types are needed.
-// ---------------------------------------------------------------------------
-struct DesignMatData {
-  const double* ptr  = nullptr;
-  int           nrow = 0;
-  int           ncol = 0;
-  bool          is_null = true;
+  // Raw design matrix data — pointer into the original Rcpp::NumericMatrix,
+  // which is owned externally and must outlive this entry (safe: R keeps it alive).
+  const double* dm_ptr  = nullptr;
+  int           dm_nrow = 0;
+  int           dm_ncol = 0;
+  bool          dm_null = true;
 };
 
 // ---------------------------------------------------------------------------
@@ -45,7 +41,7 @@ struct ParamTable {
 
   std::vector<int>  active_cols;
   std::vector<char> is_active;
-  std::vector<char> design_is_self_intercept;
+  std::vector<bool> col_is_constant;   // true if all rows of this column are identical
 
   std::unordered_map<std::string, int> name_to_base_idx;
 
@@ -58,6 +54,7 @@ struct ParamTable {
     const int p = base.ncol;
     active_cols.resize(p);
     std::iota(active_cols.begin(), active_cols.end(), 0);
+    col_is_constant.assign(p, false);  // tracks if all values are constants
     rebuild_name_map();
   }
 
@@ -79,7 +76,6 @@ struct ParamTable {
     pt.n_trials                 = n_trials;
     pt.active_cols              = active_cols;
     pt.is_active                = is_active;
-    pt.design_is_self_intercept = design_is_self_intercept;
     pt.design_plan              = design_plan;
     pt.rebuild_name_map();
     return pt;
@@ -141,8 +137,7 @@ struct ParamTable {
       const double val = particles_ptr[j * n_particle_rows + row];
       double* col = base.colptr(base_idx);
 #pragma omp simd
-      for (int r = 0; r < n_trials; ++r)
-        col[r] = val;
+      for (int r = 0; r < n_trials; ++r) col[r] = val;
     }
   }
 
@@ -184,62 +179,66 @@ struct ParamTable {
       d[i] = 0.0;
   }
 
-  // ---------------------------------------------------------------------------
-  // init_design_plan  (called once, uses Rcpp — serial only)
-  // ---------------------------------------------------------------------------
-  void init_design_plan(const Rcpp::List& designs) {
-    using namespace Rcpp;
-    const int n_params = designs.size();
-    design_plan.clear();
-    design_plan.resize(n_params);
-
-    CharacterVector design_names = designs.names();
-    const int T = n_trials;
-
-    for (int i = 0; i < n_params; ++i) {
-      DesignEntry& entry = design_plan[i];
-      entry.valid = false;
-      if (designs[i] == R_NilValue) continue;
-
-      bool skip_self = !design_is_self_intercept.empty() &&
-        i < (int)design_is_self_intercept.size() &&
-        design_is_self_intercept[i];
-      entry.skip_self_intercept = skip_self;
-
-      const std::string out_name = as<std::string>(design_names[i]);
-      auto out_it = name_to_base_idx.find(out_name);
-      if (out_it == name_to_base_idx.end()) continue;
-      entry.out_idx = out_it->second;
-
-      NumericMatrix design = designs[i];
-      if (design.nrow() != T)
-        stop("ParamTable::init_design_plan: design for '%s' must have n_trials rows",
-             out_name.c_str());
-
-      const int K = design.ncol();
-      CharacterVector coef_names = colnames(design);
-      entry.coef_idx.assign(K, -1);
-      entry.uses_self = false;
-
-      for (int j = 0; j < K; ++j) {
-        std::string coef_name = as<std::string>(coef_names[j]);
-        auto it = name_to_base_idx.find(coef_name);
-        if (it == name_to_base_idx.end()) continue;
-        int cidx = it->second;
-        entry.coef_idx[j] = cidx;
-        if (cidx == entry.out_idx) entry.uses_self = true;
-      }
-      entry.valid = true;
-    }
-  }
+  // // ---------------------------------------------------------------------------
+  // // init_design_plan  (called once, uses Rcpp — serial only)
+  // // ---------------------------------------------------------------------------
+  // void init_design_plan(const Rcpp::List& designs) {
+  //   using namespace Rcpp;
+  //   const int n_params = designs.size();
+  //   design_plan.clear();
+  //   design_plan.resize(n_params);
+  //
+  //   CharacterVector design_names = designs.names();
+  //   const int T = n_trials;
+  //
+  //   for (int i = 0; i < n_params; ++i) {
+  //     DesignEntry& entry = design_plan[i];
+  //     entry.valid = false;
+  //     if (designs[i] == R_NilValue) continue;
+  //
+  //     bool skip_self = !design_is_self_intercept.empty() &&
+  //       i < (int)design_is_self_intercept.size() &&
+  //       design_is_self_intercept[i];
+  //     entry.skip_self_intercept = skip_self;
+  //
+  //     const std::string out_name = as<std::string>(design_names[i]);
+  //     auto out_it = name_to_base_idx.find(out_name);
+  //     if (out_it == name_to_base_idx.end()) continue;
+  //     entry.out_idx = out_it->second;
+  //
+  //     NumericMatrix design = designs[i];
+  //     if (design.nrow() != T)
+  //       stop("ParamTable::init_design_plan: design for '%s' must have n_trials rows",
+  //            out_name.c_str());
+  //
+  //     // Store raw pointer alongside the logical plan
+  //     entry.dm_ptr  = design.begin();
+  //     entry.dm_nrow = design.nrow();
+  //     entry.dm_ncol = design.ncol();
+  //     entry.dm_null = false;
+  //     const int K = entry.dm_ncol;
+  //     CharacterVector coef_names = colnames(design);
+  //     entry.coef_idx.assign(K, -1);
+  //     entry.uses_self = false;
+  //
+  //     for (int j = 0; j < K; ++j) {
+  //       std::string coef_name = as<std::string>(coef_names[j]);
+  //       auto it = name_to_base_idx.find(coef_name);
+  //       if (it == name_to_base_idx.end()) continue;
+  //       int cidx = it->second;
+  //       entry.coef_idx[j] = cidx;
+  //       if (cidx == entry.out_idx) entry.uses_self = true;
+  //     }
+  //     entry.valid = true;
+  //   }
+  // }
 
   // ---------------------------------------------------------------------------
   // map_from_designs — hot path, no Rcpp types touched after init
   // ---------------------------------------------------------------------------
-  void map_from_designs(const std::vector<DesignMatData>& dc,
-                        const std::vector<bool>& use)
+  void map_from_designs(const std::vector<bool>& use)
   {
-    const int n = (int)dc.size();
+    const int n = (int)design_plan.size();
     if (n == 0) return;
 
     // Lazy init of design_plan is not safe inside a parallel region —
@@ -250,20 +249,18 @@ struct ParamTable {
     std::vector<double> self_copy(T);
 
     for (int i = 0; i < n; ++i) {
-      if (!use[i])            continue;
-      if (dc[i].is_null) continue;
+      if (!use[i])       continue;
 
       DesignEntry& entry = design_plan[i];
       if (!entry.valid || entry.skip_self_intercept) continue;
+      if (entry.dm_null)    continue;
 
-      const DesignMatData& dm      = dc[i];
-      const int            out_idx = entry.out_idx;
-      const int            K       = dm.ncol;
+      const int    out_idx = entry.out_idx;
+      const int    K       = entry.dm_ncol;
+      double*      out     = base.colptr(out_idx);
 
-      double* out = base.colptr(out_idx);
-
-      if (entry.uses_self)
-        std::copy(out, out + T, self_copy.begin());
+      // One of the input names equals the output name -- need to copy the value
+      if(entry.uses_self) std::copy(out, out + T, self_copy.begin());
 
       std::fill(out, out + T, 0.0);
 
@@ -274,7 +271,7 @@ struct ParamTable {
         const double* coef = (entry.uses_self && cidx == out_idx)
           ? self_copy.data()
             : base.colptr(cidx);
-        const double* d = dm.ptr + j * dm.nrow;  // column-major, no SEXP
+        const double* d = entry.dm_ptr + j * entry.dm_nrow;
 
 #pragma omp simd
         for (int r = 0; r < T; ++r) {
@@ -390,6 +387,7 @@ struct ParamTable {
     using namespace Rcpp;
     using std::string;
 
+    // --- Build name list ---
     std::vector<string> names_vec;
     std::unordered_set<string> seen;
     names_vec.reserve(p_vector.size() + designs.size() * 2);
@@ -415,6 +413,7 @@ struct ParamTable {
       }
     }
 
+    // --- Build base matrix ---
     const int p = (int)names_vec.size();
     Mat base(n_trials, p);
 
@@ -428,29 +427,78 @@ struct ParamTable {
       if (it != pval.end()) {
         double val = it->second;
         double* col = base.colptr(j);
-        for (int r = 0; r < n_trials; ++r)
-          col[r] = val;
+        for (int r = 0; r < n_trials; ++r) col[r] = val;
       }
     }
 
+    // --- Construct ParamTable (builds name_to_base_idx) ---
     ParamTable pt(std::move(base), names_vec);
     pt.n_trials = n_trials;
-
+    // --- Build design_plan ---
     const int n_designs = designs.size();
-    pt.design_is_self_intercept.assign(n_designs, 0);
+    pt.design_plan.clear();
+    pt.design_plan.resize(n_designs);
 
     for (int i = 0; i < n_designs; ++i) {
+      DesignEntry& entry = pt.design_plan[i];
+      entry.valid = false;
+
       if (designs[i] == R_NilValue) continue;
-      NumericMatrix dm = designs[i];
-      if (dm.nrow() != n_trials || dm.ncol() != 1) continue;
-      CharacterVector cn = colnames(dm);
-      if (cn.size() != 1) continue;
-      if (as<string>(design_names[i]) != as<string>(cn[0])) continue;
-      const double* dcol = &dm(0, 0);
-      bool all_ones = true;
-      for (int r = 0; r < n_trials; ++r)
-        if (dcol[r] != 1.0) { all_ones = false; break; }
-      if (all_ones) pt.design_is_self_intercept[i] = 1;
+
+      NumericMatrix   dm       = designs[i];
+      const string    out_name = as<string>(design_names[i]);
+
+      auto out_it = pt.name_to_base_idx.find(out_name);
+      if (out_it == pt.name_to_base_idx.end()) continue;
+      entry.out_idx = out_it->second;
+
+      if (dm.nrow() != n_trials)
+        stop("ParamTable: design for '%s' must have n_trials rows", out_name.c_str());
+
+      // --- Raw pointer fields ---
+      entry.dm_ptr  = dm.begin();
+      entry.dm_nrow = dm.nrow();
+      entry.dm_ncol = dm.ncol();
+      entry.dm_null = false;
+
+      // --- dm_is_constant: every column has identical rows ---
+      entry.dm_is_constant = true;
+      for (int j = 0; j < entry.dm_ncol && entry.dm_is_constant; ++j) {
+        const double* col = entry.dm_ptr + j * entry.dm_nrow;
+        const double  v0  = col[0];
+        for (int r = 1; r < entry.dm_nrow; ++r)
+          if (col[r] != v0) { entry.dm_is_constant = false; break; }
+      }
+
+      // --- skip_self_intercept: single all-ones self-column — mapping is a no-op ---
+      entry.skip_self_intercept = false;
+      if (entry.dm_ncol == 1) {
+        CharacterVector cn = colnames(dm);
+        if (as<string>(cn[0]) == out_name) {
+          const double* col = entry.dm_ptr;
+          bool all_ones = true;
+          for (int r = 0; r < entry.dm_nrow; ++r)
+            if (col[r] != 1.0) { all_ones = false; break; }
+          entry.skip_self_intercept = all_ones;
+        }
+      }
+
+      // --- Coefficient index mapping ---
+      const int K = entry.dm_ncol;
+      CharacterVector coef_names = colnames(dm);
+      entry.coef_idx.assign(K, -1);
+      entry.uses_self = false;
+
+      for (int j = 0; j < K; ++j) {
+        string coef_name = as<string>(coef_names[j]);
+        auto it = pt.name_to_base_idx.find(coef_name);
+        if (it == pt.name_to_base_idx.end()) continue;
+        int cidx = it->second;
+        entry.coef_idx[j] = cidx;
+        if (cidx == entry.out_idx) entry.uses_self = true;
+      }
+
+      entry.valid = true;
     }
 
     return pt;

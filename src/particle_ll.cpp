@@ -41,10 +41,6 @@ struct PipelineCache {
   std::vector<bool> mask_premap_reparam;    // reparam targets that are premap
   std::vector<bool> mask_map;               // regular main designs
   std::vector<bool> mask_reparam;           // reparam in main step
-
-  // Design matrix raw data — extracted once at construction, no SEXP after that
-  std::vector<DesignMatData> design_mats;
-  int n_designs = 0;
 };
 
 PipelineCache make_pipeline_cache(
@@ -73,21 +69,8 @@ PipelineCache make_pipeline_cache(
   Rcpp::CharacterVector dnames = designs.names();
   const int n_designs = dnames.size();
 
-  // --- Extract design matrix raw pointers ---
-  cache.n_designs = dnames.size();
-  cache.design_mats.resize(cache.n_designs);
-  for (int i = 0; i < cache.n_designs; ++i) {
-    if (designs[i] == R_NilValue) {
-      cache.design_mats[i].is_null = true;
-      continue;
-    }
-    Rcpp::NumericMatrix m = designs[i];
-    cache.design_mats[i].ptr    = m.begin();
-    cache.design_mats[i].nrow   = m.nrow();
-    cache.design_mats[i].ncol   = m.ncol();
-    cache.design_mats[i].is_null = false;
-  }
-  param_table.init_design_plan(designs);
+  // Initialise design plans
+  // param_table.init_design_plan(designs);
 
   // Figure out which parameters are *targets* for reparameterisations
   std::unordered_set<std::string> reparam_set;
@@ -126,6 +109,44 @@ PipelineCache make_pipeline_cache(
       if (is_rep) cache.mask_reparam[i] = true;
       else        cache.mask_map[i]     = true;
     }
+  }
+
+  // --- Constant-column flags ---
+  // Start pessimistic
+  std::fill(param_table.col_is_constant.begin(),
+            param_table.col_is_constant.end(), false);
+
+  // Pass 1: direct design targets are non-constant
+  // (skip_self_intercept entries are intercept-only and stay constant)
+  for (const DesignEntry& entry : param_table.design_plan) {
+    if (!entry.valid) continue;
+    if (entry.dm_is_constant) param_table.col_is_constant[entry.out_idx] = true;
+  }
+
+  // Trend targets are non-constant
+  if (trend_runtime_ptr) {
+    for (const std::string& nm : trend_runtime_ptr->all_trend_targets()) {
+      auto it = param_table.name_to_base_idx.find(nm);
+      if (it != param_table.name_to_base_idx.end())
+        param_table.col_is_constant[it->second] = false;
+    }
+  }
+
+  // Pass 2: reparam targets inherit non-constancy from their inputs
+  for (int i = 0; i < n_designs; ++i) {
+    if (!cache.mask_reparam[i]) continue;
+    const DesignEntry& entry = param_table.design_plan[i];
+    if (!entry.valid || !entry.dm_is_constant) continue;
+
+    bool all_inputs_constant = true;
+    for (int cidx : entry.coef_idx) {
+      if (cidx >= 0 && !param_table.col_is_constant[cidx]) {
+        all_inputs_constant = false;
+        break;
+      }
+    }
+    if (all_inputs_constant)
+      param_table.col_is_constant[entry.out_idx] = true;
   }
 
   return cache;
@@ -202,6 +223,7 @@ PipelineContext make_pipeline_context(
   return ctx;
 }
 
+
 // [[Rcpp::export]]
 Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform) {
   // Build the specs for these parameters
@@ -226,8 +248,8 @@ void run_pars_pipeline(ParamTable&          param_table,
 
   // 1) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_premap()) {
-    param_table.map_from_designs(cache.design_mats, cache.mask_premap);
-    param_table.map_from_designs(cache.design_mats, cache.mask_premap_reparam);
+    param_table.map_from_designs(cache.mask_premap);
+    param_table.map_from_designs(cache.mask_premap_reparam);
     if (!cache.premap_specs.empty()) {
       c_do_transform_pt(param_table, cache.premap_specs);
     }
@@ -237,8 +259,8 @@ void run_pars_pipeline(ParamTable&          param_table,
   }
 
   // 2) Map designs for remaining parameters
-  param_table.map_from_designs(cache.design_mats, cache.mask_map);
-  param_table.map_from_designs(cache.design_mats, cache.mask_reparam);
+  param_table.map_from_designs(cache.mask_map);
+  param_table.map_from_designs(cache.mask_reparam);
 
   // 3) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_pretransform()) {
@@ -936,7 +958,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                             ctx.transform_specs, trend_runtime_ptr);
 
   // Pre-initialise design_plan to avoid lazy-init race inside map_from_designs
-  ctx.param_table.init_design_plan(designs);
+  // ctx.param_table.init_design_plan(designs);
 
   // Always needed - per-thread clones of paramtable and trend runtimes
   std::vector<ParamTable>                    pt_vec;

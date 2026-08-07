@@ -205,6 +205,17 @@ struct TrendRuntime {
     return plan->premap_design_mask(designs);
   }
 
+  std::unordered_set<std::string> all_trend_targets() const {
+    std::unordered_set<std::string> out;
+    for (const auto& b : plan->premap_bases)
+      out.insert(b.target_parameter);
+    for (const auto& b : plan->pretransform_bases)
+      out.insert(b.target_parameter);
+    for (const auto& b : plan->posttransform_bases)
+      out.insert(b.target_parameter);
+    return out;
+  }
+
   void bind_all_to_paramtable(const ParamTable& pt);
   void apply_base(BaseRuntime& base_rt, ParamTable& pt);
   void reset_all_kernels();
