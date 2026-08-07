@@ -576,6 +576,11 @@ rt_check_function <- function(data){
 }
 
 
+uses_accumulator <- function(f) {
+  grepl("\\b(lR|lM)\\b", paste(deparse(body(f)), collapse = " "), perl = TRUE)
+}
+
+
 # Assess identifiability of a design from its mapped design matrices (the list
 # stored in attr(dadm, "designs")). Returns:
 #   $zero_effect_pars : sampled parameters whose design column is all zero (no
@@ -627,14 +632,25 @@ design_identifiability <- function(designs, sampled_p_names, constants = NULL) {
 
 # Aggregate the per-data-set identifiability info stored on each dadm and warn
 # about parameters/combinations that are unidentified across the whole (joint)
-# model. In a joint model a parameter is only unidentified if it is zero in every
-# data set that contains it.
-warn_identifiability <- function(dadm_list) {
-  sp_list <- lapply(dadm_list, function(d) attr(d, "sampled_p_names"))
+# model. Joint-model parameters are component-qualified, so their local names
+# must be qualified here too before aggregating.
+warn_identifiability <- function(dadm_list, component_names = NULL) {
+  joint <- length(dadm_list) > 1L
+  if (joint) {
+    if (is.null(component_names)) component_names <- as.character(seq_along(dadm_list))
+  }
+  qualify <- function(x, i) {
+    if (!joint || length(x) == 0L) x else paste(component_names[i], x, sep = "|")
+  }
+
+  sp_list <- Map(function(d, i) qualify(attr(d, "sampled_p_names"), i),
+                 dadm_list, seq_along(dadm_list))
   if (!all(lengths(sp_list) > 0)) return(invisible(NULL))  # e.g. custom likelihoods
 
   present   <- table(unlist(sp_list))
-  zero_hits <- table(unlist(lapply(dadm_list, function(d) attr(d, "zero_effect_pars"))))
+  zero_list <- Map(function(d, i) qualify(attr(d, "zero_effect_pars"), i),
+                   dadm_list, seq_along(dadm_list))
+  zero_hits <- table(unlist(zero_list))
   if (length(zero_hits) > 0) {
     unident <- names(zero_hits)[as.integer(zero_hits) == as.integer(present[names(zero_hits)])]
     if (length(unident) > 0) {
@@ -648,7 +664,13 @@ warn_identifiability <- function(dadm_list) {
     }
   }
 
-  deps <- unique(unlist(lapply(dadm_list, function(d) attr(d, "collinear_pars"))))
+  deps <- unique(unlist(Map(function(d, i) {
+    x <- attr(d, "collinear_pars")
+    if (joint && length(x) > 0L) {
+      x <- gsub("*", paste0("*", component_names[i], "|"), x, fixed = TRUE)
+    }
+    x
+  }, dadm_list, seq_along(dadm_list))))
   if (length(deps) > 0) {
     warning("The following linear combination(s) of sampled parameters have no ",
             "effect on the likelihood, so those parameters are jointly ",
@@ -666,7 +688,8 @@ warn_identifiability <- function(dadm_list) {
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
-                         compress_dms=TRUE, memory_saver = FALSE)
+                         compress_dms=TRUE, memory_saver = FALSE,
+                         check_identifiability = FALSE)
 {
   if (is.null(model)) {
     if (is.null(design$model))
@@ -700,6 +723,7 @@ design_model <- function(data,design,model=NULL,
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
+    if (i %in% names(da)) next
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da[,i] <- newF
   }
@@ -825,11 +849,11 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
 
-  # Record identifiability info (all-zero columns and exact collinear
-  # dependencies) so make_emc can warn before a fit that would otherwise diverge.
-  ident <- design_identifiability(out, sampled_p_names, design$constants)
-  attr(dadm,"zero_effect_pars") <- ident$zero_effect_pars
-  attr(dadm,"collinear_pars")   <- ident$collinear_pars
+  if (check_identifiability) {
+    ident <- design_identifiability(out, sampled_p_names, design$constants)
+    attr(dadm,"zero_effect_pars") <- ident$zero_effect_pars
+    attr(dadm,"collinear_pars") <- ident$collinear_pars
+  }
   if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
@@ -1464,15 +1488,11 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
 
-  md <- minimal_design(design, covariates = Fcovariates, verbose = F,
-            drop_R = F, add_acc = T, drop_subjects = F, do_functions = T)
-  # add_acc=T lets functions reference accumulator factors (lR/lM); collapse back
-  # to one row per trial for models that have an lR column (race types). DDM-type
-  # models have no lR, so leave their rows untouched.
-  if ("lR" %in% names(md)) {
-    md <- md[md$lR==levels(md$lR)[1],
-             !(names(md) %in% c("lR","lM","winner")), drop=FALSE]
-  }
+  design_in <- design
+  acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+  design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+  md <- minimal_design(design_in, covariates = Fcovariates, verbose = F,
+                       drop_R = F, add_acc = F, drop_subjects = F)
   dadm <- design_model(md,design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))

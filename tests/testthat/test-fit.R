@@ -51,10 +51,10 @@ test_that("on_singular carry_forward recovers a mid-stage singular covariance", 
   # Force a singular covariance on calls 4-5 (mid chain-1 preburn, so
   # last_good_pars is already set and the carry_forward branch actually runs).
   orig <- EMC2:::gibbs_step; cnt <- 0
-  assignInNamespace("gibbs_step", function(sampler, alpha, type, ridge = FALSE, ...) {
+  assignInNamespace("gibbs_step", function(sampler, alpha, type, ...) {
     cnt <<- cnt + 1
     if (cnt %in% c(4, 5)) stop("system is computationally singular")
-    orig(sampler, alpha, type, ridge = ridge, ...)
+    orig(sampler, alpha, type, ...)
   }, ns = "EMC2")
   on.exit(assignInNamespace("gibbs_step", orig, ns = "EMC2"), add = TRUE)
 

@@ -79,13 +79,8 @@ are exhausted, \code{"carry_forward"} reuses the previous iteration's group
 parameters and continues instead of aborting.
 \item \code{max_carry_forward} — integer; consecutive carried-forward iterations
 allowed before giving up with a diagnosis of the diverging parameters. Default 10.
-\item \code{ridge} — \code{FALSE} (default), \code{TRUE}, or a numeric condition-number cap.
-When set, the covariance is regularised so its inversion cannot fail; the
-chain continues with a bounded (large but finite) variance that then shows
-up in the diagnostics. Applies to the standard variant.
 }
-See the examples. All modes compose (retry, then carry-forward; \code{ridge}
-prevents the singular error arising in the first place).}
+Retry is attempted before carry-forward when both are enabled.}
 
 \item{...}{Additional optional arguments}
 }
@@ -145,10 +140,7 @@ LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress 
 #   preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
 #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 
-# For a hard model that dies with a singular group covariance during burn,
-# keep it running and read off the culprits afterwards from theta_var:
-# LNR_s <- fit(LNR_s, on_singular = list(ridge = TRUE))
-# Lighter-touch alternative that preserves the exact model:
+# For a transient singular group covariance during burn, retry the group step:
 # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
 }
 }

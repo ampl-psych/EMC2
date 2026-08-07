@@ -312,8 +312,11 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design, covariates = list(...)$covariates,
-                           drop_subjects = F, n_trials = n_trials, add_acc=T,
+    design_in <- design
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+    data <- minimal_design(design_in, covariates = list(...)$covariates,
+                           drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F, group_design = group_design)
   }
   if(!is.null(functions)){

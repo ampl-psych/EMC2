@@ -187,7 +187,7 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
 # singular group covariance (reported by check_chain_failures).
 resolve_on_singular <- function(on_singular) {
   defaults <- list(max_retries = 0, on_exhausted = "error",
-                   max_carry_forward = 10, ridge = FALSE)
+                   max_carry_forward = 10)
   if (is.null(on_singular)) return(defaults)
   if (!is.list(on_singular)) stop("`on_singular` must be a list or NULL")
   bad <- setdiff(names(on_singular), names(defaults))
@@ -217,13 +217,12 @@ top_diverging_pars <- function(store, j, n = 6) {
 
 # One group (Gibbs) step with retry on a singular covariance. Returns the group
 # parameters, or NULL if all retries were exhausted (caller then decides whether
-# to carry forward or give up). With ridge enabled the inversion cannot fail, so
-# this returns on the first attempt.
+# to carry forward or give up).
 robust_gibbs_step <- function(sampler, alpha, type, on_singular) {
   attempt <- 0L
   repeat {
     res <- tryCatch(
-      gibbs_step(sampler, alpha, type, ridge = on_singular$ridge),
+      gibbs_step(sampler, alpha, type),
       error = function(e) if (is_singular_error(e))
         structure(list(), class = "gibbs_singular") else stop(e))
     if (!inherits(res, "gibbs_singular")) return(res)
@@ -283,7 +282,7 @@ run_stage <- function(pmwgs,
   }
   block_idx <- block_variance_idx(tune$components)
   # Group-covariance recovery bookkeeping (only active when on_singular is set)
-  last_good_pars <- NULL; consec_cf <- 0L; n_cf <- 0L; n_ridge <- 0L
+  last_good_pars <- NULL; consec_cf <- 0L; n_cf <- 0L
   i <- 0L; j <- start_iter
   # Any error in the loop is enriched with where it happened and what the
   # on_singular recovery had done so far, so a chain failure is actually
@@ -323,7 +322,6 @@ run_stage <- function(pmwgs,
     } else {
       consec_cf <- 0L
       last_good_pars <- pars
-      if (isTRUE(attr(pars, "ridged"))) n_ridge <- n_ridge + 1L
     }
     pars_comb <- pars
     if(any(nuisance)){
@@ -353,9 +351,9 @@ run_stage <- function(pmwgs,
   }
   ,
   error = function(e) {
-    recov <- if (n_ridge > 0 || n_cf > 0)
-      sprintf("; on_singular recovery so far: %d ridged, %d carried forward (%d consecutive)",
-              n_ridge, n_cf, consec_cf) else
+    recov <- if (n_cf > 0)
+      sprintf("; on_singular recovery so far: %d carried forward (%d consecutive)",
+              n_cf, consec_cf) else
       "; no on_singular recovery was active (see ?fit `on_singular`)"
     stop(conditionMessage(e),
          sprintf("\n  [context: '%s' stage, iteration %d of %d%s]", stage, i, iter, recov),
@@ -365,10 +363,8 @@ run_stage <- function(pmwgs,
   })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
   if (verboseProgress) close(pb)
-  if (verbose && (n_cf > 0 || n_ridge > 0)) {
-    parts <- c(if (n_ridge > 0) paste0(n_ridge, " ridged"),
-               if (n_cf > 0)    paste0(n_cf, " carried forward"))
-    message("  [on_singular] group covariance recovered on ", paste(parts, collapse = ", "),
+  if (verbose && n_cf > 0) {
+    message("  [on_singular] group covariance recovered on ", n_cf, " carried forward",
             " of ", iter, " '", stage, "' iterations")
   }
   return(pmwgs)

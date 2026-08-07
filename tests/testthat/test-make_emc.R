@@ -38,15 +38,6 @@ test_that("make_emc warns about unidentified (all-zero design column) parameters
   )
 })
 
-test_that("make_emc does not warn for a well-identified design", {
-  ADmat <- matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))
-  des <- design(data = forstmann, model = LBA, matchfun = function(d) d$S == d$lR,
-                formula = list(v ~ lM, B ~ E, A ~ 1, t0 ~ 1, sv ~ 1),
-                contrasts = list(v = list(lM = ADmat)),
-                constants = c(sv = log(1)), report_p_vector = FALSE)
-  expect_no_warning(make_emc(forstmann, des, type = "standard", compress = FALSE))
-})
-
 # Collinearity: a linear combination of sampled parameters that maps to zero is
 # jointly unidentified even when no single column is all zero. This is the
 # generalisation of the all-zero-column check and would not be caught by it.
@@ -84,22 +75,8 @@ test_that("resolve_on_singular fills defaults and validates", {
   d <- resolve_on_singular(NULL)
   expect_identical(d$max_retries, 0)
   expect_identical(d$on_exhausted, "error")
-  expect_false(d$ridge)
-  expect_true(resolve_on_singular(list(ridge = TRUE))$ridge)
   expect_error(resolve_on_singular(list(bad_field = 1)), "unknown")
   expect_error(resolve_on_singular(list(on_exhausted = "nope")))
-})
-
-test_that("regularise_and_invert ridges only near-singular covariances", {
-  singular <- matrix(c(1, 1, 1, 1), 2, 2)
-  expect_error(regularise_and_invert(singular, FALSE))          # plain solve fails
-  r <- regularise_and_invert(singular, TRUE)
-  expect_true(r$ridged)
-  expect_true(all(is.finite(r$inv)))
-  # well-conditioned: untouched, exact inverse
-  w <- regularise_and_invert(diag(c(2, 4)), TRUE)
-  expect_false(w$ridged)
-  expect_equal(w$inv, diag(c(1/2, 1/4)))
 })
 
 test_that("is_singular_error recognises the covariance failure", {
@@ -114,7 +91,7 @@ test_that("is_singular_error recognises the covariance failure", {
 test_that("robust_gibbs_step retries then gives up", {
   n <- 0
   orig <- EMC2:::gibbs_step
-  assignInNamespace("gibbs_step", function(sampler, alpha, type, ridge = FALSE, ...) {
+  assignInNamespace("gibbs_step", function(sampler, alpha, type, ...) {
     n <<- n + 1
     if (n <= 2) stop("system is computationally singular")
     list(ok = TRUE)

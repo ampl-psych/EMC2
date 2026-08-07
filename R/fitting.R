@@ -69,8 +69,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' covariance becomes computationally singular during sampling. `NULL` errors immediately.
 #' A list may set `max_retries` (integer, re-draw the group step on failure), `on_exhausted`
 #' (`"error"` or `"carry_forward"` the previous group parameters), `max_carry_forward`
-#' (consecutive carried-forward iterations before giving up), and `ridge` (`FALSE`, `TRUE`,
-#' or a numeric condition-number cap; regularises the covariance so the inversion cannot fail).
+#' (consecutive carried-forward iterations before giving up).
 #' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
 #' @export
 #' @return An emc object
@@ -795,7 +794,8 @@ make_emc <- function(data,design,model=NULL,
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
                                      compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i],
-                                     memory_saver = memory_saver)
+                                     memory_saver = memory_saver,
+                                     check_identifiability = TRUE)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
       if (memory_saver) {
@@ -814,7 +814,7 @@ make_emc <- function(data,design,model=NULL,
   # Warn before fitting about parameters (or linear combinations) that are
   # unidentified across the (joint) model, so a fit that would later diverge on
   # an ill-conditioned group covariance fails fast with a clear message instead.
-  warn_identifiability(dadm_list)
+  warn_identifiability(dadm_list, names(design))
 
   # Make sure class retains following changes
   class(design) <- "emc.design"
@@ -983,7 +983,7 @@ check_chain_failures <- function(chains, stage, fileName = NULL){
            "unidentified or weakly-identified parameter (see the diverging parameters ",
            "listed above). Options: check for unidentified parameters, use a tighter ",
            "prior or fewer free parameters, or set the `on_singular` argument of fit() ",
-           "to retry / carry_forward / ridge.")
+           "to retry / carry_forward.")
   } else {
     paste0("This is not the known singular-covariance failure but some other error ",
            "(shown above) hit inside a chain. Read the underlying message and context; ",
