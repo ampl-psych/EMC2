@@ -77,6 +77,10 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
                          pContaminant=NULL,verbose=FALSE,rt_resolution=1/60,digits = 2)
 {
 
+  # no censor/truncation, leave unaltered
+  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)) return(data)
+  if((LT == 0) && (LC == 0) && (UT == Inf) && (UC == Inf)) return(data)
+
   no_truncate <- get_missing(no_truncate, data, "no_truncate",FALSE,"logical")
   LT <- get_missing(LT, data, "LT",0,"numeric")
   data$LT[!no_truncate] <- as.numeric(LT[!no_truncate])
@@ -207,7 +211,7 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   }
 
   # Lower censoring
-  data$rt[cutL | cutU] <- NA   # RT wasn't recorded
+  data$rt[cutL | cutU] <- NA_real_   # RT wasn't recorded
   data$R[cutL & !LCresponse] <- NA
   data$R[cutU & !UCresponse] <- NA
 
@@ -244,6 +248,7 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
+#' @param TC List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -272,22 +277,35 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' @export
 
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
-                      functions = NULL, ...)
+                      functions = NULL, TC=NULL, ...)
 {
-  # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
-  # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
-  # #' @param LC lower censoring bound (scalar or subject named vector)
-  # #' @param UC upper censoring bound (scalar or subject named vector)
-  # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-  # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-  # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-  # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-  # #' @param force_direction Boolean, take direction from argument not data (default FALSE)
-  # #' @param force_response Boolean, take response from argument not data (default FALSE)
-  # #' @param rtContaminantNA Boolean, TRUE sets contaminant trial rt to NA, if FALSE
-  # #' (the default) direction is taken from data or LCdirection or UCdirection (NB
-  # #' if both of these are false an error occurs as then contamination is not identifiable).
-  # #' @param return_Ffunctions if false covariates are not returned
+  # This handles censoring and truncation where TC is not specified -- first check data, then design as a fallback (need to agree on the accepted order)
+  if (is.null(TC)) {
+    TC <- list()
+    TC <- add_defaults(TC,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+    if (is.null(data)) {
+      missing_cols <- c("LT","LC","UC","UT","missingness")
+    } else {
+      missing_cols <- c("LT","LC","UC","UT","missingness")[!(c("LT","LC","UC","UT","missingness") %in% names(data))]
+    }
+    if (length(missing_cols) > 0) {
+      for (nm in missing_cols) {
+        if (!is.null(design[[nm]])) TC[[nm]] <- design[[nm]]
+      }
+    }
+  } else {
+    if (!is.list(TC)) stop("TC must be a list")
+    TC <- add_defaults(TC,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+  }
+
 
   if (!is.null(staircase)){
     staircase <- check_staircase(staircase)
@@ -296,18 +314,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
   check_bounds <- FALSE
-
-  LT<-0
-  UT<-Inf
-  LC<-0
-  UC<-Inf
-  LCresponse<-TRUE
-  UCresponse<-TRUE
-  LCdirection<-TRUE
-  UCdirection<-TRUE
-  force_direction<-FALSE
-  force_response<-FALSE
-  rtContaminantNA<-FALSE
   return_Ffunctions <- FALSE
   post_functions <- NULL
   optionals <- list(...)
@@ -363,28 +369,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                            do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH, NOT SURE IF THIS IS WISE
                            drop_R = F)
   } else {
-    LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
-    UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
-    LC <- attr(data,"LC"); if (is.null(LC)) LC <- 0
-    UC <- attr(data,"UC"); if (is.null(UC)) UC <- Inf
-    if (!force_direction) {
-      ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
-      LCdirection <- any(ok)
-      ok <- data$rt==Inf; ok[is.na(ok)] <- FALSE
-      UCdirection=any(ok)
-    }
-    if (!force_response) {
-      if (!any(is.infinite(data$rt)) & any(is.na(data$R))) {
-        LCresponse <- UCresponse <- FALSE
-      } else {
-        ok <- data$rt==-Inf
-        bad <- is.na(ok)
-        LCresponse <- !any(ok[!bad] & is.na(data$R[!bad]))
-        ok <- data$rt==Inf
-        bad <- is.na(ok)
-        UCresponse <- !any(ok[!bad] & is.na(data$R[!bad]))
-      }
-    }
     data <- add_trials(data[order(data$subjects),])
   }
   if(!is.null(functions)){
@@ -475,6 +459,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       data$rt <- NULL
     }
   }
+
+  data <- make_missing(data,LT=TC$LT,LC=TC$LC,UC=TC$UC,UT=TC$UT,
+                       LCresponse = TC$LCresponse, UCresponse = TC$UCresponse,
+                       LCdirection = TC$LCdirection, UCdirection = TC$UCdirection,
+                       pContaminant=TC$pContaminant,
+                       no_truncate=TC$no_truncate,no_censor=TC$no_censor,
+                       verbose=TC$verbose,rt_resolution=TC$rt_resolution,digits=TC$digits)
+
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
     for(i in 1:length(post_functions)){
