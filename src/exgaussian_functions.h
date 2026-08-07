@@ -30,15 +30,23 @@ double dexg(
   // Numerically stable branch for extreme tails where z = (x-mu)/sigma - sigma/tau is very negative.
   // In this regime, naive log formulation suffers catastrophic cancellation between
   // +sigma^2/(2 tau^2) and log Phi(z) ≈ -(sigma/tau)^2/2 + ...
-  // Using Mills ratio, one can simplify to a stable expression:
-  // log f(x) ≈ -log(tau) - 0.5*log(2*pi) - 0.5*((x-mu)/sigma)^2 - log(-( (x-mu)/sigma - sigma/tau ))
+  // Using Mills ratio, one can simplify to a stable expression. For a = -z:
+  // Phi(z) ≈ phi(z) * (1/a - 1/a^3 + 3/a^5 - 15/a^7 + 105/a^9).
+  // The leading 1/a term gives the original first-order approximation; the
+  // remaining terms substantially improve accuracy near the z < -8 cutoff.
   {
     double y = (x - mu) / sig_p;
     double a = sig_p / tau_p;
     double z = y - a;
     if (z < -8.0) {
+      double mills_a = -z;
+      double inv_a2 = 1.0 / (mills_a * mills_a);
+      double mills_correction = 1.0 - inv_a2 + 3.0 * inv_a2 * inv_a2
+                                - 15.0 * inv_a2 * inv_a2 * inv_a2
+                                + 105.0 * inv_a2 * inv_a2 * inv_a2 * inv_a2;
       double log_out_stable = -std::log(tau_p) - 0.5*std::log(2.0 * M_PI)
-                              - 0.5 * y * y - std::log(-z);
+                              - 0.5 * y * y - std::log(mills_a)
+                              + std::log(mills_correction);
       return log_d ? log_out_stable : std::exp(log_out_stable);
     }
   }
