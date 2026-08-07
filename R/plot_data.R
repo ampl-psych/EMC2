@@ -1031,6 +1031,31 @@ get_def_cdf <- function(x, defective_factor, dots, density_over = "rt") {
   return(out)
 }
 
+# `main` for the panel plots (plot_cdf/plot_delta/plot_caf) may be a single
+# string (prefixed to each panel's group key, the original behaviour) or a
+# character vector with one element per panel (used verbatim). Validate the
+# length once, before any drawing, so it fails fast.
+check_panel_main <- function(main, n_panels) {
+  if (is.null(main)) return(invisible(NULL))
+  if (!is.character(main))
+    stop("`main` must be a character string or character vector", call. = FALSE)
+  if (!length(main) %in% c(1L, n_panels))
+    stop("`main` must be length 1 or ", n_panels, " (one per panel), not ",
+         length(main), call. = FALSE)
+  invisible(NULL)
+}
+
+# Title for panel `gi` (group `group_key`). NULL -> the default (the group key);
+# a length-1 main keeps the original prefix-plus-key behaviour ("" blanks it,
+# "All Data" drops the key); a per-panel vector is used verbatim.
+panel_main <- function(main, group_key, gi) {
+  if (is.null(main)) return(group_key)
+  if (length(main) > 1) return(main[gi])
+  if (identical(as.character(main), "")) return("")
+  gk <- if (identical(group_key, "All Data")) "" else group_key
+  paste0(main, gk)
+}
+
 ###############################################################################
 ## Plot Defective CDFs
 ###############################################################################
@@ -1053,6 +1078,10 @@ get_def_cdf <- function(x, defective_factor, dots, density_over = "rt") {
 #' `"R"`). Numeric variables are grouped in the same way as `factors`.
 #' @param density_over Name of the numeric column whose density or CDF is plotted.
 #' Defaults to `"rt"`.
+#' @param main Optional panel title(s). A single string is prefixed to each
+#'   panel's group key (`""` blanks the title, the default is the group key).
+#'   A character vector with one element per panel sets each panel's title
+#'   verbatim; its length must then equal the number of panels drawn.
 #' @param n_cores Number of CPU cores to use if generating predictives from an `emc` object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
 #' @param layout Numeric vector used in `par(mfrow=...)`; use `NA` for auto-layout.
@@ -1091,6 +1120,7 @@ plot_cdf <- function(input,
                      prior_args = list(),
                      add_percentiles=c(10,50,90),
                      density_over = "rt",
+                     main = NULL,
                      ...) {
 
   if (identical(density_over, defective_factor)) {
@@ -1287,23 +1317,19 @@ plot_cdf <- function(input,
   if (!is.finite(y_max) || y_max <= 0) y_max <- 1
   ylim <- c(0, y_max*1.1)
 
-  for (group_key in unique_group_keys) {
+  check_panel_main(main, length(unique_group_keys))
+  for (gi in seq_along(unique_group_keys)) {
+    group_key <- unique_group_keys[gi]
     tmp_dots <- dots
     tmp_posterior_args <- posterior_args
     tmp_prior_args <- prior_args
 
     # blank plot
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
-                              main=group_key,
                               xlab=density_over,
                               ylab="Defective CDF")
     plot_args <- fix_dots_plot(plot_args)
-    if (!is.null(dots$main)) {
-      if (dots$main=="") plot_args$main <- "" else {
-        if (group_key=="All Data")  gk <- "" else gk <- group_key
-        plot_args$main <- paste0(dots$main, gk)
-      }
-    }
+    plot_args$main <- panel_main(main, group_key, gi)
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1430,6 +1456,10 @@ plot_cdf <- function(input,
 #'
 #' @inheritParams plot_cdf
 #' @param delta_factor The name of the factor to delta
+#' @param main Optional panel title(s). A single string is prefixed to each
+#'   panel's group key (`""` blanks the title, the default is the group key).
+#'   A character vector with one element per panel sets each panel's title
+#'   verbatim; its length must then equal the number of panels drawn.
 #' @param rev_delta If FALSE (the default) the first level of the defective
 #' factor is subtracted from the second, if TRUE this is reversed.
 #'
@@ -1464,6 +1494,7 @@ plot_delta <- function(input,
                      prior_args = list(),
                      add_percentiles=c(1:9)*10,
                      rev_delta=FALSE,
+                     main = NULL,
                      ...) {
 
   delta <- function(z) {
@@ -1561,22 +1592,19 @@ plot_delta <- function(input,
     par(mfrow = layout)
   }
 
-  for (group_key in unique_group_keys) {
+  check_panel_main(main, length(unique_group_keys))
+  for (gi in seq_along(unique_group_keys)) {
+    group_key <- unique_group_keys[gi]
     tmp_dots <- dots
     tmp_posterior_args <- posterior_args
     tmp_prior_args <- prior_args
 
     # blank plot
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
-      main=group_key,"\n", xlab=paste0("Average RT (seconds)"),
+      xlab=paste0("Average RT (seconds)"),
       ylab=paste0("RT(",delta_name,")"))
     plot_args <- fix_dots_plot(plot_args)
-    if (!is.null(dots$main)) {
-      if (dots$main=="") plot_args$main <- "" else {
-        if (group_key=="All Data")  gk <- "" else gk <- group_key
-        plot_args$main <- paste0(dots$main, gk)
-      }
-    }
+    plot_args$main <- panel_main(main, group_key, gi)
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1727,6 +1755,10 @@ get_caf <- function(x, caf_factor, smooth_window, accuracy_function, dots) {
 #'
 #' @inheritParams plot_cdf
 #' @param caf_factor The name of within-panel factor
+#' @param main Optional panel title(s). A single string is prefixed to each
+#'   panel's group key (`""` blanks the title, the default is the group key).
+#'   A character vector with one element per panel sets each panel's title
+#'   verbatim; its length must then equal the number of panels drawn.
 #' @param accuracy_function Accuracy score, default: function(d) d$S==d$R,
 #' @param smooth_window, range of RT over which calculate accuracy, default 5
 #' @param which_plot which of levels of caf_factor to plot, default is both
@@ -1760,6 +1792,7 @@ plot_caf <- function(input,
                      accuracy_function = function(d) d$S==d$R,
                      smooth_window = 5,
                      which_plot=1:2,
+                     main = NULL,
                      ...) {
 
   smooth_window <- round(smooth_window)
@@ -1901,21 +1934,18 @@ plot_caf <- function(input,
   if (!is.finite(y_max) || y_max <= 0) y_max <- 1
   ylim <- c(50, y_max*1.1)
 
-  for (group_key in unique_group_keys) {
+  check_panel_main(main, length(unique_group_keys))
+  for (gi in seq_along(unique_group_keys)) {
+    group_key <- unique_group_keys[gi]
     tmp_dots <- dots
     tmp_posterior_args <- posterior_args
     tmp_prior_args <- prior_args
 
     # blank plot
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
-                              main=group_key, xlab="Bin Centre (%)", ylab="CAF (%)")
+                              xlab="Bin Centre (%)", ylab="CAF (%)")
     plot_args <- fix_dots_plot(plot_args)
-    if (!is.null(dots$main)) {
-      if (dots$main=="") plot_args$main <- "" else {
-        if (group_key=="All Data")  gk <- "" else gk <- group_key
-        plot_args$main <- paste0(dots$main, gk)
-      }
-    }
+    plot_args$main <- panel_main(main, group_key, gi)
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset

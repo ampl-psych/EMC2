@@ -19,6 +19,7 @@
   cores_for_chains = length(emc),
   max_tries = 20,
   thin = FALSE,
+  on_singular = NULL,
   ...
 )
 
@@ -63,6 +64,23 @@ ignored if the required number of iterations has not been reached yet.}
 
 \item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
+
+\item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
+group-level covariance becomes computationally singular during sampling (which
+otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
+keeps the default behaviour: error immediately, naming the diverging parameters.
+A list may set any of:
+\itemize{
+\item \code{max_retries} — integer; on a singular covariance, re-draw the group
+(Gibbs) step this many times before giving up on that iteration. Rescues
+transient early-burn singularities. Default 0.
+\item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
+are exhausted, \code{"carry_forward"} reuses the previous iteration's group
+parameters and continues instead of aborting.
+\item \code{max_carry_forward} — integer; consecutive carried-forward iterations
+allowed before giving up with a diagnosis of the diverging parameters. Default 10.
+}
+Retry is attempted before carry-forward when both are enabled.}
 
 \item{...}{Additional optional arguments}
 }
@@ -121,5 +139,8 @@ LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress 
 # LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
 #   preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
 #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
+
+# For a transient singular group covariance during burn, retry the group step:
+# LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
 }
 }

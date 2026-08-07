@@ -24,6 +24,7 @@ plot_caf(
   accuracy_function = function(d) d$S == d$R,
   smooth_window = 5,
   which_plot = 1:2,
+  main = NULL,
   ...
 )
 }
@@ -67,6 +68,11 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{which_plot}{which of levels of caf_factor to plot, default is both
 i.e,. which_plot = 1:2}
+
+\item{main}{Optional panel title(s). A single string is prefixed to each
+panel's group key (\code{""} blanks the title, the default is the group key).
+A character vector with one element per panel sets each panel's title
+verbatim; its length must then equal the number of panels drawn.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }

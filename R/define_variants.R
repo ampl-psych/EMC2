@@ -215,4 +215,3 @@ filtered_samples <- function(samples, type, ...) {
     stop("Invalid type specified")
   )
 }
-

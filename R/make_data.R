@@ -169,8 +169,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       stop("If data is not provided need to specify number of trials")
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
@@ -235,7 +237,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   } else {
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {

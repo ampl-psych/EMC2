@@ -23,6 +23,7 @@ plot_cdf(
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
   density_over = "rt",
+  main = NULL,
   ...
 )
 }
@@ -65,6 +66,11 @@ variables are split into quartiles, unless they have fewer than four values.}
 
 \item{density_over}{Name of the numeric column whose density or CDF is plotted.
 Defaults to \code{"rt"}.}
+
+\item{main}{Optional panel title(s). A single string is prefixed to each
+panel's group key (\code{""} blanks the title, the default is the group key).
+A character vector with one element per panel sets each panel's title
+verbatim; its length must then equal the number of panels drawn.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }
