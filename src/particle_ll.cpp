@@ -645,7 +645,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
     RaceScratch ddm_scratch;
     CensorSpec censor = make_censor_spec(data, n_rows, /* nacc = */ 1, setup, ctx.param_table, ddm_scratch);
-    TruncSpec  trunc  = make_trunc_spec (data, n_rows, /* nacc = */ 1, setup, ctx.param_table, ddm_scratch);
+    TruncSpec  trunc  = make_trunc_spec(data, n_rows, /* nacc = */ 1, setup, ctx.param_table, ddm_scratch);
     // test for missingness
 
     IntegerVector missingness;
@@ -665,6 +665,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
       // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+      std::fill(ll_buf.begin(), ll_buf.end(), 1.0); // re-fill row-wise ll -- helps with missngness functionality (all trials skipped get likelihood = 1)
       c_log_likelihood_DDM(rts_ptr, Rs_ptr, ctx.param_table, setup.spec, idx_all, ll_buf.data());
 
       // 3) Trialwise truncation correction
@@ -812,15 +813,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
     if (has_missingness) missingness = data["missingness"];
 
-    // Pre-read RACE info needed for phantom filtering
-    const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
-    NumericVector   NACC;     // to-do: reimplement this with missingness = 4 instead of assumig the value corresponds to NACC
-    CharacterVector vals_NACC;
-    if (has_race_col) {
-      NACC      = data["RACE"];
-      vals_NACC = NACC.attr("levels");
-    }
-
     // Precompute winner/loser index lists (once, outside particle loop)
     std::vector<int> idx_win, idx_los;
     idx_win.reserve(n_rows);
@@ -828,13 +820,10 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
     // int total_n_winners = 0;
     for (int i = 0; i < n_rows; ++i) {
-      // if(win_flag[i]) total_n_winners += 1;
-      if(has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
-      if(win_flag[i]) {
+      if (has_missingness && !IntegerVector::is_na(missingness[i])) continue;
+      if (win_flag[i]) {
         idx_win.push_back(i);
       } else {
-        // skip phantom accumulators — data-dependent, built once
-        if (has_race_col && lR[i] > atoi(vals_NACC[NACC[i] - 1])) continue;
         idx_los.push_back(i);
       }
     }
@@ -1074,15 +1063,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     const int*    win_flag = LOGICAL(winner);
 
     NumericVector lR     = data["lR"];
-    // const double* lR_ptr = lR.begin();
-
-    const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
-    NumericVector   NACC;
-    CharacterVector vals_NACC;
-    if (has_race_col) {
-      NACC      = data["RACE"];
-      vals_NACC = NACC.attr("levels");
-    }
 
     // missingness handling
     IntegerVector missingness;
@@ -1097,8 +1077,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       if(win_flag[i]) {
         idx_win.push_back(i);
       } else {
-        // skip phantom accumulators — data-dependent, built once
-        if (has_race_col && lR[i] > atoi(vals_NACC[NACC[i] - 1])) continue;
         idx_los.push_back(i);
       }
     }

@@ -34,10 +34,20 @@ void TruncSpec::calculate_normalization_constant() const
   for (int t = 0; t < n_trials; ++t) {
     const int base = t * n_acc;
     double prod_LT = 1.0, prod_UT = 1.0;
+    bool any_participating = false;
     for (int k = 0; k < n_acc; ++k) {
-      prod_LT *= p_lower[base + k];
-      prod_UT *= p_upper[base + k];
+      const int row = base + k;
+      if (!participating[row]) continue;
+      any_participating = true;
+      prod_LT *= p_lower[row];
+      prod_UT *= p_upper[row];
     }
+
+    if (!any_participating) {
+      log_Z[t] = 1.0;
+      continue;
+    }
+
     S_lower[t] = prod_LT;
     S_upper[t] = prod_UT;
 
@@ -117,6 +127,17 @@ TruncSpec make_trunc_spec(const DataFrame& data,
         trunc.UT[row] = ut;
         trunc.idx_UT.push_back(row);
       }
+    }
+  }
+
+  // Check missingness - only participating rows should contribute to normalization correction
+  trunc.participating.assign(trunc.n_rows, true);
+  const bool has_missingness = std::find(names.begin(), names.end(), "missingness") != names.end();
+  if (has_missingness) {
+    IntegerVector missingness = data["missingness"];
+    for (int row = 0; row < trunc.n_rows; ++row) {
+      if (!IntegerVector::is_na(missingness[row]) && missingness[row] == 0)
+        trunc.participating[row] = false;
     }
   }
 
