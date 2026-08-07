@@ -114,4 +114,27 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
   return s;
 }
 
+inline MRISpec make_mri_spec(const ParamTable& pt,
+                      const Rcpp::CharacterVector& keep_names,
+                      bool is_ar1)
+{
+  MRISpec spec;
+  const int m = keep_names.size();
+
+  // Last column = sigma, second-to-last = rho (AR1 only)
+  spec.col_sigma = pt.base_index_for(Rcpp::as<std::string>(keep_names[m - 1]));
+  spec.col_rho   = is_ar1
+  ? pt.base_index_for(Rcpp::as<std::string>(keep_names[m - 2]))
+    : -1;
+
+  const int n_mean = is_ar1 ? m - 2 : m - 1;
+  spec.col_means.resize(n_mean);
+  spec.n_mean_cols = n_mean;
+  for (int j = 0; j < n_mean; ++j)
+    spec.col_means[j] = pt.base_index_for(Rcpp::as<std::string>(keep_names[j]));
+
+  return spec;
+}
+
+
 #endif // RACE_SETUP_H

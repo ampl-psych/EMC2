@@ -48,4 +48,11 @@ struct RaceScratch {
   }
 };
 
+struct MRISpec {
+  int col_sigma;               // last column
+  int col_rho;                 // second-to-last (AR1 only)
+  std::vector<int> col_means;  // all preceding columns
+  int n_mean_cols;
+};
+
 #endif // RACE_SPEC_H
