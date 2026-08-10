@@ -107,10 +107,10 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 
   # no censor/truncation, leave unaltered
   if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)) return(data)
-  if (!is.null(LT) && !is.function(LT) && LT == 0 &&
-      !is.null(LC) && !is.function(LC) && LC == 0 &&
-      !is.null(UT) && !is.function(UT) && is.infinite(UT) &&
-      !is.null(UC) && !is.function(UC) && is.infinite(UC)) {
+  if (!is.null(LT) && !is.function(LT) && all(LT == 0) &&
+      !is.null(LC) && !is.function(LC) && all(LC == 0) &&
+      !is.null(UT) && !is.function(UT) && all(is.infinite(UT)) &&
+      !is.null(UC) && !is.function(UC) && all(is.infinite(UC))) {
     return(data)
   }
 
