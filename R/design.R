@@ -106,9 +106,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                    functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
                    trend=NULL,
                    transform = NULL, bound = NULL, parameter_design=NULL,
-                   LT=NULL, LC=NULL, UC=NULL, UT=NULL,
-                   ...){
+                   TC=NULL, ...){
 
+
+  TC <- check_missing(TC)
   optionals <- list(...)
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
@@ -116,8 +117,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     pre_transform <- NULL
   }
 
-  if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
-    stop("Please do not use any of the following names within factors argument: trial, R, rt, lR, lM")
+  if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM","UC","LC","UT","LT","winner"))){
+    stop("Please do not use any of these factor names: winner, trial, R, rt, lR, lM, UC, LC, UT, LT")
   }
 
   if(any(grepl("_", names(factors)))){
@@ -152,12 +153,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       # covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
-    # From ZH's branch -- not sure again how we want to code LC/UC/LT/UT. Attributes?
-    if(is.null(LT)){if("LT"%in%colnames(data)) LT=data$LT else{LT <- attr(data,"LT")}}; if (is.null(LT)) LT <- 0
-    if(is.null(UT)){if("UT"%in%colnames(data)) UT=data$UT else{UT <- attr(data,"UT")}}; if (is.null(UT)) UT <- Inf
-    if(is.null(LC)){if("LC"%in%colnames(data)) LC=data$LC else{LC <- attr(data,"LC")}}; if (is.null(LC)) LC <- 0
-    if(is.null(UC)){if("UC"%in%colnames(data)) UC=data$UC else{UC <- attr(data,"UC")}}; if (is.null(UC)) UC <- Inf
-    # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
 
   if(!is.null(parameter_design)) {
@@ -210,7 +205,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
-                 parameter_design=parameter_design, LC=LC, UC=UC, LT=LT, UT=UT)
+                 parameter_design=parameter_design, TC=TC)
   class(design) <- "emc.design"
 
   # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model

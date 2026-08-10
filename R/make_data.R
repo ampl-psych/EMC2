@@ -19,6 +19,34 @@ get_missing <- function(supplied, data, bound_name, default,type) {
   out
 }
 
+check_missing <- function(TC,data=NULL,design=NULL) {
+  # This handles censoring and truncation where TC is not specified.
+  # First check data, then design
+  if (is.null(TC)) {
+    TC <- list()
+    TC <- add_defaults(TC,LT=0,LC=0,UT=Inf,UC=Inf,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+    if (!is.null(data)) {
+      for (i in c("LT","LC","UC","UT")) {
+        if (!is.null(data[[i]])) TC[[i]] <- data[[i]]
+      }
+    } else if (!is.null(design) && !is.null(design$TC)) {
+      for (i in names(TC)) TC[[i]] <- design$TC[[i]]
+    }
+  } else {
+    if (!is.list(TC)) stop("TC must be a list")
+    TC <- add_defaults(TC,LT=0,LC=0,UT=Inf,UC=Inf,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+  }
+  TC
+}
+
 #' Add information about missing values to data and modify/filter accordingly.
 #'
 #' Columns corresponding to LC, UT, LC, UC, and pContaminant arguments are added
@@ -285,32 +313,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                       functions = NULL, TC=NULL, ...)
 {
   # This handles censoring and truncation where TC is not specified -- first check data, then design as a fallback (need to agree on the accepted order)
-  if (is.null(TC)) {
-    TC <- list()
-    TC <- add_defaults(TC,
-                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
-                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
-                       pContaminant=NULL,rt_resolution=NULL
-    )
-    if (is.null(data)) {
-      missing_cols <- c("LT","LC","UC","UT","missingness")
-    } else {
-      missing_cols <- c("LT","LC","UC","UT","missingness")[!(c("LT","LC","UC","UT","missingness") %in% names(data))]
-    }
-    if (length(missing_cols) > 0) {
-      for (nm in missing_cols) {
-        if (!is.null(design[[nm]])) TC[[nm]] <- design[[nm]]
-      }
-    }
-  } else {
-    if (!is.list(TC)) stop("TC must be a list")
-    TC <- add_defaults(TC,
-                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
-                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
-                       pContaminant=NULL,rt_resolution=NULL
-    )
-  }
-
+  TC <- check_missing(TC,design=design,data=data)
 
   if (!is.null(staircase)){
     staircase <- check_staircase(staircase)
