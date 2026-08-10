@@ -668,13 +668,10 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       std::fill(ll_buf.begin(), ll_buf.end(), 1.0); // re-fill row-wise ll -- helps with missngness functionality (all trials skipped get likelihood = 1)
       c_log_likelihood_DDM(rts_ptr, Rs_ptr, ctx.param_table, setup.spec, idx_all, ll_buf.data());
 
-      // 3) Trialwise truncation correction
-      if (trunc.any()) {
-        trunc.calculate_normalization_constant();
-        for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
-      }
-      // 4) Fill in trialwise censor probabilities
-      if (censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
+      // 3) Trialwise truncation correction. Needs to be in this order!
+      if(trunc.any()) trunc.calculate_normalization_constant();
+      if(censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
+      if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
 
       // 5) Check for bound violations (fills is_ok)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok
@@ -856,11 +853,9 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
                             ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
       // 3) Handle truncation, censoring
-      if (trunc.any()) {
-        trunc.calculate_normalization_constant();
-        for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];
-      }
-      if (censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);
+      if(trunc.any()) trunc.calculate_normalization_constant();
+      if(censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);  // needs to have trunc know the normalization constant, hence this order
+      if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];  // cannot be before censoring - censoring fills rows, doesn't add
 
       // 4) Handle not-ok parameter values (out of bound)
       std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
@@ -1028,11 +1023,9 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
       c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_trial.data());
 
-      if (trunc_local.any()) {
-        trunc_local.calculate_normalization_constant();
-        for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
-      }
-      if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
+      if(trunc_local.any()) trunc_local.calculate_normalization_constant();
+      if(censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
+      if(trunc_local.any()) for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
 
       std::fill(is_ok.begin(), is_ok.end(), 1);
       c_do_bound_pt(pt_local, bound_specs, is_ok);
@@ -1133,12 +1126,9 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                             ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
       // truncation
-      if (trunc_local.any()) {
-        trunc_local.calculate_normalization_constant();
-        for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
-      }
-      // censoring
+      if (trunc_local.any()) trunc_local.calculate_normalization_constant();
       if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
+      if(trunc_local.any()) for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
 
       c_do_bound_pt(pt_local, bound_specs, is_ok);
       lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
