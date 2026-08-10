@@ -7,6 +7,7 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
+#include "model_exgaussian.h"
 using namespace Rcpp;
 
 // ---------------------------------------------------------------------------
@@ -88,6 +89,14 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.fill_both                   = dlba_plba_fast;
     s.fill_survivor               = lba_survivor;
     s.fill_survivor_with_response = lba_survivor_with_response;
+  } else if (type == "REXG") {
+    s.spec.col_mu       = pt.base_index_for("mu");
+    s.spec.col_sigma    = pt.base_index_for("sigma");
+    s.spec.col_tau      = pt.base_index_for("tau");
+    s.spec.col_t0       = pt.base_index_for("t0");
+    s.fill_both                   = dexg_pexg_fast;
+    s.fill_survivor               = exg_survivor;
+    s.fill_survivor_with_response = exg_survivor_with_response;
   } else if(type == "DDM") {
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_a        = pt.base_index_for("a");

@@ -18,6 +18,10 @@ struct RaceSpec {
   int col_SZ = -1;
   int col_st0= -1;
   int col_a  = -1;
+  // ExG
+  int col_mu = -1;
+  int col_tau = -1;
+  int col_sigma = -1;
 };
 
 struct RaceScratch {
@@ -25,6 +29,8 @@ struct RaceScratch {
   std::vector<double> t_eff, v, B, A, s, sv, m, out, k, l, a;
   // core gather buffers (secondary — used when A >= A_ASYMPTOTIC, only needed for RDM)
   std::vector<double> t_eff_c, v_c, B_c, A_c, s_c, out_c;
+
+  std::vector<double> mu, sigma, tau;
 
   std::vector<int> win0, win1, los0, los1;
   std::vector<int> idx_win0, idx_win1, idx_los0, idx_los1;
@@ -45,7 +51,8 @@ struct RaceScratch {
     idx_los0.resize(n); idx_los1.resize(n);
     idx_win_c.resize(n); idx_los_c.resize(n);
     denom.resize(n); denom_c.resize(n);
-  }
+    mu.resize(n); sigma.resize(n); tau.resize(n);
+    }
 };
 
 struct MRISpec {
