@@ -268,15 +268,36 @@ struct ParamTable {
         int cidx = entry.coef_idx[j];
         if (cidx < 0) continue;
 
-        const double* coef = (entry.uses_self && cidx == out_idx)
-          ? self_copy.data()
-            : base.colptr(cidx);
-        const double* d = entry.dm_ptr + j * entry.dm_nrow;
+        //
+        const double* parameter_value = (entry.uses_self && cidx == out_idx) ? self_copy.data() : base.colptr(cidx);
+        const double* design_coef = entry.dm_ptr + j * entry.dm_nrow;
 
+        if (col_is_constant[cidx]) {
+          // parameter values are uniform across all rows — scalar fast path
+          const double param = parameter_value[0];
+          if (param == 0.0) continue;
+          if (std::isfinite(param)) {
+            // finite values of param guaranteed, so no guard needed
 #pragma omp simd
-        for (int r = 0; r < T; ++r) {
-          if (d[r] != 0.0 && coef[r] != 0.0)
-            out[r] += coef[r] * d[r];
+            for (int r = 0; r < T; ++r)
+              out[r] += param * design_coef[r];
+          } else {
+            // ±Inf scalar: guard against 0 * Inf -
+            // should be rare, only when parameters are set constant to qnorm(0) or log(0) and
+            // the design formula has p~0
+#pragma omp simd // might still be used on some compilers?
+            for (int r = 0; r < T; ++r) {
+              out[r] += (design_coef[r] != 0.0) ? param * design_coef[r] : 0.0;
+            }
+          }
+        } else {
+#pragma omp simd
+          for (int r = 0; r < T; ++r) {
+            // ±Inf parameter value: guard against 0 * Inf -
+            // should be rare, only when parameters are set constant to qnorm(0) or log(0) and
+            // the design formula has p~0
+            out[r] += (design_coef[r] != 0.0) ? parameter_value[r] * design_coef[r] : 0.0;
+          }
         }
       }
     }
