@@ -79,7 +79,12 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 
   # no censor/truncation, leave unaltered
   if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)) return(data)
-  if((LT == 0) && (LC == 0) && (UT == Inf) && (UC == Inf)) return(data)
+  if (!is.null(LT) && LT == 0 &&
+      !is.null(LC) && LC == 0 &&
+      !is.null(UT) && is.infinite(UT) &&
+      !is.null(UC) && is.infinite(UC)) {
+    return(data)
+  }
 
   no_truncate <- get_missing(no_truncate, data, "no_truncate",FALSE,"logical")
   LT <- get_missing(LT, data, "LT",0,"numeric")
