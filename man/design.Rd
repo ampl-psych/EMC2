@@ -108,15 +108,10 @@ components:
   )
   }}
 
+\item{TC}{List of truncation/censoring arguments passed to \code{make_missing}
+(e.g. \code{list(LT=0.1, UC=2)}). NULL (default) means no truncation or censoring is applied.}
+
 \item{...}{Additional, optional arguments}
-
-\item{LC}{Lower censoring limit. Either a scalar or a vector of length}
-
-\item{UC}{Upper censoring limit. Either a scalar or a vector of length nrow(data)}
-
-\item{LT}{Lower truncation limit. Either a scalar or a vector of length nrow(data)}
-
-\item{UT}{Upper truncation limit. Either a scalar or a vector of length nrow(data)}
 }
 \value{
 A design list.

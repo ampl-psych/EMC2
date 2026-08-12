@@ -70,10 +70,8 @@
 #'     )
 #'   )
 #'   }
-#' @param LC Lower censoring limit. Either a scalar or a vector of length
-#' @param UC Upper censoring limit. Either a scalar or a vector of length nrow(data)
-#' @param LT Lower truncation limit. Either a scalar or a vector of length nrow(data)
-#' @param UT Upper truncation limit. Either a scalar or a vector of length nrow(data)
+#' @param TC List of truncation/censoring arguments passed to \code{make_missing}
+#'   (e.g. \code{list(LT=0.1, UC=2)}). NULL (default) means no truncation or censoring is applied.
 #' @param ... Additional, optional arguments
 #'
 #' @return A design list.
