@@ -786,7 +786,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
   const int n_trials    = data.nrow();
   const int n_particles = particle_matrix.nrow();
   const bool has_lR     = (sum(contains(data.names(), "lR")) == 1);
-  const int n_lR        = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_lR = has_lR ? unique(Rcpp::as<IntegerVector>(data["lR"])).length() : 1;
 
   // Shared setup
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
