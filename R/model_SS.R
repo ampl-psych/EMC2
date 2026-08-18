@@ -371,6 +371,116 @@ ss_lnormal_stop_spec <- function() {
 }
 
 
+#### Stop Single Normal ----
+dtnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  lb <- pars[, "normS_lb"]
+  ok <- (st > lb) & is.finite(st) & pars[, "sigmaS"] > 0
+  ok[is.na(ok)] <- FALSE
+  if (any(ok)) {
+    normalizer <- stats::pnorm(
+      lb[ok],
+      mean = pars[ok, "muS"],
+      sd = pars[ok, "sigmaS"],
+      lower.tail = FALSE
+    )
+    out[ok] <- stats::dnorm(
+      st[ok],
+      mean = pars[ok, "muS"],
+      sd = pars[ok, "sigmaS"]
+    ) / normalizer
+  }
+  out
+}
+
+
+ptnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  lb <- pars[, "normS_lb"]
+  out[is.infinite(st) & st > 0] <- 1
+  ok <- (st > lb) & is.finite(st) & pars[, "sigmaS"] > 0
+  ok[is.na(ok)] <- FALSE
+  if (any(ok)) {
+    lower <- stats::pnorm(lb[ok], mean = pars[ok, "muS"], sd = pars[ok, "sigmaS"])
+    upper <- stats::pnorm(st[ok], mean = pars[ok, "muS"], sd = pars[ok, "sigmaS"])
+    out[ok] <- (upper - lower) / (1 - lower)
+  }
+  pmin(pmax(out, 0), 1)
+}
+
+
+ss_normal_lower_truncated_moments <- function(mu, sigma, lb) {
+  n <- max(length(mu), length(sigma), length(lb))
+  mu <- rep(mu, length.out = n)
+  sigma <- rep(sigma, length.out = n)
+  lb <- rep(lb, length.out = n)
+
+  alpha <- (lb - mu) / sigma
+  normalizer <- stats::pnorm(alpha, lower.tail = FALSE)
+  lambda <- stats::dnorm(alpha) / normalizer
+  mean <- mu + sigma * lambda
+  variance <- sigma^2 * (1 + alpha * lambda - lambda^2)
+
+  data.frame(
+    mean = mean,
+    sd = sqrt(pmax(variance, 0)),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+ss_normal_stop_spec <- function() {
+  list(
+    family = "normal",
+    name = "normal",
+    parameters = c("muS", "sigmaS"),
+    p_types = c(muS = log(.25), sigmaS = log(.05)),
+    transform = c(muS = "exp", sigmaS = "exp"),
+    minmax = cbind(muS = c(0, Inf), sigmaS = c(1e-4, Inf)),
+    tail_p_types = c(normS_lb = 0),
+    tail_transform = c(normS_lb = "identity"),
+    tail_minmax = cbind(normS_lb = c(-Inf, Inf)),
+    tail_exception = c(normS_lb = -Inf),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c("muS", "sigmaS", "SSD", "normS_lb"), drop = FALSE]
+      dtnormalS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c("muS", "sigmaS", "SSD", "normS_lb"), drop = FALSE]
+      ptnormalS(rt, parsS)
+    },
+    rfun = function(n, stop_pars) {
+      lower_p <- stats::pnorm(
+        stop_pars[, "normS_lb"],
+        mean = stop_pars[, "muS"],
+        sd = stop_pars[, "sigmaS"]
+      )
+      stats::qnorm(
+        stats::runif(n, lower_p, 1),
+        mean = stop_pars[, "muS"],
+        sd = stop_pars[, "sigmaS"]
+      )
+    },
+    mean = function(pars) {
+      moments <- ss_normal_lower_truncated_moments(
+        pars[, "muS"], pars[, "sigmaS"], pars[, "normS_lb"]
+      )
+      moments$mean
+    },
+    sd = function(pars) {
+      moments <- ss_normal_lower_truncated_moments(
+        pars[, "muS"], pars[, "sigmaS"], pars[, "normS_lb"]
+      )
+      moments$sd
+    }
+  )
+}
+
+
 #### Stop Single Weibull ----
 dweibullS <- function(rt, pars)
 {
@@ -466,12 +576,13 @@ ss_exgaussian_stop_spec <- function() {
 
 
 ss_stop_spec <- function(stop) {
-  stop <- match.arg(stop, c("exgaussian", "lognormal", "weibull"))
+  stop <- match.arg(stop, c("exgaussian", "lognormal", "weibull", "normal"))
   switch(
     stop,
     exgaussian = ss_exgaussian_stop_spec(),
     lognormal = ss_lnormal_stop_spec(),
-    weibull = ss_weibull_stop_spec()
+    weibull = ss_weibull_stop_spec(),
+    normal = ss_normal_stop_spec()
   )
 }
 
@@ -524,6 +635,10 @@ ss_model_c_name <- function(go_spec, stop_spec) {
       identical(stop_spec$family, "weibull")) {
     return("SSWEIBULL")
   }
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "normal")) {
+    return("SSNORM")
+  }
   if (identical(go_spec$family, "racing_diffusion") &&
       identical(stop_spec$family, "exgaussian")) {
     return("SSRDEX")
@@ -535,6 +650,10 @@ ss_model_c_name <- function(go_spec, stop_spec) {
   if (identical(go_spec$family, "racing_diffusion") &&
       identical(stop_spec$family, "weibull")) {
     return("SSRDWEIBULL")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "normal")) {
+    return("SSRDNORM")
   }
   NULL
 }
@@ -568,14 +687,16 @@ ss_model_sfun <- function(go_spec, stop_spec) {
       stop_spec$family,
       exgaussian = function(pars, n_acc, upper = Inf) pstopTEXG(pars, n_acc, upper = upper),
       lognormal = function(pars, n_acc, upper = Inf) pstopLNormalTEXG(pars, n_acc, upper = upper),
-      weibull = function(pars, n_acc, upper = Inf) pstopWeibullTEXG(pars, n_acc, upper = upper)
+      weibull = function(pars, n_acc, upper = Inf) pstopWeibullTEXG(pars, n_acc, upper = upper),
+      normal = function(pars, n_acc, upper = Inf) pstopNormalTEXG(pars, n_acc, upper = upper)
     )
   } else {
     switch(
       stop_spec$family,
       exgaussian = function(pars, n_acc, upper = Inf) pstopHybrid(pars, n_acc, upper = upper),
       lognormal = function(pars, n_acc, upper = Inf) pstopLNormalHybrid(pars, n_acc, upper = upper),
-      weibull = function(pars, n_acc, upper = Inf) pstopWeibullHybrid(pars, n_acc, upper = upper)
+      weibull = function(pars, n_acc, upper = Inf) pstopWeibullHybrid(pars, n_acc, upper = upper),
+      normal = function(pars, n_acc, upper = Inf) pstopNormalHybrid(pars, n_acc, upper = upper)
     )
   }
 }
@@ -589,14 +710,16 @@ ss_model_rfun <- function(go_spec, stop_spec) {
       stop_spec$family,
       exgaussian = function(data = NULL, pars) rSSexGaussian(data, pars, ok = attr(pars, "ok")),
       lognormal = function(data = NULL, pars) rSSexGaussianLNormal(data, pars, ok = attr(pars, "ok")),
-      weibull = function(data = NULL, pars) rSSexGaussianWeibull(data, pars, ok = attr(pars, "ok"))
+      weibull = function(data = NULL, pars) rSSexGaussianWeibull(data, pars, ok = attr(pars, "ok")),
+      normal = function(data = NULL, pars) rSSexGaussianNormal(data, pars, ok = attr(pars, "ok"))
     )
   } else {
     switch(
       stop_spec$family,
       exgaussian = function(data = NULL, pars) rSShybrid(data, pars, ok = attr(pars, "ok")),
       lognormal = function(data = NULL, pars) rSShybridLNormal(data, pars, ok = attr(pars, "ok")),
-      weibull = function(data = NULL, pars) rSShybridWeibull(data, pars, ok = attr(pars, "ok"))
+      weibull = function(data = NULL, pars) rSShybridWeibull(data, pars, ok = attr(pars, "ok")),
+      normal = function(data = NULL, pars) rSShybridNormal(data, pars, ok = attr(pars, "ok"))
     )
   }
 }
@@ -671,7 +794,7 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' @param go Character string. Go-runner family: `"exgaussian"` or
 #'   `"racing_diffusion"`. The default is `"exgaussian"`.
 #' @param stop Character string. Stop-runner family: `"exgaussian"`,
-#'   `"lognormal"`, or `"weibull"`. The default is `"exgaussian"`.
+#'   `"lognormal"`, `"weibull"`, or `"normal"`. The default is `"exgaussian"`.
 #'
 #' @details
 #'
@@ -703,6 +826,7 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See [SSEXG()] and [SSRDEX()] for the ex-Gaussian stop-parameter description. |
 #' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
 #' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and transformed with `exp(shapeS)` and `exp(scaleS)`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `exp(scaleS) * gamma(1 + 1 / exp(shapeS))`. |
+#' | `"normal"` | `muS`, `sigmaS`, `normS_lb` | Lower-truncated normal stop finish-time distribution. `muS` and `sigmaS` are estimated on the log scale and transformed with `exp(muS)` and `exp(sigmaS)`. `muS` is the location of the underlying normal distribution, `sigmaS` is its standard deviation, and `normS_lb` is the lower truncation point. The default lower bound is `0`, so generated stop finishing times are non-negative. |
 #'
 #' All stop-signal models include `tf` and `gf`. `tf` is the attentional lapse
 #' rate for the stop process ("trigger failure") and `gf` is the attentional
@@ -718,7 +842,7 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' @export
 stop_signal <- function(
     go = c("exgaussian", "racing_diffusion"),
-    stop = c("exgaussian", "lognormal", "weibull")
+    stop = c("exgaussian", "lognormal", "weibull", "normal")
 ) {
   go <- match.arg(go)
   stop <- match.arg(stop)
@@ -1088,6 +1212,60 @@ pstopLNormalTEXG <- function(
 
 rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_lnormal_stop_spec()
+  rSSexGaussian(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+stopfn_normal_texg <- function(t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD) {
+  normalizer <- stats::pnorm(normS_lb, mean = muS, sd = sigmaS, lower.tail = FALSE)
+  out <- stats::dnorm(t, mean = muS, sd = sigmaS) / normalizer
+  out[t <= normS_lb] <- 0
+  for (i in seq_along(mu)) {
+    pars_i <- cbind(
+      mu = rep(mu[i], length(t)),
+      sigma = rep(sigma[i], length(t)),
+      tau = rep(tau[i], length(t)),
+      exg_lb = rep(lb[i], length(t))
+    )
+    out <- out * (1 - ptexGaussian(t + SSD, pars_i))
+  }
+  out
+}
+
+
+pstopNormalTEXG <- function(
+    parstop, n_acc, upper = Inf,
+    gpars = c("mu", "sigma", "tau", "exg_lb"), spars = c("muS", "sigmaS", "normS_lb")
+) {
+  sindex <- seq(1, nrow(parstop), by = n_acc)
+  ps <- parstop[sindex, spars, drop = FALSE]
+  SSDs <- parstop[sindex, "SSD", drop = FALSE]
+  ntrials <- length(SSDs)
+  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
+  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
+               dimnames = list(NULL, NULL, gpars))
+  cells <- apply(
+    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
+    1, paste, collapse = ""
+  )
+  uniq <- !duplicated(cells)
+  ups <- sapply(which(uniq), function(i) {
+    my.integrate(
+      f = stopfn_normal_texg, lower = ps[i, "normS_lb"], SSD = SSDs[i], upper = upper[i],
+      mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
+      lb = pgo[, i, "exg_lb"],
+      muS = ps[i, "muS"], sigmaS = ps[i, "sigmaS"], normS_lb = ps[i, "normS_lb"]
+    )
+  })
+  ups[as.numeric(factor(cells, levels = cells[uniq]))]
+}
+
+
+rSSexGaussianNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_normal_stop_spec()
   rSSexGaussian(
     data, pars, ok = ok,
     stop_sampler = stop_spec$rfun
@@ -1493,6 +1671,58 @@ pstopLNormalHybrid <- function(
 
 rSShybridLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_lnormal_stop_spec()
+  rSShybrid(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+stopfn_normal_rdex <- function(
+    t, n_acc, muS, sigmaS, normS_lb, v, B, A, t0, s, SSD
+) {
+  normalizer <- stats::pnorm(normS_lb, mean = muS, sd = sigmaS, lower.tail = FALSE)
+  out <- stats::dnorm(t, mean = muS, sd = sigmaS) / normalizer
+  out[t <= normS_lb] <- 0
+  for (i in seq_len(n_acc)) {
+    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
+  }
+  out
+}
+
+
+pstopNormalHybrid <- function(
+    parstop, n_acc, upper = Inf,
+    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "normS_lb")
+) {
+  sindex <- seq(1, nrow(parstop), by = n_acc)
+  ps <- parstop[sindex, spars, drop = FALSE]
+  SSDs <- parstop[sindex, "SSD", drop = FALSE]
+  ntrials <- length(SSDs)
+  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
+  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
+               dimnames = list(NULL, NULL, gpars))
+  cells <- apply(
+    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
+    1, paste, collapse = ""
+  )
+  uniq <- !duplicated(cells)
+  ups <- sapply(which(uniq), function(i) {
+    my.integrate(
+      f = stopfn_normal_rdex, lower = ps[i, "normS_lb"], upper = upper[i],
+      n_acc = n_acc,
+      muS = ps[i, "muS"], sigmaS = ps[i, "sigmaS"], normS_lb = ps[i, "normS_lb"],
+      v = pgo[, i, "v"], B = pgo[, i, "B"], A = pgo[, i, "A"],
+      t0 = pgo[, i, "t0"], s = pgo[, i, "s"],
+      SSD = SSDs[i]
+    )
+  })
+  ups[as.numeric(factor(cells, levels = cells[uniq]))]
+}
+
+
+rSShybridNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_normal_stop_spec()
   rSShybrid(
     data, pars, ok = ok,
     stop_sampler = stop_spec$rfun

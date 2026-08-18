@@ -236,6 +236,13 @@ ssrt_model_info <- function(emc) {
   } else {
     0
   }
+  info$normS_lb <- if ("normS_lb" %in% names(design$constants)) {
+    unname(design$constants[["normS_lb"]])
+  } else if ("normS_lb" %in% names(model$p_types)) {
+    unname(model$p_types[["normS_lb"]])
+  } else {
+    0
+  }
   info
 }
 
@@ -244,6 +251,7 @@ ssrt_required_parameters <- function(stop_family) {
          exgaussian = c("muS", "sigmaS", "tauS"),
          lognormal = c("meanlogS", "sdlogS"),
          weibull = c("shapeS", "scaleS"),
+         normal = c("muS", "sigmaS"),
          stop("Unsupported stop distribution: ", stop_family, call. = FALSE))
 }
 
@@ -306,6 +314,15 @@ ssrt_compute_moments <- function(pars, info) {
     ))
   }
 
+  if (identical(stop_family, "normal")) {
+    mu <- exp(pars$muS)
+    sigma <- exp(pars$sigmaS)
+    lb <- if ("normS_lb" %in% names(pars)) pars$normS_lb else info$normS_lb
+    out <- ssrt_normal_lower_truncated_moments(mu, sigma, lb)
+    out$method <- "lower_truncated_normal_analytic"
+    return(out)
+  }
+
   shape <- exp(pars$shapeS)
   scale <- exp(pars$scaleS)
   mean <- scale * gamma(1 + 1 / shape)
@@ -314,6 +331,38 @@ ssrt_compute_moments <- function(pars, info) {
     ssrt_mean = mean,
     ssrt_sd = sqrt(pmax(second - mean^2, 0)),
     method = "weibull_analytic",
+    stringsAsFactors = FALSE
+  )
+}
+
+ssrt_normal_lower_truncated_moments <- function(mu, sigma, lb) {
+  n <- max(length(mu), length(sigma), length(lb))
+  mu <- rep(mu, length.out = n)
+  sigma <- rep(sigma, length.out = n)
+  lb <- rep(lb, length.out = n)
+
+  mean <- rep(NA_real_, n)
+  sd <- rep(NA_real_, n)
+
+  ok <- is.finite(mu) & is.finite(sigma) & sigma > 0 & !is.na(lb)
+  untruncated <- ok & is.infinite(lb) & lb < 0
+  mean[untruncated] <- mu[untruncated]
+  sd[untruncated] <- sigma[untruncated]
+
+  finite_lb <- ok & is.finite(lb)
+  if (any(finite_lb)) {
+    idx <- which(finite_lb)
+    alpha <- (lb[idx] - mu[idx]) / sigma[idx]
+    normalizer <- stats::pnorm(alpha, lower.tail = FALSE)
+    lambda <- stats::dnorm(alpha) / normalizer
+    mean[idx] <- mu[idx] + sigma[idx] * lambda
+    variance <- sigma[idx]^2 * (1 + alpha * lambda - lambda^2)
+    sd[idx] <- sqrt(pmax(variance, 0))
+  }
+
+  data.frame(
+    ssrt_mean = mean,
+    ssrt_sd = sd,
     stringsAsFactors = FALSE
   )
 }

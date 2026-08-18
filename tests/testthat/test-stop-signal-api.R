@@ -1,6 +1,6 @@
 test_that("stop_signal accepts the supported model combinations", {
   go_families <- c("exgaussian", "racing_diffusion")
-  stop_families <- c("exgaussian", "lognormal", "weibull")
+  stop_families <- c("exgaussian", "lognormal", "weibull", "normal")
 
   for (go in go_families) {
     for (stop in stop_families) {
@@ -35,6 +35,10 @@ test_that("stop_signal exposes the expected parameter names", {
     c("mu", "sigma", "tau", "shapeS", "scaleS", "tf", "gf", "exg_lb")
   )
   expect_named(
+    stop_signal(go = "exgaussian", stop = "normal")$p_types,
+    c("mu", "sigma", "tau", "muS", "sigmaS", "tf", "gf", "exg_lb", "normS_lb")
+  )
+  expect_named(
     stop_signal(go = "racing_diffusion", stop = "exgaussian")$p_types,
     c("v", "B", "A", "t0", "s", "muS", "sigmaS", "tauS", "tf", "gf", "exgS_lb")
   )
@@ -45,6 +49,10 @@ test_that("stop_signal exposes the expected parameter names", {
   expect_named(
     stop_signal(go = "racing_diffusion", stop = "weibull")$p_types,
     c("v", "B", "A", "t0", "s", "shapeS", "scaleS", "tf", "gf")
+  )
+  expect_named(
+    stop_signal(go = "racing_diffusion", stop = "normal")$p_types,
+    c("v", "B", "A", "t0", "s", "muS", "sigmaS", "tf", "gf", "normS_lb")
   )
 })
 
@@ -63,9 +71,11 @@ test_that("stop_signal routes only existing C++ stop-signal backends", {
   expect_identical(stop_signal(go = "exgaussian", stop = "exgaussian")$c_name, "SSEXG")
   expect_identical(stop_signal(go = "exgaussian", stop = "lognormal")$c_name, "SSLNORM")
   expect_identical(stop_signal(go = "exgaussian", stop = "weibull")$c_name, "SSWEIBULL")
+  expect_identical(stop_signal(go = "exgaussian", stop = "normal")$c_name, "SSNORM")
   expect_identical(stop_signal(go = "racing_diffusion", stop = "exgaussian")$c_name, "SSRDEX")
   expect_identical(stop_signal(go = "racing_diffusion", stop = "lognormal")$c_name, "SSRDLNORM")
   expect_identical(stop_signal(go = "racing_diffusion", stop = "weibull")$c_name, "SSRDWEIBULL")
+  expect_identical(stop_signal(go = "racing_diffusion", stop = "normal")$c_name, "SSRDNORM")
 })
 
 test_that("SSEXG and SSRDEX are compatibility wrappers for stop_signal", {

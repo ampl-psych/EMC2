@@ -6,7 +6,7 @@
 \usage{
 stop_signal(
   go = c("exgaussian", "racing_diffusion"),
-  stop = c("exgaussian", "lognormal", "weibull")
+  stop = c("exgaussian", "lognormal", "weibull", "normal")
 )
 }
 \arguments{
@@ -14,7 +14,7 @@ stop_signal(
 \code{"racing_diffusion"}. The default is \code{"exgaussian"}.}
 
 \item{stop}{Character string. Stop-runner family: \code{"exgaussian"},
-\code{"lognormal"}, or \code{"weibull"}. The default is \code{"exgaussian"}.}
+\code{"lognormal"}, \code{"weibull"}, or \code{"normal"}. The default is \code{"exgaussian"}.}
 }
 \value{
 A model list with all the necessary functions to sample.
@@ -48,6 +48,7 @@ The stop runner can be:\tabular{lll}{
    \code{"exgaussian"} \tab \code{muS}, \code{sigmaS}, \code{tauS}, \code{exgS_lb} \tab Descriptive ex-Gaussian stop finish-time distribution. \code{muS} is the mean of the Gaussian component, \code{sigmaS} is the standard deviation of the Gaussian component, \code{tauS} is the mean of the exponential component, and \code{exgS_lb} is the lower bound used for truncation. The stop mean is \code{muS + tauS}. See \code{\link[=SSEXG]{SSEXG()}} and \code{\link[=SSRDEX]{SSRDEX()}} for the ex-Gaussian stop-parameter description. \cr
    \code{"lognormal"} \tab \code{meanlogS}, \code{sdlogS} \tab Lognormal stop finish-time distribution. \code{meanlogS} is the mean of the associated normal distribution on the log-seconds scale. \code{sdlogS} is estimated on the log scale and transformed with \code{exp(sdlogS)} to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The mapped lognormal standard deviation is bounded above at \code{3} as a numerical guardrail. The stop mean is \code{exp(meanlogS + exp(sdlogS)^2 / 2)}. \cr
    \code{"weibull"} \tab \code{shapeS}, \code{scaleS} \tab Weibull stop finish-time distribution. \code{shapeS} and \code{scaleS} are estimated on the log scale and transformed with \code{exp(shapeS)} and \code{exp(scaleS)}. \code{shapeS} controls the shape of the hazard and distribution skew; \code{scaleS} controls the time scale. The stop mean is \code{exp(scaleS) * gamma(1 + 1 / exp(shapeS))}. \cr
+   \code{"normal"} \tab \code{muS}, \code{sigmaS}, \code{normS_lb} \tab Lower-truncated normal stop finish-time distribution. \code{muS} and \code{sigmaS} are estimated on the log scale and transformed with \code{exp(muS)} and \code{exp(sigmaS)}. \code{muS} is the location of the underlying normal distribution, \code{sigmaS} is its standard deviation, and \code{normS_lb} is the lower truncation point. The default lower bound is \code{0}, so generated stop finishing times are non-negative. \cr
 }
 
 

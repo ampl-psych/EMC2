@@ -538,12 +538,16 @@ double c_log_likelihood_stop_signal(NumericMatrix pars, DataFrame data,
     ll_trial = ss_texg_lnormal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
   } else if (type == "SSWEIBULL") {
     ll_trial = ss_texg_weibull_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
+  } else if (type == "SSNORM") {
+    ll_trial = ss_texg_normal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
   } else if (type == "SSRDEX") {
     ll_trial = ss_rdex_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
   } else if (type == "SSRDLNORM") {
     ll_trial = ss_rdex_lnormal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
   } else if (type == "SSRDWEIBULL") {
     ll_trial = ss_rdex_weibull_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
+  } else if (type == "SSRDNORM") {
+    ll_trial = ss_rdex_normal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
   } else {
     stop("Unsupported stop-signal C++ likelihood.");
   }
@@ -644,8 +648,8 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       lls[i] = is_ar1 ? c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll)
         : c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
-  } else if(type == "SSEXG" || type == "SSLNORM" || type == "SSWEIBULL" ||
-            type == "SSRDEX" || type == "SSRDLNORM" || type == "SSRDWEIBULL"){
+  } else if(type == "SSEXG" || type == "SSLNORM" || type == "SSWEIBULL" || type == "SSNORM" ||
+            type == "SSRDEX" || type == "SSRDLNORM" || type == "SSRDWEIBULL" || type == "SSRDNORM"){
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     const int n_lR = unique(lR).length();

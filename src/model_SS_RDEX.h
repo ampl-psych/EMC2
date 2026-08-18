@@ -368,6 +368,206 @@ NumericVector ss_rdex_lpdf(
 
 
 // ----------------------------------------------------------------------------
+// RACING-DIFFUSION GO / NORMAL STOP FUNCTIONS
+// ----------------------------------------------------------------------------
+
+static inline double rdex_tnormal_log_normalizer(double mu, double sigma, double lb) {
+  if (sigma <= 0.0) return R_NegInf;
+  if (lb == R_NegInf) return 0.0;
+  return PNORM_STD((lb - mu) / sigma, false, true);
+}
+
+static inline double rdex_tnormal_log_pdf(double x, double mu, double sigma, double lb) {
+  if (sigma <= 0.0 || x <= lb) return R_NegInf;
+  double log_z = rdex_tnormal_log_normalizer(mu, sigma, lb);
+  if (!R_FINITE(log_z)) return R_NegInf;
+  double d = DNORM(x, mu, sigma);
+  return (d > 0.0 && R_FINITE(d)) ? std::log(d) - log_z : R_NegInf;
+}
+
+static inline double rdex_tnormal_log_survivor(double q, double mu, double sigma, double lb) {
+  if (sigma <= 0.0) return R_NegInf;
+  if (q <= lb) return 0.0;
+  double log_q = PNORM_STD((q - mu) / sigma, false, true);
+  double log_z = rdex_tnormal_log_normalizer(mu, sigma, lb);
+  if (!R_FINITE(log_q) || !R_FINITE(log_z)) return R_NegInf;
+  return log_q - log_z;
+}
+
+double ss_rdex_normal_stop_fail_lpdf(
+    double RT,
+    double SSD,
+    NumericMatrix pars,
+    LogicalVector winner,
+    double min_ll
+) {
+  double go_lprob = ss_rdex_go_lpdf(RT, pars, winner, min_ll);
+  double stop_survivor_lprob = rdex_tnormal_log_survivor(RT - SSD, pars(0, 5), pars(0, 6), pars(0, 9));
+  if (!R_FINITE(stop_survivor_lprob)) stop_survivor_lprob = min_ll;
+  return go_lprob + stop_survivor_lprob;
+}
+
+class rdex_normal_stop_success_integrand : public Func {
+private:
+  const double SSD;
+  const double min_ll;
+  const double muS, sigmaS, normS_lb;
+  const int n_go;
+  std::vector<double> alpha, nu, gamma, t0;
+
+public:
+  rdex_normal_stop_success_integrand(
+    double SSD_,
+    NumericMatrix pars_,
+    double min_ll_
+  ) :
+  SSD(SSD_),
+  min_ll(min_ll_),
+  muS(pars_(0, 5)), sigmaS(pars_(0, 6)), normS_lb(pars_(0, 9)),
+  n_go(pars_.nrow()),
+  alpha(n_go), nu(n_go), gamma(n_go), t0(n_go)
+  {
+    for (int i = 0; i < n_go; ++i) {
+      double s = pars_(i, 4);
+      alpha[i] = (pars_(i, 1) / s) + .5 * (pars_(i, 2) / s);
+      nu[i]    =  pars_(i, 0) / s;
+      gamma[i] = .5 * (pars_(i, 2) / s);
+      t0[i]    =  pars_(i, 3);
+    }
+  }
+
+  double operator()(const double& x) const {
+    double log_d = rdex_tnormal_log_pdf(x, muS, sigmaS, normS_lb);
+    if (!R_FINITE(log_d)) log_d = min_ll;
+    double summed_log_s = 0.0;
+    for (int i = 0; i < n_go; ++i) {
+      double dt_i = (x + SSD) - t0[i];
+      double log_s_i = 0.0;
+      if (dt_i > 0.0) {
+        log_s_i = log1m(pigt(dt_i, alpha[i], nu[i], gamma[i]));
+      }
+      if (!R_FINITE(log_s_i)) log_s_i = min_ll;
+      summed_log_s += log_s_i;
+    }
+    return std::exp(log_d + summed_log_s);
+  }
+};
+
+static inline double ss_rdex_normal_stop_success_lpdf(
+    double SSD,
+    NumericMatrix pars,
+    double min_ll,
+    double upper = R_PosInf,
+    int max_subdiv = 50,
+    double abs_tol = 1e-7,
+    double rel_tol = 1e-6
+) {
+  rdex_normal_stop_success_integrand f(SSD, pars, min_ll);
+  double err_est, res;
+  int err_code;
+  double muS = pars(0, 5);
+  double sigmaS = pars(0, 6);
+  double lb = pars(0, 9);
+  double lower = std::isfinite(lb) ? lb : muS - 10.0 * sigmaS;
+  double ub = std::isfinite(upper) ? upper : std::max(muS, lower) + 10.0 * sigmaS;
+  if (!(ub > lower)) ub = lower + 1e-12;
+  res = integrate(
+    f, lower, ub, err_est, err_code, max_subdiv, abs_tol, rel_tol
+  );
+  bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+  return bad ? min_ll : std::log(res);
+}
+
+NumericVector ss_rdex_normal_lpdf(
+    NumericVector RT,
+    IntegerVector R,
+    NumericVector SSD,
+    NumericVector lR,
+    LogicalVector winner,
+    NumericMatrix pars,
+    LogicalVector is_ok,
+    double min_ll
+) {
+  // pars columns: v=0, B=1, A=2, t0=3, s=4, muS=5, sigmaS=6, tf=7, gf=8, normS_lb=9, b=10
+
+  NumericVector unique_lR = unique(lR);
+  const int n_acc = unique_lR.length();
+  const int n_trials = lR.length() / n_acc;
+  NumericVector out(n_trials);
+
+  LogicalVector is_first_acc = lR == unique_lR[0];
+  NumericVector tf = pars(_, 7);
+  NumericVector gf = pars(_, 8);
+  tf = tf[is_first_acc];
+  gf = gf[is_first_acc];
+
+  double go_lprob;
+  double stop_fail_lprob;
+  double stop_success_integral;
+  double stop_success_lprob;
+
+  for (int trial = 0; trial < n_trials; trial++) {
+    int start_row = trial * n_acc;
+    int end_row = (trial + 1) * n_acc - 1;
+
+    if (is_ok[trial] != 1) {
+      out[trial] = min_ll;
+      continue;
+    }
+
+    bool response_observed = R[start_row] != NA_INTEGER;
+    bool stop_signal_presented = std::isfinite(SSD[start_row]);
+
+    if (response_observed) {
+      if (stop_signal_presented) {
+        go_lprob = ss_rdex_go_lpdf(
+          RT[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        stop_fail_lprob = ss_rdex_normal_stop_fail_lpdf(
+          RT[start_row],
+          SSD[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        out[trial] = log1m(gf[trial]) + log_mix(tf[trial], go_lprob, stop_fail_lprob);
+      } else {
+        go_lprob = ss_rdex_go_lpdf(
+          RT[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        out[trial] = log1m(gf[trial]) + go_lprob;
+      }
+    } else {
+      if (stop_signal_presented) {
+        double mix_w = (1.0 - gf[trial]) * (1.0 - tf[trial]);
+        if (mix_w <= 1e-6) {
+          out[trial] = std::log(gf[trial]);
+        } else {
+          stop_success_integral = ss_rdex_normal_stop_success_lpdf(
+            SSD[start_row],
+            pars(Range(start_row, end_row), _),
+            min_ll
+          );
+          stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
+          out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        }
+      } else {
+        out[trial] = std::log(gf[trial]);
+      }
+    }
+  }
+
+  return(out);
+}
+
+
+// ----------------------------------------------------------------------------
 // RACING-DIFFUSION GO / LOGNORMAL STOP FUNCTIONS
 // ----------------------------------------------------------------------------
 

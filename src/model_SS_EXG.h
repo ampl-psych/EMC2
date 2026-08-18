@@ -347,6 +347,208 @@ NumericVector ss_texg_lpdf(
 
 
 // ----------------------------------------------------------------------------
+// TRUNCATED EX-GAUSSIAN GO / NORMAL STOP FUNCTIONS
+// ----------------------------------------------------------------------------
+
+double ss_texg_lnormal_go_lpdf(
+    double RT,
+    NumericMatrix pars,
+    LogicalVector winner,
+    double min_ll
+);
+
+static inline double tnormal_log_normalizer(double mu, double sigma, double lb) {
+  if (sigma <= 0.0) return R_NegInf;
+  if (lb == R_NegInf) return 0.0;
+  return PNORM_STD((lb - mu) / sigma, false, true);
+}
+
+static inline double tnormal_log_pdf(double x, double mu, double sigma, double lb) {
+  if (sigma <= 0.0 || x <= lb) return R_NegInf;
+  double log_z = tnormal_log_normalizer(mu, sigma, lb);
+  if (!R_FINITE(log_z)) return R_NegInf;
+  double d = DNORM(x, mu, sigma);
+  return (d > 0.0 && R_FINITE(d)) ? std::log(d) - log_z : R_NegInf;
+}
+
+static inline double tnormal_log_survivor(double q, double mu, double sigma, double lb) {
+  if (sigma <= 0.0) return R_NegInf;
+  if (q <= lb) return 0.0;
+  double log_q = PNORM_STD((q - mu) / sigma, false, true);
+  double log_z = tnormal_log_normalizer(mu, sigma, lb);
+  if (!R_FINITE(log_q) || !R_FINITE(log_z)) return R_NegInf;
+  return log_q - log_z;
+}
+
+double ss_texg_normal_stop_fail_lpdf(
+    double RT,
+    double SSD,
+    NumericMatrix pars,
+    LogicalVector winner,
+    double min_ll
+) {
+  double go_lprob = ss_texg_lnormal_go_lpdf(RT, pars, winner, min_ll);
+  double stop_survivor_lprob = tnormal_log_survivor(RT - SSD, pars(0, 3), pars(0, 4), pars(0, 8));
+  if (!R_FINITE(stop_survivor_lprob)) stop_survivor_lprob = min_ll;
+  return go_lprob + stop_survivor_lprob;
+}
+
+class texg_normal_stop_success_integrand : public Func {
+private:
+  const double SSD;
+  const double min_ll;
+  const double muS, sigmaS, normS_lb;
+  const int n_go;
+  std::vector<double> muG, sigG, tauG, lbG;
+
+public:
+  texg_normal_stop_success_integrand(
+    double SSD_,
+    NumericMatrix pars_,
+    double min_ll_
+  ) :
+  SSD(SSD_),
+  min_ll(min_ll_),
+  muS(pars_(0, 3)), sigmaS(pars_(0, 4)), normS_lb(pars_(0, 8)),
+  n_go(pars_.nrow()),
+  muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
+  {
+    for (int i = 0; i < n_go; ++i) {
+      muG[i]  = pars_(i, 0);
+      sigG[i] = pars_(i, 1);
+      tauG[i] = pars_(i, 2);
+      lbG[i]  = pars_(i, 7);
+    }
+  }
+
+  double operator()(const double& x) const {
+    double log_d = tnormal_log_pdf(x, muS, sigmaS, normS_lb);
+    if (!R_FINITE(log_d)) log_d = min_ll;
+    double summed_log_s = 0.0;
+    for (int i = 0; i < n_go; ++i) {
+      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
+      if (!R_FINITE(log_s_i)) log_s_i = min_ll;
+      summed_log_s += log_s_i;
+    }
+    return std::exp(log_d + summed_log_s);
+  }
+};
+
+static inline double ss_texg_normal_stop_success_lpdf(
+    double SSD,
+    NumericMatrix pars,
+    double min_ll,
+    double upper = R_PosInf,
+    int max_subdiv = 50,
+    double abs_tol = 1e-7,
+    double rel_tol = 1e-6
+) {
+  texg_normal_stop_success_integrand f(SSD, pars, min_ll);
+  double err_est, res;
+  int err_code;
+  double muS = pars(0, 3);
+  double sigmaS = pars(0, 4);
+  double lb = pars(0, 8);
+  double lower = std::isfinite(lb) ? lb : muS - 10.0 * sigmaS;
+  double ub = std::isfinite(upper) ? upper : std::max(muS, lower) + 10.0 * sigmaS;
+  if (!(ub > lower)) ub = lower + 1e-12;
+  res = integrate(
+    f, lower, ub, err_est, err_code, max_subdiv, abs_tol, rel_tol
+  );
+  bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+  return bad ? min_ll : std::log(res);
+}
+
+NumericVector ss_texg_normal_lpdf(
+    NumericVector RT,
+    IntegerVector R,
+    NumericVector SSD,
+    NumericVector lR,
+    LogicalVector winner,
+    NumericMatrix pars,
+    LogicalVector is_ok,
+    double min_ll
+) {
+  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tf=5, gf=6, exg_lb=7, normS_lb=8
+
+  NumericVector unique_lR = unique(lR);
+  const int n_acc = unique_lR.length();
+  const int n_trials = lR.length() / n_acc;
+  NumericVector out(n_trials);
+
+  LogicalVector is_first_acc = lR == unique_lR[0];
+  NumericVector tf = pars(_, 5);
+  NumericVector gf = pars(_, 6);
+  tf = tf[is_first_acc];
+  gf = gf[is_first_acc];
+
+  double go_lprob;
+  double stop_fail_lprob;
+  double stop_success_integral;
+  double stop_success_lprob;
+
+  for (int trial = 0; trial < n_trials; trial++) {
+    int start_row = trial * n_acc;
+    int end_row = (trial + 1) * n_acc - 1;
+
+    if (is_ok[trial] != 1) {
+      out[trial] = min_ll;
+      continue;
+    }
+
+    bool response_observed = R[start_row] != NA_INTEGER;
+    bool stop_signal_presented = std::isfinite(SSD[start_row]);
+
+    if (response_observed) {
+      if (stop_signal_presented) {
+        go_lprob = ss_texg_lnormal_go_lpdf(
+          RT[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        stop_fail_lprob = ss_texg_normal_stop_fail_lpdf(
+          RT[start_row],
+          SSD[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        out[trial] = log1m(gf[trial]) + log_mix(tf[trial], go_lprob, stop_fail_lprob);
+      } else {
+        go_lprob = ss_texg_lnormal_go_lpdf(
+          RT[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
+        );
+        out[trial] = log1m(gf[trial]) + go_lprob;
+      }
+    } else {
+      if (stop_signal_presented) {
+        double mix_w = (1.0 - gf[trial]) * (1.0 - tf[trial]);
+        if (mix_w <= 1e-6) {
+          out[trial] = std::log(gf[trial]);
+        } else {
+          stop_success_integral = ss_texg_normal_stop_success_lpdf(
+            SSD[start_row],
+            pars(Range(start_row, end_row), _),
+            min_ll
+          );
+          stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
+          out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        }
+      } else {
+        out[trial] = std::log(gf[trial]);
+      }
+    }
+  }
+
+  return(out);
+}
+
+
+// ----------------------------------------------------------------------------
 // TRUNCATED EX-GAUSSIAN GO / LOGNORMAL STOP FUNCTIONS
 // ----------------------------------------------------------------------------
 
