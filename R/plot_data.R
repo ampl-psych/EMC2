@@ -198,11 +198,18 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       } else{
         x_lim_probs <- c(0, 0.99)
       }
-      quants <- aggregate(rt ~ group_key, datasets[[j]], quantile, probs = x_lim_probs)
-      xlim <- range(xlim, unlist(quants$rt))
+      # Compute xlim from finite RTs only.
+      finite_df <- datasets[[j]][is.finite(datasets[[j]]$rt), , drop = FALSE]
+      if (nrow(finite_df) > 0) {
+        quants <- aggregate(rt ~ group_key, finite_df, quantile, probs = x_lim_probs)
+        xlim <- range(xlim, unlist(quants$rt), na.rm = TRUE)
+      }
     }
   }
 
+  if (require_rt && is.null(xlim)) {
+    stop("No finite RT values available to plot")
+  }
   if(require_rt && remove_na && !is.null(xlim)){
     datasets <- lapply(datasets, function(x){
       x <- x[x$rt > xlim[1] & x$rt < xlim[2],]
@@ -729,21 +736,26 @@ plot_fit_choice <- function(input,
 
 
 # A small function to compute the defective densities across factor levels
-compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NULL) {
-  p_defective <- prop.table(table(dat[[defective_factor]]))
-  # We'll call density() on each subset of rt, then multiply by proportion
-  # so that the sum across factor levels is 1
-  # We'll use the from/to in dargs
+compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NULL,
+                             limits = NULL) {
+  finite <- is.finite(dat$rt)
+  in_limits <- finite
+  if (!is.null(limits))
+    in_limits <- finite & dat$rt > limits[1] & dat$rt < limits[2]
+  n_in_limits <- sum(in_limits)
+  p_finite <- mean(finite)
   by_deflev <- split(dat, dat[[defective_factor]])
   out <- list()
   for (lev in names(by_deflev)) {
     subdat <- by_deflev[[lev]]
-    if (nrow(subdat) < 2) {
-      # avoid error
+    rt_finite <- subdat$rt[is.finite(subdat$rt)]
+    if (!is.null(limits))
+      rt_finite <- rt_finite[rt_finite > limits[1] & rt_finite < limits[2]]
+    if (length(rt_finite) < 2 || n_in_limits == 0) {
       out[[lev]] <- rep(0, 512)
     } else {
-      dd <- do.call(density, c(list(x = subdat$rt, from = from, to = to), fix_dots(dargs, density.default, consider_dots = FALSE)))
-      out[[lev]] <- dd$y * p_defective[lev]
+      dd <- do.call(density, c(list(x = rt_finite, from = from, to = to), fix_dots(dargs, density.default, consider_dots = FALSE)))
+      out[[lev]] <- dd$y * length(rt_finite) / n_in_limits * p_finite
     }
   }
   out
@@ -752,10 +764,8 @@ compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NUL
 
 #' Plot Defective Densities
 #'
-#' Plots panels that contain a set of densities for each level of the specified defective factor in the data.
-#' These densities are defective; their areas are relative to the respective
-#' proportions of the defective factor levels. Across all levels, the area sums to 1.
-#' Optionally, posterior/prior predictive densities can be overlaid.
+#' Plots a defective density for each level of the specified factor. Curves use
+#' finite RTs, and their total mass equals the finite-RT proportion.
 #'
 #' @inheritParams plot_cdf
 #' @examples
@@ -778,7 +788,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
                          posterior_args = list(), prior_args = list(), ...) {
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, defective_factor, subject, n_cores, n_post, functions)
+                          factors, defective_factor, subject, n_cores, n_post, functions,
+                          remove_na = FALSE)
   data_sources <- check$datasets
   sources <- check$sources
   xlim <- check$xlim
@@ -820,7 +831,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       dens_list[[src_name]] <- lapply(splitted, function(dg) {
         postn_splits <- split(dg, dg$postn)
         lapply(postn_splits, function(dsub) {
-          compute_def_dens(dsub, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
+          compute_def_dens(dsub, defective_factor, dargs, from = check$xlim[1]-0.05,
+                           to = check$xlim[2] + 0.05, limits = check$xlim)
         })
       })
 
@@ -856,7 +868,9 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     } else {
       dargs <- dots
       splitted <- split(src_data, src_data$group_key)
-      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
+      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs,
+                                      from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05,
+                                      limits = check$xlim)
 
       if (src_type %in% use_lim) {
         # find max
@@ -992,37 +1006,39 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
 ###############################################################################
 ## Helper: get_def_cdf
 ###############################################################################
-get_def_cdf <- function(x, defective_factor, dots) {
+get_def_cdf <- function(x, defective_factor, dots, limits = NULL) {
   # Computes a single defective CDF for each level of 'defective_factor'
   # across the RT distribution (0.01 to 0.99).
   probs <- seq(0.01, 0.99, by = 0.01)
-  p_defective <- prop.table(table(x[[defective_factor]]))
+  finite <- is.finite(x$rt)
+  in_limits <- finite
+  if (!is.null(limits))
+    in_limits <- finite & x$rt > limits[1] & x$rt < limits[2]
+  n_in_limits <- sum(in_limits)
+  p_finite <- mean(finite)
 
-  # For each level, compute the empirical CDF and scale by that level's proportion
-  out <- mapply(
-    split(x, x[[defective_factor]]),
-    p_defective,
-    FUN = function(inp, prop_share) {
-      # quantile of RTs
-      rtquants <- quantile(inp$rt, probs = probs, type = 1, na.rm = TRUE)
-      # defective cdf = empirical cdf (probs) times the proportion
-      yvals <- probs * prop_share
-      cbind(x = rtquants, y = yvals)
-    },
-    SIMPLIFY = FALSE
-  )
-  # 'out' is now a list whose names are the factor levels; each entry is a 2-col matrix (x,y).
-  return(out)
+  out <- lapply(split(x, x[[defective_factor]]), function(inp) {
+    rt_finite <- inp$rt[is.finite(inp$rt)]
+    if (!is.null(limits))
+      rt_finite <- rt_finite[rt_finite > limits[1] & rt_finite < limits[2]]
+    if (!length(rt_finite) || n_in_limits == 0) {
+      return(cbind(x = rep(NA_real_, length(probs)),
+                   y = rep(0, length(probs))))
+    }
+    prop_share <- length(rt_finite) / n_in_limits * p_finite
+    rtquants <- quantile(rt_finite, probs = probs, type = 1, na.rm = TRUE)
+    cbind(x = rtquants, y = probs * prop_share)
+  })
+
+  out
 }
 
 ###############################################################################
 ## Plot Defective CDFs
-###############################################################################
 #' Plot Defective Cumulative Distribution Functions
 #'
-#' Plots panels of cumulative distribution functions (CDFs) for each level of the specified
-#' defective factor in the data. The CDFs are *defective*; each factor level's CDF
-#' scales only up to that level's proportion. Summed across levels, the maximum is 1.
+#' Plots a defective CDF for each level of the specified factor. Curves use finite
+#' RTs, and their summed endpoint approaches the finite-RT proportion.
 #' Optionally, posterior and/or prior predictive CDFs can be overlaid.
 #'
 #' @param input Either an `emc` object or a data frame, or a *list* of such objects.
@@ -1086,7 +1102,7 @@ plot_cdf <- function(input,
 
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor, subject, n_cores, n_post,
-                          functions)
+                          functions, remove_na = FALSE)
   data_sources <- check$datasets
   sources <- check$sources
   xlim <- check$xlim
@@ -1139,7 +1155,7 @@ plot_cdf <- function(input,
         # sub_grp is all rows for a single group_key
         # we further split by postn
         postn_splits <- split(sub_grp, sub_grp$postn)
-        lapply(postn_splits, get_def_cdf, defective_factor, dots)
+        lapply(postn_splits, get_def_cdf, defective_factor, dots, limits = xlim)
       })
 
       # Now we derive cdf_quants_list from cdf_list
@@ -1200,7 +1216,8 @@ plot_cdf <- function(input,
 
     } else {
       # single dataset => cdf_list[[sname]] => group_key => get_def_cdf => named list by factor level
-      cdf_list[[sname]] <- lapply(splitted, get_def_cdf, defective_factor, dots)
+      cdf_list[[sname]] <- lapply(splitted, get_def_cdf, defective_factor, dots,
+                                  limits = xlim)
       if (!is.null(dots$panel_factor)) {
         ns <- lapply(splitted,function(x){
           mult <- table(x[[dots$panel_factor]])

@@ -67,10 +67,8 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 Returns \code{NULL} invisibly.
 }
 \description{
-Plots panels of cumulative distribution functions (CDFs) for each level of the specified
-defective factor in the data. The CDFs are \emph{defective}; each factor level's CDF
-scales only up to that level's proportion. Summed across levels, the maximum is 1.
-Optionally, posterior and/or prior predictive CDFs can be overlaid.
+Plots a defective CDF for each level of the specified factor. Curves use finite
+RTs, and their summed endpoint approaches the finite-RT proportion.
 }
 \examples{
 # Plot defective CDF for data only
