@@ -151,6 +151,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   dots <- list(...)
   data <- dots$data
   dots$data <- NULL
+
   has_pooled_design <- function(x) {
     if (is.data.frame(x)) {
       return(!is.null(attr(x, "design_pool")))
@@ -165,6 +166,11 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
       stop("predict() requires `data` when the model was created with memory_saver = TRUE")
     }
     data <- get_data(emc)
+  }
+  # Temporary fix to bypass the UC=0 issue for predict.emc
+  is_gng_data <- "R" %in% names(data) &&  any(data$R == "nogo" | "nogo" %in% levels(data$R), na.rm = TRUE)
+  if (is_gng_data) {
+    data$UC=Inf
   }
   design <- get_design(emc)
   return_trialwise_parameters <- isTRUE(dots$return_trialwise_parameters)
