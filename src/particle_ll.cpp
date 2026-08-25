@@ -1,5 +1,7 @@
 #include <Rcpp.h>
+#include <algorithm>
 #include <unordered_map>
+#include <AccumulatR/api.hpp>
 
 // Utilities first — no dependencies on model types
 #include "utility_functions.h"
@@ -19,6 +21,89 @@
 // RaceSetup last — references functions defined in model headers above
 #include "RaceSetup.h"
 using namespace Rcpp;
+
+struct AccumulatRBridgeRecipe {
+  struct Binding {
+    int destination;
+    int source;
+    int length;
+  };
+
+  Rcpp::NumericMatrix runtime;
+  std::vector<Binding> bindings;
+};
+
+static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
+    const Rcpp::List& bridge,
+    const ParamTable& parameter_table) {
+  Rcpp::NumericMatrix runtime = Rcpp::clone(
+    Rcpp::NumericMatrix(bridge["defaults"]));
+  Rcpp::CharacterMatrix sources = bridge["source_names"];
+  if (sources.nrow() != runtime.nrow() ||
+      sources.ncol() != runtime.ncol() ||
+      runtime.nrow() != parameter_table.base.nrow()) {
+    Rcpp::stop("AccumulatR bridge dimensions do not match the parameter table");
+  }
+
+  std::vector<AccumulatRBridgeRecipe::Binding> bindings;
+  bindings.reserve(runtime.length());
+  for (int col = 0; col < runtime.ncol(); ++col) {
+    for (int row = 0; row < runtime.nrow(); ++row) {
+      Rcpp::String source = sources(row, col);
+      if (source == NA_STRING) continue;
+      auto found = parameter_table.name_to_base_idx.find(
+        std::string(source.get_cstring()));
+      if (found == parameter_table.name_to_base_idx.end()) {
+        Rcpp::stop("Unknown AccumulatR bridge parameter: " +
+                   std::string(source.get_cstring()));
+      }
+
+      const int destination = row + runtime.nrow() * col;
+      const int source_index = row + runtime.nrow() * found->second;
+      if (!bindings.empty() &&
+          bindings.back().destination + bindings.back().length == destination &&
+          bindings.back().source + bindings.back().length == source_index) {
+        ++bindings.back().length;
+      } else {
+        bindings.push_back({destination, source_index, 1});
+      }
+    }
+  }
+  return {runtime, bindings};
+}
+
+static void fill_accumulatr_runtime_parameters(
+    const ParamTable& parameter_table,
+    AccumulatRBridgeRecipe& recipe) {
+  for (const auto& binding : recipe.bindings) {
+    std::copy_n(
+      parameter_table.base.begin() + binding.source,
+      binding.length,
+      recipe.runtime.begin() + binding.destination);
+  }
+}
+
+static bool prepare_accumulatr_trial_ok(
+    const std::vector<int>& row_ok,
+    const Rcpp::IntegerVector& starts,
+    Rcpp::LogicalVector& trial_ok) {
+  if (std::all_of(
+        row_ok.begin(), row_ok.end(), [](const int value) { return value != 0; })) {
+    return true;
+  }
+  std::fill(trial_ok.begin(), trial_ok.end(), true);
+  for (int trial = 0; trial < starts.size(); ++trial) {
+    const int begin = starts[trial] - 1;
+    const int end = trial + 1 < starts.size() ? starts[trial + 1] - 1 : row_ok.size();
+    for (int row = begin; row < end; ++row) {
+      if (!row_ok[row]) {
+        trial_ok[trial] = false;
+        break;
+      }
+    }
+  }
+  return false;
+}
 
 
 // =============================================================================
@@ -605,9 +690,55 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
 
   // -----------------------------------------------------------------------
+  // AccumulatR
+  // -----------------------------------------------------------------------
+  if (type == "AccumulatR") {
+    SEXP likelihood_context_sexp = data.attr("AccumulatR_context");
+    if (Rf_isNull(likelihood_context_sexp)) {
+      Rcpp::stop("AccumulatR likelihood context is missing");
+    }
+    Rcpp::List likelihood_context(likelihood_context_sexp);
+    SEXP native_context = likelihood_context["native"];
+    AccumulatRBridgeRecipe recipe = make_accumulatr_bridge_recipe(
+      Rcpp::List(likelihood_context["bridge"]), ctx.param_table);
+    Rcpp::IntegerVector starts = data.attr("trials_start_rows");
+    Rcpp::IntegerVector trial_counts = likelihood_context["trial_counts"];
+    if (trial_counts.size() != starts.size()) {
+      Rcpp::stop("AccumulatR trial counts do not match the prepared data");
+    }
+    Rcpp::NumericVector trial_loglik(starts.size());
+    Rcpp::LogicalVector trial_ok(starts.size());
+    const auto evaluate_accumulatr = accumulatr::loglik_trials_ccallable();
+
+    for (int i = 0; i < n_particles; ++i) {
+      std::fill(is_ok.begin(), is_ok.end(), 1);
+      if (i > 0) {
+        ctx.param_table.fill_from_particle_row(
+          ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+      }
+      run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
+      c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
+      fill_accumulatr_runtime_parameters(ctx.param_table, recipe);
+      const bool all_valid = prepare_accumulatr_trial_ok(is_ok, starts, trial_ok);
+      evaluate_accumulatr(
+        native_context,
+        recipe.runtime,
+        data,
+        all_valid ? R_NilValue : static_cast<SEXP>(trial_ok),
+        min_ll,
+        trial_loglik.begin());
+
+      double total = 0.0;
+      for (int trial = 0; trial < starts.size(); ++trial) {
+        total += trial_loglik[trial] * trial_counts[trial];
+      }
+      lls[i] = total;
+    }
+
+  // -----------------------------------------------------------------------
   // DDM
   // -----------------------------------------------------------------------
-  if (type == "DDM") {
+  } else if (type == "DDM") {
     IntegerVector expand = data.attr("expand");
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
