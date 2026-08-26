@@ -176,7 +176,7 @@ NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<Transf
 
 
 // void, pass result to avoid repeated allocation
-void c_do_bound_pt(const ParamTable& pt,
+bool c_do_bound_pt(const ParamTable& pt,
                    const std::vector<BoundSpec>& specs,
                    std::vector<int>& result)
 {
@@ -185,6 +185,7 @@ void c_do_bound_pt(const ParamTable& pt,
 
   std::fill(result.begin(), result.begin() + nrows, 1);
   int* res = result.data();
+  int all_valid = 1;
 
   for (const BoundSpec& bs : specs) {
     const int    col_idx = bs.col_idx;
@@ -195,14 +196,16 @@ void c_do_bound_pt(const ParamTable& pt,
 
     const double* col = &base(0, col_idx);
 
-#pragma omp simd
+#pragma omp simd reduction(&:all_valid)
     for (int i = 0; i < nrows; ++i) {
       const double v = col[i];
       bool ok = (v > min_v && v < max_v);
       if (has_exc) ok = ok || (v == exc_val);
       res[i] = res[i] & (ok ? 1 : 0);
+      all_valid &= res[i];
     }
   }
+  return all_valid != 0;
 }
 
 // Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,

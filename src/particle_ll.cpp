@@ -83,14 +83,10 @@ static void fill_accumulatr_runtime_parameters(
   }
 }
 
-static bool prepare_accumulatr_trial_ok(
+static void prepare_accumulatr_trial_ok(
     const std::vector<int>& row_ok,
     const Rcpp::IntegerVector& starts,
     Rcpp::LogicalVector& trial_ok) {
-  if (std::all_of(
-        row_ok.begin(), row_ok.end(), [](const int value) { return value != 0; })) {
-    return true;
-  }
   std::fill(trial_ok.begin(), trial_ok.end(), true);
   for (int trial = 0; trial < starts.size(); ++trial) {
     const int begin = starts[trial] - 1;
@@ -102,7 +98,6 @@ static bool prepare_accumulatr_trial_ok(
       }
     }
   }
-  return false;
 }
 
 
@@ -717,9 +712,12 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
           ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
       }
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
-      c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
+      const bool all_valid =
+        c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
       fill_accumulatr_runtime_parameters(ctx.param_table, recipe);
-      const bool all_valid = prepare_accumulatr_trial_ok(is_ok, starts, trial_ok);
+      if (!all_valid) {
+        prepare_accumulatr_trial_ok(is_ok, starts, trial_ok);
+      }
       evaluate_accumulatr(
         native_context,
         recipe.runtime,
