@@ -193,11 +193,22 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
 
 
 dexGaussian <- function(rt,pars)
-  # exGaussian pdf (returns normal or exponential for small tau/sigma)
+  # exGaussian pdf. Optional approximation thresholds are off by default.
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
+  shifted_exp_sigma <- if ("exg_shifted_exp_sigma" %in% colnames(pars)) {
+    pars[, "exg_shifted_exp_sigma"]
+  } else {
+    rep(0, nrow(pars))
+  }
+  normal_ratio <- if ("exg_normal_ratio" %in% colnames(pars)) {
+    pars[, "exg_normal_ratio"]
+  } else {
+    rep(0, nrow(pars))
+  }
+
+  isexp <- shifted_exp_sigma > 0 & pars[,"sigma"] < shifted_exp_sigma
   rt[isexp] <- dexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
+  isnorm <- !isexp & normal_ratio > 0 & pars[,"tau"] < normal_ratio * pars[,"sigma"]
   rt[isnorm] <- dnorm(rt[isnorm], mean = pars[isnorm,"mu"],
                       sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
@@ -214,11 +225,22 @@ dexGaussian <- function(rt,pars)
 }
 
 pexGaussian <- function(rt,pars)
-  # exGaussian cdf (returns normal or exponential for small tau/sigma)
+  # exGaussian cdf. Optional approximation thresholds are off by default.
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
+  shifted_exp_sigma <- if ("exg_shifted_exp_sigma" %in% colnames(pars)) {
+    pars[, "exg_shifted_exp_sigma"]
+  } else {
+    rep(0, nrow(pars))
+  }
+  normal_ratio <- if ("exg_normal_ratio" %in% colnames(pars)) {
+    pars[, "exg_normal_ratio"]
+  } else {
+    rep(0, nrow(pars))
+  }
+
+  isexp <- shifted_exp_sigma > 0 & pars[,"sigma"] < shifted_exp_sigma
   rt[isexp] <- pexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
+  isnorm <- !isexp & normal_ratio > 0 & pars[,"tau"] < normal_ratio * pars[,"sigma"]
   rt[isnorm] <- pnorm(rt[isnorm], mean = pars[isnorm,"mu"],
                       sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
@@ -306,6 +328,46 @@ ptexGaussianS <- function(rt,pars)
   dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
   dimnames(pars)[[2]][dimnames(pars)[[2]]=="exgS_lb"] <- "exg_lb"
   ptexGaussian(rt,pars)
+}
+
+validate_exgaussian_approximation <- function(exgaussian_approximation) {
+  if (is.null(exgaussian_approximation)) {
+    return(c(exg_normal_ratio = 0, exg_shifted_exp_sigma = 0))
+  }
+  if (!is.list(exgaussian_approximation)) {
+    stop("`exgaussian_approximation` must be NULL or a list.", call. = FALSE)
+  }
+
+  valid_names <- c("normal_ratio", "shifted_exponential_sigma")
+  unknown <- setdiff(names(exgaussian_approximation), valid_names)
+  if (length(unknown)) {
+    stop(
+      "Unknown `exgaussian_approximation` field(s): ",
+      paste(unknown, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  get_threshold <- function(name) {
+    value <- exgaussian_approximation[[name]]
+    if (is.null(value)) return(0)
+    if (!is.numeric(value) || length(value) != 1L || is.na(value) || value < 0) {
+      stop(
+        "`exgaussian_approximation$", name,
+        "` must be NULL or a non-negative numeric scalar.",
+        call. = FALSE
+      )
+    }
+    as.numeric(value)
+  }
+
+  normal_ratio <- get_threshold("normal_ratio")
+  shifted_exponential_sigma <- get_threshold("shifted_exponential_sigma")
+
+  c(
+    exg_normal_ratio = normal_ratio,
+    exg_shifted_exp_sigma = shifted_exponential_sigma
+  )
 }
 
 
@@ -544,7 +606,10 @@ ss_weibull_stop_spec <- function() {
 }
 
 
-ss_exgaussian_stop_spec <- function() {
+ss_exgaussian_stop_spec <- function(exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
   list(
     family = "exgaussian",
     name = "exgaussian",
@@ -557,13 +622,28 @@ ss_exgaussian_stop_spec <- function() {
     tail_minmax = cbind(exgS_lb = c(-Inf, Inf)),
     tail_exception = c(exgS_lb = -Inf),
     dfun = function(rt, pars) {
-      parsS <- pars[, c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop = FALSE]
+      parsS <- pars[, c(
+        "muS", "sigmaS", "tauS", "SSD", "exgS_lb",
+        "exg_normal_ratio", "exg_shifted_exp_sigma"
+      ), drop = FALSE]
       dtexGaussianS(rt, parsS)
     },
     pfun = function(rt, pars) {
-      parsS <- pars[, c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop = FALSE]
+      parsS <- pars[, c(
+        "muS", "sigmaS", "tauS", "SSD", "exgS_lb",
+        "exg_normal_ratio", "exg_shifted_exp_sigma"
+      ), drop = FALSE]
       ptexGaussianS(rt, parsS)
     },
+    approximation_p_types = exg_approximation,
+    approximation_transform = c(
+      exg_normal_ratio = "identity",
+      exg_shifted_exp_sigma = "identity"
+    ),
+    approximation_minmax = cbind(
+      exg_normal_ratio = c(0, Inf),
+      exg_shifted_exp_sigma = c(0, Inf)
+    ),
     rfun = NULL,
     mean = function(pars) {
       pars[, "muS"] + pars[, "tauS"]
@@ -575,11 +655,14 @@ ss_exgaussian_stop_spec <- function() {
 }
 
 
-ss_stop_spec <- function(stop) {
+ss_stop_spec <- function(stop, exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
   stop <- match.arg(stop, c("exgaussian", "lognormal", "weibull", "normal"))
   switch(
     stop,
-    exgaussian = ss_exgaussian_stop_spec(),
+    exgaussian = ss_exgaussian_stop_spec(exg_approximation),
     lognormal = ss_lnormal_stop_spec(),
     weibull = ss_weibull_stop_spec(),
     normal = ss_normal_stop_spec()
@@ -587,7 +670,10 @@ ss_stop_spec <- function(stop) {
 }
 
 
-ss_go_spec <- function(go) {
+ss_go_spec <- function(go, exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
   go <- match.arg(go, c("exgaussian", "racing_diffusion"))
   switch(
     go,
@@ -601,6 +687,15 @@ ss_go_spec <- function(go) {
       tail_transform = c(exg_lb = "identity"),
       tail_minmax = cbind(exg_lb = c(-Inf, Inf)),
       tail_exception = c(exg_lb = -Inf),
+      approximation_p_types = exg_approximation,
+      approximation_transform = c(
+        exg_normal_ratio = "identity",
+        exg_shifted_exp_sigma = "identity"
+      ),
+      approximation_minmax = cbind(
+        exg_normal_ratio = c(0, Inf),
+        exg_shifted_exp_sigma = c(0, Inf)
+      ),
       dfun = function(rt, pars) dtexGaussianG(rt, pars),
       pfun = function(rt, pars) ptexGaussianG(rt, pars)
     ),
@@ -730,27 +825,42 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
   if (identical(go_spec$family, "exgaussian")) {
     go_tail_default <- c(exg_lb = if (identical(stop_spec$family, "exgaussian")) 0 else .05)
   }
+  approximation_p_types <- NULL
+  approximation_transform <- NULL
+  approximation_minmax <- NULL
+  if (identical(go_spec$family, "exgaussian")) {
+    approximation_p_types <- go_spec$approximation_p_types
+    approximation_transform <- go_spec$approximation_transform
+    approximation_minmax <- go_spec$approximation_minmax
+  } else if (identical(stop_spec$family, "exgaussian")) {
+    approximation_p_types <- stop_spec$approximation_p_types
+    approximation_transform <- stop_spec$approximation_transform
+    approximation_minmax <- stop_spec$approximation_minmax
+  }
 
   p_types <- c(
     go_spec$p_types,
     stop_spec$p_types,
     tf = qnorm(0), gf = qnorm(0),
     go_tail_default,
-    stop_spec$tail_p_types
+    stop_spec$tail_p_types,
+    approximation_p_types
   )
   transform <- c(
     go_spec$transform,
     stop_spec$transform,
     tf = "pnorm", gf = "pnorm",
     go_spec$tail_transform,
-    stop_spec$tail_transform
+    stop_spec$tail_transform,
+    approximation_transform
   )
   minmax <- do.call(cbind, Filter(Negate(is.null), list(
     go_spec$minmax,
     stop_spec$minmax,
     cbind(tf = c(.001, .999), gf = c(.001, .999)),
     go_spec$tail_minmax,
-    stop_spec$tail_minmax
+    stop_spec$tail_minmax,
+    approximation_minmax
   )))
   exception <- c(
     go_spec$exception,
@@ -781,7 +891,8 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
       go_parameters = go_spec$parameters,
       stop_parameters = stop_spec$parameters,
       stop_mean = stop_spec$mean,
-      stop_sd = stop_spec$sd
+      stop_sd = stop_spec$sd,
+      exgaussian_approximation = approximation_p_types
     )
   )
 }
@@ -795,6 +906,14 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #'   `"racing_diffusion"`. The default is `"exgaussian"`.
 #' @param stop Character string. Stop-runner family: `"exgaussian"`,
 #'   `"lognormal"`, `"weibull"`, or `"normal"`. The default is `"exgaussian"`.
+#' @param exgaussian_approximation Optional list controlling legacy
+#'   ex-Gaussian approximations. The default `NULL` disables these
+#'   approximations. Use `list(normal_ratio = .05)` to evaluate the
+#'   ex-Gaussian density and CDF with a normal approximation when
+#'   `tau < normal_ratio * sigma`, and
+#'   `list(shifted_exponential_sigma = 1e-5)` to use a shifted-exponential
+#'   approximation when `sigma < shifted_exponential_sigma`. These controls are
+#'   intended for compatibility and sensitivity checks.
 #'
 #' @details
 #'
@@ -842,13 +961,32 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' @export
 stop_signal <- function(
     go = c("exgaussian", "racing_diffusion"),
-    stop = c("exgaussian", "lognormal", "weibull", "normal")
+    stop = c("exgaussian", "lognormal", "weibull", "normal"),
+    exgaussian_approximation = NULL
 ) {
   go <- match.arg(go)
   stop <- match.arg(stop)
+  exg_approximation <- validate_exgaussian_approximation(exgaussian_approximation)
+  has_exgaussian <- identical(go, "exgaussian") || identical(stop, "exgaussian")
+  if (!has_exgaussian && any(exg_approximation > 0)) {
+    warning(
+      "`exgaussian_approximation` was supplied, but this stop-signal model ",
+      "does not contain an ex-Gaussian runner; the settings will have no effect.",
+      call. = FALSE
+    )
+  }
+  if (has_exgaussian && exg_approximation["exg_normal_ratio"] > 0) {
+    warning(
+      "Using the ex-Gaussian normal approximation for tau < ",
+      as.numeric(exg_approximation["exg_normal_ratio"]),
+      " * sigma. This changes the ex-Gaussian likelihood and is intended ",
+      "only for compatibility or sensitivity checks.",
+      call. = FALSE
+    )
+  }
   make_stop_signal_model(
-    ss_go_spec(go),
-    ss_stop_spec(stop),
+    ss_go_spec(go, exg_approximation),
+    ss_stop_spec(stop, exg_approximation),
     model_label = sprintf("stop_signal(go = \"%s\", stop = \"%s\")", go, stop)
   )
 }
@@ -1138,9 +1276,33 @@ my.integrate <- function(..., upper = Inf, big = 10) {
   return(out$value)
 }
 
+stopfn_texg_r <- function(
+    t, mu, sigma, tau, lb, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
+  out <- rep(1, length(t))
+  for (i in seq_along(mu)) {
+    pars_i <- cbind(
+      mu = rep(mu[i], length(t)),
+      sigma = rep(sigma[i], length(t)),
+      tau = rep(tau[i], length(t)),
+      exg_lb = rep(lb[i], length(t)),
+      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
+      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
+    )
+    if (i == 1L) {
+      out <- out * dtexGaussian(t, pars_i)
+    } else {
+      out <- out * (1 - ptexGaussian(t + SSD, pars_i))
+    }
+  }
+  out
+}
+
 pstopTEXG <- function(
     parstop, n_acc, upper=Inf,
-    gpars=c("mu","sigma","tau","exg_lb"), spars=c("muS","sigmaS","tauS","exgS_lb")
+    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
+    spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
@@ -1157,24 +1319,33 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
+    my.integrate(f=stopfn_texg_r,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                  mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                  sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                  tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
-                 lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]))
+                 lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]),
+                 exg_normal_ratio=c(ps[i,"exg_normal_ratio"],pgo[,i,"exg_normal_ratio"]),
+                 exg_shifted_exp_sigma=c(
+                   ps[i,"exg_shifted_exp_sigma"],pgo[,i,"exg_shifted_exp_sigma"]
+                 ))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
 
 
-stopfn_lnormal_texg <- function(t, mu, sigma, tau, lb, meanlogS, sdlogS, SSD) {
+stopfn_lnormal_texg <- function(
+    t, mu, sigma, tau, lb, meanlogS, sdlogS, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
   out <- stats::dlnorm(t, meanlog = meanlogS, sdlog = sdlogS)
   for (i in seq_along(mu)) {
     pars_i <- cbind(
       mu = rep(mu[i], length(t)),
       sigma = rep(sigma[i], length(t)),
       tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t))
+      exg_lb = rep(lb[i], length(t)),
+      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
+      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
     )
     out <- out * (1 - ptexGaussian(t + SSD, pars_i))
   }
@@ -1184,7 +1355,8 @@ stopfn_lnormal_texg <- function(t, mu, sigma, tau, lb, meanlogS, sdlogS, SSD) {
 
 pstopLNormalTEXG <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb"), spars = c("meanlogS", "sdlogS")
+    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
+    spars = c("meanlogS", "sdlogS")
 ) {
   sindex <- seq(1, nrow(parstop), by = n_acc)
   ps <- parstop[sindex, spars, drop = FALSE]
@@ -1203,6 +1375,8 @@ pstopLNormalTEXG <- function(
       f = stopfn_lnormal_texg, lower = 0, SSD = SSDs[i], upper = upper[i],
       mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
       lb = pgo[, i, "exg_lb"],
+      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
+      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
       meanlogS = ps[i, "meanlogS"], sdlogS = ps[i, "sdlogS"]
     )
   })
@@ -1219,7 +1393,10 @@ rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
-stopfn_normal_texg <- function(t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD) {
+stopfn_normal_texg <- function(
+    t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
   normalizer <- stats::pnorm(normS_lb, mean = muS, sd = sigmaS, lower.tail = FALSE)
   out <- stats::dnorm(t, mean = muS, sd = sigmaS) / normalizer
   out[t <= normS_lb] <- 0
@@ -1228,7 +1405,9 @@ stopfn_normal_texg <- function(t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD
       mu = rep(mu[i], length(t)),
       sigma = rep(sigma[i], length(t)),
       tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t))
+      exg_lb = rep(lb[i], length(t)),
+      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
+      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
     )
     out <- out * (1 - ptexGaussian(t + SSD, pars_i))
   }
@@ -1238,7 +1417,8 @@ stopfn_normal_texg <- function(t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD
 
 pstopNormalTEXG <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb"), spars = c("muS", "sigmaS", "normS_lb")
+    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
+    spars = c("muS", "sigmaS", "normS_lb")
 ) {
   sindex <- seq(1, nrow(parstop), by = n_acc)
   ps <- parstop[sindex, spars, drop = FALSE]
@@ -1257,6 +1437,8 @@ pstopNormalTEXG <- function(
       f = stopfn_normal_texg, lower = ps[i, "normS_lb"], SSD = SSDs[i], upper = upper[i],
       mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
       lb = pgo[, i, "exg_lb"],
+      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
+      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
       muS = ps[i, "muS"], sigmaS = ps[i, "sigmaS"], normS_lb = ps[i, "normS_lb"]
     )
   })
@@ -1273,14 +1455,19 @@ rSSexGaussianNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
-stopfn_weibull_texg <- function(t, mu, sigma, tau, lb, shapeS, scaleS, SSD) {
+stopfn_weibull_texg <- function(
+    t, mu, sigma, tau, lb, shapeS, scaleS, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
   out <- stats::dweibull(t, shape = shapeS, scale = scaleS)
   for (i in seq_along(mu)) {
     pars_i <- cbind(
       mu = rep(mu[i], length(t)),
       sigma = rep(sigma[i], length(t)),
       tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t))
+      exg_lb = rep(lb[i], length(t)),
+      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
+      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
     )
     out <- out * (1 - ptexGaussian(t + SSD, pars_i))
   }
@@ -1290,7 +1477,8 @@ stopfn_weibull_texg <- function(t, mu, sigma, tau, lb, shapeS, scaleS, SSD) {
 
 pstopWeibullTEXG <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb"), spars = c("shapeS", "scaleS")
+    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
+    spars = c("shapeS", "scaleS")
 ) {
   sindex <- seq(1, nrow(parstop), by = n_acc)
   ps <- parstop[sindex, spars, drop = FALSE]
@@ -1309,6 +1497,8 @@ pstopWeibullTEXG <- function(
       f = stopfn_weibull_texg, lower = 0, SSD = SSDs[i], upper = upper[i],
       mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
       lb = pgo[, i, "exg_lb"],
+      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
+      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
       shapeS = ps[i, "shapeS"], scaleS = ps[i, "scaleS"]
     )
   })
@@ -1409,8 +1599,12 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-SSEXG <- function() {
-  stop_signal(go = "exgaussian", stop = "exgaussian")
+SSEXG <- function(exgaussian_approximation = NULL) {
+  stop_signal(
+    go = "exgaussian",
+    stop = "exgaussian",
+    exgaussian_approximation = exgaussian_approximation
+  )
 }
 
 
@@ -1597,10 +1791,29 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]),
 # pWald_RDEX
 # stopfn_rdex
 
+stopfn_rdex_r <- function(
+    t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
+  pars <- cbind(
+    mu = rep(mu, length(t)),
+    sigma = rep(sigma, length(t)),
+    tau = rep(tau, length(t)),
+    exg_lb = rep(lb, length(t)),
+    exg_normal_ratio = rep(exg_normal_ratio, length(t)),
+    exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma, length(t))
+  )
+  out <- dtexGaussian(t, pars)
+  for (i in seq_len(n_acc)) {
+    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
+  }
+  out
+}
 
 pstopHybrid <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "tauS", "exgS_lb")
+    gpars = c("v", "B", "A", "t0", "s"),
+    spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
@@ -1616,10 +1829,12 @@ pstopHybrid <- function(
   ups <- sapply(which(uniq),function(i){
     my.integrate(
       # args passed to `my.integrate`
-      f = stopfn_rdex, lower = ps[i, "exgS_lb"], upper = upper[i],
+      f = stopfn_rdex_r, lower = ps[i, "exgS_lb"], upper = upper[i],
       # args passed to `stopfn_rdex`
       n_acc = n_acc,
       mu = ps[i, "muS"], sigma = ps[i, "sigmaS"], tau = ps[i, "tauS"], lb = ps[i, "exgS_lb"],
+      exg_normal_ratio = ps[i, "exg_normal_ratio"],
+      exg_shifted_exp_sigma = ps[i, "exg_shifted_exp_sigma"],
       v = pgo[ , i, "v"], B = pgo[ , i, "B"], A = pgo[ , i, "A"], t0 = pgo[ , i, "t0"], s = pgo[ , i, "s"],
       SSD = SSDs[i]
     )
@@ -1850,8 +2065,12 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-SSRDEX <- function() {
-  stop_signal(go = "racing_diffusion", stop = "exgaussian")
+SSRDEX <- function(exgaussian_approximation = NULL) {
+  stop_signal(
+    go = "racing_diffusion",
+    stop = "exgaussian",
+    exgaussian_approximation = exgaussian_approximation
+  )
 }
 
 

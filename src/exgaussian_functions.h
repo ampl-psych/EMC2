@@ -17,11 +17,21 @@ double dexg(
     const double mu = 5.,
     const double sigma = 1.,
     const double tau = 1.,
-    const bool log_d = false
+    const bool log_d = false,
+    const double normal_ratio = 0.,
+    const double shifted_exp_sigma = 0.
 ) {
 
   // minimal parameter validation - assuming all inputs are finite
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
+
+  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
+    return R::dexp(x - mu, tau, log_d);
+  }
+
+  if (normal_ratio > 0. && tau < normal_ratio * sigma) {
+    return R::dnorm(x, mu, sigma, log_d);
+  }
 
   // protect against numerical issues due to extremely small sigma or tau values
   double tau_p = std::max(tau, SIG_TAU_EPS);
@@ -77,11 +87,21 @@ double pexg(
     const double sigma = 1.,
     const double tau = 1.,
     const bool lower_tail = true,
-    const bool log_p = false
+    const bool log_p = false,
+    const double normal_ratio = 0.,
+    const double shifted_exp_sigma = 0.
 ) {
 
   // minimal parameter validation - assuming mu, sigma, and tau are all finite
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
+
+  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
+    return R::pexp(q - mu, tau, lower_tail, log_p);
+  }
+
+  if (normal_ratio > 0. && tau < normal_ratio * sigma) {
+    return R::pnorm(q, mu, sigma, lower_tail, log_p);
+  }
 
   // handle infinite q
   if (std::isinf(q)) {
@@ -141,29 +161,31 @@ double dtexg(
     const double tau = 1.,
     const double lower = R_NegInf,
     const double upper = R_PosInf,
-    const bool log_d = false
+    const bool log_d = false,
+    const double normal_ratio = 0.,
+    const double shifted_exp_sigma = 0.
 ) {
 
   if (lower == R_NegInf && upper == R_PosInf) {
-    return dexg(x, mu, sigma, tau, log_d);
+    return dexg(x, mu, sigma, tau, log_d, normal_ratio, shifted_exp_sigma);
   }
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
   if (lower >= upper) return NA_REAL;
   if (x <= lower || x >= upper) return log_d ? R_NegInf : 0.;
 
-  double x_ld = dexg(x, mu, sigma, tau, true);
+  double x_ld = dexg(x, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
   if (x_ld == R_NegInf) return log_d ? R_NegInf : 0.;
 
   double lower_lcdf, upper_lcdf;
   if (lower == R_NegInf) {
     lower_lcdf = R_NegInf;
   } else {
-    lower_lcdf = pexg(lower, mu, sigma, tau, true, true);
+    lower_lcdf = pexg(lower, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
   }
   if (upper == R_PosInf) {
     upper_lcdf = 0.;
   } else {
-    upper_lcdf = pexg(upper, mu, sigma, tau, true, true);
+    upper_lcdf = pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
   }
 
   if (lower_lcdf == upper_lcdf) return log_d ? R_NegInf : 0.;
@@ -189,11 +211,13 @@ double ptexg(
     const double lower = R_NegInf,
     const double upper = R_PosInf,
     const bool lower_tail = true,
-    const bool log_p = false
+    const bool log_p = false,
+    const double normal_ratio = 0.,
+    const double shifted_exp_sigma = 0.
 ) {
 
   if (lower == R_NegInf && upper == R_PosInf) {
-    return pexg(q, mu, sigma, tau, lower_tail, log_p);
+    return pexg(q, mu, sigma, tau, lower_tail, log_p, normal_ratio, shifted_exp_sigma);
   }
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
   if (lower >= upper) return NA_REAL;
@@ -206,18 +230,18 @@ double ptexg(
     return log_p ? (out == 0. ? R_NegInf : 0.) : out;
   }
 
-  double q_cdf = pexg(q, mu, sigma, tau);
+  double q_cdf = pexg(q, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
 
   double lower_cdf, upper_cdf;
   if (lower == R_NegInf) {
     lower_cdf = 0.;
   } else {
-    lower_cdf = pexg(lower, mu, sigma, tau);
+    lower_cdf = pexg(lower, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
   }
   if (upper == R_PosInf) {
     upper_cdf = 1.;
   } else {
-    upper_cdf = pexg(upper, mu, sigma, tau);
+    upper_cdf = pexg(upper, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
   }
 
   double normaliser = upper_cdf - lower_cdf;

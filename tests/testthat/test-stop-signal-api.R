@@ -24,23 +24,38 @@ test_that("stop_signal rejects unsupported model families", {
 test_that("stop_signal exposes the expected parameter names", {
   expect_named(
     stop_signal(go = "exgaussian", stop = "exgaussian")$p_types,
-    c("mu", "sigma", "tau", "muS", "sigmaS", "tauS", "tf", "gf", "exg_lb", "exgS_lb")
+    c(
+      "mu", "sigma", "tau", "muS", "sigmaS", "tauS", "tf", "gf",
+      "exg_lb", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"
+    )
   )
   expect_named(
     stop_signal(go = "exgaussian", stop = "lognormal")$p_types,
-    c("mu", "sigma", "tau", "meanlogS", "sdlogS", "tf", "gf", "exg_lb")
+    c(
+      "mu", "sigma", "tau", "meanlogS", "sdlogS", "tf", "gf",
+      "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"
+    )
   )
   expect_named(
     stop_signal(go = "exgaussian", stop = "weibull")$p_types,
-    c("mu", "sigma", "tau", "shapeS", "scaleS", "tf", "gf", "exg_lb")
+    c(
+      "mu", "sigma", "tau", "shapeS", "scaleS", "tf", "gf",
+      "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"
+    )
   )
   expect_named(
     stop_signal(go = "exgaussian", stop = "normal")$p_types,
-    c("mu", "sigma", "tau", "muS", "sigmaS", "tf", "gf", "exg_lb", "normS_lb")
+    c(
+      "mu", "sigma", "tau", "muS", "sigmaS", "tf", "gf",
+      "exg_lb", "normS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"
+    )
   )
   expect_named(
     stop_signal(go = "racing_diffusion", stop = "exgaussian")$p_types,
-    c("v", "B", "A", "t0", "s", "muS", "sigmaS", "tauS", "tf", "gf", "exgS_lb")
+    c(
+      "v", "B", "A", "t0", "s", "muS", "sigmaS", "tauS", "tf", "gf",
+      "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"
+    )
   )
   expect_named(
     stop_signal(go = "racing_diffusion", stop = "lognormal")$p_types,
@@ -53,6 +68,56 @@ test_that("stop_signal exposes the expected parameter names", {
   expect_named(
     stop_signal(go = "racing_diffusion", stop = "normal")$p_types,
     c("v", "B", "A", "t0", "s", "muS", "sigmaS", "tf", "gf", "normS_lb")
+  )
+})
+
+test_that("ex-Gaussian approximations are off by default and opt-in", {
+  model <- stop_signal(go = "exgaussian", stop = "exgaussian")
+  expect_equal(
+    model$p_types[c("exg_normal_ratio", "exg_shifted_exp_sigma")],
+    c(exg_normal_ratio = 0, exg_shifted_exp_sigma = 0)
+  )
+  expect_equal(model$bound$minmax[, c("exg_normal_ratio", "exg_shifted_exp_sigma")],
+               cbind(exg_normal_ratio = c(0, Inf), exg_shifted_exp_sigma = c(0, Inf)))
+
+  expect_warning(
+    stop_signal(
+      go = "exgaussian",
+      stop = "exgaussian",
+      exgaussian_approximation = list(
+        normal_ratio = .05,
+        shifted_exponential_sigma = 1e-5
+      )
+    ),
+    "changes the ex-Gaussian likelihood"
+  )
+  model <- suppressWarnings(stop_signal(
+    go = "exgaussian",
+    stop = "exgaussian",
+    exgaussian_approximation = list(
+      normal_ratio = .05,
+      shifted_exponential_sigma = 1e-5
+    )
+  ))
+  expect_equal(unname(model$p_types["exg_normal_ratio"]), .05)
+  expect_equal(unname(model$p_types["exg_shifted_exp_sigma"]), 1e-5)
+
+  expect_warning(
+    stop_signal(
+      go = "racing_diffusion",
+      stop = "normal",
+      exgaussian_approximation = list(normal_ratio = .05)
+    ),
+    "does not contain an ex-Gaussian runner"
+  )
+
+  expect_error(
+    stop_signal(exgaussian_approximation = list(normal_ratio = -1)),
+    "non-negative numeric scalar"
+  )
+  expect_error(
+    stop_signal(exgaussian_approximation = list(foo = .05)),
+    "Unknown `exgaussian_approximation`"
   )
 })
 

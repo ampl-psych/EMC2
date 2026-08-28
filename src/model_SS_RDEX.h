@@ -2,6 +2,7 @@
 #define ss_rdex_h
 
 #include <cmath>
+#include <string>
 #include <vector>
 #include <Rcpp.h>
 #ifndef rdm_h
@@ -11,6 +12,26 @@
 #include "pnorm_utils.h"
 #include "race_integrate.h"
 using namespace Rcpp;
+
+static inline double exg_threshold_by_name_rdex(const NumericMatrix& pars, const char* name) {
+  SEXP dimnames = pars.attr("dimnames");
+  if (Rf_isNull(dimnames)) return 0.0;
+  List dimnames_list(dimnames);
+  if (dimnames_list.size() < 2 || Rf_isNull(dimnames_list[1])) return 0.0;
+  CharacterVector names = dimnames_list[1];
+  for (int j = 0; j < names.size(); ++j) {
+    if (Rcpp::as<std::string>(names[j]) == name) return pars(0, j);
+  }
+  return 0.0;
+}
+
+static inline double exg_normal_ratio_threshold_rdex(const NumericMatrix& pars) {
+  return exg_threshold_by_name_rdex(pars, "exg_normal_ratio");
+}
+
+static inline double exg_shifted_exp_sigma_threshold_rdex(const NumericMatrix& pars) {
+  return exg_threshold_by_name_rdex(pars, "exg_shifted_exp_sigma");
+}
 
 // ----------------------------------------------------------------------------
 // HYBRID WALD / EX-GAUSSIAN FUNCTIONS
@@ -140,7 +161,8 @@ double ss_rdex_stop_fail_lpdf(
   // NB SSD subtracted from observed RT to get stop finish time
   // input args: q, muS, sigmaS, tauS, exgS_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
   double stop_survivor_lprob = ptexg(
-    RT - SSD, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, false, true
+    RT - SSD, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, false, true,
+    exg_normal_ratio_threshold_rdex(pars), exg_shifted_exp_sigma_threshold_rdex(pars)
   );
   if (!traits::is_finite<REALSXP>(stop_survivor_lprob)) {
     stop_survivor_lprob = min_ll;
@@ -159,6 +181,8 @@ private:
   const double min_ll;
   // stop params (truncated EXG)
   const double muS, sigS, tauS, lbS;
+  const double normal_ratio;
+  const double shifted_exp_sigma;
   // precomputed GO Wald params
   const int n_go;
   std::vector<double> alpha, nu, gamma, t0;
@@ -172,6 +196,8 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   muS(pars_(0, 5)), sigS(pars_(0, 6)), tauS(pars_(0, 7)), lbS(pars_(0, 10)),
+  normal_ratio(exg_normal_ratio_threshold_rdex(pars_)),
+  shifted_exp_sigma(exg_shifted_exp_sigma_threshold_rdex(pars_)),
   n_go(pars_.nrow()),
   alpha(n_go), nu(n_go), gamma(n_go), t0(n_go)
   {
@@ -188,7 +214,10 @@ public:
   double operator()(const double& x) const {
     // log density of stop process winning at time x
     // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
-    double log_d = dtexg(x, muS, sigS, tauS, lbS, R_PosInf, true);
+    double log_d = dtexg(
+      x, muS, sigS, tauS, lbS, R_PosInf, true,
+      normal_ratio, shifted_exp_sigma
+    );
     if (!R_FINITE(log_d)) log_d = min_ll;
     // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
@@ -261,7 +290,7 @@ NumericVector ss_rdex_lpdf(
     LogicalVector is_ok,
     double min_ll
 ) {
-  // pars columns: v=0, B=1, A=2, t0=3, s=4, muS=5, sigmaS=6, tauS=7, tf=8, gf=9, exgS_lb=10, b=11
+  // pars columns: v=0, B=1, A=2, t0=3, s=4, muS=5, sigmaS=6, tauS=7, tf=8, gf=9, exgS_lb=10, exg_normal_ratio=11, exg_shifted_exp_sigma=12, b=13
 
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();         // number of go accumulators

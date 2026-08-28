@@ -6,7 +6,8 @@
 \usage{
 stop_signal(
   go = c("exgaussian", "racing_diffusion"),
-  stop = c("exgaussian", "lognormal", "weibull", "normal")
+  stop = c("exgaussian", "lognormal", "weibull", "normal"),
+  exgaussian_approximation = NULL
 )
 }
 \arguments{
@@ -15,6 +16,15 @@ stop_signal(
 
 \item{stop}{Character string. Stop-runner family: \code{"exgaussian"},
 \code{"lognormal"}, \code{"weibull"}, or \code{"normal"}. The default is \code{"exgaussian"}.}
+
+\item{exgaussian_approximation}{Optional list controlling legacy
+ex-Gaussian approximations. The default \code{NULL} disables these
+approximations. Use \code{list(normal_ratio = .05)} to evaluate the
+ex-Gaussian density and CDF with a normal approximation when
+\code{tau < normal_ratio * sigma}, and
+\code{list(shifted_exponential_sigma = 1e-5)} to use a shifted-exponential
+approximation when \code{sigma < shifted_exponential_sigma}. These controls are
+intended for compatibility and sensitivity checks.}
 }
 \value{
 A model list with all the necessary functions to sample.

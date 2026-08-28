@@ -2,6 +2,7 @@
 #define ss_exg_h
 
 #include <cmath>
+#include <string>
 #include <vector>
 #include <Rcpp.h>
 #include "utility_functions.h"
@@ -9,6 +10,26 @@
 #include "pnorm_utils.h"
 #include "race_integrate.h"
 using namespace Rcpp;
+
+static inline double exg_threshold_by_name(const NumericMatrix& pars, const char* name) {
+  SEXP dimnames = pars.attr("dimnames");
+  if (Rf_isNull(dimnames)) return 0.0;
+  List dimnames_list(dimnames);
+  if (dimnames_list.size() < 2 || Rf_isNull(dimnames_list[1])) return 0.0;
+  CharacterVector names = dimnames_list[1];
+  for (int j = 0; j < names.size(); ++j) {
+    if (Rcpp::as<std::string>(names[j]) == name) return pars(0, j);
+  }
+  return 0.0;
+}
+
+static inline double exg_normal_ratio_threshold(const NumericMatrix& pars) {
+  return exg_threshold_by_name(pars, "exg_normal_ratio");
+}
+
+static inline double exg_shifted_exp_sigma_threshold(const NumericMatrix& pars) {
+  return exg_threshold_by_name(pars, "exg_shifted_exp_sigma");
+}
 
 // ----------------------------------------------------------------------------
 // TRUNCATED EX-GAUSSIAN FUNCTIONS
@@ -38,7 +59,8 @@ NumericVector texg_go_lpdf(
 
     // input args: x, mu, sigma, tau, exg_lb, upper = Inf, log_d = TRUE
     double log_d = dtexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, true,
+      exg_normal_ratio_threshold(pars), exg_shifted_exp_sigma_threshold(pars)
     );
     out[k] = std::isfinite(log_d) ? log_d : min_ll;
 
@@ -72,7 +94,8 @@ NumericVector texg_go_lccdf(
 
     // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
     double log_s = ptexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true,
+      exg_normal_ratio_threshold(pars), exg_shifted_exp_sigma_threshold(pars)
     );
     out[k] = std::isfinite(log_s) ? log_s : min_ll;
 
@@ -120,7 +143,8 @@ double ss_texg_stop_fail_lpdf(
   // NB SSD subtracted from observed RT to get stop finish time
   // input args: q, muS, sigmaS, tauS, exgS_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
   double stop_survivor_lprob = ptexg(
-    RT - SSD, pars(0, 3), pars(0, 4), pars(0, 5), pars(0, 9), R_PosInf, false, true
+    RT - SSD, pars(0, 3), pars(0, 4), pars(0, 5), pars(0, 9), R_PosInf, false, true,
+    exg_normal_ratio_threshold(pars), exg_shifted_exp_sigma_threshold(pars)
   );
   if (!traits::is_finite<REALSXP>(stop_survivor_lprob)) {
     stop_survivor_lprob = min_ll;
@@ -142,6 +166,8 @@ private:
   const double sigS;
   const double tauS;
   const double lbS;
+  const double normal_ratio;
+  const double shifted_exp_sigma;
   // go params per accumulator (truncated EXG)
   const int n_go;
   std::vector<double> muG, sigG, tauG, lbG;
@@ -155,6 +181,8 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)), lbS(pars_(0, 9)),
+  normal_ratio(exg_normal_ratio_threshold(pars_)),
+  shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
@@ -169,14 +197,20 @@ public:
   double operator()(const double& x) const {
     // log density of stop process winning at time x
     // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
-    double log_d = dtexg(x, muS, sigS, tauS, lbS, R_PosInf, true);
+    double log_d = dtexg(
+      x, muS, sigS, tauS, lbS, R_PosInf, true,
+      normal_ratio, shifted_exp_sigma
+    );
     if (!R_FINITE(log_d)) log_d = min_ll;
     // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
       // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
-      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
+      double log_s_i = ptexg(
+        x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true,
+        normal_ratio, shifted_exp_sigma
+      );
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -239,7 +273,7 @@ NumericVector ss_texg_lpdf(
     LogicalVector is_ok,
     double min_ll
 ) {
-  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, exg_lb=8, exgS_lb=9
+  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, exg_lb=8, exgS_lb=9, exg_normal_ratio=10, exg_shifted_exp_sigma=11
 
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();         // number of go accumulators
@@ -399,6 +433,8 @@ private:
   const double min_ll;
   const double muS, sigmaS, normS_lb;
   const int n_go;
+  const double normal_ratio;
+  const double shifted_exp_sigma;
   std::vector<double> muG, sigG, tauG, lbG;
 
 public:
@@ -410,6 +446,8 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   muS(pars_(0, 3)), sigmaS(pars_(0, 4)), normS_lb(pars_(0, 8)),
+  normal_ratio(exg_normal_ratio_threshold(pars_)),
+  shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
@@ -426,7 +464,10 @@ public:
     if (!R_FINITE(log_d)) log_d = min_ll;
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
-      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
+      double log_s_i = ptexg(
+        x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true,
+        normal_ratio, shifted_exp_sigma
+      );
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -469,7 +510,7 @@ NumericVector ss_texg_normal_lpdf(
     LogicalVector is_ok,
     double min_ll
 ) {
-  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tf=5, gf=6, exg_lb=7, normS_lb=8
+  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tf=5, gf=6, exg_lb=7, normS_lb=8, exg_normal_ratio=9, exg_shifted_exp_sigma=10
 
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();
@@ -583,7 +624,8 @@ NumericVector texg_lnormal_go_lpdf(
     if (!idx[i]) continue;
 
     double log_d = dtexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 7), R_PosInf, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 7), R_PosInf, true,
+      exg_normal_ratio_threshold(pars), exg_shifted_exp_sigma_threshold(pars)
     );
     out[k] = R_FINITE(log_d) ? log_d : min_ll;
 
@@ -610,7 +652,8 @@ NumericVector texg_lnormal_go_lccdf(
     if (!idx[i]) continue;
 
     double log_s = ptexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 7), R_PosInf, false, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 7), R_PosInf, false, true,
+      exg_normal_ratio_threshold(pars), exg_shifted_exp_sigma_threshold(pars)
     );
     out[k] = R_FINITE(log_s) ? log_s : min_ll;
 
@@ -649,6 +692,8 @@ private:
   const double min_ll;
   const double meanlogS, sdlogS;
   const int n_go;
+  const double normal_ratio;
+  const double shifted_exp_sigma;
   std::vector<double> muG, sigG, tauG, lbG;
 
 public:
@@ -660,6 +705,8 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   meanlogS(pars_(0, 3)), sdlogS(pars_(0, 4)),
+  normal_ratio(exg_normal_ratio_threshold(pars_)),
+  shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
@@ -676,7 +723,10 @@ public:
     if (!R_FINITE(log_d)) log_d = min_ll;
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
-      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
+      double log_s_i = ptexg(
+        x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true,
+        normal_ratio, shifted_exp_sigma
+      );
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -717,7 +767,7 @@ NumericVector ss_texg_lnormal_lpdf(
     LogicalVector is_ok,
     double min_ll
 ) {
-  // pars columns: mu=0, sigma=1, tau=2, meanlogS=3, sdlogS=4, tf=5, gf=6, exg_lb=7
+  // pars columns: mu=0, sigma=1, tau=2, meanlogS=3, sdlogS=4, tf=5, gf=6, exg_lb=7, exg_normal_ratio=8, exg_shifted_exp_sigma=9
 
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();
@@ -832,6 +882,8 @@ private:
   const double min_ll;
   const double shapeS, scaleS;
   const int n_go;
+  const double normal_ratio;
+  const double shifted_exp_sigma;
   std::vector<double> muG, sigG, tauG, lbG;
 
 public:
@@ -843,6 +895,8 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   shapeS(pars_(0, 3)), scaleS(pars_(0, 4)),
+  normal_ratio(exg_normal_ratio_threshold(pars_)),
+  shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
@@ -859,7 +913,10 @@ public:
     if (!R_FINITE(log_d)) log_d = min_ll;
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
-      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
+      double log_s_i = ptexg(
+        x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true,
+        normal_ratio, shifted_exp_sigma
+      );
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -901,7 +958,7 @@ NumericVector ss_texg_weibull_lpdf(
     LogicalVector is_ok,
     double min_ll
 ) {
-  // pars columns: mu=0, sigma=1, tau=2, shapeS=3, scaleS=4, tf=5, gf=6, exg_lb=7
+  // pars columns: mu=0, sigma=1, tau=2, shapeS=3, scaleS=4, tf=5, gf=6, exg_lb=7, exg_normal_ratio=8, exg_shifted_exp_sigma=9
 
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();

@@ -4,7 +4,12 @@
 \alias{SSEXG}
 \title{The ex-Gaussian race model of the stop signal task}
 \usage{
-SSEXG()
+SSEXG(exgaussian_approximation = NULL)
+}
+\arguments{
+\item{exgaussian_approximation}{Optional list passed to \code{\link[=stop_signal]{stop_signal()}}.
+The default \code{NULL} disables the legacy ex-Gaussian normal and
+shifted-exponential approximations.}
 }
 \value{
 A model list with all the necessary functions to sample
