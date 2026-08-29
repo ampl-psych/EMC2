@@ -465,8 +465,15 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       K_var = "variance of the parameter regressors",
       G_var = "variance of the factor regressors",
       B_var = "variance of structural regressors",
-      a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
-      b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
+      a_d = paste0("shape prior on factor-disturbance variances. A singleton factor uses an ",
+                   "inverse-gamma(shape = a_d, rate = b_d) prior (prior mean b_d/(a_d - 1)); ",
+                   "a correlated factor group uses an inverse-Wishart whose degrees of freedom is a_d. ",
+                   "Scalar (applied to every factor) or a vector of length n_factors ordered as the ",
+                   "columns of Lambda_mat. Within a correlated factor group a_d must be constant, as it ",
+                   "is the single inverse-Wishart degrees-of-freedom for that group."),
+      b_d = paste0("rate prior on factor-disturbance variances (inverse-gamma rate for a singleton, ",
+                   "inverse-Wishart scale diagonal for a correlated group). Scalar or a vector of length ",
+                   "n_factors ordered as the columns of Lambda_mat; may differ across factors within a group."),
       a_e = "shape prior of inverse gamma on residuals",
       b_e = "rate prior of inverse gamma on residuals"
     )

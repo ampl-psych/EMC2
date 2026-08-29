@@ -105,6 +105,52 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
+# Per-factor factor-disturbance variance priors.
+#
+# `a_d` and `b_d` may be supplied as a scalar (recycled to every factor, the
+# historical behaviour) or as a length-`n_factors` numeric vector ordered as the
+# columns of `Lambda_mat` (equivalently `colnames(Lambda_mat)` /
+# `names(factor_groups)`). A named vector is matched against the factor names.
+# The result is always an unnamed length-`n_factors` vector so downstream code
+# (sampler and bridge) can index it by factor-group position uniformly. `a_d` is
+# the inverse-Wishart degrees of freedom of a correlated factor group and so
+# must be constant within any such group (`homogeneous_in_group = TRUE`).
+normalise_factor_var_prior <- function(x, param_name, n_factors, factor_names,
+                                       factor_groups, homogeneous_in_group = FALSE) {
+  if (n_factors == 0) return(unname(x))
+  if (!is.numeric(x)) stop("prior$", param_name, " must be numeric.")
+  if (anyNA(x)) stop("prior$", param_name, " must not contain NA/NaN values.")
+  if (any(x <= 0)) stop("prior$", param_name, " must be strictly positive.")
+  nm <- names(x)
+  if (length(x) == 1L) {
+    out <- rep(unname(x), n_factors)
+  } else if (!is.null(nm) && length(factor_names) == n_factors) {
+    if (!setequal(nm, factor_names)) {
+      stop("Named prior$", param_name, " does not match the model's factor names.\n",
+           "  Expected (in Lambda_mat column order): ", paste(factor_names, collapse = ", "), "\n",
+           "  Supplied: ", paste(nm, collapse = ", "))
+    }
+    out <- unname(x[factor_names])
+  } else if (length(x) == n_factors) {
+    out <- unname(x)
+  } else {
+    stop("prior$", param_name, " must be a scalar or a length-", n_factors,
+         " vector (one per factor, in the column order of Lambda_mat); got length ",
+         length(x), ".")
+  }
+  if (homogeneous_in_group && length(factor_groups) == n_factors) {
+    for (g in unique(factor_groups)) {
+      gi <- which(factor_groups == g)
+      if (length(gi) > 1L && length(unique(out[gi])) > 1L) {
+        stop("prior$", param_name, " must be constant within each correlated factor group ",
+             "(it sets the inverse-Wishart degrees of freedom, a single number per group); ",
+             "group ", g, " was given differing values.")
+      }
+    }
+  }
+  out
+}
+
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, sem_settings = NULL){
 
   if (is.null(sem_settings)) stop("sem_settings is required")
@@ -155,6 +201,16 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
   if(is.null(prior$b_e)){
     prior$b_e <- rep(.3, n_pars)
   }
+  # Normalise the factor-variance hyperparameters to per-factor vectors so the
+  # sampler and bridge can index them by factor-group position. Scalars reproduce
+  # the historical behaviour exactly (rep() to length n_factors). This runs every
+  # time the prior is (re)built, so continuation fits with a scalar-prior emc
+  # object keep working.
+  fg_norm <- factor_groups_prior
+  if (is.null(fg_norm)) fg_norm <- if (n_factors > 0) seq_len(n_factors) else integer(0)
+  fn_norm <- if (!is.null(colnames(Lambda_mat))) colnames(Lambda_mat) else if (n_factors > 0) paste0("F", seq_len(n_factors)) else character(0)
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, "a_d", n_factors, fn_norm, fg_norm, homogeneous_in_group = TRUE)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, "b_d", n_factors, fn_norm, fg_norm, homogeneous_in_group = FALSE)
   attr(prior, "type") <- "SEM"
   out <- prior
   if(sample){
@@ -251,12 +307,12 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
           group_idx <- which(factor_groups_prior == group_id)
           d_block <- length(group_idx)
           if (d_block > 1) {
-            S_iw_prior <- diag(prior$b_d, d_block)
-            df_iw_prior <- max(prior$a_d, d_block + 2)
+            S_iw_prior <- diag(prior$b_d[group_idx], d_block)
+            df_iw_prior <- max(prior$a_d[group_idx][1], d_block + 2)
             sampled_cov_block_prior <- riwish(df_iw_prior, S_iw_prior)
             delta_inv[group_idx, group_idx, i] <- solve(sampled_cov_block_prior)
           } else if (d_block == 1) {
-            delta_inv[group_idx, group_idx, i] <- rgamma(1, shape = prior$a_d, rate = prior$b_d)
+            delta_inv[group_idx, group_idx, i] <- rgamma(1, shape = prior$a_d[group_idx], rate = prior$b_d[group_idx])
           }
         }
       }
@@ -360,6 +416,13 @@ gibbs_step_SEM <- function(sampler, alpha){
 
   factor_groups <- sem_settings$factor_groups
   unique_factor_groups <- unique(factor_groups)
+
+  # Defensive normalisation: a continuation fit may carry a prior with scalar
+  # a_d/b_d, which must be expanded before being indexed by factor group below.
+  fn_gs <- colnames(sem_settings$Lambda_mat)
+  if (is.null(fn_gs) && n_factors > 0) fn_gs <- paste0("F", seq_len(n_factors))
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, "a_d", n_factors, fn_gs, factor_groups, homogeneous_in_group = TRUE)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, "b_d", n_factors, fn_gs, factor_groups, homogeneous_in_group = FALSE)
 
   ## current state -----------------------------------------------------------
   eta         <- matrix(last$eta,     n_subjects, n_factors)
@@ -490,8 +553,8 @@ gibbs_step_SEM <- function(sampler, alpha){
     resid_blk <- eta_residuals[, group_idx, drop = FALSE]
     cov_block <- crossprod(resid_blk)
 
-    S_iw  <- diag(prior$b_d, d_block)
-    df_iw <- prior$a_d + n_subjects
+    S_iw  <- diag(prior$b_d[group_idx], d_block)
+    df_iw <- prior$a_d[group_idx][1] + n_subjects
     if(df_iw <= d_block - 1)
       stop("Inverse-Wishart degrees-of-freedom too small for factor group ", group_id)
 
@@ -501,8 +564,8 @@ gibbs_step_SEM <- function(sampler, alpha){
     } else {
       delta_inv[group_idx, group_idx] <- rgamma(
         1,
-        shape = prior$a_d + n_subjects/2,
-        rate  = prior$b_d + 0.5 * cov_block)
+        shape = prior$a_d[group_idx] + n_subjects/2,
+        rate  = prior$b_d[group_idx] + 0.5 * cov_block)
     }
   }
 
@@ -732,7 +795,16 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
   factor_groups <- sem_settings$factor_groups
   covariates   <- sem_settings$covariates
 
+  if (is.null(factor_groups)) factor_groups <- if (n_factors > 0) seq_len(n_factors) else integer(0)
   unique_fg    <- unique(factor_groups)
+
+  # Defensive normalisation, kept in lockstep with the sampler (gibbs_step_SEM):
+  # the prior-density side must use the identical per-factor a_d/b_d or the
+  # bridge-sampling marginal likelihood is silently wrong.
+  fn_bs <- colnames(Lambda_mat)
+  if (is.null(fn_bs) && n_factors > 0) fn_bs <- paste0("F", seq_len(n_factors))
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, "a_d", n_factors, fn_bs, factor_groups, homogeneous_in_group = TRUE)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, "b_d", n_factors, fn_bs, factor_groups, homogeneous_in_group = FALSE)
 
   ## covariate moments used in population moments
   x_mu  <- colMeans(covariates)
@@ -824,8 +896,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
         cov_blk   <- solve(L_prec)
         lp_delta  <- lp_delta +
           log( robust_diwish(W = cov_blk,
-                             v = prior$a_d,
-                             S = diag(prior$b_d, d_blk)) )
+                             v = prior$a_d[fg_idx][1],
+                             S = diag(prior$b_d[fg_idx], d_blk)) )
         jac_delta <- jac_delta +
           calc_log_jac_chol(v_blk)
 
@@ -837,8 +909,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
         lp_delta  <- lp_delta +
           dgamma(prec_val,
-                 shape = prior$a_d,
-                 rate  = prior$b_d,
+                 shape = prior$a_d[fg_idx],
+                 rate  = prior$b_d[fg_idx],
                  log   = TRUE)
         jac_delta <- jac_delta + log_prec
       }
