@@ -106,6 +106,24 @@ test_that("bridge density is bit-identical for scalar vs constant-vector prior",
     "constant within each correlated")
 })
 
+test_that("gibbs_step_SEM runs with a non-constant per-factor lambda_var (byrow expansion)", {
+  skip_on_cran()
+  emc <- make_sem_emc(n_sub = 3, n_chains = 2)
+  emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 2),
+                 verbose = FALSE, cores_for_chains = 1)
+  s <- emc[[1]]
+  n_pars <- sum(!s$nuisance)
+  set.seed(1)
+  alpha <- matrix(rnorm(n_pars * s$n_subjects), n_pars, s$n_subjects,
+                  dimnames = list(s$par_names[!s$nuisance], NULL))
+  # Distinct per-factor loading-prior variances must be applied column-wise
+  # (byrow), not scrambled by column-major recycling; the step should run and
+  # return finite loadings.
+  s$prior$lambda_var <- c(2, 0.5, 0.1)
+  set.seed(7); d <- gibbs_step_SEM(s, alpha)
+  expect_true(all(is.finite(d$lambda)))
+})
+
 test_that("gibbs_step_SEM draws are bit-identical for scalar vs constant-vector b_d", {
   skip_on_cran()
   emc <- make_sem_emc(n_sub = 3, n_chains = 2)

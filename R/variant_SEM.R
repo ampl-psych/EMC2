@@ -466,8 +466,14 @@ gibbs_step_SEM <- function(sampler, alpha){
 
   ## ---- update loadings: lambda and K --------------------------------------
   lambda_y       <- cbind(K, lambda)
-  lambda_y_prior <- cbind(matrix(prior$K_var,     n_pars, n_cov),
-                          matrix(prior$lambda_var,n_pars, n_factors))
+  # K_var and lambda_var are per-covariate / per-factor: every row (parameter)
+  # shares the same column value, so the length-n_cov / length-n_factors vectors
+  # must be laid across the columns (byrow = TRUE). A plain matrix() recycles
+  # them column-major, which scrambles non-constant priors (harmless only when
+  # the vectors are constant, as in the defaults). This matches the per-factor
+  # diag(prior$lambda_var[i], n_pars) used in the prior sampler.
+  lambda_y_prior <- cbind(matrix(prior$K_var,      n_pars, n_cov,     byrow = TRUE),
+                          matrix(prior$lambda_var, n_pars, n_factors, byrow = TRUE))
   for (j in seq_len(n_pars)){
     isFree <- c(isFree_K[j,], isFree_Lambda[j,])
     if(any(isFree)){
