@@ -102,6 +102,12 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   sampler$sem_settings <- sem_settings
   sampler$prior <- get_prior_SEM(prior, n_pars = n_pars, sample = F, sem_settings = sem_settings)
   sampler$n_factors <- n_factors
+  # A non-zero loading prior mean only acts on free (estimated) loadings; warn if
+  # the user supplied one for a model whose loadings are all fixed (it is ignored).
+  if (n_factors > 0 && sum(sem_settings$Lambda_mat == Inf) == 0 &&
+      !is.null(prior) && !is.null(prior$lambda_mean) && any(prior$lambda_mean != 0)) {
+    warning("lambda_mean was supplied but the model has no free (estimated) loadings; it will be ignored.")
+  }
   return(sampler)
 }
 
@@ -151,6 +157,55 @@ normalise_factor_var_prior <- function(x, param_name, n_factors, factor_names,
   out
 }
 
+# Loading-matrix hyperparameters (lambda_mean, lambda_var).
+#
+# Accepts a scalar (whole matrix), a length-`n_factors` per-factor vector (laid
+# across columns via byrow = TRUE, so column f is constant; named vectors are
+# matched to the factor names), or a full `n_pars x n_factors` matrix (per-entry;
+# named dimnames matched to par/factor names). Always returns an unnamed
+# `n_pars x n_factors` matrix in Lambda_mat's row/column order so the sampler and
+# bridge can index or unwind it uniformly. Entries at fixed Lambda_mat positions
+# are ignored downstream (only `isFree_Lambda` entries are used), so they are
+# left untouched here. `positive = TRUE` enforces strict positivity (variances);
+# `lambda_mean` allows any finite value (signs are meaningful).
+normalise_lambda_matrix_prior <- function(x, param_name, n_pars, n_factors,
+                                          par_names = NULL, factor_names = NULL,
+                                          positive = FALSE) {
+  if (n_factors == 0 || n_pars == 0) return(x)
+  if (!is.numeric(x)) stop("prior$", param_name, " must be numeric.")
+  if (anyNA(x)) stop("prior$", param_name, " must not contain NA/NaN values.")
+  if (positive && any(x <= 0)) stop("prior$", param_name, " must be strictly positive.")
+  named_ok <- function(nm, ref) !is.null(nm) && length(ref) == length(nm) && setequal(nm, ref)
+  if (is.matrix(x)) {
+    if (named_ok(rownames(x), par_names) && named_ok(colnames(x), factor_names)) {
+      x <- x[par_names, factor_names, drop = FALSE]
+    }
+    if (!identical(dim(x), c(as.integer(n_pars), as.integer(n_factors)))) {
+      stop("prior$", param_name, " matrix must be ", n_pars, " x ", n_factors,
+           " (n_pars x n_factors); got ", nrow(x), " x ", ncol(x), ".")
+    }
+    out <- matrix(as.numeric(x), n_pars, n_factors)
+  } else if (length(x) == 1L) {
+    out <- matrix(unname(x), n_pars, n_factors)
+  } else if (length(x) == n_factors) {
+    nm <- names(x)
+    if (!is.null(nm) && length(factor_names) == n_factors) {
+      if (!setequal(nm, factor_names)) {
+        stop("Named prior$", param_name, " does not match the model's factor names.\n",
+             "  Expected (in Lambda_mat column order): ", paste(factor_names, collapse = ", "), "\n",
+             "  Supplied: ", paste(nm, collapse = ", "))
+      }
+      x <- x[factor_names]
+    }
+    out <- matrix(unname(x), n_pars, n_factors, byrow = TRUE)
+  } else {
+    stop("prior$", param_name, " must be a scalar, a length-", n_factors,
+         " per-factor vector, or an ", n_pars, " x ", n_factors, " (n_pars x n_factors) matrix; got length ",
+         length(x), ".")
+  }
+  out
+}
+
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, sem_settings = NULL){
 
   if (is.null(sem_settings)) stop("sem_settings is required")
@@ -179,6 +234,9 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
   }
   if(is.null(prior$lambda_var)){
     prior$lambda_var <- rep(.7, n_factors)
+  }
+  if(is.null(prior$lambda_mean)){
+    prior$lambda_mean <- 0
   }
   if(is.null(prior$K_var)){
     prior$K_var <- rep(1, n_cov)
@@ -281,9 +339,11 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
       }
     }
     if(selection %in% c("loadings", "std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
+      Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var,  "lambda_var",  n_pars, n_factors, par_names, factor_names, positive = TRUE)
+      Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, "lambda_mean", n_pars, n_factors, par_names, factor_names)
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in seq_len(n_factors)){
-        lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var[i], n_pars)))
+        lambda[,i,] <- t(mvtnorm::rmvnorm(N, mean = Lambda_mean_mat[, i], sigma = diag(Lambda_var_mat[, i], nrow = n_pars)))
       }
       lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
@@ -424,6 +484,16 @@ gibbs_step_SEM <- function(sampler, alpha){
   prior$a_d <- normalise_factor_var_prior(prior$a_d, "a_d", n_factors, fn_gs, factor_groups, homogeneous_in_group = TRUE)
   prior$b_d <- normalise_factor_var_prior(prior$b_d, "b_d", n_factors, fn_gs, factor_groups, homogeneous_in_group = FALSE)
 
+  # lambda_var / lambda_mean normalise to full n_pars x n_factors matrices (a
+  # scalar or per-factor vector expands byrow so each parameter row shares the
+  # column value; a matrix is per-entry). Done up-front so malformed shapes are
+  # rejected before any sampling. K keeps a prior mean of 0. Defensive: a
+  # continuation fit may carry a scalar/vector lambda_var and no lambda_mean.
+  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
+  par_names_gs <- sampler$par_names[!sampler$nuisance]
+  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var,  "lambda_var",  n_pars, n_factors, par_names_gs, fn_gs, positive = TRUE)
+  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, "lambda_mean", n_pars, n_factors, par_names_gs, fn_gs)
+
   ## current state -----------------------------------------------------------
   eta         <- matrix(last$eta,     n_subjects, n_factors)
   delta_inv   <- matrix(last$delta_inv, n_factors, n_factors)
@@ -466,21 +536,20 @@ gibbs_step_SEM <- function(sampler, alpha){
 
   ## ---- update loadings: lambda and K --------------------------------------
   lambda_y       <- cbind(K, lambda)
-  # K_var and lambda_var are per-covariate / per-factor: every row (parameter)
-  # shares the same column value, so the length-n_cov / length-n_factors vectors
-  # must be laid across the columns (byrow = TRUE). A plain matrix() recycles
-  # them column-major, which scrambles non-constant priors (harmless only when
-  # the vectors are constant, as in the defaults). This matches the per-factor
-  # diag(prior$lambda_var[i], n_pars) used in the prior sampler.
-  lambda_y_prior <- cbind(matrix(prior$K_var,      n_pars, n_cov,     byrow = TRUE),
-                          matrix(prior$lambda_var, n_pars, n_factors, byrow = TRUE))
+  # Lambda_var_mat / Lambda_mean_mat were normalised up-front. K keeps mean 0.
+  lambda_y_prior      <- cbind(matrix(prior$K_var, n_pars, n_cov, byrow = TRUE), Lambda_var_mat)
+  lambda_y_prior_mean <- cbind(matrix(0,           n_pars, n_cov),              Lambda_mean_mat)
   for (j in seq_len(n_pars)){
     isFree <- c(isFree_K[j,], isFree_Lambda[j,])
     if(any(isFree)){
       etaS    <- cbind(covariates, eta)[, isFree, drop = FALSE]
       lam_sig <- solve(epsilon_inv[j,j] * crossprod(etaS) +
                        diag(1/lambda_y_prior[j,isFree], sum(isFree)))
-      lam_mu  <- lam_sig %*% (epsilon_inv[j,j] * crossprod(etaS, ytilde[,j]))
+      # Conjugate Gaussian posterior mean with a (diagonal) non-zero prior mean:
+      # the prior contributes precision * mean = mean / var elementwise. With
+      # lambda_mean = 0 the added term vanishes and this is bit-identical.
+      lam_mu  <- lam_sig %*% (epsilon_inv[j,j] * crossprod(etaS, ytilde[,j]) +
+                              (1/lambda_y_prior[j,isFree]) * lambda_y_prior_mean[j,isFree])
       lambda_y[j, isFree] <- rmvnorm(1, lam_mu, lam_sig)
     }
   }
@@ -812,6 +881,18 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
   prior$a_d <- normalise_factor_var_prior(prior$a_d, "a_d", n_factors, fn_bs, factor_groups, homogeneous_in_group = TRUE)
   prior$b_d <- normalise_factor_var_prior(prior$b_d, "b_d", n_factors, fn_bs, factor_groups, homogeneous_in_group = FALSE)
 
+  # Loading prior mean/variance as full matrices, then unwound to free-entry
+  # vectors in the exact column-major order unwind_lambda produces v_lambda, so
+  # the prior density matches the Gibbs update entry-for-entry. Unwinding the
+  # normalised variance matrix (rather than rep()-recycling prior$lambda_var)
+  # also fixes the per-factor variance mapping on the bridge side.
+  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
+  pn_bs <- rownames(Lambda_mat)
+  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var,  "lambda_var",  n_pars, n_factors, pn_bs, fn_bs, positive = TRUE)
+  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, "lambda_mean", n_pars, n_factors, pn_bs, fn_bs)
+  lambda_mean_free <- unwind_lambda(Lambda_mean_mat, Lambda_mat)
+  lambda_var_free  <- unwind_lambda(Lambda_var_mat,  Lambda_mat)
+
   ## covariate moments used in population moments
   x_mu  <- colMeans(covariates)
   x_var <- cov(covariates)
@@ -930,8 +1011,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
     lp_lambda <- if (!is.null(v_lambda))
       dmvnorm(v_lambda[i, ],
-              mean = rep(0, length(v_lambda[i, ])),
-              sigma = diag(rep(prior$lambda_var, length.out = length(v_lambda[i, ]))),
+              mean  = lambda_mean_free,
+              sigma = diag(lambda_var_free, nrow = length(lambda_var_free)),
               log = TRUE) else 0
 
     lp_B <- if (!is.null(v_B))

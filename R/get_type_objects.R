@@ -461,7 +461,15 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      lambda_var = "variance of the factor loadings",
+      lambda_mean = paste0("prior mean of the (free) factor loadings, N(lambda_mean, lambda_var). ",
+                   "Default 0. Scalar (every entry), a length-n_factors per-factor vector (ordered/named ",
+                   "as the columns of Lambda_mat = names(lambda_specs)), or a full n_pars x n_factors ",
+                   "matrix (per-entry, for indicators of a factor with opposite expected signs). Signs are ",
+                   "meaningful and entries at fixed Lambda_mat positions are ignored. Use to shrink free ",
+                   "loadings toward tau-equivalence (e.g. lambda_mean = 1 with a moderate lambda_var)."),
+      lambda_var = paste0("prior variance of the factor loadings, N(lambda_mean, lambda_var). ",
+                   "Scalar, a length-n_factors per-factor vector (columns of Lambda_mat), or a full ",
+                   "n_pars x n_factors per-entry matrix."),
       K_var = "variance of the parameter regressors",
       G_var = "variance of the factor regressors",
       B_var = "variance of structural regressors",
@@ -479,7 +487,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var"),
+      loadings = c("lambda_mean", "lambda_var"),
       residuals = c("a_e", "b_e"),
       factor_residuals = c("a_d", "b_d"),
       regressors = c("K_var"),
