@@ -801,9 +801,14 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
+      accumulatr_context <- NULL
+      if (identical(model$c_name, "AccumulatR")) {
+        accumulatr_context <- attr(dadm, "AccumulatR_bridge")
+        accumulatr_context$native <- model$native_context()
+      }
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend)
+                     model$trend, accumulatr_context)
     }
   }
   return(lls)

@@ -719,8 +719,13 @@ design_model <- function(data,design,model=NULL,
 
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
   if(rt_check){rt_check_function(data)}
-  if (!add_acc) da <- data else
-    da <- add_accumulators(data,design$matchfun,type=model_type(model_info),Fcovariates=design$Fcovariates)
+  if (!add_acc) {
+    da <- data
+  } else {
+    da <- model_expand_rows(
+      data, model_info, design$matchfun, covariates = design$Fcovariates
+    )
+  }
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
@@ -807,7 +812,12 @@ design_model <- function(data,design,model=NULL,
   }
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
-    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    compression_columns <- unique(c(
+      names(design$Ffunctions),
+      intersect(model_info$compression_columns, names(da))
+    ))
+    dadm <- compress_dadm(da, designs = out, Fcov = design$Fcovariates,
+                          Ffun = compression_columns)
     # Change expansion names
     # attr(dadm,"expand_all") <- attr(dadm,"expand")
     if(!is.null(dadm$lR)){
@@ -1231,8 +1241,8 @@ dm_list <- function(dadm)
 
   # winner on expanded dadm
   expand_winner <- attr(dadm,"expand")
-  # subjects for first level of lR in expanded dadm
-  slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
+  model_info <- if (is.function(model)) model() else NULL
+  is_accumulatr <- identical(model_type(model_info), "AccumulatR")
 
   dl <- stats::setNames(vector(mode="list",length=length(levels(dadm$subjects))),
                         levels(dadm$subjects))
@@ -1240,6 +1250,11 @@ dm_list <- function(dadm)
     isin <- dadm$subjects==i         # dadm
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+    if (is_accumulatr) {
+      dl[[i]] <- .accumulatr_prepare_subject(
+        dl[[i]], model_info$spec, model_info$accumulatr_bridge
+      )
+    }
 
     if(!is.null(attr(dadm, 'covariate_coding'))) {
       covariate_coding <- attr(dadm, 'covariate_coding')
@@ -1253,6 +1268,14 @@ dm_list <- function(dadm)
       isin2 <- attr(dadm,"s_data")==i  # data
       if(length(isin2) > 0){
         attr(dl[[i]],"expand") <- as.integer(expand_winner[isin2]-min(expand_winner[isin2]) + 1)
+      }
+      if (is_accumulatr) {
+        context <- attr(dl[[i]], "AccumulatR_bridge")
+        context$trial_counts <- tabulate(
+          attr(dl[[i]], "expand"),
+          nbins = nrow(dl[[i]]) / length(model_info$spec$prep$accumulators)
+        )
+        attr(dl[[i]], "AccumulatR_bridge") <- context
       }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names

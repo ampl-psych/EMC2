@@ -22,6 +22,11 @@
 #include "RaceSetup.h"
 using namespace Rcpp;
 
+// [[Rcpp::export]]
+bool accumulatr_context_valid(SEXP context) {
+  return TYPEOF(context) == EXTPTRSXP && R_ExternalPtrAddr(context) != nullptr;
+}
+
 struct AccumulatRBridgeRecipe {
   struct Binding {
     int destination;
@@ -663,7 +668,9 @@ double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
-                      CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue) {
+                      CharacterVector p_types, double min_ll,
+                      Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                      Rcpp::Nullable<Rcpp::List> accumulatr_context = R_NilValue) {
   const int n_particles = particle_matrix.nrow();
   const int n_trials    = data.nrow();
 
@@ -688,11 +695,10 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   // AccumulatR
   // -----------------------------------------------------------------------
   if (type == "AccumulatR") {
-    SEXP likelihood_context_sexp = data.attr("AccumulatR_context");
-    if (Rf_isNull(likelihood_context_sexp)) {
+    if (accumulatr_context.isNull()) {
       Rcpp::stop("AccumulatR likelihood context is missing");
     }
-    Rcpp::List likelihood_context(likelihood_context_sexp);
+    Rcpp::List likelihood_context(accumulatr_context);
     SEXP native_context = likelihood_context["native"];
     AccumulatRBridgeRecipe recipe = make_accumulatr_bridge_recipe(
       Rcpp::List(likelihood_context["bridge"]), ctx.param_table);

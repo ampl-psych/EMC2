@@ -50,3 +50,18 @@ model_prepare_dm <- function(model, p_name, form, da) {
   }
   model_list$prepare_dm(p_name = p_name, form = form, da = da)
 }
+
+model_expand_rows <- function(data, model, matchfun = NULL, simulate = FALSE,
+                              covariates = NULL) {
+  model_list <- .model_list(model)
+  if (identical(model_type(model_list), "AccumulatR")) {
+    return(.accumulatr_expand_rows(data, model_list$spec))
+  }
+  add_accumulators(
+    data,
+    matchfun = matchfun,
+    simulate = simulate,
+    type = model_type(model_list),
+    Fcovariates = covariates
+  )
+}

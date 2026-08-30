@@ -67,6 +67,7 @@ Imports:
     utils,
     lpSolve,
     WienR (>= 0.3-17),
+    AccumulatR,
 LinkingTo: 
     Rcpp, RcppArmadillo, AccumulatR
 Depends: 

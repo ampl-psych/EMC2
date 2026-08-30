@@ -1465,10 +1465,12 @@ make_data_unconditional <- function(data, pars, design, model,
   # -----------------------------------------------------------------------
   # Step 1: Build the full dadm ONCE for all subjects and trials.
   # -----------------------------------------------------------------------
+  expanded_data <- model_expand_rows(
+    data, model_list, design$matchfun,
+    covariates = design$Fcovariates
+  )
   dadm_full <- design_model(
-    add_accumulators(data, design$matchfun, simulate = FALSE,
-                     type = model_list$type, Fcovariates = design$Fcovariates),
-    design, model_fun, add_acc = FALSE, compress = FALSE,
+    expanded_data, design, model_fun, add_acc = FALSE, compress = FALSE,
     verbose = FALSE, rt_check = FALSE, compress_dms = FALSE
   )
   if (!"R"  %in% names(dadm_full)) dadm_full$R  <- NA

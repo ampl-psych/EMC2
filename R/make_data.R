@@ -235,10 +235,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
   } else {
+    expanded_data <- model_expand_rows(
+      data, model, design$matchfun, simulate = TRUE,
+      covariates = design$Fcovariates
+    )
     data <- design_model(
-      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
-      rt_check=FALSE)
+      expanded_data, design, model, add_acc = FALSE, compress = FALSE,
+      verbose = FALSE, rt_check = FALSE)
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {
       if(!is.null(model()$trend)) {
