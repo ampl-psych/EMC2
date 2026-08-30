@@ -85,12 +85,12 @@ static void fill_accumulatr_runtime_parameters(
 
 static void prepare_accumulatr_trial_ok(
     const std::vector<int>& row_ok,
-    const Rcpp::IntegerVector& starts,
+    const int rows_per_trial,
     Rcpp::LogicalVector& trial_ok) {
   std::fill(trial_ok.begin(), trial_ok.end(), true);
-  for (int trial = 0; trial < starts.size(); ++trial) {
-    const int begin = starts[trial] - 1;
-    const int end = trial + 1 < starts.size() ? starts[trial + 1] - 1 : row_ok.size();
+  for (int trial = 0; trial < trial_ok.size(); ++trial) {
+    const int begin = trial * rows_per_trial;
+    const int end = begin + rows_per_trial;
     for (int row = begin; row < end; ++row) {
       if (!row_ok[row]) {
         trial_ok[trial] = false;
@@ -696,13 +696,15 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     SEXP native_context = likelihood_context["native"];
     AccumulatRBridgeRecipe recipe = make_accumulatr_bridge_recipe(
       Rcpp::List(likelihood_context["bridge"]), ctx.param_table);
-    Rcpp::IntegerVector starts = data.attr("trials_start_rows");
     Rcpp::IntegerVector trial_counts = likelihood_context["trial_counts"];
-    if (trial_counts.size() != starts.size()) {
-      Rcpp::stop("AccumulatR trial counts do not match the prepared data");
+    const int accumulatr_trials = trial_counts.size();
+    if (accumulatr_trials == 0 ||
+        recipe.runtime.nrow() % accumulatr_trials != 0) {
+      Rcpp::stop("AccumulatR parameter rows do not form complete trial blocks");
     }
-    Rcpp::NumericVector trial_loglik(starts.size());
-    Rcpp::LogicalVector trial_ok(starts.size());
+    const int rows_per_trial = recipe.runtime.nrow() / accumulatr_trials;
+    Rcpp::NumericVector trial_loglik(accumulatr_trials);
+    Rcpp::LogicalVector trial_ok(accumulatr_trials);
     const auto evaluate_accumulatr = accumulatr::loglik_trials_ccallable();
 
     for (int i = 0; i < n_particles; ++i) {
@@ -716,7 +718,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
       fill_accumulatr_runtime_parameters(ctx.param_table, recipe);
       if (!all_valid) {
-        prepare_accumulatr_trial_ok(is_ok, starts, trial_ok);
+        prepare_accumulatr_trial_ok(is_ok, rows_per_trial, trial_ok);
       }
       evaluate_accumulatr(
         native_context,
@@ -727,7 +729,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         trial_loglik.begin());
 
       double total = 0.0;
-      for (int trial = 0; trial < starts.size(); ++trial) {
+      for (int trial = 0; trial < accumulatr_trials; ++trial) {
         total += trial_loglik[trial] * trial_counts[trial];
       }
       lls[i] = total;
