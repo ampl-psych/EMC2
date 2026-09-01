@@ -49,6 +49,14 @@ struct RaceModelSetup {
   survivor_with_response_fn fill_survivor_with_response;
 };
 
+inline std::pair<int,int> race_scratch_slots(const String& type) {
+  if (type == "RDM" || type == "RDM-A0") return {RDM::N_DBL,  RDM::N_INT};
+  if (type == "LBA")                      return {LBA::N_DBL,  LBA::N_INT};
+  if (type == "LNR")                      return {LNR::N_DBL,  LNR::N_INT};
+  if (type == "REXG")                     return {REXG::N_DBL, REXG::N_INT};
+  return {1, 1};  // DDM: scratch unused, minimal allocation
+}
+
 // ---------------------------------------------------------------------------
 // make_race_setup
 // ---------------------------------------------------------------------------

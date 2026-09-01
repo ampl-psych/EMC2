@@ -34,86 +34,6 @@ NumericVector pWald(NumericVector t, NumericVector v,
 }
 
 
-// ---------------------------------------------------------------------------
-// Fast ParamTable-based functions
-// ---------------------------------------------------------------------------
-// void drdm_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const std::vector<int>& idx,
-//                double* __restrict__ ll_row)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   for (int j = 0; j < (int)idx.size(); ++j) {
-//     const int i = idx[j];
-//
-//     const double t_eff = rt[i] - t0[i];
-//     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
-//
-//     const double inv_s = 1.0 / s[i];
-//     double pdf;
-//     if (A[i] < A_EPS) {
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s;
-//       clamp_l(l);
-//       pdf = digt0(t_eff, k, l);
-//     } else {
-//       double a = 0.5 * A[i] * inv_s;
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s + a;
-//       clamp_a_l(a, l);
-//       pdf = digt_core(t_eff, k, l, a);
-//     }
-//     ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
-//   }
-// }
-
-
-// void prdm_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const std::vector<int>& idx,
-//                double* __restrict__ ll_row)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   for (int j = 0; j < (int)idx.size(); ++j) {
-//     const int i = idx[j];
-//
-//     const double t_eff = rt[i] - t0[i];
-//     if (t_eff <= 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
-//
-//     const double inv_s = 1.0 / s[i];
-//     double cdf;
-//     if (A[i] < A_EPS) {
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s;
-//       clamp_l(l);
-//       cdf = pigt0(t_eff, k, l);
-//     } else {
-//       double a = 0.5 * A[i] * inv_s;
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s + a;
-//       clamp_a_l(a, l);
-//       cdf = pigt_core(t_eff, k, l, a);
-//     }
-//     if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-//     else if (cdf > 1.0)                    cdf = 1.0;
-//     ll_row[i] = 1.0 - cdf;  // survival
-//   }
-// }
-
 
 // This new filling function checks whether A==0, if so --> runs digt0 and pigt0
 void drdm_prdm_fast(const double* rt,
@@ -135,21 +55,21 @@ void drdm_prdm_fast(const double* rt,
   const int n_los = (int)idx_los.size();
 
   // noA scratch (primary)
-  double* __restrict__ sc_teff = scratch.t_eff.data();
-  double* __restrict__ sc_v    = scratch.v.data();
-  double* __restrict__ sc_B    = scratch.B.data();
-  double* __restrict__ sc_s    = scratch.s.data();
-  double* __restrict__ sc_out  = scratch.out.data();
-  int*    __restrict__ sc_idx  = scratch.idx_win0.data();
+  double* __restrict__ sc_teff = scratch.dslot(RDM::t_eff);
+  double* __restrict__ sc_v    = scratch.dslot(RDM::v);
+  double* __restrict__ sc_B    = scratch.dslot(RDM::B);
+  double* __restrict__ sc_s    = scratch.dslot(RDM::s);
+  double* __restrict__ sc_out  = scratch.dslot(RDM::out);
+  int*    __restrict__ sc_idx  = scratch.islot(ScratchInt::idx_win);
 
   // core scratch (secondary)
-  double* __restrict__ sc_teff_c = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c    = scratch.v_c.data();
-  double* __restrict__ sc_B_c    = scratch.B_c.data();
-  double* __restrict__ sc_A_c    = scratch.A_c.data();
-  double* __restrict__ sc_s_c    = scratch.s_c.data();
-  double* __restrict__ sc_out_c  = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c  = scratch.idx_win_c.data();
+  double* __restrict__ sc_teff_c = scratch.dslot(RDM::t_eff_c);
+  double* __restrict__ sc_v_c    = scratch.dslot(RDM::v_c);
+  double* __restrict__ sc_B_c    = scratch.dslot(RDM::B_c);
+  double* __restrict__ sc_A_c    = scratch.dslot(RDM::A_c);
+  double* __restrict__ sc_s_c    = scratch.dslot(RDM::s_c);
+  double* __restrict__ sc_out_c  = scratch.dslot(RDM::out_c);
+  int*    __restrict__ sc_idx_c  = scratch.islot(ScratchInt::idx_win_c);
 
   // =========================================================================
   // WINNERS
@@ -221,9 +141,8 @@ void drdm_prdm_fast(const double* rt,
   // =========================================================================
   // LOSERS
   // =========================================================================
-
-  sc_idx  = scratch.idx_los0.data();
-  sc_idx_c = scratch.idx_los_c.data();
+  sc_idx  = scratch.islot(ScratchInt::idx_los);
+  sc_idx_c = scratch.islot(ScratchInt::idx_los_c);
 
   // --- One-pass gather: split into noA (primary, most likely) and core (secondary, most likely) ---
   int n_los_noA = 0, n_los_core = 0;
@@ -315,21 +234,21 @@ void rdm_survivor(const std::vector<int>& idx,
   const double* __restrict__ s  = &pt.base(0, spec.col_s);
 
   // noA scratch (primary)
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_v     = scratch.v.data();
-  double* __restrict__ sc_B     = scratch.B.data();
-  double* __restrict__ sc_s     = scratch.s.data();
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+  double* __restrict__ sc_teff = scratch.dslot(RDM::t_eff);
+  double* __restrict__ sc_v    = scratch.dslot(RDM::v);
+  double* __restrict__ sc_B    = scratch.dslot(RDM::B);
+  double* __restrict__ sc_s    = scratch.dslot(RDM::s);
+  double* __restrict__ sc_out  = scratch.dslot(RDM::out);
+  int*    __restrict__ sc_idx  = scratch.islot(ScratchInt::idx_win);
 
   // core scratch (secondary)
-  double* __restrict__ sc_teff_c = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c    = scratch.v_c.data();
-  double* __restrict__ sc_B_c    = scratch.B_c.data();
-  double* __restrict__ sc_A_c    = scratch.A_c.data();
-  double* __restrict__ sc_s_c    = scratch.s_c.data();
-  double* __restrict__ sc_out_c  = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c  = scratch.idx_win_c.data();
+  double* __restrict__ sc_teff_c = scratch.dslot(RDM::t_eff_c);
+  double* __restrict__ sc_v_c    = scratch.dslot(RDM::v_c);
+  double* __restrict__ sc_B_c    = scratch.dslot(RDM::B_c);
+  double* __restrict__ sc_A_c    = scratch.dslot(RDM::A_c);
+  double* __restrict__ sc_s_c    = scratch.dslot(RDM::s_c);
+  double* __restrict__ sc_out_c  = scratch.dslot(RDM::out_c);
+  int*    __restrict__ sc_idx_c  = scratch.islot(ScratchInt::idx_win_c);
 
   // --- One-pass gather: split noA (primary) / core (secondary) ---
   int n_noA = 0, n_core = 0;
@@ -506,3 +425,86 @@ void rdm_survivor_with_response(const std::vector<int>&    idx,
                                  n_acc, winner[j], lower[j], upper[j]);
   }
 }
+
+
+
+
+// ---------------------------------------------------------------------------
+// Fast ParamTable-based functions
+// ---------------------------------------------------------------------------
+// void drdm_fast(const NumericVector& rts,
+//                const ParamTable& pt,
+//                const RaceSpec& spec,
+//                const std::vector<int>& idx,
+//                double* __restrict__ ll_row)
+// {
+//   const double* __restrict__ rt = rts.begin();
+//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
+//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
+//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
+//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
+//
+//   for (int j = 0; j < (int)idx.size(); ++j) {
+//     const int i = idx[j];
+//
+//     const double t_eff = rt[i] - t0[i];
+//     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
+//
+//     const double inv_s = 1.0 / s[i];
+//     double pdf;
+//     if (A[i] < A_EPS) {
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s;
+//       clamp_l(l);
+//       pdf = digt0(t_eff, k, l);
+//     } else {
+//       double a = 0.5 * A[i] * inv_s;
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s + a;
+//       clamp_a_l(a, l);
+//       pdf = digt_core(t_eff, k, l, a);
+//     }
+//     ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
+//   }
+// }
+
+
+// void prdm_fast(const NumericVector& rts,
+//                const ParamTable& pt,
+//                const RaceSpec& spec,
+//                const std::vector<int>& idx,
+//                double* __restrict__ ll_row)
+// {
+//   const double* __restrict__ rt = rts.begin();
+//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
+//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
+//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
+//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
+//
+//   for (int j = 0; j < (int)idx.size(); ++j) {
+//     const int i = idx[j];
+//
+//     const double t_eff = rt[i] - t0[i];
+//     if (t_eff <= 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
+//
+//     const double inv_s = 1.0 / s[i];
+//     double cdf;
+//     if (A[i] < A_EPS) {
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s;
+//       clamp_l(l);
+//       cdf = pigt0(t_eff, k, l);
+//     } else {
+//       double a = 0.5 * A[i] * inv_s;
+//       double l = v[i] * inv_s;
+//       double k = B[i] * inv_s + a;
+//       clamp_a_l(a, l);
+//       cdf = pigt_core(t_eff, k, l, a);
+//     }
+//     if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
+//     else if (cdf > 1.0)                    cdf = 1.0;
+//     ll_row[i] = 1.0 - cdf;  // survival
+//   }
+// }

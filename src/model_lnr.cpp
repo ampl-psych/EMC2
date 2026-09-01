@@ -122,50 +122,55 @@ void dlnr_plnr_fast(const double* rt,
   const int n_win = (int)idx_win.size();
   const int n_los = (int)idx_los.size();
 
+  double* __restrict__ sc_t_eff = scratch.dslot(LNR::t_eff);
+  double* __restrict__ sc_m = scratch.dslot(LNR::m);
+  double* __restrict__ sc_s = scratch.dslot(LNR::s);
+  double* __restrict__ sc_out = scratch.dslot(LNR::out);
+
   // --- Winners: gather (m → scratch.v, s → scratch.s) ---
   for (int j = 0; j < n_win; ++j) {
     const int i      = idx_win[j];
-    scratch.t_eff[j] = rt[i] - t0[i];
-    scratch.v[j]     = m[i];
-    scratch.s[j]     = s[i];
+    sc_t_eff[j] = rt[i] - t0[i];
+    sc_m[j]     = m[i];
+    sc_s[j]     = s[i];
   }
 
   // --- Winners: compute (contiguous — vectorisable) ---
   for (int j = 0; j < n_win; ++j) {
-    if (std::isnan(scratch.v[j]) || scratch.t_eff[j] <= 0.0) {
-      scratch.out[j] = 0.0;
+    if (std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
+      sc_out[j] = 0.0;
       continue;
     }
-    double val = DLNORM(scratch.t_eff[j], scratch.v[j], scratch.s[j]);
-    scratch.out[j] = (std::isfinite(val) && val >= 0.0) ? val : 0.0;
+    double val = DLNORM(sc_t_eff[j], sc_m[j], sc_s[j]);
+    sc_out[j] = (std::isfinite(val) && val >= 0.0) ? val : 0.0;
   }
 
   // --- Winners: scatter ---
-  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = scratch.out[j];
+  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = sc_out[j];
 
   // --- Losers: gather ---
   for (int j = 0; j < n_los; ++j) {
     const int i      = idx_los[j];
-    scratch.t_eff[j] = rt[i] - t0[i];
-    scratch.v[j]     = m[i];
-    scratch.s[j]     = s[i];
+    sc_t_eff[j] = rt[i] - t0[i];
+    sc_m[j]     = m[i];
+    sc_s[j]     = s[i];
   }
 
   // --- Losers: compute (contiguous — vectorisable) ---
   for (int j = 0; j < n_los; ++j) {
-    if (std::isnan(scratch.v[j]) || scratch.t_eff[j] <= 0.0) {
-      scratch.out[j] = 0.0;
+    if (std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
+      sc_out[j] = 0.0;
       continue;
     }
-    double val = PLNORM(scratch.t_eff[j], scratch.v[j], scratch.s[j]);
+    double val = PLNORM(sc_t_eff[j], sc_m[j], sc_s[j]);
     if      (!std::isfinite(val) || val < 0.0) val = 0.0;
     else if (val > 1.0)                         val = 1.0;
-    scratch.out[j] = val;
+    sc_out[j] = val;
   }
 
   // --- Losers: scatter ---
   // SURVIVOR! 1-CDF, not CDF
-  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = 1-scratch.out[j];
+  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = 1-sc_out[j];
 }
 
 // =============================================================================
@@ -185,11 +190,11 @@ void plnr_fast(const NumericVector&    rts,
   const double* __restrict__ s_ = &pt.base(0, spec.col_s);
   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
 
-  double* __restrict__ sc_teff = scratch.t_eff.data();
-  double* __restrict__ sc_m    = scratch.v.data();
-  double* __restrict__ sc_s    = scratch.s.data();
-  double* __restrict__ sc_out  = scratch.out.data();
-  int*    __restrict__ sc_idx  = scratch.idx_win0.data();
+  double* __restrict__ sc_teff = scratch.dslot(LNR::t_eff);
+  double* __restrict__ sc_m = scratch.dslot(LNR::m);
+  double* __restrict__ sc_s = scratch.dslot(LNR::s);
+  double* __restrict__ sc_out = scratch.dslot(LNR::out);
+  int*    __restrict__ sc_idx  = scratch.islot(ScratchInt::idx_win);
 
   // --- Gather ---
   int n = 0;
@@ -238,11 +243,11 @@ void lnr_survivor(const std::vector<int>&     idx,
   const double* __restrict__ t0_    = &pt.base(0, spec.col_t0);
   const double* __restrict__ s_     = &pt.base(0, spec.col_s);
 
-  double* __restrict__ sc_teff = scratch.t_eff.data();
-  double* __restrict__ sc_m    = scratch.v.data();    // m reuses v buffer
-  double* __restrict__ sc_s    = scratch.s.data();
-  double* __restrict__ sc_out  = scratch.out.data();
-  int*    __restrict__ sc_idx  = scratch.idx_win0.data();
+  double* __restrict__ sc_teff = scratch.dslot(LNR::t_eff);
+  double* __restrict__ sc_m = scratch.dslot(LNR::m);
+  double* __restrict__ sc_s = scratch.dslot(LNR::s);
+  double* __restrict__ sc_out = scratch.dslot(LNR::out);
+  int*    __restrict__ sc_idx  = scratch.islot(ScratchInt::idx_win);
 
   // --- Gather: filter teff <= 0, pack valid rows contiguously ---
   int n = 0;

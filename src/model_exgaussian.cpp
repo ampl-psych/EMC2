@@ -32,12 +32,12 @@ void dexg_pexg_fast(const double*           rt,
   const double* __restrict__ t0    = &pt.base(0, spec.col_t0);
 
   // Scratch aliases — single buffer set (no A branching)
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_mu    = scratch.mu.data();
-  double* __restrict__ sc_sigma = scratch.sigma.data();
-  double* __restrict__ sc_tau   = scratch.tau.data();
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+  double* __restrict__ sc_teff  = scratch.dslot(REXG::t_eff);
+  double* __restrict__ sc_mu    = scratch.dslot(REXG::mu);
+  double* __restrict__ sc_sigma = scratch.dslot(REXG::sigma);
+  double* __restrict__ sc_tau   = scratch.dslot(REXG::tau);
+  double* __restrict__ sc_out   = scratch.dslot(REXG::out);
+  int*    __restrict__ sc_idx   = scratch.islot(ScratchInt::idx_win);
 
   // =========================================================================
   // WINNERS — density
@@ -75,7 +75,7 @@ void dexg_pexg_fast(const double*           rt,
   // =========================================================================
 
   // Reuse scratch idx slot for losers
-  int* __restrict__ sc_idx_los = scratch.idx_los0.data();
+  int* __restrict__ sc_idx_los = scratch.islot(ScratchInt::idx_los);
 
   // --- Gather ---
   int n_los = 0;
@@ -137,12 +137,12 @@ void exg_survivor(const std::vector<int>&    idx,
   const double* __restrict__ t0    = &pt.base(0, spec.col_t0);
 
   // Scratch aliases — single buffer set
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_mu    = scratch.mu.data();
-  double* __restrict__ sc_sigma = scratch.sigma.data();
-  double* __restrict__ sc_tau   = scratch.tau.data();
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+  double* __restrict__ sc_teff  = scratch.dslot(REXG::t_eff);
+  double* __restrict__ sc_mu    = scratch.dslot(REXG::mu);
+  double* __restrict__ sc_sigma = scratch.dslot(REXG::sigma);
+  double* __restrict__ sc_tau   = scratch.dslot(REXG::tau);
+  double* __restrict__ sc_out   = scratch.dslot(REXG::out);
+  int*    __restrict__ sc_idx   = scratch.islot(ScratchInt::idx_win);
 
   // --- Gather ---
   int n = 0;

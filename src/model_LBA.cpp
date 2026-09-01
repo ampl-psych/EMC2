@@ -73,22 +73,21 @@ void dlba_plba_fast(const double* rt,
   const int n_los = (int)idx_los.size();
 
   // primary scratch — core entries (A > LBA_A_ASYMPTOTIC)
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_v     = scratch.v.data();
-  double* __restrict__ sc_sv    = scratch.sv.data();
-  double* __restrict__ sc_B     = scratch.B.data();
-  double* __restrict__ sc_A     = scratch.A.data();
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+  double* __restrict__ sc_teff  = scratch.dslot(LBA::t_eff);
+  double* __restrict__ sc_v     = scratch.dslot(LBA::v);
+  double* __restrict__ sc_sv    = scratch.dslot(LBA::sv);
+  double* __restrict__ sc_B     = scratch.dslot(LBA::B);
+  double* __restrict__ sc_A     = scratch.dslot(LBA::A);
+  double* __restrict__ sc_out   = scratch.dslot(LBA::out);
+  int*    __restrict__ sc_idx   = scratch.islot(ScratchInt::idx_win);
 
   // secondary scratch — noA entries (A <= LBA_A_ASYMPTOTIC)
-  // note: sc_sv_c reuses s_c since noA path needs sv but not s
-  double* __restrict__ sc_teff_c = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c    = scratch.v_c.data();
-  double* __restrict__ sc_sv_c   = scratch.s_c.data();
-  double* __restrict__ sc_B_c    = scratch.B_c.data();
-  double* __restrict__ sc_out_c  = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c  = scratch.idx_win_c.data();
+  double* __restrict__ sc_teff_c = scratch.dslot(LBA::t_eff_c);
+  double* __restrict__ sc_v_c    = scratch.dslot(LBA::v_c);
+  double* __restrict__ sc_sv_c   = scratch.dslot(LBA::sv_c);
+  double* __restrict__ sc_B_c    = scratch.dslot(LBA::B_c);
+  double* __restrict__ sc_out_c  = scratch.dslot(LBA::out_c);
+  int*    __restrict__ sc_idx_c  = scratch.islot(ScratchInt::idx_win_c);
 
   // =========================================================================
   // WINNERS
@@ -143,8 +142,8 @@ void dlba_plba_fast(const double* rt,
   // LOSERS
   // =========================================================================
 
-  sc_idx   = scratch.idx_los0.data();
-  sc_idx_c = scratch.idx_los_c.data();
+  sc_idx   = scratch.islot(ScratchInt::idx_los);
+  sc_idx_c = scratch.islot(ScratchInt::idx_los_c);
 
   // --- One-pass gather: core -> primary, noA -> secondary ---
   int n_los_core = 0, n_los_noA = 0;
@@ -221,22 +220,22 @@ void plba_fast(const NumericVector&    rts,
 
   const int n = (int)idx.size();
 
-  double* __restrict__ sc_teff  = scratch.t_eff.data();
-  double* __restrict__ sc_v     = scratch.v.data();
-  double* __restrict__ sc_sv    = scratch.sv.data();
-  double* __restrict__ sc_B     = scratch.B.data();
-  double* __restrict__ sc_A     = scratch.A.data();
-  double* __restrict__ sc_denom = scratch.denom.data();   // new
-  double* __restrict__ sc_out   = scratch.out.data();
-  int*    __restrict__ sc_idx   = scratch.idx_win0.data();
+  double* __restrict__ sc_teff  = scratch.dslot(LBA::t_eff);
+  double* __restrict__ sc_v     = scratch.dslot(LBA::v);
+  double* __restrict__ sc_sv    = scratch.dslot(LBA::sv);
+  double* __restrict__ sc_B     = scratch.dslot(LBA::B);
+  double* __restrict__ sc_A     = scratch.dslot(LBA::A);
+  double* __restrict__ sc_denom = scratch.dslot(LBA::denom);
+  double* __restrict__ sc_out   = scratch.dslot(LBA::out);
+  int*    __restrict__ sc_idx   = scratch.islot(ScratchInt::idx_win);
 
-  double* __restrict__ sc_teff_c  = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c     = scratch.v_c.data();
-  double* __restrict__ sc_sv_c    = scratch.s_c.data();
-  double* __restrict__ sc_B_c     = scratch.B_c.data();
-  double* __restrict__ sc_denom_c = scratch.denom_c.data(); // new
-  double* __restrict__ sc_out_c   = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c   = scratch.idx_win_c.data();
+  double* __restrict__ sc_teff_c  = scratch.dslot(LBA::t_eff_c);
+  double* __restrict__ sc_v_c     = scratch.dslot(LBA::v_c);
+  double* __restrict__ sc_sv_c    = scratch.dslot(LBA::sv_c);
+  double* __restrict__ sc_B_c     = scratch.dslot(LBA::B_c);
+  double* __restrict__ sc_denom_c = scratch.dslot(LBA::denom_c);
+  double* __restrict__ sc_out_c   = scratch.dslot(LBA::out_c);
+  int*    __restrict__ sc_idx_c   = scratch.islot(ScratchInt::idx_win_c);
 
   // --- Gather: compute teff, denom; split core / noA ---
   int n_core = 0, n_noA = 0;
@@ -300,22 +299,22 @@ void lba_survivor(const std::vector<int>&    idx,
 
   const int n = (int)idx.size();
 
-  double* __restrict__ sc_teff   = scratch.t_eff.data();
-  double* __restrict__ sc_v      = scratch.v.data();
-  double* __restrict__ sc_sv     = scratch.sv.data();
-  double* __restrict__ sc_B      = scratch.B.data();
-  double* __restrict__ sc_A      = scratch.A.data();
-  double* __restrict__ sc_denom  = scratch.denom.data();
-  double* __restrict__ sc_out    = scratch.out.data();
-  int*    __restrict__ sc_idx    = scratch.idx_win0.data();
+  double* __restrict__ sc_teff  = scratch.dslot(LBA::t_eff);
+  double* __restrict__ sc_v     = scratch.dslot(LBA::v);
+  double* __restrict__ sc_sv    = scratch.dslot(LBA::sv);
+  double* __restrict__ sc_B     = scratch.dslot(LBA::B);
+  double* __restrict__ sc_A     = scratch.dslot(LBA::A);
+  double* __restrict__ sc_denom = scratch.dslot(LBA::denom);   // new
+  double* __restrict__ sc_out   = scratch.dslot(LBA::out);
+  int*    __restrict__ sc_idx   = scratch.islot(ScratchInt::idx_win);
 
-  double* __restrict__ sc_teff_c  = scratch.t_eff_c.data();
-  double* __restrict__ sc_v_c     = scratch.v_c.data();
-  double* __restrict__ sc_sv_c    = scratch.s_c.data();
-  double* __restrict__ sc_B_c     = scratch.B_c.data();
-  double* __restrict__ sc_denom_c = scratch.denom_c.data();
-  double* __restrict__ sc_out_c   = scratch.out_c.data();
-  int*    __restrict__ sc_idx_c   = scratch.idx_win_c.data();
+  double* __restrict__ sc_teff_c  = scratch.dslot(LBA::t_eff_c);
+  double* __restrict__ sc_v_c     = scratch.dslot(LBA::v_c);
+  double* __restrict__ sc_sv_c    = scratch.dslot(LBA::sv_c);
+  double* __restrict__ sc_B_c     = scratch.dslot(LBA::B_c);
+  double* __restrict__ sc_denom_c = scratch.dslot(LBA::denom_c);   // new
+  double* __restrict__ sc_out_c   = scratch.dslot(LBA::out_c);
+  int*    __restrict__ sc_idx_c   = scratch.islot(ScratchInt::idx_win_c);
 
   // --- Gather ---
   int n_core = 0, n_noA = 0;

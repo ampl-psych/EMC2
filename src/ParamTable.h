@@ -179,60 +179,6 @@ struct ParamTable {
       d[i] = 0.0;
   }
 
-  // // ---------------------------------------------------------------------------
-  // // init_design_plan  (called once, uses Rcpp — serial only)
-  // // ---------------------------------------------------------------------------
-  // void init_design_plan(const Rcpp::List& designs) {
-  //   using namespace Rcpp;
-  //   const int n_params = designs.size();
-  //   design_plan.clear();
-  //   design_plan.resize(n_params);
-  //
-  //   CharacterVector design_names = designs.names();
-  //   const int T = n_trials;
-  //
-  //   for (int i = 0; i < n_params; ++i) {
-  //     DesignEntry& entry = design_plan[i];
-  //     entry.valid = false;
-  //     if (designs[i] == R_NilValue) continue;
-  //
-  //     bool skip_self = !design_is_self_intercept.empty() &&
-  //       i < (int)design_is_self_intercept.size() &&
-  //       design_is_self_intercept[i];
-  //     entry.skip_self_intercept = skip_self;
-  //
-  //     const std::string out_name = as<std::string>(design_names[i]);
-  //     auto out_it = name_to_base_idx.find(out_name);
-  //     if (out_it == name_to_base_idx.end()) continue;
-  //     entry.out_idx = out_it->second;
-  //
-  //     NumericMatrix design = designs[i];
-  //     if (design.nrow() != T)
-  //       stop("ParamTable::init_design_plan: design for '%s' must have n_trials rows",
-  //            out_name.c_str());
-  //
-  //     // Store raw pointer alongside the logical plan
-  //     entry.dm_ptr  = design.begin();
-  //     entry.dm_nrow = design.nrow();
-  //     entry.dm_ncol = design.ncol();
-  //     entry.dm_null = false;
-  //     const int K = entry.dm_ncol;
-  //     CharacterVector coef_names = colnames(design);
-  //     entry.coef_idx.assign(K, -1);
-  //     entry.uses_self = false;
-  //
-  //     for (int j = 0; j < K; ++j) {
-  //       std::string coef_name = as<std::string>(coef_names[j]);
-  //       auto it = name_to_base_idx.find(coef_name);
-  //       if (it == name_to_base_idx.end()) continue;
-  //       int cidx = it->second;
-  //       entry.coef_idx[j] = cidx;
-  //       if (cidx == entry.out_idx) entry.uses_self = true;
-  //     }
-  //     entry.valid = true;
-  //   }
-  // }
-
   // ---------------------------------------------------------------------------
   // map_from_designs — hot path, no Rcpp types touched after init
   // ---------------------------------------------------------------------------
@@ -302,57 +248,6 @@ struct ParamTable {
       }
     }
   }
-
-//   void map_from_designs(const Rcpp::List& designs,
-//                         const Rcpp::LogicalVector& include_param = Rcpp::LogicalVector())
-//   {
-//     const int n_params = designs.size();
-//     if (n_params == 0) return;
-//
-//     Rcpp::LogicalVector use =
-//       (include_param.size() == n_params)
-//       ? include_param
-//     : Rcpp::LogicalVector(n_params, true);
-//
-//     if (design_plan.size() != (size_t)n_params)
-//       init_design_plan(designs);
-//
-//     const int T = n_trials;
-//     std::vector<double> self_copy(T);
-//
-//     for (int i = 0; i < n_params; ++i) {
-//       if (!use[i]) continue;
-//       if (designs[i] == R_NilValue) continue;
-//
-//       DesignEntry& entry = design_plan[i];
-//       if (!entry.valid || entry.skip_self_intercept) continue;
-//
-//       const int out_idx = entry.out_idx;
-//       Rcpp::NumericMatrix design = designs[i];  // light SEXP handle — read-only
-//       const int K = design.ncol();
-//
-//       double* out = base.colptr(out_idx);
-//
-//       if (entry.uses_self)
-//         std::copy(out, out + T, self_copy.begin());
-//
-//       std::fill(out, out + T, 0.0);
-//
-//       for (int j = 0; j < K; ++j) {
-//         int cidx = entry.coef_idx[j];
-//         if (cidx < 0) continue;
-//         const double* coef = (entry.uses_self && cidx == out_idx)
-//           ? self_copy.data()
-//             : base.colptr(cidx);
-//         const double* d = &design(0, j);  // read-only SEXP access — safe if not written
-// #pragma omp simd
-//         for (int r = 0; r < T; ++r) {
-//           if (d[r] != 0.0 && coef[r] != 0.0)
-//             out[r] += coef[r] * d[r];
-//         }
-//       }
-//     }
-//   }
 
   // ---------------------------------------------------------------------------
   // materialize (non-hot, returns Rcpp matrix for R interface)

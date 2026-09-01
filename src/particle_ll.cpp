@@ -591,6 +591,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
   PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
                                             ctx.transform_specs, trend_runtime_ptr);
+
   // -----------------------------------------------------------------------
   // MRI / MRI_AR1 -- no expand, rt, R attributes
   // -----------------------------------------------------------------------
@@ -618,9 +619,10 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
-    // -----------------------------------------------------------------------
-    // Choice-only models (ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT)
-    // -----------------------------------------------------------------------
+
+  // -----------------------------------------------------------------------
+  // Choice-only models (ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT)
+  // -----------------------------------------------------------------------
   } else if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" || type == "MULTINOMIAL_LOGIT") {
     // Shared choice-only setup
     IntegerVector expand = data.attr("expand");
@@ -651,9 +653,9 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const double sum = expand_clamp_sum(ll_buf.data(), expand.begin(), n_exp, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
-    // -----------------------------------------------------------------------
-    // Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
-    // -----------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
+  // -----------------------------------------------------------------------
   } else {
     // Shared Choice-RT setup
     IntegerVector expand = data.attr("expand");
@@ -669,7 +671,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
     RaceScratch scratch;
-    scratch.reserve(n_rows);  // DDM doesn't use scratch but keeps things consistent
+    auto [n_dbl, n_int] = race_scratch_slots(type);
+    scratch.reserve(n_dbl, n_int, n_rows);
 
     CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
     TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);
@@ -711,6 +714,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
         if (!return_trialwise) result(0, i) = sum;
       }
+
       // ---- Race models (RDM, LBA, LNR, ...) ----
     } else {
       LogicalVector winner = data["winner"];
@@ -876,7 +880,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
     RaceScratch    scratch_tmp;
-    scratch_tmp.reserve(n_rows);
+    auto [n_dbl, n_int] = race_scratch_slots(type);
+    scratch_tmp.reserve(n_dbl, n_int, n_rows);
     CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
     TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
 
@@ -888,7 +893,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     std::vector<TruncSpec>  trunc_vec(n_threads_used, trunc);
     std::vector<CensorSpec> censor_vec(n_threads_used, censor);
     for (int t = 0; t < n_threads_used; ++t) {
-      scratch_vec[t].reserve(n_rows);
+      scratch_vec[t].reserve(n_dbl, n_int, n_rows);
       censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
       trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
     }
@@ -969,12 +974,12 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
     RaceModelSetup setup = make_race_setup(type, ctx.param_table);
     RaceScratch scratch_tmp;
-    scratch_tmp.reserve(n_rows);
+    auto [n_dbl, n_int] = race_scratch_slots(type);
+    scratch_tmp.reserve(n_dbl, n_int, n_rows);
     CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
     TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
 
     // Per-thread scratch — all plain std::vector, no Rcpp types
-    const int scratch_size = n_rows;
     std::vector<RaceScratch>         scratch_vec(n_threads_used);
     std::vector<std::vector<double>> ll_row_vec(n_threads_used,   std::vector<double>(n_rows, 1.0));
     std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
@@ -985,7 +990,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     std::vector<TruncSpec> trunc_vec(n_threads_used, trunc);
     std::vector<CensorSpec> censor_vec(n_threads_used, censor);
     for (int t = 0; t < n_threads_used; ++t) {
-      scratch_vec[t].reserve(scratch_size);
+      scratch_vec[t].reserve(n_dbl, n_int, n_rows);
       censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
       trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
     }
