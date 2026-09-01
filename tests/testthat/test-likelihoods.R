@@ -121,3 +121,18 @@ test_that("LNR with missing", {expect_snapshot(calc_lls(LNR_s1_m))})
 test_that("RDM with missing", {expect_snapshot(calc_lls(RDM_s1_m))})
 test_that("LBA with missing", {expect_snapshot(calc_lls(LBA_s1_m))})
 test_that("WDM with missing", {expect_snapshot(calc_lls(WDM_s1_m))})
+
+
+# Racing ExGaussian -------------------------------------------------------
+design_REXG <- design(data = dat,model=REXG,matchfun=matchfun,
+                      formula=list(mu~lM,tau~1,sigma~1,t0~1),
+                      contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
+REXG_s <- make_emc(dat, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
+test_that("REXG", {
+  expect_snapshot(calc_lls(REXG_s))
+})
+
+REXG_s1_m <- make_emc(dat_m, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("REXG with missing", {expect_snapshot(calc_lls(REXG_s1_m))})
+
+
