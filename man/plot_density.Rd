@@ -61,10 +61,8 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{...}{Other graphical parameters for the real data lines.}
 }
 \description{
-Plots panels that contain a set of densities for each level of the specified defective factor in the data.
-These densities are defective; their areas are relative to the respective
-proportions of the defective factor levels. Across all levels, the area sums to 1.
-Optionally, posterior/prior predictive densities can be overlaid.
+Plots a defective density for each level of the specified factor. Curves use
+finite RTs, and their total mass equals the finite-RT proportion.
 }
 \examples{
 # Plot defective densities for each subject and the factor combination in the design:
