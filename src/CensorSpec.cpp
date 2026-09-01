@@ -25,8 +25,8 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
   setup->fill_survivor(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch);
 
-  // Fill p_upper: S_k(UC - t0) for active UC rows, 0.0 elsewhere (default -- at t=inf, S=0)
-  std::fill(p_upper.begin(), p_upper.end(), 0.0);
+  // Survivor implementations leave t <= t0 untouched, where S(t - t0) = 1.
+  std::fill(p_upper.begin(), p_upper.end(), 1.0);
   setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
 
   // Minimal LL

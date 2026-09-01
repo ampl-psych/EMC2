@@ -54,8 +54,8 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' truncation, lower or upper censoring, or contamination with the given probability.
 #' Truncation removes rows. Contamination makes R = NA and the rt = Inf, and is
 #' applied after truncation but before censoring. Lower/upper censoring sets
-#'   R = NA if LCresponse/UCresponse = TRUE and
-#'   rt = -Inf/Inf if LCdireciton/UCdireciton = TRUE (else NA).
+#'   R = NA unless LCresponse/UCresponse = TRUE and
+#'   rt = NA if LCdireciton/UCdireciton = TRUE (else NA).
 #' All of these arguments can be: 1) NULL, in which case if the data frame has a column
 #' of that name it is used, or if not the default is used (see argument definition),
 #' 2) a scalar/logical (same value for every data row), 3) a subject-named  vector
@@ -70,8 +70,8 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' @param UT Upper truncation bound above which data are removed, default Inf.
 #' @param LC Lower censoring bound, default 0.
 #' @param UC Upper censoring bound, default Inf.
-#' @param LCresponse Logical. Default FALSE, set responses to NA on lower-censored trials.
-#' @param UCresponse Logical. Default FALSE, set responses to NA on upper-censored trials.
+#' @param LCresponse Logical. Default FALSE; if TRUE, retain responses on lower-censored trials.
+#' @param UCresponse Logical. Default FALSE; if TRUE, retain responses on upper-censored trials.
 #' @param LCdirection Logical. Default TRUE, lower-censored RTs are coded as -Inf; if FALSE, as NA.
 #' @param UCdirection Logical. Default TRUE, upper-censored RTs are coded as Inf; if FALSE, as NA.
 #' @param pContaminant Probability of contamination, default 0.
@@ -105,12 +105,13 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
                          pContaminant=NULL,verbose=FALSE,rt_resolution=1/60,digits = 2)
 {
 
-  # no censor/truncation, leave unaltered
-  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)) return(data)
+  # no censor/truncation, leave unaltered unless go/nogo model
+  is_gng_data <- "R" %in% names(data) &&  any(data$R == "nogo" | "nogo" %in% levels(data$R), na.rm = TRUE)
+  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data) return(data)
   if (!is.null(LT) && !is.function(LT) && all(LT == 0) &&
       !is.null(LC) && !is.function(LC) && all(LC == 0) &&
       !is.null(UT) && !is.function(UT) && all(is.infinite(UT)) &&
-      !is.null(UC) && !is.function(UC) && all(is.infinite(UC))) {
+      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data) {
     return(data)
   }
 
@@ -122,11 +123,6 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 
   # Go/no-go data are defined by explicit non-responses. Truncation is not a
   # coherent missing-data mechanism in this setting, so disable LT/UT globally.
-  is_gng_data <- FALSE
-  if ("R" %in% names(data)) {
-    if (is.factor(data$R)) is_gng_data <- "nogo" %in% levels(data$R)
-    if (!is_gng_data) is_gng_data <- any(data$R == "nogo", na.rm = TRUE)
-  }
   if (is_gng_data) {
     requested_trunc <- any(((data$LT != 0) | is.finite(data$UT)) & !no_truncate, na.rm = TRUE)
     if (requested_trunc) {
@@ -165,12 +161,17 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   isgng <- data$R == "nogo"
   isgng[is.na(isgng)] <- FALSE
   if (any(isgng)) {
-    UC_eff[isgng] <- 0
-    LC_eff[isgng] <- 0
-    UT_eff[isgng] <- Inf
-    LT_eff[isgng] <- 0
+    # A nogo winner here is a known latent response with an unobserved finishing
+    # time.  Persist the effective bounds consumed by the C++ likelihood and
+    # retain R so it can integrate the nogo winner over the full race instead of treating 
+    # all nogo trials as unknown-winner with rt>UC.
+    data$UC[isgng] <- UC_eff[isgng] <- 0
+    data$LC[isgng] <- LC_eff[isgng] <- 0
+    data$UT[isgng] <- UT_eff[isgng] <- Inf
+    data$LT[isgng] <- LT_eff[isgng] <- 0
     UCdirection[isgng] <- TRUE
-    UCresponse[isgng] <- FALSE
+    UCresponse[isgng] <- TRUE
+    no_censor[isgng] <- FALSE # previously bypassed gng if used
   }
 
   tol_l <- sqrt(.Machine$double.eps) * pmax(1, abs(LT_eff), abs(LC_eff))
