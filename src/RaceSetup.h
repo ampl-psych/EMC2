@@ -10,21 +10,7 @@
 #include "model_exgaussian.h"
 using namespace Rcpp;
 
-// ---------------------------------------------------------------------------
-// RaceSpec — parameter column indices in ParamTable
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Dispatcher types
-// ---------------------------------------------------------------------------
-
-// // Combined pdf+cdf fill — hot path, takes pre-allocated scratch
-// using race_combined_fn = void(*)(const NumericVector&,
-//                               const ParamTable&,
-//                               const RaceSpec&,
-//                               const std::vector<int>& idx_win,
-//                               const std::vector<int>& idx_los,
-//                               double* __restrict__ raw,
-//                               RaceScratch& scratch);
+// Combined pdf+cdf fill — hot path, takes pre-allocated scratch
 using race_combined_fn = void(*)(const double*           rts_ptr,
                                  const ParamTable&       pt,
                                  const RaceSpec&         spec,
@@ -132,9 +118,7 @@ inline MRISpec make_mri_spec(const ParamTable& pt,
 
   // Last column = sigma, second-to-last = rho (AR1 only)
   spec.col_sigma = pt.base_index_for(Rcpp::as<std::string>(keep_names[m - 1]));
-  spec.col_rho   = is_ar1
-  ? pt.base_index_for(Rcpp::as<std::string>(keep_names[m - 2]))
-    : -1;
+  spec.col_rho   = is_ar1 ? pt.base_index_for(Rcpp::as<std::string>(keep_names[m - 2])) : -1;
 
   const int n_mean = is_ar1 ? m - 2 : m - 1;
   spec.col_means.resize(n_mean);

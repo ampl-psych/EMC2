@@ -560,44 +560,6 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
   }
 }
 
-// void c_log_likelihood_MRI_white(NumericMatrix& pars, NumericVector& y,
-//                           int n, int m,
-//                           double* ll_buf)             // size = n
-// {
-//   for (int i = 0; i < n; i++) {
-//     double s = 0.0;
-//     for (int j = 0; j < m - 1; j++) s += pars(i, j);
-//     ll_buf[i] = R::dnorm(y[i], s, pars(i, m - 1), true);
-//   }
-// }
-//
-//
-//
-// void c_log_likelihood_MRI_ar1(NumericMatrix& pars, NumericVector& y,
-//                               int n, int m,
-//                               double* ll_buf)        // size = n
-// {
-//   // First observation: stationary variance
-//   double s = 0.0;
-//   for (int j = 0; j < m - 2; j++) s += pars(0, j);
-//   ll_buf[0] = R::dnorm(y[0], s, pars(0, m - 1), true);
-//
-//   // t >= 1: AR(1) conditional likelihood
-//   for (int i = 1; i < n; i++) {
-//     double s = 0.0;
-//     for (int j = 0; j < m - 2; j++) s += pars(i, j);
-//     const double sigma_i   = pars(i, m - 1);
-//     const double rho_i     = pars(i, m - 2);
-//     const double cond_sd   = sigma_i * std::sqrt(1.0 - rho_i * rho_i);
-//     const double cond_mean = s + rho_i * (y[i - 1] - ([&]() {
-//       double s_prev = 0.0;
-//       for (int j = 0; j < m - 2; j++) s_prev += pars(i - 1, j);
-//       return s_prev;
-//     })());
-//     ll_buf[i] = R::dnorm(y[i], cond_mean, cond_sd, true);
-//   }
-// }
-
 
 // [[Rcpp::export]]
 NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
@@ -766,30 +728,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
-    // const int     n_pars = p_types.length();
-    // NumericVector y      = extract_y(data);
-    // const bool    is_ar1 = (type == "MRI_AR1");
-    // for (int i = 0; i < n_particles; ++i) {
-    //   // 1) Map p_vector to trialwise parameters
-    //   if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-    //   run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
-    //   NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-    //
-    //   // 2) Fill log-likelihood buffer
-    //   if (is_ar1) c_log_likelihood_MRI_ar1(pars, y, n_rows, n_pars, ll_buf.data());
-    //   else        c_log_likelihood_MRI_white(pars, y, n_rows, n_pars, ll_buf.data());
-    //
-    //   // 3) Check for bound violations (fills is_ok)
-    //   std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok
-    //   c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-    //   for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
-    //
-    //   // 4) Determine output location (tw is a pointer to the correct address in result) and protect via clamp, sum [[no expanding here, compression doesn't work for MRI]]
-    //   double* tw = return_trialwise ? result.column(i).begin() : nullptr;
-    //   const double sum = clamp_sum(ll_buf.data(), n_rows, min_ll, tw);
-    //   if (!return_trialwise) result(0, i) = sum;
-    // }
-
   // -----------------------------------------------------------------------
   // Race models (RDM, LBA, LNR)
   // -----------------------------------------------------------------------
