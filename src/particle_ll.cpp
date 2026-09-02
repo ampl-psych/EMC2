@@ -12,11 +12,7 @@
 #include "TrendEngine.h"
 #include "math_utils.h"
 
-// Model headers — each includes RaceSpec.h themselves
-#include "model_LBA.h"
-#include "model_lnr.h"
-#include "model_RDM.h"
-#include "model_DDM.h"
+// for extract_y -- should be moved elsewhere
 #include "model_MRI.h"
 
 // RaceSetup last — references functions defined in model headers above
@@ -353,7 +349,7 @@ double c_ordered_cdf(double x, double location, double scale, bool probit) {
 }
 
 // =============================================================================
-// expand_clamp_sum — hoisted final step for all models with expand
+// expand_clamp_sum — final step for all models with expand
 // =============================================================================
 
 inline double expand_clamp_sum(const double* ll_ptr, const int* exp_ptr,
@@ -398,7 +394,44 @@ inline double clamp_sum(const double* ll_ptr, const int n, const double min_ll,
   return sum_ll;
 }
 
+// is_ok handling - shared by all models
+inline void apply_bounds(const ParamTable&             pt,
+                         const std::vector<BoundSpec>& bound_specs,
+                         std::vector<int>&             is_ok,
+                         double*                       ll,
+                         int                           n_trials,
+                         int                           n_lR,
+                         double                        min_ll,
+                         const std::vector<int>*       idx = nullptr)
+{
+  c_do_bound_pt(pt, bound_specs, is_ok);
 
+  if (n_lR == 1) {
+    // can be vectorised by the compiler
+    if (idx) {
+#pragma omp simd
+      for (int t = 0; t < (int)idx->size(); ++t)
+        if (!is_ok[(*idx)[t]]) ll[(*idx)[t]] = min_ll;
+    } else {
+#pragma omp simd
+      for (int t = 0; t < n_trials; ++t)
+        if (!is_ok[t]) ll[t] = min_ll;
+    }
+  } else {
+    // cannot be vectorised due to strided access and early break
+    if (idx) {
+      for (int t : *idx) {
+        const int trial = t / n_lR;
+        for (int k = 0; k < n_lR; ++k)
+          if (!is_ok[trial * n_lR + k]) { ll[trial] = min_ll; break; }
+      }
+    } else {
+      for (int t = 0; t < n_trials; ++t)
+        for (int k = 0; k < n_lR; ++k)
+          if (!is_ok[t * n_lR + k]) { ll[t] = min_ll; break; }
+    }
+  }
+}
 
 // =============================================================================
 // Likelihood functions — Call within calc_ll branches
@@ -412,7 +445,7 @@ void c_log_likelihood_race(ParamTable& pt,
                            int n_acc,
                            double* ll_row_ptr,
                            int     ll_row_size,
-                           double* ll_buf,
+                           double* ll_buf_ptr,
                            RaceScratch& scratch)
 {
   const int n_winners = (int)idx_win.size();
@@ -423,16 +456,16 @@ void c_log_likelihood_race(ParamTable& pt,
 
   if (n_acc == 1) {
     for (int t = 0; t < n_winners; ++t)
-      ll_buf[idx_win[t]] = ll_row_ptr[idx_win[t]];
+      ll_buf_ptr[idx_win[t]] = ll_row_ptr[idx_win[t]];
   } else {
     for (int t = 0; t < n_winners; ++t) {
-      // NB: ll_buf is sized n_trials - including the missing (NA) trials. Can't index with t directly...
+      // NB: ll_buf_ptr is sized n_trials - including the missing (NA) trials. Can't index with t directly...
       const int trial_idx = idx_win[t] / n_acc;
       const int base      = trial_idx * n_acc;
       double ll = 0.0;
       for (int k = 0; k < n_acc; ++k)
         ll += ll_row_ptr[base + k];
-      ll_buf[trial_idx] = ll;
+      ll_buf_ptr[trial_idx] = ll;
     }
   }
 }
@@ -609,172 +642,166 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
       // No get_pars_matrix call — work directly on param_table
       if (is_ar1) c_log_likelihood_MRI_ar1  (ctx.param_table, spec, y, n_choice_trials, ll_buf.data());
-      else        c_log_likelihood_MRI_white (ctx.param_table, spec, y, n_choice_trials, ll_buf.data());
+      else        c_log_likelihood_MRI_white(ctx.param_table, spec, y, n_choice_trials, ll_buf.data());
 
-      std::fill(is_ok.begin(), is_ok.begin() + n_choice_trials, 1);
-      c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
-      for (int t = 0; t < n_choice_trials; ++t) if (!is_ok[t]) ll_buf[t] = min_ll;
+      apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll);
 
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
 
-  // -----------------------------------------------------------------------
-  // Choice-only models (ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT)
-  // -----------------------------------------------------------------------
-  } else if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" || type == "MULTINOMIAL_LOGIT") {
-    // Shared choice-only setup
-    IntegerVector expand = data.attr("expand");
-    const int     n_exp  = expand.size();
-    const bool is_probit = (type == "ORDERED_PROBIT");  // unused for MULTINOMIAL_LOGIT, but fine
-
-    for (int i = 0; i < n_particles; ++i) {
-      // 1) Map p_vector to trialwise parameters
-      if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
-      NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
-
-      // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
-      if (type == "MULTINOMIAL_LOGIT") {
-        c_log_likelihood_multinomial_logit(pars, data, n_lR, ll_buf.data());
-      } else {
-        c_log_likelihood_ordered(pars, data, n_lR, is_probit, ll_buf.data());
-      }
-
-      // 3) Handle not-ok parameter values (out of bound)
-      std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
-      c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-      lr_all(is_ok, n_lR);                                 // make sure the ok value is shared across accumulators / levels or lR
-      for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t * n_lR]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
-
-      // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
-      double* tw = return_trialwise ? result.column(i).begin() : nullptr;
-      const double sum = expand_clamp_sum(ll_buf.data(), expand.begin(), n_exp, min_ll, tw);
-      if (!return_trialwise) result(0, i) = sum;
-    }
-  // -----------------------------------------------------------------------
-  // Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
-  // -----------------------------------------------------------------------
   } else {
-    // Shared Choice-RT setup
+    // All choice models have an expand attribute
     IntegerVector expand = data.attr("expand");
     const int     n_exp  = expand.size();
     const int*    exp_ptr = expand.begin();
 
-    NumericVector rts     = data["rt"];
-    const double* rts_ptr = rts.begin();
-
+    // Missingness — shared across all choice models
     IntegerVector missingness;
     const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
     if (has_missingness) missingness = data["missingness"];
 
-    RaceModelSetup setup = make_race_setup(type, ctx.param_table);
-    RaceScratch scratch;
-    auto [n_dbl, n_int] = race_scratch_slots(type);
-    scratch.reserve(n_dbl, n_int, n_rows);
+    // Winner flag — shared across all choice models except DDM
+    // (choice-only models don't use it yet but will)
+    const bool has_winner = (sum(contains(data.names(), "winner")) == 1);
+    LogicalVector winner;
+    int* win_flag = nullptr;
+    if (has_winner) {
+      winner   = data["winner"];
+      win_flag = LOGICAL(winner);
+    }
 
-    CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
-    TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);
-
-    if (type == "DDM") {
-      IntegerVector R      = data["R"];
-      const int*    Rs_ptr = R.begin();
-
-      // Find all trials that contribute "normally" to the likelihood
-      std::vector<int> idx_all;
-      idx_all.reserve(n_rows);
-      for (int i = 0; i < n_rows; ++i) {
-        if (has_missingness && !IntegerVector::is_na(missingness[i])) continue;
-        idx_all.push_back(i);
+    // Index lists — built once, shared across all choice models
+    // idx_all: all non-missing rows (DDM, choice-only)
+    // idx_win / idx_los: winner/loser split (race, and future choice-only)
+    std::vector<int> idx_all, idx_win, idx_los, idx_bounds;
+    idx_all.reserve(n_rows); idx_bounds.reserve(n_rows);
+    if (has_winner) {
+      idx_win.reserve(n_rows);
+      idx_los.reserve(n_rows);
+    }
+    for (int i = 0; i < n_rows; ++i) {
+      if (has_missingness && !IntegerVector::is_na(missingness[i])) {
+        if (missingness[i] > 0) idx_bounds.push_back(i);  // censored: bounds still apply
+        continue;                                         // but skip from likelihood - probability calculated by censorspec
       }
+      idx_all.push_back(i);
+      idx_bounds.push_back(i);  // censored trials also need bound check
+      if (has_winner) {
+        if (win_flag[i]) idx_win.push_back(i);
+        else             idx_los.push_back(i);
+      }
+    }
 
-      // Loop over particles
+    // -----------------------------------------------------------------------
+    // Choice-only models (ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT)
+    // -----------------------------------------------------------------------
+    if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" || type == "MULTINOMIAL_LOGIT") {
+      // Shared choice-only setup
+      const bool is_probit = (type == "ORDERED_PROBIT");  // unused for MULTINOMIAL_LOGIT, but fine
+
       for (int i = 0; i < n_particles; ++i) {
         // 1) Map p_vector to trialwise parameters
         if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
         run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
         // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
-        std::fill(ll_buf.begin(), ll_buf.end(), 1.0); // re-fill row-wise ll -- helps with missngness functionality (all trials skipped get likelihood = 1)
-        c_log_likelihood_DDM(rts_ptr, Rs_ptr, ctx.param_table, setup.spec, idx_all, ll_buf.data());
+        if (type == "MULTINOMIAL_LOGIT") {
+          c_log_likelihood_multinomial_logit(pars, data, n_lR, ll_buf.data());
+        } else {
+          c_log_likelihood_ordered(pars, data, n_lR, is_probit, ll_buf.data());
+        }
 
-        // 3) Trialwise truncation correction. Needs to be in this order!
-        if(trunc.any()) trunc.calculate_normalization_constant();
-        if(censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
-        if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
+        // 3) Handle not-ok parameter values (out of bound)
+        apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
 
-        // 5) Check for bound violations (fills is_ok)
-        std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok
-        c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-        for (int t = 0; t < n_choice_trials; ++t) if(!is_ok[t]) ll_buf[t] = min_ll;  // apply min_ll when is_ok = false (overwrite ll_buf)
-
-        // 6) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
+        // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
         double* tw = return_trialwise ? result.column(i).begin() : nullptr;
         const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
         if (!return_trialwise) result(0, i) = sum;
       }
-
-      // ---- Race models (RDM, LBA, LNR, ...) ----
+    // -----------------------------------------------------------------------
+    // Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
+    // -----------------------------------------------------------------------
     } else {
-      LogicalVector winner = data["winner"];
-      int* win_flag = LOGICAL(winner);
+      // Shared Choice-RT setup
+      NumericVector rts     = data["rt"];
+      const double* rts_ptr = rts.begin();
 
-      std::vector<int> idx_win, idx_los;
-      idx_win.reserve(n_rows);
-      idx_los.reserve(n_rows);
-      for (int i = 0; i < n_rows; ++i) {
-        if (has_missingness && !IntegerVector::is_na(missingness[i])) continue;
-        if (win_flag[i]) idx_win.push_back(i);
-        else             idx_los.push_back(i);
-      }
+      RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+      RaceScratch scratch;
+      auto [n_dbl, n_int] = race_scratch_slots(type);
+      scratch.reserve(n_dbl, n_int, n_rows);
 
-      // Scratch buffers (reused across particles)
-      std::vector<double> ll_row(n_rows);                 // stores (log)likelihood of row in dadm
-      // ll_trial sized n_choice_trials; assumes n_winners <= n_choice_trials (one winner per trial at most)
-      std::vector<double> ll_trial(n_choice_trials);     // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
+      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
+      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);
 
-      // Begin particle loop
-      for (int i = 0; i < n_particles; ++i) {
-        // 1) Map p_vector to trialwise parameters
-        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+      if (type == "DDM") {
+        IntegerVector R      = data["R"];
+        const int*    Rs_ptr = R.begin();
 
-        // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
-        std::fill(ll_row.begin(), ll_row.end(), 1.0); // re-fill row-wise ll -- helps with RACE functionality (all trials skipped get likelihood = 1)
-        c_log_likelihood_race(ctx.param_table, setup, rts_ptr,
-                              idx_win, idx_los, n_lR,
-                              ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
+        // Loop over particles
+        for (int i = 0; i < n_particles; ++i) {
+          // 1) Map p_vector to trialwise parameters
+          if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+          run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
-        // 3) Handle truncation, censoring
-        if(trunc.any()) trunc.calculate_normalization_constant();
-        if(censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);  // needs to have trunc know the normalization constant, hence this order
-        if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];  // cannot be before censoring - censoring fills rows, doesn't add
+          // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+          std::fill(ll_buf.begin(), ll_buf.end(), 1.0); // re-fill row-wise ll -- helps with missngness functionality (all trials skipped get likelihood = 1)
+          c_log_likelihood_DDM(rts_ptr, Rs_ptr, ctx.param_table, setup.spec, idx_all, ll_buf.data());
 
-        // 4) Handle not-ok parameter values (out of bound)
-        std::fill(is_ok.begin(), is_ok.end(), 1);            // reset is_ok [parameter dependent]
-        c_do_bound_pt(ctx.param_table, bound_specs, is_ok);  // fill is_ok by bound
-        lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
-        for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
-        // for(int t=0; t < n_choice_trials; t++) {
-        //   for(int k=0; k < n_lR; k++) {
-        //     if(!is_ok[t * n_lR + k]) {
-        //       // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
-        //       ll_trial[t] = min_ll;
-        //       break;  // no need to check remaining accumulators for this trial
-        //     }
-        //   }
-        // }
+          // 3) Trialwise truncation correction. Needs to be in this order!
+          if(trunc.any()) trunc.calculate_normalization_constant();
+          if(censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
+          if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
 
-        // 5) Expand, clamp, sum, etc
-        double* tw = return_trialwise ? result.column(i).begin() : nullptr;
-        const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
-        if (!return_trialwise) result(0, i) = sum;
+          // 4) Check for bound violations
+          apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, &idx_bounds);
+
+          // 5) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
+          double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+          const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+          if (!return_trialwise) result(0, i) = sum;
+        }
+
+        // ---- Race models (RDM, LBA, LNR, ...) ----
+      } else {
+        // Scratch buffers (reused across particles)
+        std::vector<double> ll_row(n_rows);                 // stores (log)likelihood of row in dadm
+        // ll_trial sized n_choice_trials; assumes n_winners <= n_choice_trials (one winner per trial at most)
+        std::vector<double> ll_trial(n_choice_trials);     // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
+
+        // Begin particle loop
+        for (int i = 0; i < n_particles; ++i) {
+          // 1) Map p_vector to trialwise parameters
+          if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+          run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+
+          // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
+          std::fill(ll_row.begin(), ll_row.end(), 1.0); // re-fill row-wise ll -- helps with RACE functionality (all trials skipped get likelihood = 1)
+          c_log_likelihood_race(ctx.param_table, setup, rts_ptr,
+                                idx_win, idx_los, n_lR,
+                                ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
+
+          // 3) Handle truncation, censoring
+          if(trunc.any()) trunc.calculate_normalization_constant();
+          if(censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);  // needs to have trunc know the normalization constant, hence this order
+          if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];  // cannot be before censoring - censoring fills rows, doesn't add
+
+          // 4) Handle not-ok parameter values (out of bound)
+          apply_bounds(ctx.param_table, bound_specs, is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
+
+          // 5) Expand, clamp, sum, etc
+          double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+          const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
+          if (!return_trialwise) result(0, i) = sum;
+        }
       }
     }
   }
   return result;
-
 }
 
 

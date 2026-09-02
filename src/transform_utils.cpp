@@ -214,39 +214,7 @@ void c_do_bound_pt(const ParamTable& pt,
   }
 }
 
-// Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
-//                                   const std::vector<BoundSpec>& specs)
-// {
-//   using Rcpp::LogicalVector;
-//   using Rcpp::NumericMatrix;
-//
-//   const NumericMatrix& base = pt.base;
-//   const int nrows = base.nrow();
-//
-//   LogicalVector result(nrows, true);
-//
-//   for (std::size_t j = 0; j < specs.size(); ++j) {
-//     const BoundSpec& bs = specs[j];
-//     const int col_idx   = bs.col_idx;   // MUST be a base-column index
-//     const double min_v  = bs.min_val;
-//     const double max_v  = bs.max_val;
-//     const bool has_exc  = bs.has_exception;
-//     const double exc_val= bs.exception_val;
-//
-//     for (int i = 0; i < nrows; ++i) {
-//       const double val = base(i, col_idx);
-//       bool ok = (val > min_v && val < max_v);
-//       if (!ok && has_exc) {
-//         ok = (val == exc_val);
-//       }
-//       if (result[i] && !ok) {
-//         result[i] = false;
-//       }
-//     }
-//   }
-//
-//   return result;
-// }
+
 
 // ---------------------
 // c_do_transform_pt (ParamTable version)

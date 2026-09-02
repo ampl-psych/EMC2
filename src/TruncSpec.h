@@ -20,6 +20,7 @@ struct TruncSpec {
   int n_trials  = 0;
   int n_acc     = 0;
   std::vector<bool> participating;  // length n_rows, false if missingness==0
+  // TO-DO: Apply same logic to censoring -- non-participating rows do *not* contribute to censored likelihoods
 
   // Working buffers — length n_rows, filled by fill_truncate calls
   mutable std::vector<double> p_lower;   // S_k(LT - t0) per accumulator row
