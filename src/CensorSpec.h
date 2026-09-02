@@ -72,7 +72,7 @@ struct CensorSpec {
 CensorSpec make_censor_spec(const Rcpp::DataFrame& data,
                             int n_trials,
                             int n_acc,
-                            const RaceModelSetup& setup,
+                            const RaceModelSetup* setup,
                             const ParamTable& pt,
                             RaceScratch& scratch);
 

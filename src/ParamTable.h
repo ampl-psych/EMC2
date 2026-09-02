@@ -77,6 +77,7 @@ struct ParamTable {
     pt.active_cols              = active_cols;
     pt.is_active                = is_active;
     pt.design_plan              = design_plan;
+    pt.col_is_constant          = col_is_constant;
     pt.rebuild_name_map();
     return pt;
   }

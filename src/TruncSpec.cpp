@@ -69,7 +69,7 @@ void TruncSpec::calculate_normalization_constant() const
 TruncSpec make_trunc_spec(const DataFrame& data,
                           int n_trials,
                           int n_acc,
-                          const RaceModelSetup& setup,
+                          const RaceModelSetup* setup,
                           const ParamTable& pt,
                           RaceScratch& scratch)
 {
@@ -77,7 +77,7 @@ TruncSpec make_trunc_spec(const DataFrame& data,
   trunc.n_trials = n_trials;
   trunc.n_acc    = n_acc;
   trunc.n_rows   = n_trials * n_acc;
-  trunc.setup    = &setup;
+  trunc.setup    = setup;
   trunc.pt       = &pt;
   trunc.scratch  = &scratch;
 

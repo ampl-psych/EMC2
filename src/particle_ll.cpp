@@ -735,8 +735,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       auto [n_dbl, n_int] = race_scratch_slots(type);
       scratch.reserve(n_dbl, n_int, n_rows);
 
-      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
-      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch);
+      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, &setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
+      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, &setup, ctx.param_table, scratch);
 
       if (type == "DDM") {
         IntegerVector R      = data["R"];
@@ -805,7 +805,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 }
 
 
-
 // [[Rcpp::export]]
 NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame data,
                                     NumericVector constants, List designs, String type,
@@ -815,14 +814,13 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                     bool return_trialwise = false,
                                     int n_threads = -1) {
 
-  // Only race models are parallelised for now; all others fall back to serial calc_ll
-  const bool is_race = (//type != "DDM"            &&
-    type != "ORDERED_PROBIT"  &&
-      type != "ORDERED_LOGIT"   &&
-      type != "MULTINOMIAL_LOGIT" &&
-      type != "MRI"             &&
-      type != "MRI_AR1");
-  if (!is_race) {
+  // Non-race/DDM models fall back to serial calc_ll
+  const bool is_choice_rt = (type != "ORDERED_PROBIT"    &&
+                             type != "ORDERED_LOGIT"     &&
+                             type != "MULTINOMIAL_LOGIT" &&
+                             type != "MRI"               &&
+                             type != "MRI_AR1");
+  if (!is_choice_rt) {
     return calc_ll(particle_matrix, data, constants, designs, type, bounds,
                    transforms, pretransforms, p_types, min_ll, trend,
                    return_trialwise);
@@ -842,16 +840,17 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 #endif
 
   // ---------------------------------------------------------------------------
-  // Shared setup (identical to calc_ll)
+  // Shared setup
   // ---------------------------------------------------------------------------
-  const int n_particles     = particle_matrix.nrow();
-  const int n_rows        = data.nrow();
-  const bool has_lR         = (sum(contains(data.names(), "lR")) == 1);
-  const int n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
-  const int n_choice_trials = n_rows / n_lR;
-  const int out_rows        = return_trialwise ? n_choice_trials : 1;
+  const int  n_particles     = particle_matrix.nrow();
+  const int  n_rows          = data.nrow();
+  const bool has_lR          = (sum(contains(data.names(), "lR")) == 1);
+  const int  n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int  n_choice_trials = n_rows / n_lR;
+  const int  out_rows        = return_trialwise ? n_choice_trials : 1;
 
   NumericMatrix result(out_rows, n_particles);
+  double* result_ptr = result.begin();
 
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
                                               designs, transforms, pretransforms, trend);
@@ -861,229 +860,174 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   CharacterVector mm_names = colnames(minmax);
   std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names,
                                                            ctx.param_table, bounds);
-
   PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
                                             ctx.transform_specs, trend_runtime_ptr);
 
-  // Pre-initialise design_plan to avoid lazy-init race inside map_from_designs
-  // ctx.param_table.init_design_plan(designs);
+  // ---------------------------------------------------------------------------
+  // Read-only shared data — extracted before parallel region
+  // ---------------------------------------------------------------------------
+  IntegerVector expand  = data.attr("expand");
+  const int     n_exp   = expand.size();
+  const int*    exp_ptr = expand.begin();
 
-  // Always needed - per-thread clones of paramtable and trend runtimes
+  NumericVector rts     = data["rt"];
+  const double* rts_ptr = rts.begin();
+
+  // Missingness
+  IntegerVector missingness;
+  const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
+  if (has_missingness) missingness = data["missingness"];
+
+  // Winner flag (DDM has no winner column)
+  const bool has_winner = (sum(contains(data.names(), "winner")) == 1);
+  LogicalVector winner;
+  int* win_flag = nullptr;
+  if (has_winner) {
+    winner   = data["winner"];
+    win_flag = LOGICAL(winner);
+  }
+
+  // Index lists — built once, shared (read-only) across threads
+  std::vector<int> idx_all, idx_win, idx_los, idx_bounds;
+  idx_all.reserve(n_rows); idx_bounds.reserve(n_rows);
+  if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
+  for (int i = 0; i < n_rows; ++i) {
+    if (has_missingness && !IntegerVector::is_na(missingness[i])) {
+      if (missingness[i] > 0) idx_bounds.push_back(i);
+      continue;
+    }
+    idx_all.push_back(i);
+    idx_bounds.push_back(i);
+    if (has_winner) {
+      if (win_flag[i]) idx_win.push_back(i);
+      else             idx_los.push_back(i);
+    }
+  }
+
+  // DDM-specific
+  IntegerVector R_vec;
+  const int*    Rs_ptr = nullptr;
+  if (type == "DDM") {
+    R_vec   = data["R"];
+    Rs_ptr  = R_vec.begin();
+  }
+
+  // Race/DDM model setup — built from particle 0, read-only in parallel loop
+  RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+  auto [n_dbl, n_int]  = race_scratch_slots(type);
+
+  // Build censor/trunc from a temporary scratch (structure only, not per-particle values)
+  RaceScratch scratch_tmp;
+  scratch_tmp.reserve(n_dbl, n_int, n_rows);
+  CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, &setup,
+                                       ctx.param_table, scratch_tmp);
+  TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, &setup,
+                                       ctx.param_table, scratch_tmp);
+
+  // ---------------------------------------------------------------------------
+  // Per-thread mutable state
+  // ---------------------------------------------------------------------------
   std::vector<ParamTable>                    pt_vec;
   std::vector<std::unique_ptr<TrendRuntime>> tr_vec;
   pt_vec.reserve(n_threads_used);
   tr_vec.reserve(n_threads_used);
+
+  std::vector<RaceScratch>         scratch_vec(n_threads_used);
+  std::vector<std::vector<double>> ll_buf_vec  (n_threads_used, std::vector<double>(n_choice_trials, 1.0));
+  std::vector<std::vector<double>> ll_row_vec  (n_threads_used, std::vector<double>(n_rows,          1.0));
+  std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
+  std::vector<std::vector<int>>    is_ok_vec   (n_threads_used, std::vector<int>   (n_rows,          1));
+  std::vector<CensorSpec>          censor_vec  (n_threads_used, censor);
+  std::vector<TruncSpec>           trunc_vec   (n_threads_used, trunc);
+  std::vector<std::vector<double>> tw_vec      (n_threads_used,
+                                                std::vector<double>(return_trialwise ? n_choice_trials : 0));
+
   for (int t = 0; t < n_threads_used; ++t) {
     pt_vec.push_back(ctx.param_table.deep_copy());
-    if (ctx.trend_runtime) {
+    if (ctx.trend_runtime)
       tr_vec.push_back(std::make_unique<TrendRuntime>(
-          clone_trend_runtime(*ctx.trend_runtime, pt_vec.back())
-      ));
-    } else {
+          clone_trend_runtime(*ctx.trend_runtime, pt_vec.back())));
+    else
       tr_vec.push_back(nullptr);
-    }
+    scratch_vec[t].reserve(n_dbl, n_int, n_rows);
+    censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
+    trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
   }
 
-  // Raw pointer to result data — safe to write column i from thread i
-  double* result_ptr = result.begin();
-
-  if(type == "DDM") {
-    // DDM shared setup — extracted once, read-only in parallel loop
-    NumericVector rts     = data["rt"];
-    const double* rts_ptr = rts.begin();
-    IntegerVector R_vec   = data["R"];
-    const int*    Rs_ptr  = R_vec.begin();
-
-    IntegerVector missingness;
-    const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
-    if (has_missingness) missingness = data["missingness"];
-
-    std::vector<int> idx_all;
-    idx_all.reserve(n_rows);
-    for (int i = 0; i < n_rows; ++i) {
-      if (has_missingness && !IntegerVector::is_na(missingness[i])) continue;
-      idx_all.push_back(i);
-    }
-
-    RaceModelSetup setup = make_race_setup(type, ctx.param_table);
-    RaceScratch    scratch_tmp;
-    auto [n_dbl, n_int] = race_scratch_slots(type);
-    scratch_tmp.reserve(n_dbl, n_int, n_rows);
-    CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
-    TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
-
-    std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
-    std::vector<std::vector<int>>    is_ok_vec(n_threads_used,    std::vector<int>(n_rows, 1));
-    std::vector<std::vector<double>> tw_vec(n_threads_used,
-                                            std::vector<double>(return_trialwise ? n_choice_trials : 0));
-    std::vector<RaceScratch>  scratch_vec(n_threads_used);  // DDM doesn't use scratch but rebind needs it
-    std::vector<TruncSpec>  trunc_vec(n_threads_used, trunc);
-    std::vector<CensorSpec> censor_vec(n_threads_used, censor);
-    for (int t = 0; t < n_threads_used; ++t) {
-      scratch_vec[t].reserve(n_dbl, n_int, n_rows);
-      censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
-      trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
-    }
-
-    IntegerVector expand   = data.attr("expand");
-    const int     n_exp    = expand.size();
-    const int*    exp_ptr  = expand.begin();
-
+  // ---------------------------------------------------------------------------
+  // Particle loop
+  // ---------------------------------------------------------------------------
 #pragma omp parallel for schedule(static) num_threads(n_threads_used)
-    for (int i = 0; i < n_particles; ++i) {
+  for (int i = 0; i < n_particles; ++i) {
 #ifdef _OPENMP
-      const int tid = omp_get_thread_num();
+    const int tid = omp_get_thread_num();
 #else
-      const int tid = 0;
+    const int tid = 0;
 #endif
-      ParamTable&          pt_local = pt_vec[tid];
-      TrendRuntime*        tr_local = tr_vec[tid].get();
-      std::vector<double>& ll_trial = ll_trial_vec[tid];
-      std::vector<int>&    is_ok    = is_ok_vec[tid];
-      CensorSpec&    censor_local   = censor_vec[tid];
-      TruncSpec&     trunc_local    = trunc_vec[tid];
 
-      pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(pt_local, tr_local, cache);
+    ParamTable&          pt_local     = pt_vec[tid];
+    TrendRuntime*        tr_local     = tr_vec[tid].get();
+    RaceScratch&         scratch      = scratch_vec[tid];
+    std::vector<double>& ll_buf       = ll_buf_vec[tid];
+    std::vector<double>& ll_row       = ll_row_vec[tid];
+    std::vector<double>& ll_trial     = ll_trial_vec[tid];
+    std::vector<int>&    is_ok        = is_ok_vec[tid];
+    CensorSpec&          censor_local = censor_vec[tid];
+    TruncSpec&           trunc_local  = trunc_vec[tid];
 
-      c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_trial.data());
+    pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+    run_pars_pipeline(pt_local, tr_local, cache);
 
-      if(trunc_local.any()) trunc_local.calculate_normalization_constant();
-      if(censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
-      if(trunc_local.any()) for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
+    if (type == "DDM") {
+      // 1) Likelihood
+      std::fill(ll_buf.begin(), ll_buf.end(), 1.0);
+      c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_buf.data());
 
-      std::fill(is_ok.begin(), is_ok.end(), 1);
-      c_do_bound_pt(pt_local, bound_specs, is_ok);
-      for (int t = 0; t < n_choice_trials; ++t) if (!is_ok[t]) ll_trial[t] = min_ll;
+      // 2) Truncation / censoring
+      if (trunc_local.any())  trunc_local.calculate_normalization_constant();
+      if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_buf, min_ll);
+      if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_buf[t] -= trunc_local.log_Z[t];
 
+      // 3) Bounds
+      apply_bounds(pt_local, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /*n_lR=*/1, min_ll, &idx_bounds);
+
+      // 4) Output
       if (return_trialwise) {
         std::vector<double>& tw = tw_vec[tid];
-        expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
-        double* col = result_ptr + (ptrdiff_t)i * out_rows;
-        std::copy(tw.begin(), tw.end(), col);
+        expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw.data());
+        std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
       } else {
-        const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
-        result_ptr[i] = sum;
+        result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
       }
-    }
-  } else {
-    // ---------------------------------------------------------------------------
-    // Race-specific shared setup
-    // ---------------------------------------------------------------------------
-    // Extract raw pointers from Rcpp vectors BEFORE the parallel region —
-    // no Rcpp types are touched inside the parallel loop.
-    IntegerVector expand   = data.attr("expand");
-    const int     n_exp    = expand.size();
-    const int*    exp_ptr  = expand.begin();
-    NumericVector rts    = data["rt"];
-    const double* rts_ptr = rts.begin();
-    LogicalVector winner  = data["winner"];
-    const int*    win_flag = LOGICAL(winner);
 
-    NumericVector lR     = data["lR"];
-
-    // missingness handling
-    IntegerVector missingness;
-    const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
-    if (has_missingness) missingness = data["missingness"];
-
-    std::vector<int> idx_win, idx_los;
-    idx_win.reserve(n_rows);
-    idx_los.reserve(n_rows);
-    for (int i = 0; i < n_rows; ++i) {
-      if(has_missingness && !IntegerVector::is_na(missingness[i])) continue;  // handled by censor
-      if(win_flag[i]) {
-        idx_win.push_back(i);
-      } else {
-        idx_los.push_back(i);
-      }
-    }
-
-    RaceModelSetup setup = make_race_setup(type, ctx.param_table);
-    RaceScratch scratch_tmp;
-    auto [n_dbl, n_int] = race_scratch_slots(type);
-    scratch_tmp.reserve(n_dbl, n_int, n_rows);
-    CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
-    TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, setup, ctx.param_table, scratch_tmp);
-
-    // Per-thread scratch — all plain std::vector, no Rcpp types
-    std::vector<RaceScratch>         scratch_vec(n_threads_used);
-    std::vector<std::vector<double>> ll_row_vec(n_threads_used,   std::vector<double>(n_rows, 1.0));
-    std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
-    std::vector<std::vector<int>>    is_ok_vec(n_threads_used,    std::vector<int>(n_rows, 1));
-    // trialwise output buffer — written then copied to result, avoiding Rcpp inside loop
-    std::vector<std::vector<double>> tw_vec(n_threads_used,
-                                            std::vector<double>(return_trialwise ? n_choice_trials : 0));
-    std::vector<TruncSpec> trunc_vec(n_threads_used, trunc);
-    std::vector<CensorSpec> censor_vec(n_threads_used, censor);
-    for (int t = 0; t < n_threads_used; ++t) {
-      scratch_vec[t].reserve(n_dbl, n_int, n_rows);
-      censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
-      trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
-    }
-
-    // #pragma omp parallel for schedule(dynamic, 4) num_threads(n_threads_used)
-#pragma omp parallel for schedule(static) num_threads(n_threads_used)
-    for (int i = 0; i < n_particles; ++i) {
-#ifdef _OPENMP
-      const int tid = omp_get_thread_num();
-#else
-      const int tid = 0;
-#endif
-
-      ParamTable&          pt_local  = pt_vec[tid];
-      TrendRuntime*        tr_local  = tr_vec[tid].get();
-      RaceScratch&         scratch   = scratch_vec[tid];
-      std::vector<double>& ll_row    = ll_row_vec[tid];
-      std::vector<double>& ll_trial  = ll_trial_vec[tid];
-      std::vector<int>&    is_ok     = is_ok_vec[tid];
-      CensorSpec& censor_local = censor_vec[tid];
-      TruncSpec&  trunc_local  = trunc_vec[tid];
-
-      pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-      run_pars_pipeline(pt_local, tr_local, cache);
-
-      std::fill(ll_row.begin(),   ll_row.end(),   1.0);
-      std::fill(is_ok.begin(),    is_ok.end(),    1);
-
+    } else {
+      // 1) Likelihood
+      std::fill(ll_row.begin(), ll_row.end(), 1.0);
       c_log_likelihood_race(pt_local, setup, rts_ptr,
                             idx_win, idx_los, n_lR,
                             ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
-      // truncation
-      if (trunc_local.any()) trunc_local.calculate_normalization_constant();
+      // 2) Truncation / censoring
+      if (trunc_local.any())  trunc_local.calculate_normalization_constant();
       if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
-      if(trunc_local.any()) for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
+      if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
 
-      c_do_bound_pt(pt_local, bound_specs, is_ok);
-      lr_all(is_ok, n_lR);                             // make sure the ok value is shared across accumulators / levels or lR
-      for (int t = 0; t < (int)idx_win.size(); ++t) if(!is_ok[idx_win[t]]) ll_trial[idx_win[t] / n_lR] = min_ll;
-      // for(int t=0; t < n_choice_trials; t++) {
-      //   for(int k=0; k < n_lR; k++) {
-      //     if(!is_ok[t * n_lR + k]) {
-      //       // set to min_ll and move to next trial - any subsequent !is_ok checks are unnecessary
-      //       ll_trial[t] = min_ll;
-      //       break;  // no need to check remaining accumulators for this trial
-      //     }
-      //   }
-      // }
+      // 3) Bounds
+      apply_bounds(pt_local, bound_specs, is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
 
+      // 4) Output
       if (return_trialwise) {
         std::vector<double>& tw = tw_vec[tid];
         expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
-        // Write trialwise column i into result — raw pointer, no Rcpp
-        double* col = result_ptr + (ptrdiff_t)i * out_rows;
-        std::copy(tw.begin(), tw.end(), col);
+        std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
       } else {
-        const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
-        result_ptr[i] = sum;  // out_rows == 1, column i is just element i
+        result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
       }
     }
   }
 
   return result;
 }
-
 
 
 // [[Rcpp::export]]

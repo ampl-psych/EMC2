@@ -138,7 +138,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
 CensorSpec make_censor_spec(const DataFrame& data,
                             int n_trials,
                             int n_acc,
-                            const RaceModelSetup& setup,
+                            const RaceModelSetup* setup,
                             const ParamTable& pt,
                             RaceScratch& scratch)
 {
@@ -146,7 +146,7 @@ CensorSpec make_censor_spec(const DataFrame& data,
   censor.n_trials = n_trials;
   censor.n_acc    = n_acc;
   censor.n_rows   = n_trials * n_acc;
-  censor.setup    = &setup;
+  censor.setup    = setup;
   censor.pt       = &pt;
   censor.scratch  = &scratch;
 
