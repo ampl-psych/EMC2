@@ -137,5 +137,20 @@ inline MRISpec make_mri_spec(const ParamTable& pt,
   return spec;
 }
 
+inline ChoiceOnlySpec make_choice_only_spec(const ParamTable&      pt,
+                                            const std::string&     type)
+{
+  ChoiceOnlySpec spec;
+
+  if (type == "MULTINOMIAL_LOGIT") {
+    spec.col_utility = pt.base_index_for("utility");
+  } else {
+    spec.col_location = pt.base_index_for("location");
+    spec.col_scale    = pt.base_index_for("scale");
+    spec.col_cut      = pt.base_index_for("cut");
+  }
+  return spec;
+}
+
 
 #endif // RACE_SETUP_H

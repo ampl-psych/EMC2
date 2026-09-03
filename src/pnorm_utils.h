@@ -359,9 +359,16 @@ namespace pnorm_detail {
   return fast_dnorm_std((x - mean) / sd) / sd;
 }
 
-} // namespace pnorm_detail
+[[gnu::always_inline]] inline double fast_log_dnorm(double x, double mean, double sd)
+{
+  constexpr double LOG_INV_SQRT_2PI = -0.9189385332046727;  // log(1/sqrt(2pi))
+  const double z = (x - mean) / sd;
+  return LOG_INV_SQRT_2PI - std::log(sd) - 0.5 * z * z;
+}
 
+} // namespace pnorm_detail
 #define DNORM_STD(x)          pnorm_detail::fast_dnorm_std((x))
 #define DNORM(x, mean, sd)    pnorm_detail::fast_dnorm((x), (mean), (sd))
+#define LOG_DNORM(x, mean, sd)  pnorm_detail::fast_log_dnorm((x), (mean), (sd))
 
 #endif // PNORM_UTILS_H

@@ -25,6 +25,15 @@ struct RaceSpec {
   int col_sigma = -1;
 };
 
+// Choice-only models
+struct ChoiceOnlySpec {
+  // ParamTable column indices
+  int col_location = -1;
+  int col_scale    = -1;
+  int col_cut      = -1;
+  int col_utility  = -1;
+};
+
 // Same but for MRI models (not strictly a race model but still)
 struct MRISpec {
   int col_sigma;               // last column

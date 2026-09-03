@@ -69,15 +69,17 @@ void TruncSpec::calculate_normalization_constant() const
 TruncSpec make_trunc_spec(const DataFrame& data,
                           int n_trials,
                           int n_acc,
+                          std::vector<bool>& participating,
                           const RaceModelSetup* setup,
                           const ParamTable& pt,
                           RaceScratch& scratch)
 {
   TruncSpec trunc;
-  trunc.n_trials = n_trials;
-  trunc.n_acc    = n_acc;
-  trunc.n_rows   = n_trials * n_acc;
-  trunc.setup    = setup;
+  trunc.n_trials      = n_trials;
+  trunc.n_acc         = n_acc;
+  trunc.n_rows        = n_trials * n_acc;
+  trunc.setup         = setup;
+  trunc.participating = participating;
   trunc.pt       = &pt;
   trunc.scratch  = &scratch;
 
@@ -127,17 +129,6 @@ TruncSpec make_trunc_spec(const DataFrame& data,
         trunc.UT[row] = ut;
         trunc.idx_UT.push_back(row);
       }
-    }
-  }
-
-  // Check missingness - only participating rows should contribute to normalization correction
-  trunc.participating.assign(trunc.n_rows, true);
-  const bool has_missingness = std::find(names.begin(), names.end(), "missingness") != names.end();
-  if (has_missingness) {
-    IntegerVector missingness = data["missingness"];
-    for (int row = 0; row < trunc.n_rows; ++row) {
-      if (!IntegerVector::is_na(missingness[row]) && missingness[row] == 0)
-        trunc.participating[row] = false;
     }
   }
 

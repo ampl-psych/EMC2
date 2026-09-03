@@ -23,6 +23,7 @@ struct CensorSpec {
   std::vector<int> idx_L_known;      std::vector<int> winner_L_known;
   std::vector<int> idx_U_known;      std::vector<int> winner_U_known;
   std::vector<int> idx_B_known;      std::vector<int> winner_B_known;
+  std::vector<bool> participating;
 
   // Upper limit of integration for censoring
   double CENS_UPPER_CAP = 30.0;
@@ -72,6 +73,7 @@ struct CensorSpec {
 CensorSpec make_censor_spec(const Rcpp::DataFrame& data,
                             int n_trials,
                             int n_acc,
+                            const std::vector<bool>& participating,
                             const RaceModelSetup* setup,
                             const ParamTable& pt,
                             RaceScratch& scratch);

@@ -39,17 +39,19 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     const int base = row * n_acc;
     double prod_LC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
+      if (!participating[base + k]) continue;  // skip non-participating accumulator
       prod_LC *= p_lower[base + k];
     }
     const double p = trunc.S_lower[row] - prod_LC; // P(LT <= T <= LC) = S_RACE(LT) - S_RACE(LC)
     ll_trial[row] = std::log(clamp(p));
-    }
+  }
 
   // Upper censoring
   for(int row : idx_U_tr) {
     const int base = row * n_acc;
     double prod_UC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
+      if (!participating[base + k]) continue;  // skip non-participating accumulator
       prod_UC *= p_upper[base + k];
     }
     const double p = prod_UC - trunc.S_upper[row]; // P(UC <= T <= UT) = S_RACE(UC) - S_RACE(UT)
@@ -61,6 +63,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     const int base = row * n_acc;
     double prod_LC = 1.0, prod_UC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
+      if (!participating[base + k]) continue;  // skip non-participating accumulator
       prod_UC *= p_upper[base + k];
       prod_LC *= p_lower[base + k];
     }
@@ -93,8 +96,8 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     const int n = (int)idx_U_known.size();
     for (int j = 0; j < n; ++j) {
       const int base = idx_U_known[j];
-      lo_U[j] = UC[base];
       // Don't integrate to inf but to CENS_UPPER_CAP
+      lo_U[j] = UC[base];
       hi_U[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
     }
     setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo_U, hi_U,
@@ -138,6 +141,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
 CensorSpec make_censor_spec(const DataFrame& data,
                             int n_trials,
                             int n_acc,
+                            const std::vector<bool>& participating,
                             const RaceModelSetup* setup,
                             const ParamTable& pt,
                             RaceScratch& scratch)
@@ -147,6 +151,7 @@ CensorSpec make_censor_spec(const DataFrame& data,
   censor.n_acc    = n_acc;
   censor.n_rows   = n_trials * n_acc;
   censor.setup    = setup;
+  censor.participating = participating;
   censor.pt       = &pt;
   censor.scratch  = &scratch;
 

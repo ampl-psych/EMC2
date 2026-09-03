@@ -10,7 +10,7 @@ using std::string;
 // make_transform_specs (NumericMatrix)
 // ---------------------
 
-std::vector<TransformSpec> make_transform_specs_matrix(const NumericMatrix& pars, const List& transform) {
+std::vector<TransformSpec> make_transform_specs(const NumericMatrix& pars, const List& transform) {
     CharacterVector func_charvec = transform["func"];
     NumericVector   lower_numvec = transform["lower"];
     NumericVector   upper_numvec = transform["upper"];
@@ -73,10 +73,10 @@ std::vector<TransformSpec> make_transform_specs_matrix(const NumericMatrix& pars
 
 
 // ---------------------
-// make_transform_specs_pt
+// make_transform_specs
 // ---------------------
 
-std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const List& transform) {
+std::vector<TransformSpec> make_transform_specs(const ParamTable& pt, const List& transform) {
     CharacterVector func_charvec = transform["func"];
     NumericVector lower_numvec   = transform["lower"];
     NumericVector upper_numvec   = transform["upper"];
@@ -141,7 +141,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
 // c_do_transform (NumericMatrix)
 // ---------------------
 
-NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<TransformSpec>& specs) {
+NumericMatrix c_do_transform(NumericMatrix pars, const std::vector<TransformSpec>& specs) {
   int nrow = pars.nrow();
 
   for (size_t j = 0; j < specs.size(); j++) {
@@ -176,9 +176,9 @@ NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<Transf
 
 
 // void, pass result to avoid repeated allocation
-void c_do_bound_pt(const ParamTable& pt,
-                   const std::vector<BoundSpec>& specs,
-                   std::vector<int>& result)
+void c_do_bound(const ParamTable& pt,
+                const std::vector<BoundSpec>& specs,
+                std::vector<int>& result)
 {
   const Mat base = pt.base;
   const int nrows = base.nrow;
@@ -217,10 +217,10 @@ void c_do_bound_pt(const ParamTable& pt,
 
 
 // ---------------------
-// c_do_transform_pt (ParamTable version)
+// c_do_transform (ParamTable version)
 // ---------------------
 
-void c_do_transform_pt(ParamTable& pt,
+void c_do_transform(ParamTable& pt,
                   const std::vector<TransformSpec>& specs)
 {
   const int nrow = pt.n_trials;
@@ -308,10 +308,10 @@ std::vector<TransformSpec> complement_specs_for_premap(
 
 
 // Same logic as above, but with a ParamTable instead of NumericMatrix
-std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
-                                           Rcpp::CharacterVector minmax_colnames,
-                                           const ParamTable& pt,
-                                           Rcpp::List bound)
+std::vector<BoundSpec> make_bound_specs(Rcpp::NumericMatrix minmax,
+                                        Rcpp::CharacterVector minmax_colnames,
+                                        const ParamTable& pt,
+                                        Rcpp::List bound)
 {
   using namespace Rcpp;
   using std::string;

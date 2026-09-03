@@ -175,8 +175,8 @@ PipelineContext make_pipeline_context(
   PipelineContext ctx;
 
   // 1. Pre-transform
-  std::vector<TransformSpec> t_specs = make_transform_specs_matrix(particle_matrix, pretransforms);
-  ctx.particle_matrix = c_do_transform_matrix(particle_matrix, t_specs);
+  std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
+  ctx.particle_matrix = c_do_transform(particle_matrix, t_specs);
 
   // 2. Append constants
   bool has_constants = !(constants.size() == 1 && Rcpp::NumericVector::is_na(constants[0]));
@@ -190,7 +190,7 @@ PipelineContext make_pipeline_context(
   ctx.param_table = ParamTable::from_p_vector_and_designs(p_vector, designs, data.nrow());
 
   // 4. Transform specs
-  ctx.transform_specs = make_transform_specs_pt(ctx.param_table, transforms);
+  ctx.transform_specs = make_transform_specs(ctx.param_table, transforms);
 
   // 5. Trend objects and keep_names
   if (!trend.isNull()) {
@@ -223,9 +223,9 @@ PipelineContext make_pipeline_context(
 // [[Rcpp::export]]
 Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform) {
   // Build the specs for these parameters
-  std::vector<TransformSpec> specs = make_transform_specs_matrix(pars, transform);
+  std::vector<TransformSpec> specs = make_transform_specs(pars, transform);
   // Apply transformation in place and return
-  return c_do_transform_matrix(pars, specs);
+  return c_do_transform(pars, specs);
 }
 
 
@@ -247,7 +247,7 @@ void run_pars_pipeline(ParamTable&          param_table,
     param_table.map_from_designs(cache.mask_premap);
     param_table.map_from_designs(cache.mask_premap_reparam);
     if (!cache.premap_specs.empty()) {
-      c_do_transform_pt(param_table, cache.premap_specs);
+      c_do_transform(param_table, cache.premap_specs);
     }
     for (BaseRuntime& base : trend_runtime->premap_bases) {
       trend_runtime->apply_base(base, param_table);
@@ -261,7 +261,7 @@ void run_pars_pipeline(ParamTable&          param_table,
   // 3) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_pretransform()) {
     if (!cache.pretransform_specs.empty()) {
-      c_do_transform_pt(param_table, cache.pretransform_specs);
+      c_do_transform(param_table, cache.pretransform_specs);
     }
     for (BaseRuntime& base : trend_runtime->pretransform_bases) {
       trend_runtime->apply_base(base, param_table);
@@ -269,7 +269,7 @@ void run_pars_pipeline(ParamTable&          param_table,
   }
 
   // 4) Transforms for all parameters excluding trend pars used so far
-  c_do_transform_pt(param_table, cache.postmap_specs);
+  c_do_transform(param_table, cache.postmap_specs);
 
   // 5) Posttransform trends
   if (trend_runtime && trend_runtime->has_posttransform()) {
@@ -306,46 +306,44 @@ NumericMatrix get_covariate_matrix(ParamTable& param_table,
   return trend_runtime->all_kernel_outputs(param_table, codes);
 }
 
+// ---------------------------------------------------------------------------
+// c_expand_ordered_cut — raw double arrays, no Rcpp, safe in parallel
+// cut_in / cut_out both length n_rows = n_trials * n_lR
+// ---------------------------------------------------------------------------
+inline void c_expand_ordered_cut(const double* __restrict__ cut_in,
+                                 double* __restrict__       cut_out,
+                                 int n_rows,
+                                 int n_lR)
+{
+  const int n_trials = n_rows / n_lR;
 
-// Helper functions for ordered choice models
-int c_col_index(const CharacterVector& names, const std::string& target) {
-  for (int i = 0; i < names.size(); ++i) {
-    if (Rcpp::as<std::string>(names[i]) == target) return i;
-  }
-  stop("Column not found: " + target);
-}
-
-NumericVector c_expand_ordered_cut(NumericVector raw_cut, int n_lR) {
-  if (raw_cut.size() % n_lR != 0) {
-    stop("cut vector length must be divisible by the number of response levels");
-  }
-
-  NumericVector cut = clone(raw_cut);
-  const int n_trials = cut.size() / n_lR;
-
-  for (int trial = 0; trial < n_trials; ++trial) {
-    const int base = trial * n_lR;
-    if (n_lR == 2) {
-      cut[base + 1] = cut[base];
-      continue;
+  if (n_lR == 2) {
+    for (int t = 0; t < n_trials; ++t) {
+      const int base  = t * n_lR;
+      cut_out[base]   = cut_in[base];
+      cut_out[base+1] = cut_in[base];
     }
+    return;
+  }
 
-    double current = cut[base];
+  for (int t = 0; t < n_trials; ++t) {
+    const int base = t * n_lR;
+    double current = cut_in[base];
+    cut_out[base]  = current;
     for (int r = 1; r < n_lR - 1; ++r) {
-      current += std::exp(raw_cut[base + r]);
-      cut[base + r] = current;
+      current          += std::exp(cut_in[base + r]);
+      cut_out[base + r] = current;
     }
-    cut[base + n_lR - 1] = cut[base + n_lR - 2];
+    cut_out[base + n_lR - 1] = cut_out[base + n_lR - 2];
   }
-
-  return cut;
 }
 
 double c_ordered_cdf(double x, double location, double scale, bool probit) {
   if (x == R_NegInf) return 0.0;
   if (x == R_PosInf) return 1.0;
-  if (probit) return R::pnorm(x, location, scale, true, false);
-  return R::plogis(x, location, scale, true, false);
+  if (probit) return PNORM_STD((x - location) / scale, true, false);
+  const double z = (x - location) / scale;
+  return 1.0 / (1.0 + std::exp(-z));
 }
 
 // =============================================================================
@@ -395,43 +393,28 @@ inline double clamp_sum(const double* ll_ptr, const int n, const double min_ll,
 }
 
 // is_ok handling - shared by all models
-inline void apply_bounds(const ParamTable&             pt,
-                         const std::vector<BoundSpec>& bound_specs,
-                         std::vector<int>&             is_ok,
+inline void apply_bounds(std::vector<int>&             is_ok,
                          double*                       ll,
                          int                           n_trials,
                          int                           n_lR,
                          double                        min_ll,
-                         const std::vector<int>*       idx = nullptr)
+                         const std::vector<bool>&      participating)   // length n_rows, all true if no missingness
 {
-  c_do_bound_pt(pt, bound_specs, is_ok);
-
   if (n_lR == 1) {
-    // can be vectorised by the compiler
-    if (idx) {
 #pragma omp simd
-      for (int t = 0; t < (int)idx->size(); ++t)
-        if (!is_ok[(*idx)[t]]) ll[(*idx)[t]] = min_ll;
-    } else {
-#pragma omp simd
-      for (int t = 0; t < n_trials; ++t)
-        if (!is_ok[t]) ll[t] = min_ll;
-    }
+    for (int t = 0; t < n_trials; ++t)
+      ll[t] = (!is_ok[t] && participating[t]) ? min_ll : ll[t];
+
   } else {
-    // cannot be vectorised due to strided access and early break
-    if (idx) {
-      for (int t : *idx) {
-        const int trial = t / n_lR;
-        for (int k = 0; k < n_lR; ++k)
-          if (!is_ok[trial * n_lR + k]) { ll[trial] = min_ll; break; }
+    for (int t = 0; t < n_trials; ++t)
+      for (int k = 0; k < n_lR; ++k) {
+        const int row = t * n_lR + k;
+        if (!participating[row]) continue;
+        if (!is_ok[row]) { ll[t] = min_ll; break; }
       }
-    } else {
-      for (int t = 0; t < n_trials; ++t)
-        for (int k = 0; k < n_lR; ++k)
-          if (!is_ok[t * n_lR + k]) { ll[t] = min_ll; break; }
-    }
   }
 }
+
 
 // =============================================================================
 // Likelihood functions — Call within calc_ll branches
@@ -484,59 +467,60 @@ void c_log_likelihood_DDM(const double* rts,
            ll_row);
 }
 
-void c_log_likelihood_ordered(NumericMatrix pars, DataFrame data,
-                              const int n_lR,    // std::vector<int>& is_ok,
-                              bool probit,
-                              double* ll_buf)    // size = n_winners
+inline void c_log_likelihood_ordered(const ParamTable&       pt,
+                                     const ChoiceOnlySpec&   spec,
+                                     const std::vector<int>& idx_win,
+                                     const int*              lR_ptr,
+                                     int                     n_rows,
+                                     int                     n_lR,
+                                     double* __restrict__    cut_buf,
+                                     bool                    probit,
+                                     double* __restrict__    ll_buf)
 {
-  const int loc_idx   = c_col_index(colnames(pars), "location");
-  const int scale_idx = c_col_index(colnames(pars), "scale");
-  const int cut_idx   = c_col_index(colnames(pars), "cut");
-  const LogicalVector winner = data["winner"];
-  const IntegerVector lR     = data["lR"];
-  const NumericVector cut    = c_expand_ordered_cut(pars(_, cut_idx), n_lR);
+  const double* loc_col = pt.base.colptr(spec.col_location);
+  const double* sc_col  = pt.base.colptr(spec.col_scale);
+  const double* cut_col = pt.base.colptr(spec.col_cut);
 
-  int out_idx = 0;
-  for (int i = 0; i < pars.nrow(); ++i) {
-    if (!winner[i]) continue;
+  c_expand_ordered_cut(cut_col, cut_buf, n_rows, n_lR);
 
-    const int    level    = lR[i];
-    const double location = pars(i, loc_idx);
-    const double scale    = pars(i, scale_idx);
-    const double upper    = (level == n_lR) ? R_PosInf : cut[i];
-    const double lower    = (level == 1)    ? R_NegInf : cut[i - 1];
+  const int n_winners = (int)idx_win.size();
+  for (int t = 0; t < n_winners; ++t) {
+    const int    i        = idx_win[t];
+    const int    level    = lR_ptr[i];
+    const double location = loc_col[i];
+    const double scale    = sc_col[i];
+    const double upper    = (level == n_lR) ? R_PosInf : cut_buf[i];
+    const double lower    = (level == 1)    ? R_NegInf : cut_buf[i - 1];
     const double prob     = c_ordered_cdf(upper, location, scale, probit) - c_ordered_cdf(lower, location, scale, probit);
-
-    ll_buf[out_idx++] = std::log(prob);
+    ll_buf[i/n_lR] = std::log(prob);
   }
+  // vec_log(ll_buf, n_rows);
 }
 
-void c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
-                                        const int n_lR,  // std::vector<int>& is_ok,
-                                        double* ll_buf)  // size = n_choice_trials
+inline void c_log_likelihood_multinomial_logit(const ParamTable&       pt,
+                                               const ChoiceOnlySpec&   spec,
+                                               const std::vector<int>& idx_win,
+                                               int                     n_lR,
+                                               double* __restrict__    ll_buf)
 {
-  const int utility_idx  = c_col_index(colnames(pars), "utility");
-  const LogicalVector winner = data["winner"];
-  const int n_choice_trials  = pars.nrow() / n_lR;
+  const double* util_col    = pt.base.colptr(spec.col_utility);
+  const int     n_winners   = (int)idx_win.size();
 
-  for (int trial = 0; trial < n_choice_trials; ++trial) {
-    const int base = trial * n_lR;
+  for (int t = 0; t < n_winners; ++t) {
+    const int base = (idx_win[t] / n_lR) * n_lR;  // trial base row
 
-    double max_utility = pars(base, utility_idx);
-    for (int r = 1; r < n_lR; ++r) {
-      const double v = pars(base + r, utility_idx);
-      if (v > max_utility) max_utility = v;
-    }
+    double max_u = util_col[base];
+    for (int r = 1; r < n_lR; ++r)
+      if (util_col[base + r] > max_u) max_u = util_col[base + r];
 
-    double denom = 0.0, chosen = NA_REAL;
-    for (int r = 0; r < n_lR; ++r) {
-      const double v = std::exp(pars(base + r, utility_idx) - max_utility);
-      denom += v;
-      if (winner[base + r]) chosen = v;
-    }
+    double denom = 0.0;
+    for (int r = 0; r < n_lR; ++r)
+      denom += std::exp(util_col[base + r] - max_u);
 
-    ll_buf[trial] = std::log(chosen / denom);  // -inf/nan caught by expand_clamp_sum
+    const double chosen = std::exp(util_col[idx_win[t]] - max_u);
+    ll_buf[idx_win[t] / n_lR] = std::log(chosen / denom);
   }
+
 }
 
 void c_log_likelihood_MRI_white(const ParamTable& pt,
@@ -556,8 +540,9 @@ void c_log_likelihood_MRI_white(const ParamTable& pt,
   for (int i = 0; i < n; i++) {
     double s = 0.0;
     for (int j = 0; j < nm; j++) s += mean_cols[j][i];
-    ll_buf[i] = R::dnorm(y[i], s, sigma[i], true);
+    ll_buf[i] = DNORM(y[i], s, sigma[i]);
   }
+  vec_log(ll_buf, n);
 }
 
 void c_log_likelihood_MRI_ar1(const ParamTable& pt,
@@ -577,7 +562,7 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
   // t = 0: stationary
   double s_prev = 0.0;
   for (int j = 0; j < nm; j++) s_prev += mean_cols[j][0];
-  ll_buf[0] = R::dnorm(y[0], s_prev, sigma[0], true);
+  ll_buf[0] = DNORM(y[0], s_prev, sigma[0]);
 
   // t >= 1: AR(1) conditional
   for (int i = 1; i < n; i++) {
@@ -588,9 +573,10 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
     const double cond_sd  = sigma[i] * std::sqrt(1.0 - rho_i * rho_i);
     const double cond_mean = s_curr + rho_i * (y[i - 1] - s_prev);
 
-    ll_buf[i] = R::dnorm(y[i], cond_mean, cond_sd, true);
+    ll_buf[i] = DNORM(y[i], cond_mean, cond_sd);
     s_prev = s_curr;
   }
+  vec_log(ll_buf, n);
 }
 
 // [[Rcpp::export]]
@@ -617,13 +603,14 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
                                               designs, transforms, pretransforms, trend);
   TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
+  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
+                                            ctx.transform_specs, trend_runtime_ptr);
+
   // Bounds — built once from structure
   NumericMatrix   minmax   = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
-  std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names, ctx.param_table, bounds);
-
-  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
-                                            ctx.transform_specs, trend_runtime_ptr);
+  std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, ctx.param_table, bounds);
+  std::vector<bool> participating(n_rows, true);
 
   // -----------------------------------------------------------------------
   // MRI / MRI_AR1 -- no expand, rt, R attributes
@@ -644,7 +631,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       if (is_ar1) c_log_likelihood_MRI_ar1  (ctx.param_table, spec, y, n_choice_trials, ll_buf.data());
       else        c_log_likelihood_MRI_white(ctx.param_table, spec, y, n_choice_trials, ll_buf.data());
 
-      apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll);
+      c_do_bound(ctx.param_table, bound_specs, is_ok);
+      apply_bounds(is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, participating);
 
       double* tw = return_trialwise ? result.column(i).begin() : nullptr;
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
@@ -675,19 +663,20 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     // Index lists — built once, shared across all choice models
     // idx_all: all non-missing rows (DDM, choice-only)
     // idx_win / idx_los: winner/loser split (race, and future choice-only)
-    std::vector<int> idx_all, idx_win, idx_los, idx_bounds;
-    idx_all.reserve(n_rows); idx_bounds.reserve(n_rows);
+    std::vector<int> idx_all, idx_win, idx_los;
+    idx_all.reserve(n_rows);
     if (has_winner) {
       idx_win.reserve(n_rows);
       idx_los.reserve(n_rows);
     }
     for (int i = 0; i < n_rows; ++i) {
       if (has_missingness && !IntegerVector::is_na(missingness[i])) {
-        if (missingness[i] > 0) idx_bounds.push_back(i);  // censored: bounds still apply
-        continue;                                         // but skip from likelihood - probability calculated by censorspec
+        if (missingness[i] == 0) {
+          participating[i] = false;  // ignored: bounds checking skipped entirely
+        }
+        continue;                 // but skip from likelihood - probability calculated by censorspec
       }
       idx_all.push_back(i);
-      idx_bounds.push_back(i);  // censored trials also need bound check
       if (has_winner) {
         if (win_flag[i]) idx_win.push_back(i);
         else             idx_los.push_back(i);
@@ -700,22 +689,30 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" || type == "MULTINOMIAL_LOGIT") {
       // Shared choice-only setup
       const bool is_probit = (type == "ORDERED_PROBIT");  // unused for MULTINOMIAL_LOGIT, but fine
+      Rcpp::IntegerVector lR = data["lR"];
+      const int* lR_ptr = INTEGER(lR);
+      std::vector<double> cut_buf(n_rows);
+      // ll_buf sized n_choice_trials, filled at trial index
+      std::vector<double> ll_buf(n_choice_trials, 0.0);  // default 1.0 = log(1) = 0 for missing
+      // to-do -  make log_likelihoods fill out probabilities first and then do vec_log over the buffer.
+      // In that case
+      ChoiceOnlySpec spec = make_choice_only_spec(ctx.param_table, type);
 
       for (int i = 0; i < n_particles; ++i) {
         // 1) Map p_vector to trialwise parameters
         if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
         run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
-        NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
 
         // 2) calculate raw (compressed) trialwise log-likelihoods (fills ll_buf)
         if (type == "MULTINOMIAL_LOGIT") {
-          c_log_likelihood_multinomial_logit(pars, data, n_lR, ll_buf.data());
+          c_log_likelihood_multinomial_logit(ctx.param_table, spec, idx_win, n_lR, ll_buf.data());
         } else {
-          c_log_likelihood_ordered(pars, data, n_lR, is_probit, ll_buf.data());
+          c_log_likelihood_ordered(ctx.param_table, spec, idx_win, lR_ptr, n_rows, n_lR, cut_buf.data(), is_probit, ll_buf.data());
         }
 
         // 3) Handle not-ok parameter values (out of bound)
-        apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
 
         // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
         double* tw = return_trialwise ? result.column(i).begin() : nullptr;
@@ -735,8 +732,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       auto [n_dbl, n_int] = race_scratch_slots(type);
       scratch.reserve(n_dbl, n_int, n_rows);
 
-      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, &setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
-      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, &setup, ctx.param_table, scratch);
+      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, participating, &setup, ctx.param_table, scratch);  // n_lR equals 1 for DDM
+      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, participating, &setup, ctx.param_table, scratch);
 
       if (type == "DDM") {
         IntegerVector R      = data["R"];
@@ -758,7 +755,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
           if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
 
           // 4) Check for bound violations
-          apply_bounds(ctx.param_table, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, &idx_bounds);
+          c_do_bound(ctx.param_table, bound_specs, is_ok);
+          apply_bounds(is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, participating);
 
           // 5) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
           double* tw = return_trialwise ? result.column(i).begin() : nullptr;
@@ -791,7 +789,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
           if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];  // cannot be before censoring - censoring fills rows, doesn't add
 
           // 4) Handle not-ok parameter values (out of bound)
-          apply_bounds(ctx.param_table, bound_specs, is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
+          c_do_bound(ctx.param_table, bound_specs, is_ok);
+          apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
 
           // 5) Expand, clamp, sum, etc
           double* tw = return_trialwise ? result.column(i).begin() : nullptr;
@@ -813,18 +812,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                                     bool return_trialwise = false,
                                     int n_threads = -1) {
-
-  // Non-race/DDM models fall back to serial calc_ll
-  const bool is_choice_rt = (type != "ORDERED_PROBIT"    &&
-                             type != "ORDERED_LOGIT"     &&
-                             type != "MULTINOMIAL_LOGIT" &&
-                             type != "MRI"               &&
-                             type != "MRI_AR1");
-  if (!is_choice_rt) {
-    return calc_ll(particle_matrix, data, constants, designs, type, bounds,
-                   transforms, pretransforms, p_types, min_ll, trend,
-                   return_trialwise);
-  }
 
   // ---------------------------------------------------------------------------
   // Thread count
@@ -858,176 +845,273 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
   NumericMatrix   minmax   = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
-  std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names,
-                                                           ctx.param_table, bounds);
+  std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names,
+                                                        ctx.param_table, bounds);
   PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
                                             ctx.transform_specs, trend_runtime_ptr);
 
   // ---------------------------------------------------------------------------
-  // Read-only shared data — extracted before parallel region
-  // ---------------------------------------------------------------------------
-  IntegerVector expand  = data.attr("expand");
-  const int     n_exp   = expand.size();
-  const int*    exp_ptr = expand.begin();
-
-  NumericVector rts     = data["rt"];
-  const double* rts_ptr = rts.begin();
-
-  // Missingness
-  IntegerVector missingness;
-  const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
-  if (has_missingness) missingness = data["missingness"];
-
-  // Winner flag (DDM has no winner column)
-  const bool has_winner = (sum(contains(data.names(), "winner")) == 1);
-  LogicalVector winner;
-  int* win_flag = nullptr;
-  if (has_winner) {
-    winner   = data["winner"];
-    win_flag = LOGICAL(winner);
-  }
-
-  // Index lists — built once, shared (read-only) across threads
-  std::vector<int> idx_all, idx_win, idx_los, idx_bounds;
-  idx_all.reserve(n_rows); idx_bounds.reserve(n_rows);
-  if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
-  for (int i = 0; i < n_rows; ++i) {
-    if (has_missingness && !IntegerVector::is_na(missingness[i])) {
-      if (missingness[i] > 0) idx_bounds.push_back(i);
-      continue;
-    }
-    idx_all.push_back(i);
-    idx_bounds.push_back(i);
-    if (has_winner) {
-      if (win_flag[i]) idx_win.push_back(i);
-      else             idx_los.push_back(i);
-    }
-  }
-
-  // DDM-specific
-  IntegerVector R_vec;
-  const int*    Rs_ptr = nullptr;
-  if (type == "DDM") {
-    R_vec   = data["R"];
-    Rs_ptr  = R_vec.begin();
-  }
-
-  // Race/DDM model setup — built from particle 0, read-only in parallel loop
-  RaceModelSetup setup = make_race_setup(type, ctx.param_table);
-  auto [n_dbl, n_int]  = race_scratch_slots(type);
-
-  // Build censor/trunc from a temporary scratch (structure only, not per-particle values)
-  RaceScratch scratch_tmp;
-  scratch_tmp.reserve(n_dbl, n_int, n_rows);
-  CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, &setup,
-                                       ctx.param_table, scratch_tmp);
-  TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, &setup,
-                                       ctx.param_table, scratch_tmp);
-
-  // ---------------------------------------------------------------------------
-  // Per-thread mutable state
+  // Per-thread mutable state — always needed
   // ---------------------------------------------------------------------------
   std::vector<ParamTable>                    pt_vec;
   std::vector<std::unique_ptr<TrendRuntime>> tr_vec;
   pt_vec.reserve(n_threads_used);
   tr_vec.reserve(n_threads_used);
-
-  std::vector<RaceScratch>         scratch_vec(n_threads_used);
-  std::vector<std::vector<double>> ll_buf_vec  (n_threads_used, std::vector<double>(n_choice_trials, 1.0));
-  std::vector<std::vector<double>> ll_row_vec  (n_threads_used, std::vector<double>(n_rows,          1.0));
-  std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
-  std::vector<std::vector<int>>    is_ok_vec   (n_threads_used, std::vector<int>   (n_rows,          1));
-  std::vector<CensorSpec>          censor_vec  (n_threads_used, censor);
-  std::vector<TruncSpec>           trunc_vec   (n_threads_used, trunc);
-  std::vector<std::vector<double>> tw_vec      (n_threads_used,
-                                                std::vector<double>(return_trialwise ? n_choice_trials : 0));
-
-  for (int t = 0; t < n_threads_used; ++t) {
+  for (int t = 0; t < n_threads_used; ++t)
     pt_vec.push_back(ctx.param_table.deep_copy());
+  for (int t = 0; t < n_threads_used; ++t) {
     if (ctx.trend_runtime)
       tr_vec.push_back(std::make_unique<TrendRuntime>(
-          clone_trend_runtime(*ctx.trend_runtime, pt_vec.back())));
+          clone_trend_runtime(*ctx.trend_runtime, pt_vec[t])));
     else
       tr_vec.push_back(nullptr);
-    scratch_vec[t].reserve(n_dbl, n_int, n_rows);
-    censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
-    trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
   }
 
+  std::vector<std::vector<double>> ll_buf_vec(n_threads_used, std::vector<double>(n_choice_trials, 1.0));
+  std::vector<std::vector<int>>    is_ok_vec (n_threads_used, std::vector<int>   (n_rows,          1));
+  std::vector<std::vector<double>> tw_vec    (n_threads_used,
+                                              std::vector<double>(return_trialwise ? n_choice_trials : 0));
+
   // ---------------------------------------------------------------------------
-  // Particle loop
+  // MRI / MRI_AR1
   // ---------------------------------------------------------------------------
+  if (type == "MRI" || type == "MRI_AR1") {
+    NumericVector y_rcpp = extract_y(data);
+    const double* y      = y_rcpp.begin();
+    const bool    is_ar1 = (type == "MRI_AR1");
+
+    MRISpec spec = make_mri_spec(ctx.param_table, ctx.keep_names, is_ar1);
+    // participating stays all-true for MRI — no missingness column
+    const std::vector<bool> participating(n_rows, true);
+
 #pragma omp parallel for schedule(static) num_threads(n_threads_used)
-  for (int i = 0; i < n_particles; ++i) {
+    for (int i = 0; i < n_particles; ++i) {
 #ifdef _OPENMP
-    const int tid = omp_get_thread_num();
+      const int tid = omp_get_thread_num();
 #else
-    const int tid = 0;
+      const int tid = 0;
 #endif
+      ParamTable&          pt_local = pt_vec[tid];
+      TrendRuntime*        tr_local = tr_vec[tid].get();
+      std::vector<double>& ll_buf   = ll_buf_vec[tid];
+      std::vector<int>&    is_ok    = is_ok_vec[tid];
 
-    ParamTable&          pt_local     = pt_vec[tid];
-    TrendRuntime*        tr_local     = tr_vec[tid].get();
-    RaceScratch&         scratch      = scratch_vec[tid];
-    std::vector<double>& ll_buf       = ll_buf_vec[tid];
-    std::vector<double>& ll_row       = ll_row_vec[tid];
-    std::vector<double>& ll_trial     = ll_trial_vec[tid];
-    std::vector<int>&    is_ok        = is_ok_vec[tid];
-    CensorSpec&          censor_local = censor_vec[tid];
-    TruncSpec&           trunc_local  = trunc_vec[tid];
+      pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+      run_pars_pipeline(pt_local, tr_local, cache);
 
-    pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
-    run_pars_pipeline(pt_local, tr_local, cache);
+      std::fill(is_ok.begin(), is_ok.end(), 1);
+      if (is_ar1) c_log_likelihood_MRI_ar1  (pt_local, spec, y, n_choice_trials, ll_buf.data());
+      else        c_log_likelihood_MRI_white(pt_local, spec, y, n_choice_trials, ll_buf.data());
 
-    if (type == "DDM") {
-      // 1) Likelihood
-      std::fill(ll_buf.begin(), ll_buf.end(), 1.0);
-      c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_buf.data());
+      c_do_bound(pt_local, bound_specs, is_ok);
+      apply_bounds(is_ok, ll_buf.data(), n_choice_trials, 1, min_ll, participating);
 
-      // 2) Truncation / censoring
-      if (trunc_local.any())  trunc_local.calculate_normalization_constant();
-      if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_buf, min_ll);
-      if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_buf[t] -= trunc_local.log_Z[t];
-
-      // 3) Bounds
-      apply_bounds(pt_local, bound_specs, is_ok, ll_buf.data(), n_choice_trials, /*n_lR=*/1, min_ll, &idx_bounds);
-
-      // 4) Output
       if (return_trialwise) {
         std::vector<double>& tw = tw_vec[tid];
-        expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw.data());
+        clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw.data());
         std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
       } else {
-        result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+        result_ptr[i] = clamp_sum(ll_buf.data(), n_choice_trials, min_ll);
+      }
+    }
+
+  } else {
+    // ---------------------------------------------------------------------------
+    // All choice models — shared read-only data
+    // ---------------------------------------------------------------------------
+    IntegerVector expand  = data.attr("expand");
+    const int     n_exp   = expand.size();
+    const int*    exp_ptr = expand.begin();
+
+    IntegerVector missingness;
+    const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
+    if (has_missingness) missingness = data["missingness"];
+
+    const bool has_winner = (sum(contains(data.names(), "winner")) == 1);
+    LogicalVector winner;
+    int* win_flag = nullptr;
+    if (has_winner) {
+      winner   = data["winner"];
+      win_flag = LOGICAL(winner);
+    }
+
+    // participating — built once, shared read-only across threads
+    std::vector<bool> participating(n_rows, true);
+
+    std::vector<int> idx_all, idx_win, idx_los;
+    idx_all.reserve(n_rows);
+    if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
+    for (int i = 0; i < n_rows; ++i) {
+      if (has_missingness && !IntegerVector::is_na(missingness[i])) {
+        if (missingness[i] == 0) participating[i] = false;
+        continue;
+      }
+      idx_all.push_back(i);
+      if (has_winner) {
+        if (win_flag[i]) idx_win.push_back(i);
+        else             idx_los.push_back(i);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Choice-only branch
+    // -----------------------------------------------------------------------
+    const bool is_choice_only = (type == "ORDERED_PROBIT" ||
+                                 type == "ORDERED_LOGIT"  ||
+                                 type == "MULTINOMIAL_LOGIT");
+    if (is_choice_only) {
+      const bool     is_probit = (type == "ORDERED_PROBIT");
+      ChoiceOnlySpec spec      = make_choice_only_spec(ctx.param_table, std::string(type));
+
+      IntegerVector lR_vec = has_lR ? IntegerVector(data["lR"]) : IntegerVector();
+      const int* lR_ptr    = has_lR ? INTEGER(lR_vec) : nullptr;
+
+      std::vector<std::vector<double>> cut_buf_vec(n_threads_used, std::vector<double>(n_rows, 0.0));
+      for (auto& v : ll_buf_vec) std::fill(v.begin(), v.end(), 0.0);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_buf   = ll_buf_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+        std::vector<double>& cut_buf  = cut_buf_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+
+        std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
+        std::fill(is_ok.begin(),  is_ok.end(),  1);
+
+        if (type == "MULTINOMIAL_LOGIT") {
+          c_log_likelihood_multinomial_logit(pt_local, spec, idx_win, n_lR, ll_buf.data());
+        } else {
+          c_log_likelihood_ordered(pt_local, spec, idx_win, lR_ptr,
+                                   n_rows, n_lR, cut_buf.data(), is_probit, ll_buf.data());
+        }
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+        }
       }
 
+      // -----------------------------------------------------------------------
+      // Choice-RT branch (DDM + race)
+      // -----------------------------------------------------------------------
     } else {
-      // 1) Likelihood
-      std::fill(ll_row.begin(), ll_row.end(), 1.0);
-      c_log_likelihood_race(pt_local, setup, rts_ptr,
-                            idx_win, idx_los, n_lR,
-                            ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
+      NumericVector rts     = data["rt"];
+      const double* rts_ptr = rts.begin();
 
-      // 2) Truncation / censoring
-      if (trunc_local.any())  trunc_local.calculate_normalization_constant();
-      if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
-      if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
+      IntegerVector R_vec;
+      const int*    Rs_ptr = nullptr;
+      if (type == "DDM") {
+        R_vec  = data["R"];
+        Rs_ptr = R_vec.begin();
+      }
 
-      // 3) Bounds
-      apply_bounds(pt_local, bound_specs, is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, &idx_bounds);
+      RaceModelSetup setup = make_race_setup(type, ctx.param_table);
+      auto [n_dbl, n_int]  = race_scratch_slots(type);
 
-      // 4) Output
-      if (return_trialwise) {
-        std::vector<double>& tw = tw_vec[tid];
-        expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
-        std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
-      } else {
-        result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+      RaceScratch scratch_tmp;
+      scratch_tmp.reserve(n_dbl, n_int, n_rows);
+      CensorSpec censor = make_censor_spec(data, n_choice_trials, n_lR, participating,
+                                           &setup, ctx.param_table, scratch_tmp);
+      TruncSpec  trunc  = make_trunc_spec (data, n_choice_trials, n_lR, participating,
+                                           &setup, ctx.param_table, scratch_tmp);
+
+      std::vector<RaceScratch>         scratch_vec (n_threads_used);
+      std::vector<std::vector<double>> ll_row_vec  (n_threads_used, std::vector<double>(n_rows,          1.0));
+      std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials));
+      std::vector<CensorSpec>          censor_vec  (n_threads_used, censor);
+      std::vector<TruncSpec>           trunc_vec   (n_threads_used, trunc);
+
+      for (int t = 0; t < n_threads_used; ++t) {
+        scratch_vec[t].reserve(n_dbl, n_int, n_rows);
+        censor_vec[t].rebind(pt_vec[t], scratch_vec[t]);
+        trunc_vec[t].rebind(pt_vec[t], scratch_vec[t]);
+      }
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local     = pt_vec[tid];
+        TrendRuntime*        tr_local     = tr_vec[tid].get();
+        RaceScratch&         scratch      = scratch_vec[tid];
+        std::vector<double>& ll_buf       = ll_buf_vec[tid];
+        std::vector<double>& ll_row       = ll_row_vec[tid];
+        std::vector<double>& ll_trial     = ll_trial_vec[tid];
+        std::vector<int>&    is_ok        = is_ok_vec[tid];
+        CensorSpec&          censor_local = censor_vec[tid];
+        TruncSpec&           trunc_local  = trunc_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+
+        if (type == "DDM") {
+          std::fill(ll_buf.begin(), ll_buf.end(), 1.0);
+          std::fill(is_ok.begin(),  is_ok.end(),  1);
+          c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_buf.data());
+
+          if (trunc_local.any())  trunc_local.calculate_normalization_constant();
+          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_buf, min_ll);
+          if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_buf[t] -= trunc_local.log_Z[t];
+
+          c_do_bound(pt_local, bound_specs, is_ok);
+          apply_bounds(is_ok, ll_buf.data(), n_choice_trials, 1, min_ll, participating);
+
+          if (return_trialwise) {
+            std::vector<double>& tw = tw_vec[tid];
+            expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw.data());
+            std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+          } else {
+            result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+          }
+
+        } else {
+          std::fill(ll_row.begin(),  ll_row.end(),  1.0);
+          std::fill(is_ok.begin(),   is_ok.end(),   1);
+          c_log_likelihood_race(pt_local, setup, rts_ptr,
+                                idx_win, idx_los, n_lR,
+                                ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
+
+          if (trunc_local.any())  trunc_local.calculate_normalization_constant();
+          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
+          if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
+
+          c_do_bound(pt_local, bound_specs, is_ok);
+          apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
+
+          if (return_trialwise) {
+            std::vector<double>& tw = tw_vec[tid];
+            expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+            std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+          } else {
+            result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+          }
+        }
       }
     }
   }
 
   return result;
 }
+
 
 
 // [[Rcpp::export]]
@@ -1065,7 +1149,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
 
   NumericMatrix   minmax   = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
-  std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names, ctx.param_table, bounds);
+  std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, ctx.param_table, bounds);
   std::vector<int> is_ok(n_trials, 1);
 
   List result(n_particles);
@@ -1076,7 +1160,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
     run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
 
     std::fill(is_ok.begin(), is_ok.end(), 1);
-    c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
+    c_do_bound(ctx.param_table, bound_specs, is_ok);
     if(n_lR > 1) lr_all(is_ok, n_lR);
 
     // Convert is_ok to LogicalVector for the attribute
