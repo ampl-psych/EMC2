@@ -163,9 +163,20 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       stop("If data is not provided need to specify number of trials")
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design_in, covariates = list(...)$covariates, do_functions = FALSE,
-                             drop_subjects = F, n_trials = n_trials, add_acc=FALSE,
-                           drop_R = F)
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+
+    is_stop_signal <- is_stop_signal_model(model())
+
+    data <- minimal_design(
+      design_in,
+      covariates = list(...)$covariates,
+      do_functions = !is_stop_signal,
+      drop_subjects = F,
+      n_trials = n_trials,
+      add_acc = FALSE,
+      drop_R = F
+    )
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
@@ -237,7 +248,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   } else {
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
     lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
     pars <- get_pars_oo(parameters, data, model())

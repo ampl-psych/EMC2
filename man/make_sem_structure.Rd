@@ -26,12 +26,20 @@ The parameter names for the SEM are derived from \code{names(sampled_pars(design
 \item{covariate_cols}{Character vector or NULL. Column names in \code{data} to be used
 as covariates for K_mat and G_mat. If NULL, no covariates are processed.}
 
-\item{lambda_specs}{A list defining factor loadings.
-The list names should be factor names and each element should be a
-character vector of parameter names (from \code{names(sampled_pars(design))}) that load onto that factor.
-The first parameter listed for each factor will be fixed to 1 for identifiability.
-Example: \code{list(Factor1 = c("v_Sleft", "a_Eneutral"), Factor2 = "t0")}
-Here, \code{Lambda_mat["v_Sleft", "Factor1"]} would be 1.}
+\item{lambda_specs}{A list defining factor loadings. The list names should be factor names.
+Each element may be given in one of two forms:
+\enumerate{
+\item A character vector of parameter names (from \code{names(sampled_pars(design))}) that load
+onto that factor. The first parameter listed is fixed to 1 for identifiability and the
+remaining ones are estimated.
+Example: \code{list(Factor1 = c("v_Sleft", "a_Eneutral"), Factor2 = "t0")}.
+Here, \code{Lambda_mat["v_Sleft", "Factor1"]} would be 1.
+\item A named numeric vector, where the names are parameter names and the values are written
+directly into \code{Lambda_mat}. A value of \code{Inf} marks an estimated loading; any finite value
+fixes the loading to that value. No automatic identifiability constraint is applied in this
+mode, so at least one loading should typically be fixed.
+Example: \code{list(Factor1 = c(v_Sleft = 1, a_Eneutral = Inf))}.
+}}
 
 \item{b_specs}{A list defining regressions among factors.
 List names are outcome factors, elements are character vectors of predictor factors.
@@ -77,7 +85,8 @@ specifications for the paths to be estimated.
 The subject-level parameter names for Lambda_mat and K_mat rows are derived from \code{sampled_pars(design)}.
 It validates that covariates are consistent per subject (subject column in \code{data} must be named "subjects")
 and includes an aggregated subject-level covariate data frame named \code{covariates} in the output list.
-For identifiability, the first parameter listed in \code{lambda_specs} for each factor is fixed to 1.
+For identifiability, when a factor's loadings are given as a character vector, the first parameter
+listed in \code{lambda_specs} for that factor is fixed to 1.
 }
 \examples{
 # Create a design object (simplified from design.R example)

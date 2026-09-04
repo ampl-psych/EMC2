@@ -2,21 +2,25 @@
 % Please edit documentation in R/trend.R
 \name{get_trend_pnames}
 \alias{get_trend_pnames}
-\title{Get parameter types from trend object}
+\title{Get parameter names from a trend object}
 \usage{
 get_trend_pnames(trend)
 }
 \arguments{
-\item{trend}{A trend object created by make_trend()}
+\item{trend}{An \code{emc2_trend} object created by \code{\link[=make_trend]{make_trend()}}.}
 }
 \value{
-A character vector of parameter names used in the trend
+A character vector of unique parameter names used in the trend,
+covering both kernel parameters (e.g. \code{v.q0}, \code{v.alpha}) and base
+parameters (e.g. \code{v.w}). Shared parameter renaming is already baked into
+the names at \code{make_trend()} time, so no post-hoc substitution is needed.
 }
 \description{
-Get parameter types from trend object
+Get parameter names from a trend object
 }
 \examples{
-trend <- make_trend(par_names = "v", cov_names = "trial", kernels = "exp_incr")
+k <- make_kernel("exp_incr", cov_names = "trial")
+b <- make_base("lin", target_parameter = "v", kernel = k)
+trend <- make_trend(b)
 get_trend_pnames(trend)
-
 }

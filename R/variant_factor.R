@@ -338,9 +338,12 @@ unwind_lambda <- function(lambda, constraintMat, reverse = F){
 }
 
 constrain_lambda <- function(lambda, constraintMat){
+  # Inf marks an estimated entry; any finite entry is fixed to that value, which
+  # is not necessarily 0 (e.g. unit loadings used to induce a correlation structure).
+  is_fixed <- constraintMat != Inf
   for(i in 1:dim(lambda)[3]){
     tmp <- lambda[,,i]
-    tmp[constraintMat != Inf] <- 0
+    tmp[is_fixed] <- constraintMat[is_fixed]
     lambda[,,i] <- tmp
   }
   return(lambda)

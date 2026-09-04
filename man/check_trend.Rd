@@ -13,18 +13,19 @@ check_trend(
 )
 }
 \arguments{
-\item{trend}{A trend list, as made by make_trend}
+\item{trend}{An \code{emc2_trend} object created by \code{\link[=make_trend]{make_trend()}}.}
 
-\item{covariates}{Names of covariates, or NULL}
+\item{covariates}{Character vector of covariate column names in the data.}
 
-\item{model}{A model function, or NULL}
+\item{model}{A model function, or NULL.}
 
-\item{formula}{List of formulas, or NULL}
+\item{formula}{List of formulas, or NULL.}
 
-\item{parameter_design}{A parameter_design list, or NULL}
+\item{parameter_design}{A parameter_design list, or NULL.}
 }
 \value{
-Updated formula list with intercept formulas added for missing trend parameters
+Updated formula list with intercept formulas added for missing trend
+parameters.
 }
 \description{
 Check and update formula list for trend parameters

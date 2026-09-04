@@ -7,7 +7,7 @@ d_ord_probit <- design(Rlevels = c("low", "mid", "high"),
                        formula = list(location ~ 0 + S, scale ~ 1, cut ~ 1),
                        matchfun = matchfun,
                        constants = c(scale = log(1)),
-                       model = ordered_probit)
+                       model = ordered_probit, report_p_vector = FALSE)
 
 p_ord_probit <- c(location_Slow = -1, location_Smid = 0, location_Shigh = 1,
                   cut_lRlow = -0.5, cut_lRmid = log(1.5))
@@ -17,7 +17,7 @@ d_ord_logit <- design(Rlevels = c("left", "right"),
                       formula = list(location ~ 0 + S, scale ~ 1, cut ~ 1),
                       matchfun = matchfun,
                       constants = c(scale = log(1)),
-                      model = ordered_logit)
+                      model = ordered_logit, report_p_vector = FALSE)
 
 p_ord_logit <- c(location_Sleft = -1, location_Sright = 1, cut = 0)
 
@@ -25,7 +25,7 @@ d_mnl <- design(Rlevels = c("left", "right", "up"),
                 factors = list(subjects = 1, S = c("left", "right", "up")),
                 formula = list(utility ~ 0 + S),
                 matchfun = matchfun,
-                model = multinomial_logit)
+                model = multinomial_logit, report_p_vector = FALSE)
 
 p_mnl <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
 
@@ -33,7 +33,7 @@ d_mnp <- design(Rlevels = c("left", "right", "up"),
                 factors = list(subjects = 1, S = c("left", "right", "up")),
                 formula = list(utility ~ 0 + S),
                 matchfun = matchfun,
-                model = multinomial_probit)
+                model = multinomial_probit, report_p_vector = FALSE)
 
 p_mnp <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
 

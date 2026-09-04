@@ -182,6 +182,55 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   return(pm_settings)
 }
 
+# Normalise the user-facing `on_singular` control list, filling defaults. NULL
+# (the default) reproduces the pre-existing behaviour: no recovery, error on a
+# singular group covariance (reported by check_chain_failures).
+resolve_on_singular <- function(on_singular) {
+  defaults <- list(max_retries = 0, on_exhausted = "error",
+                   max_carry_forward = 10)
+  if (is.null(on_singular)) return(defaults)
+  if (!is.list(on_singular)) stop("`on_singular` must be a list or NULL")
+  bad <- setdiff(names(on_singular), names(defaults))
+  if (length(bad)) stop("unknown `on_singular` field(s): ", paste(bad, collapse = ", "),
+                        ". Valid fields: ", paste(names(defaults), collapse = ", "))
+  out <- modifyList(defaults, on_singular)
+  out$on_exhausted <- match.arg(out$on_exhausted, c("error", "carry_forward"))
+  out
+}
+
+# Is this error the recoverable group-covariance failure? Covers solve()
+# ("computationally singular") and chol() non-positive-definite failures. Note R
+# >= 4.x reports the latter as "the leading minor of order N is not positive"
+# (without "definite"), so match "not positive" and "leading minor" too.
+is_singular_error <- function(e) {
+  grepl("singular|reciprocal condition|not positive|leading minor|positive definite|Lapack|infinite or missing",
+        conditionMessage(e), ignore.case = TRUE)
+}
+
+# Parameters with the largest group variance at iteration j, for give-up messages.
+top_diverging_pars <- function(store, j, n = 6) {
+  v <- tryCatch(diag(store$theta_var[, , j]), error = function(e) NULL)
+  if (is.null(v) || all(!is.finite(v))) return("unavailable")
+  nm <- rownames(store$theta_mu)
+  paste0(nm[order(v, decreasing = TRUE)][seq_len(min(n, length(nm)))], collapse = ", ")
+}
+
+# One group (Gibbs) step with retry on a singular covariance. Returns the group
+# parameters, or NULL if all retries were exhausted (caller then decides whether
+# to carry forward or give up).
+robust_gibbs_step <- function(sampler, alpha, type, on_singular) {
+  attempt <- 0L
+  repeat {
+    res <- tryCatch(
+      gibbs_step(sampler, alpha, type),
+      error = function(e) if (is_singular_error(e))
+        structure(list(), class = "gibbs_singular") else stop(e))
+    if (!inherits(res, "gibbs_singular")) return(res)
+    if (attempt >= on_singular$max_retries) return(NULL)
+    attempt <- attempt + 1L
+  }
+}
+
 run_stage <- function(pmwgs,
                       stage,
                       iter = 1000,
@@ -190,7 +239,9 @@ run_stage <- function(pmwgs,
                       tune = NULL,
                       verbose = TRUE,
                       verboseProgress = TRUE,
+                      on_singular = NULL,
                       r_cores = 1) {
+  on_singular <- resolve_on_singular(on_singular)
   # Set defaults for NULL values
   # Set necessary local variables
   # Set stable (fixed) new_sample argument for this run
@@ -230,6 +281,13 @@ run_stage <- function(pmwgs,
     pmwgs$sampler_nuis$samples$idx <- pmwgs$samples$idx
   }
   block_idx <- block_variance_idx(tune$components)
+  # Group-covariance recovery bookkeeping (only active when on_singular is set)
+  last_good_pars <- NULL; consec_cf <- 0L; n_cf <- 0L
+  i <- 0L; j <- start_iter
+  # Any error in the loop is enriched with where it happened and what the
+  # on_singular recovery had done so far, so a chain failure is actually
+  # diagnostic instead of a bare R message.
+  tryCatch(
   # Main iteration loop
   for (i in 1:iter) {
     if (verboseProgress) {
@@ -238,8 +296,34 @@ run_stage <- function(pmwgs,
     }
     j <- start_iter + i
 
-    # Gibbs step
-    pars <- pars_comb <- gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1, drop = FALSE], pmwgs$type)
+    # Gibbs step (with optional recovery from a singular group covariance)
+    pars <- robust_gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1, drop = FALSE],
+                              pmwgs$type, on_singular)
+    if (is.null(pars)) {
+      # Retries exhausted: either carry the previous group parameters forward, or
+      # give up with a diagnosis of the diverging parameters.
+      if (on_singular$on_exhausted == "carry_forward" && !is.null(last_good_pars)) {
+        consec_cf <- consec_cf + 1L; n_cf <- n_cf + 1L
+        # Terse message; the loop's error handler adds stage/iteration context and
+        # the diverging parameters, and check_chain_failures adds the advice.
+        if (consec_cf > on_singular$max_carry_forward) {
+          stop("group covariance singular for ", consec_cf,
+               " consecutive iterations; giving up (on_singular carry_forward)", call. = FALSE)
+        }
+        pars <- last_good_pars
+        # gibbs_step returns alpha as a 2-D (p x n) matrix, so match that shape
+        # here (the raw sample slice is 3-D and breaks the downstream indexing).
+        a <- pmwgs$samples$alpha[!nuisance, , j - 1, drop = FALSE]
+        pars$alpha <- matrix(a, nrow = dim(a)[1], ncol = dim(a)[2],
+                             dimnames = list(pmwgs$par_names[!nuisance], NULL))
+      } else {
+        stop("group covariance became computationally singular", call. = FALSE)
+      }
+    } else {
+      consec_cf <- 0L
+      last_good_pars <- pars
+    }
+    pars_comb <- pars
     if(any(nuisance)){
       pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1, drop = FALSE], pmwgs$sampler_nuis$type)
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance, pars$subj_mu)
@@ -265,8 +349,24 @@ run_stage <- function(pmwgs,
     pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = pars,
                                                proposals = proposals, j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
   }
+  ,
+  error = function(e) {
+    recov <- if (n_cf > 0)
+      sprintf("; on_singular recovery so far: %d carried forward (%d consecutive)",
+              n_cf, consec_cf) else
+      "; no on_singular recovery was active (see ?fit `on_singular`)"
+    stop(conditionMessage(e),
+         sprintf("\n  [context: '%s' stage, iteration %d of %d%s]", stage, i, iter, recov),
+         "\n  parameters with the largest group variance:\n    ",
+         top_diverging_pars(pmwgs$samples, max(start_iter, j - 1)),
+         call. = FALSE)
+  })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
   if (verboseProgress) close(pb)
+  if (verbose && n_cf > 0) {
+    message("  [on_singular] group covariance recovered on ", n_cf, " carried forward",
+            " of ", iter, " '", stage, "' iterations")
+  }
   return(pmwgs)
 }
 

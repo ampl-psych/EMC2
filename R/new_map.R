@@ -182,6 +182,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
 
   pars <- res$pars
   data <- res$data
+
   if(!by_subject){
     data$subjects <- 1
     factor(data$subjects)
@@ -247,6 +248,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
     out <- list()
     idx <- data$subjects == sub
     for(i in 1:n_pars){
+      cur_pars <- matrix(pars[idx,,i], nrow = sum(idx))
       # First case, map = TRUE
       if(isTRUE(map[i]) || is.character(map[[i]])){
         if(isTRUE(map[i])){
@@ -260,7 +262,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
           cells <- interaction(df[idx,vars], sep = "_", drop = TRUE, lex.order = TRUE)
           g <- nlevels(cells)
           ng <- as.vector(table(cells))
-          res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
+          res <- rowsum(cur_pars, cells) / ng            # (g x k)
 
         } else{
           if (sum(idx)==1) res <- pars[idx,,i] else
@@ -270,7 +272,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
         S  <- model.matrix(map[[i]], data = data[idx,])
         ng <- colSums(S)
         # g x k means:
-        res <- (t(S) %*% pars[idx,,i]) / ng
+        res <- (t(S) %*% cur_pars) / ng
       }
       if(is.vector(res)){
         res <- t(res)
@@ -321,7 +323,10 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design, covariates = list(...)$covariates,
+    design_in <- design
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+    data <- minimal_design(design_in, covariates = list(...)$covariates,
                            drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F, group_design = group_design)
   }
@@ -336,11 +341,13 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
-  data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
-    x <- x[!duplicated(x[,colnames(x) != "rt"]),]
-    return(x)
-  }))
-  data <- add_trials(data[order(data$subjects),])
+  if(ncol(data) > 1){
+    data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
+      x <- x[!duplicated(x[,colnames(x) != "rt"]),]
+      return(x)
+    }))
+  }
+  data <- add_trials(data[order(data$subjects),, drop = F])
 
 
   model <- design$model
@@ -355,29 +362,59 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   n_mcmc <- dim(par_mcmc)[3]
   n_pars <- dim(par_mcmc)[1]
   n_subs <- ncol(par_mcmc)
-  for(i in 1:n_mcmc){
-    parameters <- t(matrix(par_mcmc[,,i, drop = FALSE], nrow = n_pars, ncol = n_subs))
+
+  # SM: Don't loop over mcmc particles (do this loop in C); loop over subjects here
+  dadm_list <- dm_list(data)
+  row_ids <- split(seq_len(nrow(data)), data$subjects)
+  out <- NULL
+
+  for (i in seq_len(n_subs)) {
+    # par_mcmc is n_pars x n_subs x n_mcmc
+    parameters <- t(matrix(par_mcmc[,i,,drop=FALSE], nrow=n_pars, ncol=n_mcmc))
     colnames(parameters) <- dimnames(par_mcmc)[[1]]
-    if(nrow(parameters) == length(unique(data$subjects))){
-      design$Ffactors$subjects <- unique(data$subjects)
+    pars_list <- get_pars_singlesub_oo(parameters, dadm_list[[i]], model(), return_all_pars=TRUE)
+
+    # not yet sure how many columns will be returned - so get from first subject
+    if(is.null(out)) {
+      par_names <- colnames(pars_list[[1]])
+      out <- array(NA_real_, dim = c(nrow(data), n_mcmc, length(par_names)),
+                   dimnames = list(NULL, NULL, par_names))
     }
 
-    rownames(parameters) <- design$Ffactors$subjects
-    pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE,
-                               allow_missing_ssd = TRUE)
-    if(!add_recalculated){
-      base_names <- intersect(names(model()$p_types), colnames(pars))
-      pars <- pars[, base_names, drop = FALSE]
-      attr(pars, "ok") <- NULL
-    }
-    if(i == 1){
-      out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
-                   dimnames = list(NULL, NULL, colnames(pars)))
-    }
-    out[,i,] <- pars
+    # fill
+    row_idx <- row_ids[[i]]
+    for (k in seq_len(n_mcmc)) out[row_idx, k, ] <- pars_list[[k]]
   }
+  if (!add_recalculated) {
+    base_names <- intersect(names(model()$p_types), dimnames(out)[[3]])
+    out <- out[,, base_names, drop = FALSE]
+  }
+
   return(list(data = data, pars = out))
 }
+
+#   for(i in 1:n_mcmc){
+#     parameters <- t(matrix(par_mcmc[,,i, drop = FALSE], nrow = n_pars, ncol = n_subs))
+#     colnames(parameters) <- dimnames(par_mcmc)[[1]]
+#     if(nrow(parameters) == length(unique(data$subjects))){
+#       design$Ffactors$subjects <- unique(data$subjects)
+#     }
+#
+#     rownames(parameters) <- design$Ffactors$subjects
+#     pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE)
+#     if(!add_recalculated){
+#       base_names <- intersect(names(model()$p_types), colnames(pars))
+#       pars <- pars[, base_names, drop = FALSE]
+#       attr(pars, "ok") <- NULL
+#     }
+#     if(i == 1){
+#       out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
+#                    dimnames = list(NULL, NULL, colnames(pars)))
+#     }
+#     out[,i,] <- pars
+#   }
+#   return(list(data = data, pars = out))
+# }
 
 group_mapping <- function(samples, selection) {
   if(ncol(samples) < 2) stop("Please use type = 'single' for designs with 1 subject")

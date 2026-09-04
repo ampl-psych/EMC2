@@ -4,12 +4,14 @@
 \alias{trend_help}
 \title{Get help information for trend kernels and bases}
 \usage{
-trend_help(kernel = NULL, base = NULL, ...)
+trend_help(kernel = NULL, base = NULL, show_experimental = FALSE, ...)
 }
 \arguments{
 \item{kernel}{Character string specifying the kernel type to get information about}
 
 \item{base}{Character string specifying the base type to get information about}
+
+\item{show_experimental}{Boolean, if TRUE, will also show information on experimental kernels. These could produce unexpected results or crash. Use at your own risk.}
 
 \item{...}{Additional arguments}
 }

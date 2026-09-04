@@ -10,7 +10,7 @@ dat$subjects <- droplevels(dat$subjects)
 
 design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
                           formula=list(m~lM,s~1,t0~1),
-                          contrasts=list(m=list(lM=ADmat)))
+                          contrasts=list(m=list(lM=ADmat)), report_p_vector=FALSE)
 
 
 

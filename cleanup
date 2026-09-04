@@ -5,6 +5,7 @@ echo "Running cleanup..."
 # Remove configure-generated files
 rm -f src/Makevars
 rm -f src/Makevars.tmp
+rm -f inst/include/build_info.h
 rm -f config.status config.log config.cache
 
 # Autoconf leftovers

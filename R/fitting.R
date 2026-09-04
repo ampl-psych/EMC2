@@ -65,6 +65,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
 #' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
+#' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
+#' covariance becomes computationally singular during sampling. `NULL` errors immediately.
+#' A list may set `max_retries` (integer, re-draw the group step on failure), `on_exhausted`
+#' (`"error"` or `"carry_forward"` the previous group parameters), `max_carry_forward`
+#' (consecutive carried-forward iterations before giving up).
 #' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
 #' @export
 #' @return An emc object
@@ -85,7 +90,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE, r_cores=1){
+                    thin = FALSE, trim = TRUE, on_singular = NULL, r_cores=1){
   if(length(emc) == 1) stop("run_emc() currently requires n_chains > 1.")
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
@@ -123,7 +128,13 @@ run_emc <- function(emc, stage, stop_criteria,
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
-                             r_cores = r_cores)
+                             on_singular = on_singular, r_cores = r_cores)
+
+    # A chain that errors inside the parallel sampler comes back as a try-error
+    # (or a value with no $samples) rather than a sampler object. Report which
+    # chain failed and why here, instead of failing later with a cryptic error
+    # in chain_n() ("$ operator is invalid for atomic vectors").
+    check_chain_failures(sub_emc, stage, fileName)
 
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
@@ -187,7 +198,7 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1, r_cores = 1)
+                       particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1)
 {
   particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
@@ -197,7 +208,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
                        n_cores = n_cores, tune = tune, verbose = verbose,
-                       verboseProgress = verboseProgress, r_cores = r_cores)
+                       verboseProgress = verboseProgress, on_singular = on_singular, r_cores = r_cores)
   return(sampler)
 }
 
@@ -792,7 +803,8 @@ make_emc <- function(data,design,model=NULL,
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
                                      compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i],
-                                     memory_saver = memory_saver)
+                                     memory_saver = memory_saver,
+                                     check_identifiability = TRUE)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
       if (memory_saver) {
@@ -808,6 +820,11 @@ make_emc <- function(data,design,model=NULL,
       }
     }
   }
+  # Warn before fitting about parameters (or linear combinations) that are
+  # unidentified across the (joint) model, so a fit that would later diverge on
+  # an ill-conditioned group covariance fails fast with a clear message instead.
+  warn_identifiability(dadm_list, names(design))
+
   # Make sure class retains following changes
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
@@ -944,6 +961,51 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
   }
   return(list_out)
+}
+
+# Turn a silent per-chain sampler failure into an informative error. mclapply
+# puts a try-error object in a chain's slot when its worker errors (and a worker
+# killed for memory returns something with no $samples); left unchecked this
+# surfaces much later as "$ operator is invalid for atomic vectors" in chain_n().
+check_chain_failures <- function(chains, stage, fileName = NULL){
+  failed <- vapply(chains, function(x){
+    inherits(x, "try-error") || is.null(x) || !is.list(x) || is.null(x$samples)
+  }, logical(1))
+  if(!any(failed)) return(invisible(NULL))
+  reasons <- vapply(which(failed), function(i){
+    x <- chains[[i]]
+    cond <- attr(x, "condition")
+    reason <- if(!is.null(cond)) conditionMessage(cond)
+      else if(inherits(x, "try-error")) trimws(as.character(x))
+      else "chain worker returned no samples (it likely crashed or ran out of memory)"
+    paste0("  chain ", i, ": ", reason)
+  }, character(1))
+  saved <- if(!is.null(fileName)) paste0(" The fit up to the previous stage was saved to '",
+                                         fix_fileName(fileName), "'.") else ""
+  # Tailor the advice to what actually failed, rather than always blaming the
+  # covariance. The per-chain reasons now carry context (iteration + on_singular
+  # recovery so far + diverging parameters) added in run_stage.
+  singular_like <- any(grepl("singular|reciprocal condition|not positive|leading minor|positive definite|ill-conditioned|Lapack",
+                             reasons, ignore.case = TRUE))
+  advice <- if (singular_like) {
+    paste0("The group-level covariance became ill-conditioned, usually from an ",
+           "unidentified or weakly-identified parameter (see the diverging parameters ",
+           "listed above). Options: check for unidentified parameters, use a tighter ",
+           "prior or fewer free parameters, or set the `on_singular` argument of fit() ",
+           "to retry / carry_forward.")
+  } else {
+    paste0("This is not the known singular-covariance failure but some other error ",
+           "(shown above) hit inside a chain. Read the underlying message and context; ",
+           "if it looks like a bug rather than your model/data, please report it.")
+  }
+  # Wrap the advice to ~80 columns so it is readable; the saved-file note gets
+  # its own line.
+  advice <- paste(strwrap(advice, width = 80), collapse = "\n")
+  if (nzchar(saved)) advice <- paste0(advice, "\n", trimws(saved))
+  stop("Sampling failed in ", sum(failed), " of ", length(chains),
+       " chain(s) during the '", stage, "' stage:\n",
+       paste(reasons, collapse = "\n"),
+       "\n\n", advice, call. = FALSE)
 }
 
 #' Strip all entries except samples from EMC list entries

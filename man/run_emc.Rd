@@ -20,6 +20,7 @@ run_emc(
   n_blocks = 1,
   thin = FALSE,
   trim = TRUE,
+  on_singular = NULL,
   r_cores = 1
 )
 }
@@ -61,6 +62,12 @@ conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored i
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
 
 \item{trim}{A boolean. If \code{TRUE} will automatically remove redundant samples (i.e. from preburn, burn, adapt).}
+
+\item{on_singular}{A list or \code{NULL} (default). Controls recovery when the group-level
+covariance becomes computationally singular during sampling. \code{NULL} errors immediately.
+A list may set \code{max_retries} (integer, re-draw the group step on failure), \code{on_exhausted}
+(\code{"error"} or \code{"carry_forward"} the previous group parameters), and \code{max_carry_forward}
+(consecutive carried-forward iterations before giving up).}
 
 \item{r_cores}{An integer for number of cores to use in R-based likelihood calculations, default 1.}
 }

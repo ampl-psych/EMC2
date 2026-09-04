@@ -215,12 +215,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
                  parameter_design=parameter_design)
   class(design) <- "emc.design"
+
+  # Check for 'at' factor, and throw warning if at is specified for a non-accumulator model
   if (!is.null(trend)) {
     # check for at = 'lR'
-    if(any(sapply(trend, function(x) x$at) == 'lR') &&
+    if(any(vapply(trend$kernels, function(k) identical(k$at, "lR"), logical(1))) &&
        !is_choice_accumulator_type(model())) {
       warning('A trend has `at="lR"`, but this model does not use accumulator rows. Setting `at` to NULL')
-      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+      for(kernel_id in names(trend$kernels)) if(identical(trend$kernels[[kernel_id]]$at, "lR")) trend$kernels[[kernel_id]]$at <- NULL
     }
     model <- update_model_trend(trend, model)
     design$model <- model
@@ -600,10 +602,120 @@ rt_check_function <- function(data){
 }
 
 
+uses_accumulator <- function(f) {
+  grepl("\\b(lR|lM)\\b", paste(deparse(body(f)), collapse = " "), perl = TRUE)
+}
+
+
+# Assess identifiability of a design from its mapped design matrices (the list
+# stored in attr(dadm, "designs")). Returns:
+#   $zero_effect_pars : sampled parameters whose design column is all zero (no
+#                       effect on the likelihood; a parameter counts as
+#                       identified if it is non-zero in any block).
+#   $collinear_pars   : exact linear dependencies among the remaining sampled
+#                       columns, each as a readable string like
+#                       "+1*B_Ea +1*B_Eb -1*B_Eab" (which maps to zero).
+# Both make a parameter (or combination) structurally unidentified, which lets
+# the group-level covariance diverge and crash the sampler; make_emc aggregates
+# these across (joint) data sets and warns before fitting.
+design_identifiability <- function(designs, sampled_p_names, constants = NULL) {
+  # All-zero columns
+  nonzero_p <- character(0); all_p <- character(0)
+  for (x in designs) {
+    pcol <- !is.na(attr(x, "assign"))
+    if (!any(pcol)) next
+    xp <- x[, pcol, drop = FALSE]
+    all_p <- c(all_p, colnames(xp))
+    nonzero_p <- c(nonzero_p, colnames(xp)[colSums(abs(xp)) != 0])
+  }
+  zero_effect_pars <- intersect(setdiff(unique(all_p), unique(nonzero_p)), sampled_p_names)
+
+  # Exact linear dependencies among the remaining sampled columns. Skip the
+  # all-zero columns (reported above) to avoid double-reporting.
+  collinear_deps <- character(0)
+  for (x in designs) {
+    pcol <- !is.na(attr(x, "assign"))
+    if (!any(pcol)) next
+    keep <- setdiff(colnames(x)[pcol], c(names(constants), zero_effect_pars))
+    if (length(keep) < 2) next
+    xp <- unique(x[, keep, drop = FALSE])          # unique rows preserve column rank
+    # nv = ncol so the full right-singular basis (including the null space) is
+    # returned even when there are fewer unique rows than columns. Singular values
+    # past min(dim) are implicitly zero, so pad before thresholding.
+    sv <- svd(xp, nu = 0, nv = ncol(xp))
+    d <- c(sv$d, rep(0, ncol(xp) - length(sv$d)))
+    tol <- max(1e-8 * max(d), max(dim(xp)) * .Machine$double.eps * max(d))
+    for (j in which(d <= tol)) {
+      v <- sv$v[, j]
+      v <- v / v[which.max(abs(v))]                # scale so the largest coef is 1
+      inv <- abs(v) > 1e-6
+      collinear_deps <- c(collinear_deps,
+                          paste(sprintf("%+.2g*%s", v[inv], keep[inv]), collapse = " "))
+    }
+  }
+  list(zero_effect_pars = zero_effect_pars, collinear_pars = unique(collinear_deps))
+}
+
+# Aggregate the per-data-set identifiability info stored on each dadm and warn
+# about parameters/combinations that are unidentified across the whole (joint)
+# model. Joint-model parameters are component-qualified, so their local names
+# must be qualified here too before aggregating.
+warn_identifiability <- function(dadm_list, component_names = NULL) {
+  joint <- length(dadm_list) > 1L
+  if (joint) {
+    if (is.null(component_names)) component_names <- as.character(seq_along(dadm_list))
+  }
+  qualify <- function(x, i) {
+    if (!joint || length(x) == 0L) x else paste(component_names[i], x, sep = "|")
+  }
+
+  sp_list <- Map(function(d, i) qualify(attr(d, "sampled_p_names"), i),
+                 dadm_list, seq_along(dadm_list))
+  if (!all(lengths(sp_list) > 0)) return(invisible(NULL))  # e.g. custom likelihoods
+
+  present   <- table(unlist(sp_list))
+  zero_list <- Map(function(d, i) qualify(attr(d, "zero_effect_pars"), i),
+                   dadm_list, seq_along(dadm_list))
+  zero_hits <- table(unlist(zero_list))
+  if (length(zero_hits) > 0) {
+    unident <- names(zero_hits)[as.integer(zero_hits) == as.integer(present[names(zero_hits)])]
+    if (length(unident) > 0) {
+      warning("The following parameter(s) have no effect on the likelihood ",
+              "(their mapped design column is all zero) and are unidentified:\n  ",
+              paste(unident, collapse = ", "),
+              "\nCheck the contrast/design matrices for these parameters, or add ",
+              "them to `constants`. Leaving an unidentified parameter free lets the ",
+              "group-level variance diverge, which typically crashes the sampler ",
+              "mid-run.", call. = FALSE)
+    }
+  }
+
+  deps <- unique(unlist(Map(function(d, i) {
+    x <- attr(d, "collinear_pars")
+    if (joint && length(x) > 0L) {
+      x <- gsub("*", paste0("*", component_names[i], "|"), x, fixed = TRUE)
+    }
+    x
+  }, dadm_list, seq_along(dadm_list))))
+  if (length(deps) > 0) {
+    warning("The following linear combination(s) of sampled parameters have no ",
+            "effect on the likelihood, so those parameters are jointly ",
+            "unidentified (collinear design columns):\n  ",
+            paste0(deps, " = 0", collapse = "\n  "),
+            "\nDrop or constrain one parameter from each dependency, or revise the ",
+            "contrast/design matrices. Leaving a collinear set free lets the ",
+            "group-level covariance become singular and crash the sampler mid-run.",
+            call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
-                         compress_dms=TRUE, memory_saver = FALSE)
+                         compress_dms=TRUE, memory_saver = FALSE,
+                         check_identifiability = FALSE)
 {
   if (is.null(model)) {
     if (is.null(design$model))
@@ -641,35 +753,34 @@ design_model <- function(data,design,model=NULL,
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
+    if(i %in% names(da)) next  # SM don't overwrite existing columns
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da[,i] <- newF
   }
 
-  # Add covariate_map as attribute to da
+  # Trend checks to apply now that we have the data
   if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      if(!is.null(trend_list[[i]]$map)) {
-        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
-        covariate_map_names <- names(trend_list[[i]]$map)
-        covariate_map_functions <- trend_list[[i]]$map
-        for(map_n in 1:length(covariate_map_names)) {
-          covs <- trend_list[[i]]$covariate
-          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+    trend <- model_info$trend
+
+    # loop over bases to find covariate maps
+    for(base in trend$bases) {
+      if(!is.null(base$coding)) {
+        ## look up covariate names
+        if(!'covariate_coding' %in% names(attributes(da))) attr(da, 'covariate_coding') <- list()
+        covs <- trend$kernels[[base$kernel_id]]$cov_names
+        for(scheme_name in names(base$coding)) {
+          attr(da, 'covariate_coding')[[scheme_name]] <- attr(da, 'covariate_coding')[[scheme_name]] <- base$coding[[scheme_name]](dadm = da, covs)
         }
       }
     }
-  }
 
-  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
-  if(!is.null(model_info$trend)) {
-    trend_list <- model_info$trend
-    for(i in 1:length(trend_list)) {
-      current_trend <- trend_list[[i]]
-      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+    # loop over kernels to check for NAs in data
+    all_kernels <- get_kernels()
+    for(kernel in trend$kernels) {
+      if(!isTRUE(all_kernels[[kernel$type]]$NA_allowed)) {
         # check if any NAs exist in the covariate
-        for(covariate in current_trend$covariate) {
-          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        for(covariate in kernel$cov_names) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', kernel$type, ' kernel type.'))
         }
       }
     }
@@ -765,8 +876,17 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
-  if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
+
+  if (check_identifiability) {
+    ident <- design_identifiability(out, sampled_p_names, design$constants)
+    attr(dadm,"zero_effect_pars") <- ident$zero_effect_pars
+    attr(dadm,"collinear_pars") <- ident$collinear_pars
+  }
+  if(is.null(dadm$lR)){
+    nunique <- dim(dadm)[1]
+  } else{
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
+  }
   if (verbose & compress) message("Likelihood speedup factor: ",
   round(dim(da)[1]/dim(dadm)[1],1)," (",nunique," unique trials)")
 
@@ -787,7 +907,7 @@ design_model <- function(data,design,model=NULL,
       attr(dadm, "designs") <- NULL
     }
     model_list <- model()
-    if (!has_trend_map(model_list)) attr(dadm, "covariate_maps") <- NULL
+    if (!has_trend_coding(model_list)) attr(dadm, "covariate_coding") <- NULL
     keep <- resolve_memory_columns(dadm, model_list)
     if (length(keep) > 0) {
       attrs <- attributes(dadm)
@@ -843,6 +963,15 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 
   # --- 4. Auto-add intercept formulas for source parameters not yet in formula
   missing_sources <- source_pars[!source_pars %in% lhs_terms]
+
+  # Don't add intercept if source will already be generated as a column
+  # of an existing formula (e.g. "B_lRd.alpha_errorFALSE" from "B_lRd.alpha")
+  missing_sources <- missing_sources[!vapply(missing_sources, function(src) {
+    any(vapply(lhs_terms, function(lhs) {
+      startsWith(src, paste0(lhs, "_"))
+    }, logical(1)))
+  }, logical(1))]
+
   if (length(missing_sources) > 0) {
     message(paste0(
       "Intercept formula added for parameter_design source parameter(s): ",
@@ -1140,10 +1269,10 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
 
-    if(!is.null(attr(dadm, 'covariate_maps'))) {
-      covariate_maps <- attr(dadm, 'covariate_maps')
-      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
-      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    if(!is.null(attr(dadm, 'covariate_coding'))) {
+      covariate_coding <- attr(dadm, 'covariate_coding')
+      for(ii in 1:length(covariate_coding)) covariate_coding[[ii]] <- covariate_coding[[ii]][isin,]
+      attr(dl[[i]], 'covariate_coding') <- covariate_coding
     }
 
     if(is.null(attr(dadm, "custom_ll"))){
@@ -1408,27 +1537,65 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   }
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
-  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
-                                      do_functions = F),
-                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
+  design_in <- design
+  acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+  design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+
+  md <- minimal_design(
+    design_in,
+    covariates = Fcovariates,
+    verbose = F,
+    drop_R = F,
+    add_acc = F,
+    drop_subjects = F
+  )
+
+  dadm <- design_model(
+    md,
+    design,
+    model,
+    rt_check = FALSE,
+    compress = FALSE,
+    verbose = FALSE
+  )
+
   if (is_stop_signal && is.null(dadm$SSD)) {
     dadm$SSD <- Inf
   }
+
   hidden_if_constant <- function(x, col) {
     if (!col %in% colnames(x)) return(character(0))
     vals <- unique(x[, col])
     vals <- vals[!is.na(vals)]
     if (length(vals) <= 1) col else character(0)
   }
-  hidden_data_cols <- c("subjects","trials","R","rt","winner")
+
+  hidden_data_cols <- c("subjects", "trials", "R", "rt", "winner")
   if (is_stop_signal) {
     hidden_data_cols <- c(hidden_data_cols, "SSD", hidden_if_constant(dadm, "lI"))
   }
+
   ok <- !(names(dadm) %in% hidden_data_cols)
-  mapped_values <- round(get_pars_matrix_oo(p_vector,dadm, design$model(), allow_missing_ssd = TRUE),digits)
+
+  mapped_values <- round(
+    get_pars_matrix_oo(
+      p_vector,
+      dadm,
+      design$model(),
+      allow_missing_ssd = TRUE
+    ),
+    digits
+  )
+
   hidden_mapped_cols <- if (is_stop_signal) c("SSD", "lI") else character(0)
-  mapped_values <- mapped_values[, !(colnames(mapped_values) %in% hidden_mapped_cols), drop = FALSE]
-  out <- cbind(dadm[,ok, drop = F], mapped_values)
+  mapped_values <- mapped_values[
+    ,
+    !(colnames(mapped_values) %in% hidden_mapped_cols),
+    drop = FALSE
+  ]
+
+  out <- cbind(dadm[, ok, drop = F], mapped_values)
+
   if (is_ordered_response_type(model()))
     out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model_info$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
