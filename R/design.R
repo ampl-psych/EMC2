@@ -154,6 +154,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     parameter_design <- parse_parameter_design(parameter_design)  # translate once here
     formula <- check_parameter_design(parameter_design, formula, constants)
   }
+  if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
+    covariates <- unique(c(covariates, "SSD"))
+  }
   if(!is.null(trend)) {
     formula <- check_trend(trend,c(names(functions), covariates), model, formula, parameter_design)
   }

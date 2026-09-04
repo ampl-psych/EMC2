@@ -15,6 +15,7 @@ profile_plot(
   use_par = NULL,
   n_point = 100,
   n_cores = 1,
+  use_c = FALSE,
   round = 3,
   true_args = list(),
   ...
@@ -40,6 +41,8 @@ profile_plot(
 \item{n_point}{Integer. Number of evenly spaced points at which to calculate likelihood}
 
 \item{n_cores}{Number of likelihood points evenly spaced between the minimum and maximum likelihood range.}
+
+\item{use_c}{Logical, use C++ version of likelihood if available, default FALSE,}
 
 \item{round}{Integer. To how many digits will the output be rounded.}
 
