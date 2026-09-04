@@ -137,6 +137,26 @@ omp_diagnostics <- function(n_threads = -1L) {
     invisible(.Call(`_EMC2_omp_diagnostics`, n_threads))
 }
 
+rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rCDM`, pars, ok, dt, max_steps)
+}
+
+rSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rSDM`, pars, ok, dt, max_steps)
+}
+
+rPSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rPSDM`, pars, ok, dt, max_steps)
+}
+
+rPHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rPHSDM`, pars, ok, dt, max_steps)
+}
+
+rHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rHSDM`, pars, ok, dt, max_steps)
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }

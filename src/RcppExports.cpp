@@ -558,6 +558,76 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// rCDM
+DataFrame rCDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
+RcppExport SEXP _EMC2_rCDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type ok(okSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< int >::type max_steps(max_stepsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rCDM(pars, ok, dt, max_steps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rSDM
+DataFrame rSDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
+RcppExport SEXP _EMC2_rSDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type ok(okSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< int >::type max_steps(max_stepsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rSDM(pars, ok, dt, max_steps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rPSDM
+DataFrame rPSDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
+RcppExport SEXP _EMC2_rPSDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type ok(okSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< int >::type max_steps(max_stepsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rPSDM(pars, ok, dt, max_steps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rPHSDM
+DataFrame rPHSDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
+RcppExport SEXP _EMC2_rPHSDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type ok(okSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< int >::type max_steps(max_stepsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rPHSDM(pars, ok, dt, max_steps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rHSDM
+DataFrame rHSDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
+RcppExport SEXP _EMC2_rHSDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Nullable<LogicalVector> >::type ok(okSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< int >::type max_steps(max_stepsSEXP);
+    rcpp_result_gen = Rcpp::wrap(rHSDM(pars, ok, dt, max_steps));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -606,6 +676,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
+    {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
+    {"_EMC2_rSDM", (DL_FUNC) &_EMC2_rSDM, 4},
+    {"_EMC2_rPSDM", (DL_FUNC) &_EMC2_rPSDM, 4},
+    {"_EMC2_rPHSDM", (DL_FUNC) &_EMC2_rPHSDM, 4},
+    {"_EMC2_rHSDM", (DL_FUNC) &_EMC2_rHSDM, 4},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

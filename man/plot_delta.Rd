@@ -23,6 +23,7 @@ plot_delta(
   prior_args = list(),
   add_percentiles = c(1:9) * 10,
   rev_delta = FALSE,
+  main = NULL,
   ...
 )
 }
@@ -39,8 +40,8 @@ plot_delta(
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{factors}{Character vector of factor names to aggregate over;
-defaults to plotting full data set ungrouped by factors if \code{NULL}.}
+\item{factors}{Character vector of factor names to aggregate over. Numeric
+variables are split into quartiles, unless they have fewer than four values.}
 
 \item{delta_factor}{The name of the factor to delta}
 
@@ -64,6 +65,11 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{rev_delta}{If FALSE (the default) the first level of the defective
 factor is subtracted from the second, if TRUE this is reversed.}
+
+\item{main}{Optional panel title(s). A single string is prefixed to each
+panel's group key (\code{""} blanks the title, the default is the group key).
+A character vector with one element per panel sets each panel's title
+verbatim; its length must then equal the number of panels drawn.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }

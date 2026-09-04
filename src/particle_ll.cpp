@@ -12,6 +12,7 @@
 #include "TrendEngine.h"
 #include "math_utils.h"
 
+#include "model_CDM.h"
 // for extract_y -- should be moved elsewhere
 #include "model_MRI.h"
 
@@ -330,6 +331,7 @@ inline void c_expand_ordered_cut(const double* __restrict__ cut_in,
     const int base = t * n_lR;
     double current = cut_in[base];
     cut_out[base]  = current;
+
     for (int r = 1; r < n_lR - 1; ++r) {
       current          += std::exp(cut_in[base + r]);
       cut_out[base + r] = current;
@@ -466,6 +468,7 @@ void c_log_likelihood_DDM(const double* rts,
            idx_all,
            ll_row);
 }
+
 
 inline void c_log_likelihood_ordered(const ParamTable&       pt,
                                      const ChoiceOnlySpec&   spec,
@@ -638,7 +641,6 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
-
   } else {
     // All choice models have an expand attribute
     IntegerVector expand = data.attr("expand");
@@ -719,8 +721,48 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
         if (!return_trialwise) result(0, i) = sum;
       }
+      // -----------------------------------------------------------------------
+      // Continuous-choice-RT models (CDM, PSDM, PHSDM)
+      // -----------------------------------------------------------------------
+    } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
+      const bool has_R2 = (sum(contains(data.names(), "R2")) == 1);
+      const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
+      NumericVector rts = data["rt"];
+      NumericVector Rs  = data["R"];
+      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+
+      std::vector<double> ll_trial(n_choice_trials, 0.0);     // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
+
+      for (int i = 0; i < n_particles; ++i) {
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        std::fill(is_ok.begin(),  is_ok.end(),  1);
+        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        NumericMatrix pars = get_pars_matrix(ctx.param_table, ctx.keep_names);
+
+        if (type == "CDM") {
+          // Sub-type dispatch: CDM -> HSDM (R,R2,R3) -> SDM (R,R2) -> CDM (R only)
+          if(has_R2 && has_R3 && pars.ncol() >= 8)
+            c_dHSDM(rts, Rs, R2s, R3s, pars, participating, ll_trial.data(), n_choice_trials);
+          else if (has_R2 && pars.ncol() >= 7)
+            c_dSDM (rts, Rs, R2s, pars, participating, ll_trial.data(), n_choice_trials);
+          else
+            c_dCDM (rts, Rs, pars, participating, ll_trial.data(), n_choice_trials);
+        } else if (type == "PSDM") {
+          c_dPSDM (rts, Rs, pars, participating, ll_trial.data(), n_choice_trials);
+        } else {
+          c_dPHSDM(rts, Rs, R2s,  pars, participating, ll_trial.data(), n_choice_trials);
+        }
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, 1, min_ll, participating);
+
+        double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+        const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
+        if (!return_trialwise) result(0, i) = sum;
+      }
     // -----------------------------------------------------------------------
-    // Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
+    // Discrete-Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
     // -----------------------------------------------------------------------
     } else {
       // Shared Choice-RT setup

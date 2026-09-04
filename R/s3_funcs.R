@@ -428,7 +428,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     search_width = 1, step_size = 100, verbose = TRUE, fileName = NULL,
                     particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
-                    thin = FALSE,
+                    thin = FALSE, on_singular = NULL,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
@@ -467,7 +467,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
-                   r_cores = dots$r_cores)
+                   on_singular = on_singular, r_cores = dots$r_cores)
   }
   if (verbose) {
     # Re-use check_progress to get final Rhat and ESS for the sample stage,
@@ -567,6 +567,22 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' of parameters these should hold. See the details and examples section.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
+#' @param on_singular A list or `NULL` (the default). Controls recovery when the
+#' group-level covariance becomes computationally singular during sampling (which
+#' otherwise aborts the run, typically from an unidentified parameter). `NULL`
+#' keeps the default behaviour: error immediately, naming the diverging parameters.
+#' A list may set any of:
+#' \itemize{
+#'   \item `max_retries` — integer; on a singular covariance, re-draw the group
+#'     (Gibbs) step this many times before giving up on that iteration. Rescues
+#'     transient early-burn singularities. Default 0.
+#'   \item `on_exhausted` — `"error"` (default) or `"carry_forward"`. When retries
+#'     are exhausted, `"carry_forward"` reuses the previous iteration's group
+#'     parameters and continues instead of aborting.
+#'   \item `max_carry_forward` — integer; consecutive carried-forward iterations
+#'     allowed before giving up with a diagnosis of the diverging parameters. Default 10.
+#' }
+#' Retry is attempted before carry-forward when both are enabled.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{
@@ -588,6 +604,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' # LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
 #' #   preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
 #' #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
+#'
+#' # For a transient singular group covariance during burn, retry the group step:
+#' # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
 #'}
 #' @export
 fit <- function(emc, ...){

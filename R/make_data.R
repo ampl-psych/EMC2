@@ -163,7 +163,7 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   if (any(isgng)) {
     # A nogo winner here is a known latent response with an unobserved finishing
     # time.  Persist the effective bounds consumed by the C++ likelihood and
-    # retain R so it can integrate the nogo winner over the full race instead of treating 
+    # retain R so it can integrate the nogo winner over the full race instead of treating
     # all nogo trials as unknown-winner with rt>UC.
     data$UC[isgng] <- UC_eff[isgng] <- 0
     data$LC[isgng] <- LC_eff[isgng] <- 0
@@ -373,9 +373,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       stop("If data is not provided need to specify number of trials")
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
                              drop_subjects = F, n_trials = n_trials, add_acc=F,
-                           do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH, NOT SURE IF THIS IS WISE
+                           do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH
                            drop_R = F)
   } else {
     data <- add_trials(data[order(data$subjects),])
@@ -418,7 +420,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   } else {
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {

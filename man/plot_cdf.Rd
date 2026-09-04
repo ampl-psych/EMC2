@@ -22,6 +22,8 @@ plot_cdf(
   posterior_args = list(),
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
+  density_over = "rt",
+  main = NULL,
   ...
 )
 }
@@ -38,10 +40,11 @@ plot_cdf(
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{factors}{Character vector of factor names to aggregate over;
-defaults to plotting full data set ungrouped by factors if \code{NULL}.}
+\item{factors}{Character vector of factor names to aggregate over. Numeric
+variables are split into quartiles, unless they have fewer than four values.}
 
-\item{defective_factor}{Name of the factor used for the defective CDF (default "R").}
+\item{defective_factor}{Name of the factor used for the defective CDF (default
+\code{"R"}). Numeric variables are grouped in the same way as \code{factors}.}
 
 \item{n_cores}{Number of CPU cores to use if generating predictives from an \code{emc} object.}
 
@@ -61,14 +64,24 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{add_percentiles}{Vector of integers giving percentiles to plot as points, NULL stops plotting.}
 
+\item{density_over}{Name of the numeric column whose density or CDF is plotted.
+Defaults to \code{"rt"}.}
+
+\item{main}{Optional panel title(s). A single string is prefixed to each
+panel's group key (\code{""} blanks the title, the default is the group key).
+A character vector with one element per panel sets each panel's title
+verbatim; its length must then equal the number of panels drawn.}
+
 \item{...}{Other graphical parameters for the real data lines.}
 }
 \value{
 Returns \code{NULL} invisibly.
 }
 \description{
-Plots a defective CDF for each level of the specified factor. Curves use finite
-RTs, and their summed endpoint approaches the finite-RT proportion.
+Plots panels of cumulative distribution functions (CDFs) for each level of the specified
+defective factor in the data. The CDFs are \emph{defective}; each factor level's CDF
+scales only up to that level's proportion. Summed across levels, the maximum is 1.
+Optionally, posterior and/or prior predictive CDFs can be overlaid.
 }
 \examples{
 # Plot defective CDF for data only

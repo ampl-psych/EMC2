@@ -33,9 +33,9 @@ make_missing(
 
 \item{UC}{Upper censoring bound, default Inf.}
 
-\item{LCresponse}{Logical. Default FALSE, set responses to NA on lower-censored trials.}
+\item{LCresponse}{Logical. Default FALSE; if TRUE, retain responses on lower-censored trials.}
 
-\item{UCresponse}{Logical. Default FALSE, set responses to NA on upper-censored trials.}
+\item{UCresponse}{Logical. Default FALSE; if TRUE, retain responses on upper-censored trials.}
 
 \item{LCdirection}{Logical. Default TRUE, lower-censored RTs are coded as -Inf; if FALSE, as NA.}
 
@@ -65,8 +65,8 @@ to the return, specifying, respectively, if a row is subject to lower or upper
 truncation, lower or upper censoring, or contamination with the given probability.
 Truncation removes rows. Contamination makes R = NA and the rt = Inf, and is
 applied after truncation but before censoring. Lower/upper censoring sets
-R = NA if LCresponse/UCresponse = TRUE and
-rt = -Inf/Inf if LCdireciton/UCdireciton = TRUE (else NA).
+R = NA unless LCresponse/UCresponse = TRUE and
+rt = NA if LCdireciton/UCdireciton = TRUE (else NA).
 All of these arguments can be: 1) NULL, in which case if the data frame has a column
 of that name it is used, or if not the default is used (see argument definition),
 2) a scalar/logical (same value for every data row), 3) a subject-named  vector

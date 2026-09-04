@@ -182,6 +182,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
 
   pars <- res$pars
   data <- res$data
+
   if(!by_subject){
     data$subjects <- 1
     factor(data$subjects)
@@ -247,6 +248,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
     out <- list()
     idx <- data$subjects == sub
     for(i in 1:n_pars){
+      cur_pars <- matrix(pars[idx,,i], nrow = sum(idx))
       # First case, map = TRUE
       if(isTRUE(map[i]) || is.character(map[[i]])){
         if(isTRUE(map[i])){
@@ -260,7 +262,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
           cells <- interaction(df[idx,vars], sep = "_", drop = TRUE, lex.order = TRUE)
           g <- nlevels(cells)
           ng <- as.vector(table(cells))
-          res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
+          res <- rowsum(cur_pars, cells) / ng            # (g x k)
 
         } else{
           if (sum(idx)==1) res <- pars[idx,,i] else
@@ -270,7 +272,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
         S  <- model.matrix(map[[i]], data = data[idx,])
         ng <- colSums(S)
         # g x k means:
-        res <- (t(S) %*% pars[idx,,i]) / ng
+        res <- (t(S) %*% cur_pars) / ng
       }
       if(is.vector(res)){
         res <- t(res)
@@ -312,7 +314,10 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design, covariates = list(...)$covariates,
+    design_in <- design
+    acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
+    design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
+    data <- minimal_design(design_in, covariates = list(...)$covariates,
                            drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F, group_design = group_design)
   }
@@ -327,11 +332,13 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
-  data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
-    x <- x[!duplicated(x[,colnames(x) != "rt"]),]
-    return(x)
-  }))
-  data <- add_trials(data[order(data$subjects),])
+  if(ncol(data) > 1){
+    data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
+      x <- x[!duplicated(x[,colnames(x) != "rt"]),]
+      return(x)
+    }))
+  }
+  data <- add_trials(data[order(data$subjects),, drop = F])
 
 
   model <- design$model
