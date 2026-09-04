@@ -446,9 +446,9 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   muS(pars_(0, 3)), sigmaS(pars_(0, 4)), normS_lb(pars_(0, 8)),
+  n_go(pars_.nrow()),
   normal_ratio(exg_normal_ratio_threshold(pars_)),
   shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
-  n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
     for (int i = 0; i < n_go; ++i) {
@@ -705,9 +705,9 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   meanlogS(pars_(0, 3)), sdlogS(pars_(0, 4)),
+  n_go(pars_.nrow()),
   normal_ratio(exg_normal_ratio_threshold(pars_)),
   shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
-  n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
     for (int i = 0; i < n_go; ++i) {
@@ -895,9 +895,9 @@ public:
   SSD(SSD_),
   min_ll(min_ll_),
   shapeS(pars_(0, 3)), scaleS(pars_(0, 4)),
+  n_go(pars_.nrow()),
   normal_ratio(exg_normal_ratio_threshold(pars_)),
   shifted_exp_sigma(exg_shifted_exp_sigma_threshold(pars_)),
-  n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
     for (int i = 0; i < n_go; ++i) {
