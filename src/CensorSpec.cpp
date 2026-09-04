@@ -290,13 +290,13 @@ CensorSpec make_censor_spec(const DataFrame& data,
     for (int k = 0; k < n_acc; ++k) {
       const int m = missingness_ptr[base + k];
       if (m == 4)          has_silent   = true;
-      if (m == NA_INTEGER) has_observed = true;
-    }
+      if (m != 4)          has_observed = true;  // NA, 0, 1, 2, 3 all count
+      }
     if (!has_silent) continue;
 
     if (!has_observed)
       Rcpp::stop("Trial %d has all accumulators marked silent (missingness=4) "
-                   "but no observed response", base / n_acc);
+                   "with no other accumulators present", base / n_acc);
 
     const int trial = base / n_acc;
     censor.idx_mixed_trials.push_back(trial);
