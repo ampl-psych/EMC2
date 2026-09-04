@@ -79,6 +79,8 @@ test_that("ex-Gaussian approximations are off by default and opt-in", {
   )
   expect_equal(model$bound$minmax[, c("exg_normal_ratio", "exg_shifted_exp_sigma")],
                cbind(exg_normal_ratio = c(0, Inf), exg_shifted_exp_sigma = c(0, Inf)))
+  expect_equal(unname(model$bound$exception["exg_normal_ratio"]), 0)
+  expect_equal(unname(model$bound$exception["exg_shifted_exp_sigma"]), 0)
 
   expect_warning(
     stop_signal(
@@ -101,6 +103,8 @@ test_that("ex-Gaussian approximations are off by default and opt-in", {
   ))
   expect_equal(unname(model$p_types["exg_normal_ratio"]), .05)
   expect_equal(unname(model$p_types["exg_shifted_exp_sigma"]), 1e-5)
+  expect_equal(unname(model$bound$exception["exg_normal_ratio"]), 0)
+  expect_equal(unname(model$bound$exception["exg_shifted_exp_sigma"]), 0)
 
   expect_warning(
     stop_signal(

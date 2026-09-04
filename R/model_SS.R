@@ -644,6 +644,10 @@ ss_exgaussian_stop_spec <- function(exg_approximation = c(
       exg_normal_ratio = c(0, Inf),
       exg_shifted_exp_sigma = c(0, Inf)
     ),
+    approximation_exception = c(
+      exg_normal_ratio = 0,
+      exg_shifted_exp_sigma = 0
+    ),
     rfun = NULL,
     mean = function(pars) {
       pars[, "muS"] + pars[, "tauS"]
@@ -695,6 +699,10 @@ ss_go_spec <- function(go, exg_approximation = c(
       approximation_minmax = cbind(
         exg_normal_ratio = c(0, Inf),
         exg_shifted_exp_sigma = c(0, Inf)
+      ),
+      approximation_exception = c(
+        exg_normal_ratio = 0,
+        exg_shifted_exp_sigma = 0
       ),
       dfun = function(rt, pars) dtexGaussianG(rt, pars),
       pfun = function(rt, pars) ptexGaussianG(rt, pars)
@@ -828,14 +836,17 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
   approximation_p_types <- NULL
   approximation_transform <- NULL
   approximation_minmax <- NULL
+  approximation_exception <- NULL
   if (identical(go_spec$family, "exgaussian")) {
     approximation_p_types <- go_spec$approximation_p_types
     approximation_transform <- go_spec$approximation_transform
     approximation_minmax <- go_spec$approximation_minmax
+    approximation_exception <- go_spec$approximation_exception
   } else if (identical(stop_spec$family, "exgaussian")) {
     approximation_p_types <- stop_spec$approximation_p_types
     approximation_transform <- stop_spec$approximation_transform
     approximation_minmax <- stop_spec$approximation_minmax
+    approximation_exception <- stop_spec$approximation_exception
   }
 
   p_types <- c(
@@ -866,7 +877,8 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
     go_spec$exception,
     tf = 0, gf = 0,
     go_spec$tail_exception,
-    stop_spec$tail_exception
+    stop_spec$tail_exception,
+    approximation_exception
   )
 
   list(
