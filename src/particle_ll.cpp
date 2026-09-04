@@ -593,10 +593,24 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   const bool has_lR         = (sum(contains(data.names(), "lR")) == 1);
   const int n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
   const int n_choice_trials = n_rows / n_lR;
-  const int out_rows        = return_trialwise ? n_choice_trials : 1;
 
+
+  // n_exp needed for out_rows — extract expand early for non-MRI models
+  const bool is_mri = (type == "MRI" || type == "MRI_AR1");
+  IntegerVector expand;
+  const int* exp_ptr = nullptr;
+  int n_exp = n_choice_trials;  // MRI has no expand, trialwise = n_choice_trials
+  if (!is_mri) {
+    expand  = data.attr("expand");
+    n_exp   = expand.size();
+    exp_ptr = expand.begin();
+  }
+
+  const int out_rows = return_trialwise ? n_exp : 1;
+  NumericMatrix result(out_rows, n_particles);
+  double* result_ptr = result.begin();
   // Column i = particle i's trialwise buffer (contiguous)
-  NumericMatrix result(out_rows, n_particles);  // column i = particle i, contiguous
+  // NumericMatrix result(out_rows, n_particles);  // column i = particle i, contiguous
 
   std::vector<int>     is_ok(n_rows, 1);
   std::vector<double>  ll_buf(n_choice_trials);  // compressed scratch, reused per particle
@@ -637,16 +651,11 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       c_do_bound(ctx.param_table, bound_specs, is_ok);
       apply_bounds(is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, participating);
 
-      double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+      double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
       const double sum = clamp_sum(ll_buf.data(), n_choice_trials, min_ll, tw);
       if (!return_trialwise) result(0, i) = sum;
     }
   } else {
-    // All choice models have an expand attribute
-    IntegerVector expand = data.attr("expand");
-    const int     n_exp  = expand.size();
-    const int*    exp_ptr = expand.begin();
-
     // Missingness — shared across all choice models
     IntegerVector missingness;
     const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
@@ -717,7 +726,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
 
         // 4) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
-        double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
         const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
         if (!return_trialwise) result(0, i) = sum;
       }
@@ -757,7 +766,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         c_do_bound(ctx.param_table, bound_specs, is_ok);
         apply_bounds(is_ok, ll_trial.data(), n_choice_trials, 1, min_ll, participating);
 
-        double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
         const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
         if (!return_trialwise) result(0, i) = sum;
       }
@@ -801,7 +810,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
           apply_bounds(is_ok, ll_buf.data(), n_choice_trials, /* n_lR = */ 1, min_ll, participating);
 
           // 5) Determine output location (tw is a pointer to the correct address in result) and protect via expand, clamp, sum
-          double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+          double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
           const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
           if (!return_trialwise) result(0, i) = sum;
         }
@@ -835,7 +844,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
           apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
 
           // 5) Expand, clamp, sum, etc
-          double* tw = return_trialwise ? result.column(i).begin() : nullptr;
+          double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
           const double sum = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw);
           if (!return_trialwise) result(0, i) = sum;
         }
@@ -876,8 +885,19 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   const bool has_lR          = (sum(contains(data.names(), "lR")) == 1);
   const int  n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
   const int  n_choice_trials = n_rows / n_lR;
-  const int  out_rows        = return_trialwise ? n_choice_trials : 1;
 
+  // n_exp needed for out_rows — extract expand early for non-MRI models
+  const bool is_mri = (type == "MRI" || type == "MRI_AR1");
+  IntegerVector expand;
+  const int* exp_ptr = nullptr;
+  int n_exp = n_choice_trials;  // MRI has no expand, trialwise = n_choice_trials
+  if (!is_mri) {
+    expand  = data.attr("expand");
+    n_exp   = expand.size();
+    exp_ptr = expand.begin();
+  }
+
+  const int out_rows = return_trialwise ? n_exp : 1;
   NumericMatrix result(out_rows, n_particles);
   double* result_ptr = result.begin();
 
@@ -911,19 +931,19 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
   std::vector<std::vector<double>> ll_buf_vec(n_threads_used, std::vector<double>(n_choice_trials, 1.0));
   std::vector<std::vector<int>>    is_ok_vec (n_threads_used, std::vector<int>   (n_rows,          1));
+  // tw_vec sized n_exp — written by expand_clamp_sum then copied into result
   std::vector<std::vector<double>> tw_vec    (n_threads_used,
-                                              std::vector<double>(return_trialwise ? n_choice_trials : 0));
+                                              std::vector<double>(return_trialwise ? n_exp : 0));
 
   // ---------------------------------------------------------------------------
   // MRI / MRI_AR1
   // ---------------------------------------------------------------------------
-  if (type == "MRI" || type == "MRI_AR1") {
+  if (is_mri) {
     NumericVector y_rcpp = extract_y(data);
     const double* y      = y_rcpp.begin();
     const bool    is_ar1 = (type == "MRI_AR1");
 
     MRISpec spec = make_mri_spec(ctx.param_table, ctx.keep_names, is_ar1);
-    // participating stays all-true for MRI — no missingness column
     const std::vector<bool> participating(n_rows, true);
 
 #pragma omp parallel for schedule(static) num_threads(n_threads_used)
@@ -961,10 +981,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     // ---------------------------------------------------------------------------
     // All choice models — shared read-only data
     // ---------------------------------------------------------------------------
-    IntegerVector expand  = data.attr("expand");
-    const int     n_exp   = expand.size();
-    const int*    exp_ptr = expand.begin();
-
     IntegerVector missingness;
     const bool has_missingness = (sum(contains(data.names(), "missingness")) == 1);
     if (has_missingness) missingness = data["missingness"];
@@ -977,7 +993,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       win_flag = LOGICAL(winner);
     }
 
-    // participating — built once, shared read-only across threads
     std::vector<bool> participating(n_rows, true);
 
     std::vector<int> idx_all, idx_win, idx_los;
@@ -1046,6 +1061,64 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
           std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
         } else {
           result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // CDM / PSDM / PHSDM branch
+      // -----------------------------------------------------------------------
+    } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
+      const bool has_R2 = (sum(contains(data.names(), "R2")) == 1);
+      const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
+      NumericVector rts = data["rt"];
+      NumericVector Rs  = data["R"];
+      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+
+      std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials, 0.0));
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_trial = ll_trial_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        std::fill(is_ok.begin(),    is_ok.end(),    1);
+
+        NumericMatrix pars = get_pars_matrix(pt_local, ctx.keep_names);
+
+        if (type == "CDM") {
+          if      (has_R2 && has_R3 && pars.ncol() >= 8)
+            c_dHSDM(rts, Rs, R2s, R3s, pars, participating, ll_trial.data(), n_choice_trials);
+          else if (has_R2 && pars.ncol() >= 7)
+            c_dSDM (rts, Rs, R2s,       pars, participating, ll_trial.data(), n_choice_trials);
+          else
+            c_dCDM (rts, Rs,            pars, participating, ll_trial.data(), n_choice_trials);
+        } else if (type == "PSDM") {
+          c_dPSDM (rts, Rs,      pars, participating, ll_trial.data(), n_choice_trials);
+        } else {
+          c_dPHSDM(rts, Rs, R2s, pars, participating, ll_trial.data(), n_choice_trials);
+        }
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, 1, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
         }
       }
 
@@ -1153,6 +1226,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
 
   return result;
 }
+
 
 
 
