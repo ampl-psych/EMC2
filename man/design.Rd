@@ -21,6 +21,7 @@ design(
   transform = NULL,
   bound = NULL,
   parameter_design = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -106,6 +107,9 @@ components:
     )
   )
   }}
+
+\item{TC}{List of truncation/censoring arguments passed to \code{make_missing}
+(e.g. \code{list(LT=0.1, UC=2)}). NULL (default) means no truncation or censoring is applied.}
 
 \item{...}{Additional, optional arguments}
 }

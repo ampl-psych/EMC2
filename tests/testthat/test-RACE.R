@@ -8,6 +8,11 @@ designLBA <- design(
   Rlevels=c("left","right","pm"),
   matchfun=matchfun,
   model=LBA,constants=c(v_RACE3=0),
+  functions=list(missingness=function(x) {
+    out <- NA
+    out[(x$RACE==2) & (x$lR=='pm')] <- 0
+    out
+  }),
   formula=list(v~RACE*lM,B~1,t0~1,A~1), report_p_vector=FALSE
 )
 

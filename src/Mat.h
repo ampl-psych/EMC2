@@ -31,6 +31,15 @@ struct Mat {
     std::copy(src, src + nr * nc, m.data.data());
     return m;
   }
+
+  // Construct from Rcpp::NumericMatrix (at the R boundary, before parallel region)
+  static Mat from_rcpp(const Rcpp::NumericMatrix& m) {
+    return from_sexp(m);
+  }
+
+  Mat clone() const {
+    return *this;  // std::vector<double> data is deep-copied by value
+  }
 };
 
 #endif // mat_h

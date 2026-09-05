@@ -1,36 +1,263 @@
-make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
-                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
-{
+get_missing <- function(supplied, data, bound_name, default,type) {
 
-  censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
-  {
-    if (Ld) Ld <- -Inf else Ld <- NA
-    if (Ud) Ud <- Inf else Ud <- NA
-    snams <- levels(data$subjects)
-    if (length(L)==1) L <- setNames(rep(L,length(snams)),snams)
-    if (length(U)==1) U <- setNames(rep(U,length(snams)),snams)
-    for (i in snams) {
-      pick <- data$subjects==i & data$rt < L[i]
-      pick[is.na(pick)] <- FALSE
-      data$rt[pick] <- Ld
-      if (!Lr) data$R[pick] <- NA
-      pick <- data$subjects==i & data$rt > U[i]
-      pick[is.na(pick)] <- FALSE
-      data$rt[pick] <- Ud
-      if (!Ur) data$R[pick] <- NA
-    }
-    data
+  subjectwise <- FALSE
+  if (is.function(supplied)) supplied <- supplied(data)
+  if (is.null(supplied)) {
+    if (bound_name %in% colnames(data)) bound <- data[[bound_name]] else
+      bound <- default
+  } else {
+    if (type=="logical" & !is.logical(supplied))
+      stop(bound_name," must be logical")
+    if (type=="numeric" & !is.numeric(supplied))
+      stop(bound_name," must be numeric")
+    subjectwise <- all(utils::hasName(supplied,levels(data$subjects)))
+    if (!subjectwise) bound <- supplied else
+      bound <- supplied[as.character(data$subjects)]
   }
-
-  pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
-  pick[is.na(pick)] <- TRUE
-  out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
-  if (LC != 0) attr(out,"LC") <- LC
-  if (UC != Inf) attr(out,"UC") <- UC
-  if (LT != 0) attr(out,"LT") <- LT
-  if (UT != Inf) attr(out,"UT") <- UT
+  out <- rep(bound,length.out=nrow(data))
+  attr(out,"subjectwise") <- subjectwise
   out
 }
+
+check_missing <- function(TC,data=NULL,design=NULL) {
+  # This handles censoring and truncation where TC is not specified.
+  # First check data, then design
+  if (is.null(TC)) {
+    TC <- list()
+    TC <- add_defaults(TC,LT=0,LC=0,UT=Inf,UC=Inf,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+    if (!is.null(data)) {
+      for (i in c("LT","LC","UC","UT")) {
+        if (!is.null(data[[i]])) TC[[i]] <- data[[i]]
+      }
+    } else if (!is.null(design) && !is.null(design$TC)) {
+      for (i in names(TC)) TC[[i]] <- design$TC[[i]]
+    }
+  } else {
+    if (!is.list(TC)) stop("TC must be a list")
+    TC <- add_defaults(TC,LT=0,LC=0,UT=Inf,UC=Inf,
+                       no_truncate=FALSE,no_censor=FALSE,verbose=FALSE,digits=2,
+                       LCresponse=FALSE,UCresponse=FALSE,LCdirection=TRUE,UCdirection=TRUE,
+                       pContaminant=NULL,rt_resolution=NULL
+    )
+  }
+  TC
+}
+
+#' Add information about missing values to data and modify/filter accordingly.
+#'
+#' Columns corresponding to LC, UT, LC, UC, and pContaminant arguments are added
+#' to the return, specifying, respectively, if a row is subject to lower or upper
+#' truncation, lower or upper censoring, or contamination with the given probability.
+#' Truncation removes rows. Contamination makes R = NA and the rt = Inf, and is
+#' applied after truncation but before censoring. Lower/upper censoring sets
+#'   R = NA unless LCresponse/UCresponse = TRUE and
+#'   rt = NA if LCdireciton/UCdireciton = TRUE (else NA).
+#' All of these arguments can be: 1) NULL, in which case if the data frame has a column
+#' of that name it is used, or if not the default is used (see argument definition),
+#' 2) a scalar/logical (same value for every data row), 3) a subject-named  vector
+#' (same value for each subject), 4) a vector with length matching data rows, or
+#' 5) a function taking data as it argument that creates a column of appropriate
+#' values. Note that if this function returns a subject named vector it will be
+#' expanded as in case (3). For rows with response (column R) "nogo" the following
+#' are enforced: UC=LC=LT=0, UT=Inf, UCdirection=UCresponse=TRUE
+#'
+#' @param data Data frame to be modified
+#' @param LT Lower truncation bound below which data are removed, default 0.
+#' @param UT Upper truncation bound above which data are removed, default Inf.
+#' @param LC Lower censoring bound, default 0.
+#' @param UC Upper censoring bound, default Inf.
+#' @param LCresponse Logical. Default FALSE; if TRUE, retain responses on lower-censored trials.
+#' @param UCresponse Logical. Default FALSE; if TRUE, retain responses on upper-censored trials.
+#' @param LCdirection Logical. Default TRUE, lower-censored RTs are coded as -Inf; if FALSE, as NA.
+#' @param UCdirection Logical. Default TRUE, upper-censored RTs are coded as Inf; if FALSE, as NA.
+#' @param pContaminant Probability of contamination, default 0.
+#' @param no_truncate Logical, default FALSE, for TRUE don't apply truncation to row (except if GO/NOGO).
+#' @param no_censor Logical, default FALSE, for TRUE don't apply censor to row (except if GO/NOGO).
+#' @param verbose Logical. Default FALSE, if TRUE report effects of filtering.
+#' @param rt_resolution A double, see make_emc, specified here so binning of rt and LC/UC/LT/UT is consistent.
+#'        The default is 1/60 as in make_emc, but when make_missing is called by make_data the default is to
+#'        do nothing unless an explicit is value passed in the missing list.
+#' @param digits Integer, number of decimal places used when rounding the
+#'        percentage summaries reported when \code{verbose = TRUE}. Default 2.
+#' @return A filtered and modified data frame with added/updated LC, UC, LT and UT columns
+#' @examples
+#' # First make some data
+#'   designRDM <- design(model = RDM,
+#'   factors = list(subjects = 1:2, S = c("left", "right")),Rlevels = c("left", "right"),
+#'   matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+#'   formula = list(B ~ 1, v ~ lM, A ~ 1, t0 ~ 1, s ~ lM),
+#'   constants = c(s = log(1)))
+#' p_vector <- log(c(B=2,A=.5,t0=0.2,v=1,v_lMTRUE=2,s_lMTRUE=.8))
+#' dat <- make_data(p_vector, designRDM, n_trials = 10)
+#'
+#' # Filter data frame without LT/UC/LT/UT columns (as in most real data files)
+#' data <- dat
+#' mdata <- make_missing(dat,LT=.7,LC=.75,UC=1.5,UT=1.6,verbose=TRUE)
+#' @export
+
+make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
+                         LCresponse = NULL, UCresponse = NULL,LCdirection = NULL, UCdirection = NULL,
+                         no_truncate=FALSE,no_censor=FALSE,
+                         pContaminant=NULL,verbose=FALSE,rt_resolution=1/60,digits = 2)
+{
+
+  # no censor/truncation, leave unaltered unless go/nogo model
+  is_gng_data <- "R" %in% names(data) &&  any(data$R == "nogo" | "nogo" %in% levels(data$R), na.rm = TRUE)
+  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data) return(data)
+  if (!is.null(LT) && !is.function(LT) && all(LT == 0) &&
+      !is.null(LC) && !is.function(LC) && all(LC == 0) &&
+      !is.null(UT) && !is.function(UT) && all(is.infinite(UT)) &&
+      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data) {
+    return(data)
+  }
+
+  no_truncate <- get_missing(no_truncate, data, "no_truncate",FALSE,"logical")
+  LT <- get_missing(LT, data, "LT",0,"numeric")
+  data$LT[!no_truncate] <- as.numeric(LT[!no_truncate])
+  UT <- get_missing(UT, data, "UT",Inf,"numeric")
+  data$UT[!no_truncate] <- as.numeric(UT[!no_truncate])
+
+  # Go/no-go data are defined by explicit non-responses. Truncation is not a
+  # coherent missing-data mechanism in this setting, so disable LT/UT globally.
+  if (is_gng_data) {
+    requested_trunc <- any(((data$LT != 0) | is.finite(data$UT)) & !no_truncate, na.rm = TRUE)
+    if (requested_trunc) {
+      warning("Ignoring LT/UT truncation for go/no-go data (R includes 'nogo').")
+    }
+    no_truncate[] <- TRUE
+    data$LT[] <- 0
+    data$UT[] <- Inf
+  }
+
+
+  no_censor <- get_missing(no_censor, data, "no_censor",FALSE,"logical")
+  LC <- get_missing(LC, data, "LC",0,"numeric")
+  data$LC[!no_censor] <- as.numeric(LC[!no_censor])
+  UC <- get_missing(UC, data, "UC",Inf,"numeric")
+  data$UC[!no_censor] <- as.numeric(UC[!no_censor])
+
+  if (!is.null(rt_resolution)) {
+    data$rt <- .floor_to_rt_resolution(data$rt, rt_resolution)
+    data$LC <- .floor_to_rt_resolution(data$LC, rt_resolution)
+    data$UC <- .floor_to_rt_resolution(data$UC, rt_resolution)
+    data$LT <- .floor_to_rt_resolution(data$LT, rt_resolution)
+    data$UT <- .floor_to_rt_resolution(data$UT, rt_resolution)
+  }
+
+  LCresponse <- get_missing(LCresponse, data, "LCresponse",FALSE,"logical")
+  UCresponse <- get_missing(UCresponse, data, "UCresponse",FALSE,"logical")
+  LCdirection <- get_missing(LCdirection, data, "LCdirection",TRUE,"logical")
+  UCdirection <- get_missing(UCdirection, data, "UCdirection",TRUE,"logical")
+
+  LT_eff <- data$LT
+  LC_eff <- data$LC
+  UT_eff <- data$UT
+  UC_eff <- data$UC
+
+  isgng <- data$R == "nogo"
+  isgng[is.na(isgng)] <- FALSE
+  if (any(isgng)) {
+    # A nogo winner here is a known latent response with an unobserved finishing
+    # time.  Persist the effective bounds consumed by the C++ likelihood and
+    # retain R so it can integrate the nogo winner over the full race instead of treating
+    # all nogo trials as unknown-winner with rt>UC.
+    data$UC[isgng] <- UC_eff[isgng] <- 0
+    data$LC[isgng] <- LC_eff[isgng] <- 0
+    data$UT[isgng] <- UT_eff[isgng] <- Inf
+    data$LT[isgng] <- LT_eff[isgng] <- 0
+    UCdirection[isgng] <- TRUE
+    UCresponse[isgng] <- TRUE
+    no_censor[isgng] <- FALSE # previously bypassed gng if used
+  }
+
+  tol_l <- sqrt(.Machine$double.eps) * pmax(1, abs(LT_eff), abs(LC_eff))
+  tol_u <- sqrt(.Machine$double.eps) * pmax(1, abs(UC_eff), abs(UT_eff))
+  if (any((LT_eff - LC_eff) > tol_l & LC_eff != 0, na.rm = TRUE)) stop("LT > LC not allowed")
+  if (any((UC_eff - UT_eff) > tol_u & UC_eff != Inf, na.rm = TRUE)) stop("UC > UT not allowed")
+
+  # Only keep trials in LT-UT (inclusive) or infinite or NA
+  cutL <- is.finite(data$rt) & (data$rt < LT_eff & is.finite(data$rt))
+  cutL[is.na(cutL)] <- FALSE; cutL[no_truncate] <- FALSE
+  cutU <- (data$rt > UT_eff & is.finite(data$rt))
+  cutU[is.na(cutU)] <- FALSE; cutU[no_truncate] <- FALSE
+  if (verbose) {
+    if (!all(LT_eff==0)) {
+      if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
+        stat <- tapply(cutL,data$subjects,mean)
+      message("% lower truncation")
+      print(round(100*stat,digits))
+    }
+    if (!all(UT_eff==Inf)) {
+      if (!attr(UT,"subjectwise")) stat <- mean(cutU) else
+        stat <- tapply(cutU,data$subjects,mean)
+      message("% upper truncation")
+      print(round(100*stat,digits))
+    }
+  }
+
+  # Truncate
+  data <- data[!cutL & !cutU, ]
+  LT_eff <- LT_eff[!cutL & !cutU]
+  LC_eff <- LC_eff[!cutL & !cutU]
+  UT_eff <- UT_eff[!cutL & !cutU]
+  UC_eff <- UC_eff[!cutL & !cutU]
+  LCresponse <- LCresponse[!cutL & !cutU]
+  UCresponse <- UCresponse[!cutL & !cutU]
+  LCdirection <- LCdirection[!cutL & !cutU]
+  UCdirection <- UCdirection[!cutL & !cutU]
+  no_censor <- no_censor[!cutL & !cutU]
+
+  pContaminant <- get_missing(pContaminant, data, "pContaminant",0,"numeric")
+  if (!all(pContaminant==0)) {
+    contam <- rbinom(nrow(data), 1, pContaminant) == 1
+    data[contam, "rt"] <- Inf
+    data[contam, "R"] <- NA
+    if (verbose) {
+      if (!attr(pContaminant,"subjectwise")) stat <- mean(contam) else
+        stat <- tapply(contam,data$subjects,mean)
+      message("% contaminated")
+      print(round(100*stat,digits))
+    }
+  }
+
+  # Censoring proportions (like truncation dont censor if equal to LC or UC)
+  cutL <- is.finite(data$rt) & (data$rt < LC_eff)
+  cutL[is.na(cutL)] <- TRUE; cutL[no_censor] <- FALSE
+  cutU <- (data$rt > UC_eff)
+  cutU[is.na(cutU)] <- TRUE; cutU[no_censor] <- FALSE
+  if (verbose) {
+    if (!all(LC_eff==0)) {
+      if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
+        stat <- tapply(cutL,data$subjects,mean)
+      message("% lower censoring (after truncation)")
+      print(round(100*stat,digits))
+    }
+    if (!all(UC_eff==Inf)) {
+      if (!attr(UT,"subjectwise")) stat <- mean(cutU) else
+        stat <- tapply(cutU,data$subjects,mean)
+      message("% upper censoring (after truncation)")
+      print(round(100*stat,digits))
+    }
+  }
+
+  # Lower censoring
+  data$rt[cutL | cutU] <- NA_real_   # RT wasn't recorded
+  data$R[cutL & !LCresponse] <- NA
+  data$R[cutU & !UCresponse] <- NA
+
+  # Add missingness column
+  data$missingness <- NA_integer_
+  data$missingness[cutL & !cutU] <- 1L  # lower-censored only
+  data$missingness[cutU & !cutL] <- 2L  # upper-censored only
+  data$missingness[cutL &  cutU] <- 3L  # both
+
+  data
+}
+
 
 #' Simulate Data
 #'
@@ -55,6 +282,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
+#' @param TC List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -83,22 +311,10 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @export
 
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
-                      functions = NULL, ...)
+                      functions = NULL, TC=NULL, ...)
 {
-  # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
-  # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
-  # #' @param LC lower censoring bound (scalar or subject named vector)
-  # #' @param UC upper censoring bound (scalar or subject named vector)
-  # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-  # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-  # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-  # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-  # #' @param force_direction Boolean, take direction from argument not data (default FALSE)
-  # #' @param force_response Boolean, take response from argument not data (default FALSE)
-  # #' @param rtContaminantNA Boolean, TRUE sets contaminant trial rt to NA, if FALSE
-  # #' (the default) direction is taken from data or LCdirection or UCdirection (NB
-  # #' if both of these are false an error occurs as then contamination is not identifiable).
-  # #' @param return_Ffunctions if false covariates are not returned
+  # This handles censoring and truncation where TC is not specified -- first check data, then design as a fallback (need to agree on the accepted order)
+  TC <- check_missing(TC,design=design,data=data)
 
   if (!is.null(staircase)){
     staircase <- check_staircase(staircase)
@@ -107,18 +323,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
   check_bounds <- FALSE
-
-  LT<-0
-  UT<-Inf
-  LC<-0
-  UC<-Inf
-  LCresponse<-TRUE
-  UCresponse<-TRUE
-  LCdirection<-TRUE
-  UCdirection<-TRUE
-  force_direction<-FALSE
-  force_response<-FALSE
-  rtContaminantNA<-FALSE
   return_Ffunctions <- FALSE
   post_functions <- NULL
   optionals <- list(...)
@@ -172,31 +376,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
     design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
-                           drop_subjects = F, n_trials = n_trials, add_acc=F,
+                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH
                            drop_R = F)
   } else {
-    LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
-    UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
-    LC <- attr(data,"LC"); if (is.null(LC)) LC <- 0
-    UC <- attr(data,"UC"); if (is.null(UC)) UC <- Inf
-    if (!force_direction) {
-      ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
-      LCdirection <- any(ok)
-      ok <- data$rt==Inf; ok[is.na(ok)] <- FALSE
-      UCdirection=any(ok)
-    }
-    if (!force_response) {
-      if (!any(is.infinite(data$rt)) & any(is.na(data$R))) {
-        LCresponse <- UCresponse <- FALSE
-      } else {
-        ok <- data$rt==-Inf
-        bad <- is.na(ok)
-        LCresponse <- !any(ok[!bad] & is.na(data$R[!bad]))
-        ok <- data$rt==Inf
-        bad <- is.na(ok)
-        UCresponse <- !any(ok[!bad] & is.na(data$R[!bad]))
-      }
-    }
     data <- add_trials(data[order(data$subjects),])
   }
   if(!is.null(functions)){
@@ -287,6 +470,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       data$rt <- NULL
     }
   }
+
+  data <- make_missing(data,LT=TC$LT,LC=TC$LC,UC=TC$UC,UT=TC$UT,
+                       LCresponse = TC$LCresponse, UCresponse = TC$UCresponse,
+                       LCdirection = TC$LCdirection, UCdirection = TC$UCdirection,
+                       pContaminant=TC$pContaminant,
+                       no_truncate=TC$no_truncate,no_censor=TC$no_censor,
+                       verbose=TC$verbose,rt_resolution=TC$rt_resolution,digits=TC$digits)
+
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
     for(i in 1:length(post_functions)){
