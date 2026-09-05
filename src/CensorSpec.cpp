@@ -130,7 +130,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     const int n = (int)idx_silent.size();
     for (int j = 0; j < n; ++j) {
       lo_silent[j] = 0.0;
-      hi_silent[j] = UC[idx_silent[j]];
+      hi_silent[j] = UC[idx_silent[j] + winner_silent[j]];  // base + k to index UC
     }
     setup->fill_survivor_with_response(
         idx_silent, winner_silent,
@@ -248,7 +248,7 @@ CensorSpec make_censor_spec(const DataFrame& data,
       censor.has_silent_trial[base / n_acc] = true;
       for (int k = 0; k < n_acc; ++k) {
         if (missingness_ptr[base + k] == 4) {
-          censor.idx_silent.push_back(base + k);
+          censor.idx_silent.push_back(base);
           censor.winner_silent.push_back(k);
         }
       }
