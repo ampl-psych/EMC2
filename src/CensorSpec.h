@@ -25,13 +25,10 @@ struct CensorSpec {
   std::vector<int> idx_B_known;      std::vector<int> winner_B_known;
   std::vector<bool> participating;
 
-  // Mixed-response trials: at least one silent accumulator (missingness=4)
-  std::vector<int> idx_mixed_trials;  // trial indices
-  std::vector<int> idx_mixed_rows;    // base rows (trial * n_acc), for fill_survivor
-
-  // Parallel — one entry per silent accumulator per trial
-  std::vector<int> silent_trial;      // trial index for this entry
-  std::vector<int> silent_acc;        // accumulator index [0, n_acc-1]
+  std::vector<int>  idx_silent;       // base + k rows for silent accumulators
+  std::vector<int>  winner_silent;    // parallel: accumulator index [0, n_acc-1]
+  std::vector<bool> has_silent_trial; // length n_trials, for deferred log in fill_censored_rows
+  mutable std::vector<double> lo_silent, hi_silent, out_silent;
 
   // Integration buffers — sized to silent_acc.size()
   mutable std::vector<double> lo_mixed, hi_mixed, out_mixed;
@@ -65,7 +62,7 @@ struct CensorSpec {
   bool any() const {
     return !idx_L.empty() || !idx_U.empty() || !idx_B.empty() ||
       !idx_L_known.empty() || !idx_U_known.empty() || !idx_B_known.empty() ||
-      !idx_mixed_trials.empty();
+      !idx_silent.empty();
   }
 
   void fill_censored_rows(const TruncSpec& trunc,
@@ -79,8 +76,6 @@ struct CensorSpec {
   }
 };
 
-// CensorSpec make_censor_spec(const Rcpp::DataFrame& data,
-//                             int n_trials);
 
 CensorSpec make_censor_spec(const Rcpp::DataFrame& data,
                             int n_trials,

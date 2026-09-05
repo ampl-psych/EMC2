@@ -29,9 +29,6 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
   std::fill(p_upper.begin(), p_upper.end(), 1.0);
   setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
 
-  // also fill UC for mixed rows (with silent accumulator)
-  setup->fill_survivor(idx_mixed_rows, UC, *pt, setup->spec, p_upper.data(), *scratch);
-
   // Minimal LL
   auto clamp = [min_ll](double v) {
     return (v > min_ll) ? v : min_ll;
@@ -128,44 +125,25 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       ll_trial[idx_B_known[j] / n_acc] = std::log(clamp(out1_B[j] + out2_B[j]));
   }
 
-  // Silent accumulators
-  if (!idx_mixed_trials.empty()) {
-    const int n = (int)silent_acc.size();
-
-    // Build integration bounds — [0, UC] per silent accumulator
+  // Silent accumulator correction — add defective winner integral to ll_trial
+  if (!idx_silent.empty()) {
+    const int n = (int)idx_silent.size();
     for (int j = 0; j < n; ++j) {
-      const int base = silent_trial[j] * n_acc;
-      lo_mixed[j] = 0.0;
-      hi_mixed[j] = UC[base + silent_acc[j]];
+      lo_silent[j] = 0.0;
+      hi_silent[j] = UC[idx_silent[j]];
     }
-
-    // One batched integration call over all silent accumulators
     setup->fill_survivor_with_response(
-        silent_trial, silent_acc,
-        lo_mixed, hi_mixed,
-        n_acc, *pt, setup->spec, out_mixed.data()
+        idx_silent, winner_silent,
+        lo_silent, hi_silent,
+        n_acc, *pt, setup->spec, out_silent.data()
     );
-
-    // Zero ll_trial for mixed trials before accumulation
-    for (int trial : idx_mixed_trials)
-      ll_trial[trial] = 0.0;
-
-    // Sum integration results per trial
-    for (int j = 0; j < n; ++j)
-      ll_trial[silent_trial[j]] += out_mixed[j];
-
-    // Add S_race(UC) analytically and apply log
-    for (int trial : idx_mixed_trials) {
-      const int base = trial * n_acc;
-      double prod_UC = 1.0;
-      for (int k = 0; k < n_acc; ++k) {
-        if (!participating[base + k]) continue;
-        prod_UC *= p_upper[base + k];
-      }
-      ll_trial[trial] = std::log(clamp(ll_trial[trial] + prod_UC));
+    for (int j = 0; j < n; ++j) {
+      const int trial = idx_silent[j] / n_acc;
+      // ll_trial[trial] currently holds log(S_race(UC)) — need to undo log,
+      // add integration term, re-apply log
+      ll_trial[trial] = std::log(clamp(std::exp(ll_trial[trial]) + out_silent[j]));
     }
   }
-
 }
 
 // -----------------------------------------------------------------------------
@@ -237,22 +215,44 @@ CensorSpec make_censor_spec(const DataFrame& data,
     case 1: censor.idx_L.push_back(i); break;
     case 2: censor.idx_U.push_back(i); break;
     case 3: censor.idx_L.push_back(i); censor.idx_U.push_back(i); break;
+    case 4: censor.idx_U.push_back(i); break; // silent accumulator contributes to S_race(UC)
     default: break;
     }
   }
+
+  censor.has_silent_trial.assign(n_trials, false);  // initialised before the trial loop above
+  censor.idx_silent.reserve(n_trials);
+  censor.winner_silent.reserve(n_trials);
 
   // Trial-level loop (step by n_acc): populate trial index lists
   for (int base = 0; base < censor.n_rows; base += n_acc) {
     // Aggregate missingness across all accumulator rows for this trial
     bool has_L = false, has_U = false;
+    bool has_silent = false;
     int  R_val = NA_INTEGER;
     for (int k = 0; k < n_acc; ++k) {
       const int m = missingness_ptr[base + k];
       if (m == 1 || m == 3) has_L = true;
       if (m == 2 || m == 3) has_U = true;
-      // Take first non-NA R value as the winner
+      if (m == 4)           has_silent   = true;
+      // Take first non-NA R value as the winner for regular censoring with known response
+      // (cases without silent accumulators)
       if (R_val == NA_INTEGER && R_ptr[base + k] != NA_INTEGER)
         R_val = R_ptr[base + k];
+    }
+
+    // For cases with silent accumulators, we need to mark the accumulators with missingness == 4 as the winner
+    if (has_silent) {
+      // Silent accumulators contribute S_race(UC) via idx_U_tr
+      censor.idx_U_tr.push_back(base / n_acc);
+      censor.has_silent_trial[base / n_acc] = true;
+      for (int k = 0; k < n_acc; ++k) {
+        if (missingness_ptr[base + k] == 4) {
+          censor.idx_silent.push_back(base + k);
+          censor.winner_silent.push_back(k);
+        }
+      }
+      continue;  // skip regular miss aggregation for this trial
     }
 
     const int miss = (has_L ? 1 : 0) + (has_U ? 2 : 0);
@@ -278,51 +278,12 @@ CensorSpec make_censor_spec(const DataFrame& data,
     }
   }
 
-  // Mixed trials -- go-nogo, sst have silent accumulators
-  censor.idx_mixed_trials.reserve(n_trials);
-  censor.idx_mixed_rows.reserve(n_trials);
-  censor.silent_trial.reserve(n_trials);
-  censor.silent_acc.reserve(n_trials);
-
-  for (int base = 0; base < censor.n_rows; base += n_acc) {
-    bool has_silent   = false;
-    bool has_observed = false;
-    for (int k = 0; k < n_acc; ++k) {
-      const int m = missingness_ptr[base + k];
-      if (m == 4)          has_silent   = true;
-      if (m != 4)          has_observed = true;  // NA, 0, 1, 2, 3 all count
-      }
-    if (!has_silent) continue;
-
-    if (!has_observed)
-      Rcpp::stop("Trial %d has all accumulators marked silent (missingness=4) "
-                   "with no other accumulators present", base / n_acc);
-
-    const int trial = base / n_acc;
-    censor.idx_mixed_trials.push_back(trial);
-    censor.idx_mixed_rows.push_back(base);
-
-    for (int k = 0; k < n_acc; ++k) {
-      if (missingness_ptr[base + k] == 4) {
-        censor.silent_trial.push_back(trial);
-        censor.silent_acc.push_back(k);
-      }
-    }
-  }
-
-  // Size integration buffers
-  const int n_mixed = (int)censor.silent_acc.size();
-  censor.lo_mixed.resize(n_mixed);
-  censor.hi_mixed.resize(n_mixed);
-  censor.out_mixed.resize(n_mixed);
 
   // Validate consistency
   if (!censor.idx_L.empty() && censor.LC.empty())
     Rcpp::stop("missingness contains lower-censored rows (1 or 3) but no LC column found in data");
   if (!censor.idx_U.empty() && censor.UC.empty())
-    Rcpp::stop("missingness contains upper-censored rows (2 or 3) but no UC column found in data");
-  if (!censor.silent_acc.empty() && censor.UC.empty())
-    Rcpp::stop("missingness contains silent accumulators (4) but no UC column found in data");
+    Rcpp::stop("missingness contains upper-censored rows (2, 3 or 4) but no UC column found in data");
 
   // Working buffers for analytical survivor products
   censor.p_lower.resize(censor.n_rows);
@@ -338,6 +299,12 @@ CensorSpec make_censor_spec(const DataFrame& data,
   censor.lo_U.resize(n_U);  censor.hi_U.resize(n_U);  censor.out_U.resize(n_U);
   censor.lo1_B.resize(n_B); censor.hi1_B.resize(n_B); censor.out1_B.resize(n_B);
   censor.lo2_B.resize(n_B); censor.hi2_B.resize(n_B); censor.out2_B.resize(n_B);
+
+  // More buffers for handling silent accumulator cases
+  const int n_s = (int)censor.idx_silent.size();
+  censor.lo_silent.resize(n_s);
+  censor.hi_silent.resize(n_s);
+  censor.out_silent.resize(n_s);
 
   return censor;
 }
