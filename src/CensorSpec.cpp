@@ -19,7 +19,7 @@ using namespace Rcpp;
 // -----------------------------------------------------------------------------
 void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
                                     std::vector<double>& ll_trial,
-                                    const double min_ll) const
+                                    const bool return_log = false) const
 {
   // Fill p_lower: S_k(LC - t0) for active LC rows, 1.0 elsewhere (default -- at t=0, S=1)
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
@@ -28,11 +28,6 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
   // Survivor implementations leave t <= t0 untouched, where S(t - t0) = 1.
   std::fill(p_upper.begin(), p_upper.end(), 1.0);
   setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
-
-  // Minimal LL
-  auto clamp = [min_ll](double v) {
-    return (v > min_ll) ? v : min_ll;
-  };
 
   // Lower censoring
   for (int row : idx_L_tr) {
@@ -43,7 +38,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       prod_LC *= p_lower[base + k];
     }
     const double p = trunc.S_lower[row] - prod_LC; // P(LT <= T <= LC) = S_RACE(LT) - S_RACE(LC)
-    ll_trial[row] = std::log(clamp(p));
+    ll_trial[row] = p;
   }
 
   // Upper censoring
@@ -55,7 +50,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       prod_UC *= p_upper[base + k];
     }
     const double p = prod_UC - trunc.S_upper[row]; // P(UC <= T <= UT) = S_RACE(UC) - S_RACE(UT)
-    ll_trial[row] = std::log(clamp(p));
+    ll_trial[row] = p;
   }
 
   // Both censoring -- doesn't need truncation
@@ -68,7 +63,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       prod_LC *= p_lower[base + k];
     }
     const double p = (1-prod_LC) + prod_UC;        // P(T <= LC || P >= UC) = (1-S_RACE(LC)) + S_RACE(UC)
-    ll_trial[row] = std::log(clamp(p));
+    ll_trial[row] = p;
   }
 
   // -------------------------------------------------------------------------
@@ -88,7 +83,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     setup->fill_survivor_with_response(idx_L_known, winner_L_known, lo_L, hi_L,
                                        n_acc, *pt, setup->spec, out_L.data());
     for (int j = 0; j < n; ++j)
-      ll_trial[idx_L_known[j] / n_acc] = std::log(clamp(out_L[j]));
+      ll_trial[idx_L_known[j] / n_acc] = out_L[j];
   }
 
   // Upper-censored, known response: integrate over [UC, UT]
@@ -103,7 +98,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo_U, hi_U,
                                        n_acc, *pt, setup->spec, out_U.data());
     for (int j = 0; j < n; ++j) {
-      ll_trial[idx_U_known[j] / n_acc] = std::log(clamp(out_U[j]));
+      ll_trial[idx_U_known[j] / n_acc] = out_U[j];
     }
   }
 
@@ -122,7 +117,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo2_B, hi2_B,
                                        n_acc, *pt, setup->spec, out2_B.data());
     for (int j = 0; j < n; ++j)
-      ll_trial[idx_B_known[j] / n_acc] = std::log(clamp(out1_B[j] + out2_B[j]));
+      ll_trial[idx_B_known[j] / n_acc] = out1_B[j] + out2_B[j];
   }
 
   // Silent accumulator correction — add defective winner integral to ll_trial
@@ -141,8 +136,18 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       const int trial = idx_silent[j] / n_acc;
       // ll_trial[trial] currently holds log(S_race(UC)) — need to undo log,
       // add integration term, re-apply log
-      ll_trial[trial] = std::log(clamp(std::exp(ll_trial[trial]) + out_silent[j]));
+      ll_trial[trial] = ll_trial[trial] + out_silent[j];
     }
+  }
+
+  // Single log-transform over all censored trials
+  if(return_log) {
+    for (int trial : idx_L_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
+    for (int trial : idx_U_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
+    for (int trial : idx_B_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
+    for (int j = 0; j < (int)idx_L_known.size(); ++j) { int t = idx_L_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
+    for (int j = 0; j < (int)idx_U_known.size(); ++j) { int t = idx_U_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
+    for (int j = 0; j < (int)idx_B_known.size(); ++j) { int t = idx_B_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
   }
 }
 
@@ -223,6 +228,7 @@ CensorSpec make_censor_spec(const DataFrame& data,
   censor.has_silent_trial.assign(n_trials, false);  // initialised before the trial loop above
   censor.idx_silent.reserve(n_trials);
   censor.winner_silent.reserve(n_trials);
+  censor.idx_silent_trials.reserve(n_trials);
 
   // Trial-level loop (step by n_acc): populate trial index lists
   for (int base = 0; base < censor.n_rows; base += n_acc) {
@@ -250,7 +256,10 @@ CensorSpec make_censor_spec(const DataFrame& data,
         if (missingness_ptr[base + k] == 4) {
           censor.idx_silent.push_back(base);
           censor.winner_silent.push_back(k);
-        }
+          // Only push trial once — first silent accumulator for this trial
+          if (censor.idx_silent_trials.empty() || censor.idx_silent_trials.back() != base / n_acc)
+            censor.idx_silent_trials.push_back(base / n_acc);
+          }
       }
       continue;  // skip regular miss aggregation for this trial
     }

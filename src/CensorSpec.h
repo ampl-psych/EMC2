@@ -28,6 +28,7 @@ struct CensorSpec {
   std::vector<int>  idx_silent;       // base + k rows for silent accumulators
   std::vector<int>  winner_silent;    // parallel: accumulator index [0, n_acc-1]
   std::vector<bool> has_silent_trial; // length n_trials, for deferred log in fill_censored_rows
+  std::vector<int>  idx_silent_trials;
   mutable std::vector<double> lo_silent, hi_silent, out_silent;
 
   // Integration buffers — sized to silent_acc.size()
@@ -67,7 +68,7 @@ struct CensorSpec {
 
   void fill_censored_rows(const TruncSpec& trunc,
                           std::vector<double>& ll_trial,
-                          const double min_ll) const;
+                          const bool return_log) const;
 
   // Update paramtable for multithreading
   void rebind(ParamTable& pt, RaceScratch& scratch) {

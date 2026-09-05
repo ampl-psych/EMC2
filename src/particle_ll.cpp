@@ -802,7 +802,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
           // 3) Trialwise truncation correction. Needs to be in this order!
           if(trunc.any()) trunc.calculate_normalization_constant();
-          if(censor.any()) censor.fill_censored_rows(trunc, ll_buf, min_ll);
+          if(censor.any()) censor.fill_censored_rows(trunc, ll_buf, true);
           if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_buf[t] -= trunc.log_Z[t];
 
           // 4) Check for bound violations
@@ -836,7 +836,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 
           // 3) Handle truncation, censoring
           if(trunc.any()) trunc.calculate_normalization_constant();
-          if(censor.any()) censor.fill_censored_rows(trunc, ll_trial, min_ll);  // needs to have trunc know the normalization constant, hence this order
+          if(censor.any()) censor.fill_censored_rows(trunc, ll_trial, true);  // needs to have trunc know the normalization constant, hence this order
           if(trunc.any()) for (int t = 0; t < trunc.n_trials; ++t) ll_trial[t] -= trunc.log_Z[t];  // cannot be before censoring - censoring fills rows, doesn't add
 
           // 4) Handle not-ok parameter values (out of bound)
@@ -1184,7 +1184,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
           c_log_likelihood_DDM(rts_ptr, Rs_ptr, pt_local, setup.spec, idx_all, ll_buf.data());
 
           if (trunc_local.any())  trunc_local.calculate_normalization_constant();
-          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_buf, min_ll);
+          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_buf, true);
           if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_buf[t] -= trunc_local.log_Z[t];
 
           c_do_bound(pt_local, bound_specs, is_ok);
@@ -1206,7 +1206,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                 ll_row.data(), (int)ll_row.size(), ll_trial.data(), scratch);
 
           if (trunc_local.any())  trunc_local.calculate_normalization_constant();
-          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, min_ll);
+          if (censor_local.any()) censor_local.fill_censored_rows(trunc_local, ll_trial, true);
           if (trunc_local.any())  for (int t = 0; t < trunc_local.n_trials; ++t) ll_trial[t] -= trunc_local.log_Z[t];
 
           c_do_bound(pt_local, bound_specs, is_ok);
