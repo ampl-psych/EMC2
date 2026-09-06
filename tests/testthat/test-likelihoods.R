@@ -31,7 +31,7 @@ calc_lls <- function(emc, n_particles=1e3) {
   lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
                             model$bound, model$transform, model$pre_transform, p_types = p_types,
                             min_ll = log(1e-10), model$trend)[1,]
-  lls_new
+  round(lls_new, 3)  # prevent numerical precision issues messing with the results
 }
 
 # Simplest design, no trend -----------------------------------------------
