@@ -4,7 +4,6 @@
 #include <cmath>
 #include <vector>
 #include <Rcpp.h>
-#include "utility_functions.h"
 #include "exgaussian_functions.h"
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
 using namespace Rcpp;
