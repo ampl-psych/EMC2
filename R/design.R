@@ -152,6 +152,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       if(length(covariates) == 0) covariates <- NULL
     }
   }
+  if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
+    covariates <- unique(c(covariates, "SSD"))
+  }
 
   if(!is.null(parameter_design)) {
     parameter_design <- parse_parameter_design(parameter_design)  # translate once here
