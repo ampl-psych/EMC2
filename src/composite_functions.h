@@ -14,9 +14,9 @@
  *
  * This header provides composite functions that are more efficient and
  * numerically stable than their naive implementations. NaN/Inf detection
- * uses the project's is_nan / is_finite / is_inf helpers instead of
- * ISNAN / direct equality against R_NegInf / R_PosInf, since the latter
- * are not guaranteed to behave correctly under -ffast-math
+ * uses the project's is_nan / is_finite / is_inf / is_pos_inf / is_neg_inf
+ * helpers instead of ISNAN / direct equality against R_NegInf / R_PosInf,
+ * since the latter are not guaranteed to behave correctly under -ffast-math
  * (-ffinite-math-only assumes no operand is ever NaN/Inf and the
  * compiler is free to fold such checks away).
  *
@@ -46,7 +46,7 @@ namespace composite_detail {
  */
 [[gnu::always_inline]] inline double log1m(double x) {
   if (is_nan(x) || x > 1.0) { return na_real(); }
-  if (is_inf(x)) { return (x > 0.0) ? na_real() : pos_inf(); }
+  if (is_neg_inf(x)) { return pos_inf(); }
   if (x == 1.0) { return neg_inf(); }
   return std::log1p(-x);
 }
@@ -88,7 +88,8 @@ namespace composite_detail {
  */
 [[gnu::always_inline]] inline double log1p_exp(double x) {
   if (is_nan(x)) { return na_real(); }
-  if (is_inf(x)) { return (x > 0.0) ? pos_inf() : 0.0; }
+  if (is_pos_inf(x)) { return pos_inf(); }
+  if (is_neg_inf(x)) {return 0.0; }
   if (x <= -37.0) { return std::exp(x) ; }
   if (x <=  18.0) { return std::log1p(std::exp(x)) ; }
   if (x <=  33.3) { return x + std::exp(-x); }
@@ -128,7 +129,7 @@ namespace composite_detail {
  */
 [[gnu::always_inline]] inline double log1m_exp(double x) {
   if (is_nan(x) || x > 0.0) { return na_real(); }
-  if (is_inf(x)) { return 0.0; } // can only be neg inf, given previous line
+  if (is_neg_inf(x)) { return 0.0; }
   if (x == 0.0) { return neg_inf(); }
   // Near zero, expm1(x) gives much better accuracy than 1 - exp(x).
   if (x > -composite_detail::LOG2) { return std::log(-std::expm1(x)); }
@@ -168,9 +169,9 @@ namespace composite_detail {
   if (is_nan(a) || is_nan(b)) { return na_real(); }
   // These cases must be handled before subtracting a and b, since
   // +Inf - +Inf is NaN.
-  if (is_inf(a) && a < 0.0) { return b; }
-  if (is_inf(b) && b < 0.0) { return a; }
-  if (is_inf(a) && a > 0.0 && is_inf(b) && b > 0.0) { return pos_inf(); }
+  if (is_neg_inf(a)) { return b; }
+  if (is_neg_inf(b)) { return a; }
+  if (is_pos_inf(a) && is_pos_inf(b)) { return pos_inf(); }
   if (a > b) {
     return a + std::log1p(std::exp(b - a));
   }
@@ -213,13 +214,11 @@ namespace composite_detail {
     if (val > max_val) { max_val = val; }
   }
   if (any_nan) { return na_real(); }
-  if (is_inf(max_val) && max_val > 0.0) { return pos_inf(); }
-  if (is_inf(max_val) && max_val < 0.0) { return neg_inf(); }
+  if (is_pos_inf(max_val)) { return pos_inf(); }
+  if (is_neg_inf(max_val)) { return neg_inf(); }
   double sum = 0.0;
   for (double val : x) {
-    if (!(is_inf(val) && val < 0.0)) {
-      sum += std::exp(val - max_val);
-    }
+    if (!is_neg_inf(val)) { sum += std::exp(val - max_val); }
   }
   return max_val + std::log(sum);
 }
@@ -243,12 +242,12 @@ namespace composite_detail {
  */
 [[gnu::always_inline]] inline double log_diff_exp(double a, double b) {
   if (is_nan(a) || is_nan(b) || a < b) { return na_real(); }
-  if (is_inf(a) && a > 0.0) {
-    if (is_inf(b) && b > 0.0) { return na_real(); }
+  if (is_pos_inf(a)) {
+    if (is_pos_inf(b)) { return na_real(); }
     return pos_inf();
   }
   if (a == b) { return neg_inf(); }
-  if (is_inf(b) && b < 0.0) { return a; }
+  if (is_neg_inf(b)) { return a; }
   const double diff = b - a;
   // When b is close to a, exp(diff) is close to 1 and
   // log1m_exp() avoids catastrophic cancellation.
@@ -299,11 +298,9 @@ namespace composite_detail {
   if (theta < 0.0 || theta > 1.0) { return na_real(); }
   if (theta == 0.0) { return lambda2; }
   if (theta == 1.0) { return lambda1; }
-  bool l1_neg_inf = is_inf(lambda1) && lambda1 < 0.0;
-  bool l2_neg_inf = is_inf(lambda2) && lambda2 < 0.0;
-  if (l1_neg_inf && l2_neg_inf) { return neg_inf(); }
-  if (l1_neg_inf) { return log1m(theta) + lambda2; }
-  if (l2_neg_inf) { return std::log(theta) + lambda1; }
+  if (is_neg_inf(lambda1) && is_neg_inf(lambda2)) { return neg_inf(); }
+  if (is_neg_inf(lambda1)) { return log1m(theta) + lambda2; }
+  if (is_neg_inf(lambda2)) { return std::log(theta) + lambda1; }
   return log_sum_exp(std::log(theta) + lambda1, log1m(theta) + lambda2);
 }
 
