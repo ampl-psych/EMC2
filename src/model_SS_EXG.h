@@ -90,16 +90,14 @@ inline NumericVector texg_go_lccdf(
 
 struct texg_stop_success_pars {
   double SSD;
-  double min_ll;
   // stop params (truncated EXG)
   double muS, sigS, tauS, lbS;
   // go params per accumulator (truncated EXG)
   int n_go;
   std::vector<double> muG, sigG, tauG, lbG;
 
-  texg_stop_success_pars(double SSD_, double min_ll_, const NumericMatrix& pars_)
+  texg_stop_success_pars(double SSD_, const NumericMatrix& pars_)
     : SSD(SSD_),
-      min_ll(min_ll_),
       muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)), lbS(pars_(0, 9)),
       n_go(pars_.nrow()), muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
@@ -118,13 +116,13 @@ static int texg_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   const double xx = x[0];
   // log density of stop process finishing at time xx
   double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true);
-  if (!is_finite(log_fS)) { log_fS = w->min_ll; }
+  if (!is_finite(log_fS)) { out[0] = 0.0; return 0; }
   // log probability that no go accumulator has finished by xx + SSD
   double log_S_go = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
     double log_Si = ptexg(xx + w->SSD, w->muG[i], w->sigG[i], w->tauG[i], w->lbG[i],
                           pos_inf(), false, true);
-    if (!is_finite(log_Si)) { log_Si = w->min_ll; }
+    if (!is_finite(log_Si)) { out[0] = 0.0; return 0; }
     log_S_go += log_Si;
   }
   // output: sum of (1) log winner density (stop) and (2) sum of log survival
@@ -146,7 +144,7 @@ static inline double ss_texg_stop_success_lpdf(
     double k_sigma = SS_WINDOW_K_SIGMA,
     double k_tau = SS_WINDOW_K_TAU
 ) {
-  texg_stop_success_pars w(SSD, min_ll, pars);
+  texg_stop_success_pars w(SSD, pars);
   const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS, k_sigma);
   const double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS, k_sigma, k_tau);
   // max_subdiv is an evaluation-budget proxy (kept from the upstream API)
