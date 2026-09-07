@@ -24,7 +24,7 @@
 #include <Rcpp.h>
 #include "composite_functions.h"     // log1m, log1m_exp, log_sum_exp, log_mix
 #include "ss_integrate.h"            // ss_integrate (cens hcubature), SS_WINDOW_K_*
-#include "exgaussian_functions.h"    // ptexg (stop survivor)
+#include "exgaussian_functions.h"
 #include "model_SS_EXG.h"
 #include "model_SS_RDEX.h"
 #include "utility_functions.h"       // submat_rcpp(NumericMatrix, LogicalVector)
