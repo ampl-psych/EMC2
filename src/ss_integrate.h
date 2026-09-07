@@ -21,7 +21,7 @@
 
 #include <cmath>
 #include <cstddef>
-#include <Rcpp.h>    // R_FINITE, R_PosInf
+#include "nan_check.h" // is_finite
 #include "hcubature.h"   // the package's adaptive cubature
 
 constexpr double SS_WINDOW_K_SIGMA = 8.0;
@@ -34,7 +34,7 @@ inline double ss_integrate(ss_integrand_fn f, void* params,
                            double lo, double hi,
                            double abs_tol, double rel_tol,
                            std::size_t max_eval) {
-  if (!(hi > lo) || !R_FINITE(lo) || !R_FINITE(hi)) return 0.0;
+  if (!(hi > lo) || !is_finite(lo) || !is_finite(hi)) return 0.0;
   double a = lo, b = hi, val = 0.0, err = 0.0;
   hcubature(f, params, 1, &a, &b, max_eval, abs_tol, rel_tol, &val, &err);
   return val;
@@ -45,13 +45,13 @@ inline double ss_integrate(ss_integrand_fn f, void* params,
 inline double ss_stop_window_lo(double lb, double muS, double sigS,
                                 double k_sigma = SS_WINDOW_K_SIGMA) {
   double lo = muS - k_sigma * sigS;
-  return (R_FINITE(lb) && lb > lo) ? lb : lo;
+  return (is_finite(lb) && lb > lo) ? lb : lo;
 }
 inline double ss_stop_window_hi(double upper, double muS, double sigS, double tauS,
                                 double k_sigma = SS_WINDOW_K_SIGMA,
                                 double k_tau = SS_WINDOW_K_TAU) {
   double hi = muS + k_sigma * sigS + k_tau * tauS;
-  return (R_FINITE(upper) && upper < hi) ? upper : hi;
+  return (is_finite(upper) && upper < hi) ? upper : hi;
 }
 
 #endif
