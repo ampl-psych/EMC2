@@ -113,8 +113,8 @@ TruncSpec make_trunc_spec(const DataFrame& data,
   trunc.UT.resize(trunc.n_rows, R_PosInf);
 
   for (int t = 0; t < n_trials; ++t) {
-    const double lt = (LT_ptr != nullptr) ? LT_ptr[t] : 0.0;
-    const double ut = (UT_ptr != nullptr) ? UT_ptr[t] : R_PosInf;
+    const double lt = (LT_ptr != nullptr) ? LT_ptr[t*n_acc] : 0.0;
+    const double ut = (UT_ptr != nullptr) ? UT_ptr[t*n_acc] : R_PosInf;
 
     const bool active_LT = (lt > 0.0) && std::isfinite(lt);
     const bool active_UT = std::isfinite(ut);
