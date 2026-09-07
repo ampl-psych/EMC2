@@ -176,16 +176,7 @@ profile_plot <- function (data, design, p_vector, range = 0.5, layout = NA, p_mi
     if (use_c) {
       p_matrix <- matrix(p_vector,nrow=1)
       colnames(p_matrix) <- names(p_vector)
-      model <- attr(dadm, "model")()
-      p_types=names(model$p_types)
-      designs <- list()
-      for (p in p_types) {
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-      }
-      constants <- attr(dadm,"constants")
-      if (is.null(constants)) constants <- NA
-      calc_ll(p_matrix, dadm, constants,designs,model$c_name,
-              model$bound,model$transform,model$pre_transform,p_types,log(1e-10),model$trend)
+      calc_ll_manager(p_matrix, dadm, attr(dadm, "model"))
     } else calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
   }
 

@@ -76,6 +76,15 @@ values. Note that if this function returns a subject named vector it will be
 expanded as in case (3). For rows with response (column R) "nogo" the following
 are enforced: UC=LC=LT=0, UT=Inf, UCdirection=UCresponse=TRUE
 }
+\details{
+The added \code{missingness} column codes each row as NA (observed), 1 (lower
+censored), 2 (upper censored) or 3 (both). For stop-signal data (an SSD
+column is present) an intrinsic no-response (successful stop or go failure)
+is coded 2: under a finite UC it cannot be distinguished from a too-slow
+response, and with UC = Inf the code-2 likelihood is the no-response
+probability. Codes 0 (accumulator not participating) and 4 (silent
+accumulator) are set by the user through design functions, not here.
+}
 \examples{
 # First make some data
   designRDM <- design(model = RDM,

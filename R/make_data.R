@@ -65,6 +65,14 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' expanded as in case (3). For rows with response (column R) "nogo" the following
 #' are enforced: UC=LC=LT=0, UT=Inf, UCdirection=UCresponse=TRUE
 #'
+#' The added \code{missingness} column codes each row as NA (observed), 1 (lower
+#' censored), 2 (upper censored) or 3 (both). For stop-signal data (an SSD
+#' column is present) an intrinsic no-response (successful stop or go failure)
+#' is coded 2: under a finite UC it cannot be distinguished from a too-slow
+#' response, and with UC = Inf the code-2 likelihood is the no-response
+#' probability. Codes 0 (accumulator not participating) and 4 (silent
+#' accumulator) are set by the user through design functions, not here.
+#'
 #' @param data Data frame to be modified
 #' @param LT Lower truncation bound below which data are removed, default 0.
 #' @param UT Upper truncation bound above which data are removed, default Inf.
@@ -105,13 +113,15 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
                          pContaminant=NULL,verbose=FALSE,rt_resolution=1/60,digits = 2)
 {
 
-  # no censor/truncation, leave unaltered unless go/nogo model
+  # no censor/truncation, leave unaltered unless go/nogo or stop-signal model
+  # (both have intrinsic no-responses that need a missingness code)
   is_gng_data <- "R" %in% names(data) &&  any(data$R == "nogo" | "nogo" %in% levels(data$R), na.rm = TRUE)
-  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data) return(data)
+  is_ss_data <- "SSD" %in% names(data)
+  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data && !is_ss_data) return(data)
   if (!is.null(LT) && !is.function(LT) && all(LT == 0) &&
       !is.null(LC) && !is.function(LC) && all(LC == 0) &&
       !is.null(UT) && !is.function(UT) && all(is.infinite(UT)) &&
-      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data) {
+      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data && !is_ss_data) {
     return(data)
   }
 
@@ -229,6 +239,14 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   cutL[is.na(cutL)] <- TRUE; cutL[no_censor] <- FALSE
   cutU <- (data$rt > UC_eff)
   cutU[is.na(cutU)] <- TRUE; cutU[no_censor] <- FALSE
+  # Stop-signal data (SSD column): an NA rt before censoring is an intrinsic
+  # no-response (successful stop or go failure). It is never lower-censored and
+  # is coded as upper-censored (2): under a finite deadline UC it cannot be told
+  # apart from a too-slow response, and with UC = Inf the likelihood reduces to
+  # the intrinsic no-response probability.
+  is_nr <- is_ss_data & is.na(data$rt)
+  cutL[is_nr] <- FALSE
+  cutU[is_nr] <- !no_censor[is_nr]
   if (verbose) {
     if (!all(LC_eff==0)) {
       if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
@@ -458,10 +476,16 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     if (!is.null(ssd_meta)) {
       ssd_meta$labels <- lR_levels
+      # Under a (single) deadline UC a response slower than UC is unobserved, so
+      # the staircase must step as for a non-response (see staircase_function).
+      stair_UC <- TC$UC
+      if (!is.numeric(stair_UC) || length(unique(stair_UC)) != 1) stair_UC <- NULL
+      ssd_meta$UC <- stair_UC
       if (!is.null(ssd_meta$specs)) {
         for (nm in names(ssd_meta$specs)) {
           if (is.list(ssd_meta$specs[[nm]])) {
             ssd_meta$specs[[nm]]$labels <- lR_levels
+            ssd_meta$specs[[nm]]$UC <- stair_UC
           }
         }
       }
@@ -474,6 +498,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     dropNames <- c("lR","lM")
     if (!return_Ffunctions && !is.null(design$Ffunctions))
       dropNames <- c(dropNames,names(design$Ffunctions))
+    # SSD is drawn at random per trial and cannot be re-derived from a function
+    dropNames <- setdiff(dropNames, "SSD")
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
     if (!is.null(ssd_meta)) {

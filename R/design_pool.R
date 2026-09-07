@@ -1,5 +1,7 @@
 default_memory_columns <- function() {
-  c("subjects", "trials", "rt", "R", "lR", "winner", "lM", "RACE", "TIMEOUT", "Rgo")
+  c("subjects", "trials", "rt", "R", "lR", "winner", "lM", "RACE", "TIMEOUT", "Rgo",
+    # censoring/truncation and stop-signal columns read by the likelihood
+    "LT", "UT", "LC", "UC", "missingness", "SSD", "lI")
 }
 
 resolve_memory_columns <- function(dadm, model) {

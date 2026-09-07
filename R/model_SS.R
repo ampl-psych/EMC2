@@ -78,6 +78,12 @@ staircase_function <- function(dts,staircase) {
       }
       label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
     }
+    # Under a deadline (staircase$UC, set by make_data) a response slower than
+    # UC is not observed in the experiment, so the staircase treats it as a
+    # non-response.
+    late <- !is.null(staircase$UC) && is.finite(staircase$UC) &&
+      !is.na(srt[i]) && srt[i] > staircase$UC
+    if (late) label <- NA_character_
     step_dir <- NULL
     if (!is.null(rules$up) || !is.null(rules$down)) {
       success <- match_rule(label, rules$up)
@@ -95,7 +101,7 @@ staircase_function <- function(dts,staircase) {
       }
     }
     if (is.null(step_dir)) {
-      if (Ri==1) step_dir <- "up" else step_dir <- "down"
+      if (Ri==1 || late) step_dir <- "up" else step_dir <- "down"
     }
     if (i<ns) {
       if (identical(step_dir, "up")) {
@@ -1122,6 +1128,39 @@ SSRDEX <- function() {
 }
 
 
+# --- Lower-censored response mass (missingness code 1) -------------------------
+# Integral over [LT, LC] of the trial *response* density, mirroring the C++
+# ss_integrate_lc_response_mass (src/ss_likelihood.h). Go-path only (ST out of
+# scope for this port). If `resp` is a known go-response label the integral uses
+# only that winning accumulator's defective density; otherwise it sums over the
+# go winners.
+#   f(t) = (1-gf) * go_race_density(t)  * [ tf + (1-tf)*S_stop(t-SSD) ] (stop trials)
+# go_pars: the go accumulators' parameter rows for a single trial (n_accG rows).
+ss_lc_response_mass <- function(go_pars, is_stop, gf, tf, resp, LT, LC, model, GoR) {
+  n_accG <- nrow(go_pars)
+  if (!(LC > LT)) return(0)
+  winners <- if (!is.na(resp)) which(GoR == resp) else seq_len(n_accG)
+  if (length(winners) == 0L) winners <- seq_len(n_accG)
+  f_resp <- function(t) {
+    gd <- numeric(length(t))
+    for (w in winners) {
+      dens_w <- model$dfunG(t, go_pars[rep(w, length(t)), , drop = FALSE])
+      for (o in setdiff(seq_len(n_accG), w))
+        dens_w <- dens_w * (1 - model$pfunG(t, go_pars[rep(o, length(t)), , drop = FALSE]))
+      gd <- gd + dens_w
+    }
+    out <- (1 - gf) * gd
+    if (is_stop) {
+      S_stop <- 1 - model$pfunS(t, go_pars[rep(1, length(t)), , drop = FALSE])
+      out <- out * (tf + (1 - tf) * S_stop)
+    }
+    out[!is.finite(out) | out < 0] <- 0
+    out
+  }
+  my.integrate(f_resp, lower = LT, upper = LC)
+}
+
+
 log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 {
   # All bad?
@@ -1170,37 +1209,128 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     # Go response names
     GoR <- as.character(dadm[1:n_acc,"lR"][dadm[1:n_acc,"lI"]==2])
 
-    # No response
-    ispNR <- is.na(dadm$R)
-    if ( any(ispNR) ) {  # Note by definition no ST present
+    # UC column: Inf means no deadline (default if column absent). An intrinsic
+    # no-response (code 2 with UC = Inf, or NA rt without a code) then reduces
+    # the deadline formula below to log(gf) for go trials and to the full pStop
+    # mixture for stop trials.
+    UC_ss <- if (!is.null(dadm$UC)) dadm$UC else rep(Inf, nrow(dadm))
 
-      # Go failures
-      ispgoNR <- ispNR & !ispStop            # No response and no stop signal
-      tgoNR <- c(1:sum(isp1))[ispgoNR[isp1]] # trial number
-      if (any(ispgoNR))
-        allLL[allok][tgoNR] <- log(gf[tgoNR])
+    # Lower / both-censored trials (missingness 1 / 3): a response occurred but rt
+    # fell below LC (too fast). Handled by the dedicated response-mass block below
+    # and excluded from the NR and observed branches (their R may be kept when
+    # LCresponse=TRUE, so exclude by missingness, not by is.na(R)).
+    is_lc_row <- if (!is.null(dadm$missingness))
+      (!is.na(dadm$missingness) & dadm$missingness %in% c(1L, 3L)) else rep(FALSE, nrow(dadm))
+    is_lc_trial <- is_lc_row[isp1]
 
-      # Stop trial with no response and no ST accumulator
-      ispstopNR <- ispNR & ispStop & (n_accST == 0)
-      if ( any(ispstopNR) ) { # Stop trial probability
-        # Non-response and stop trial & go/stop accumulator parameters
-        pStop <- pmin(1,pmax(0,  # protection to keep in 0-1
-                             model$sfun(
-                               pars[ispNR & ispStop & ispGOacc,,drop=FALSE],n_acc=n_accG)
+    # No response (excluding lower/both-censored)
+    ispNR <- is.na(dadm$R) & !is_lc_row
+    if ( any(ispNR) ) {
+
+      # ── NR go trials (no stop signal) ──────────────────────────────────────
+      # No deadline:   log(gf)
+      # With deadline: log(gf + (1-gf)*S_go(UC))
+      # Unified: S_go(Inf)=0 so the deadline formula reduces to log(gf) ✓
+      ispgoNR <- ispNR & !ispStop
+      if (any(ispgoNR)) {
+        tgoNR <- trials[ispgoNR[isp1]]
+        uc_go <- UC_ss[ispgoNR & ispGOacc]   # n_accG values per trial (same UC each)
+        log_S_go_UC <- colSums(matrix(
+          log(1 - model$pfunG(rt=uc_go, pars=pars[ispgoNR & ispGOacc,,drop=FALSE])),
+          nrow=n_accG))
+        allLL[allok][tgoNR] <- log(gf[tgoNR] + (1-gf[tgoNR]) * exp(log_S_go_UC))
+      }
+
+      # ── NR stop trials ─────────────────────────────────────────────────────
+      ispstopNR_all <- ispNR & ispStop
+      if (any(ispstopNR_all)) {
+        tstopNR <- trials[ispstopNR_all[isp1]]
+
+        # Per-trial UC and upper integration bound for pStop integral
+        uc_stop <- UC_ss[ispstopNR_all & isp1]
+        ssd_stop <- pars[ispstopNR_all & isp1, "SSD"]
+        upper_sfun <- pmax(0, uc_stop - ssd_stop)  # Inf when no deadline
+
+        # S_go(UC): product of go acc survivors at UC  [0 when UC=Inf] ✓
+        uc_go_stop <- UC_ss[ispstopNR_all & ispGOacc]
+        log_S_go_UC <- colSums(matrix(
+          log(1 - model$pfunG(rt=uc_go_stop, pars=pars[ispstopNR_all & ispGOacc,,drop=FALSE])),
+          nrow=n_accG))
+        S_go_UC <- exp(log_S_go_UC)
+
+        # S_stop(UC-SSD): pfunS subtracts SSD internally  [0 when UC=Inf] ✓
+        S_stop_UC <- 1 - model$pfunS(
+          rt=uc_stop, pars=pars[ispstopNR_all & isp1,,drop=FALSE])
+
+        # pStop(UC): stop-success integral up to UC-SSD  [full integral when UC=Inf] ✓
+        pStop <- pmin(1, pmax(0,
+          model$sfun(pars[ispstopNR_all & ispGOacc,,drop=FALSE], n_accG, upper=upper_sfun)
         ))
-        # Fill in stop-trial non-response probabilities, either 1) go failure
-        # 2) not go failure and not trigger failure and stop wins
-        tstopNR <- trials[ispstopNR[isp1]]  # trial number
-        allLL[allok][tstopNR] <- log(gf[tstopNR] + (1-gf[tstopNR])*(1-tf[tstopNR])*pStop)
+
+        if (n_accST == 0) {
+          # No ST accumulators:
+          #   gf + (1-gf)*(tf*S_go(UC) + (1-tf)*(pStop(UC) + S_go(UC)*S_stop(UC-SSD)))
+          # Reduces to gf + (1-gf)*(1-tf)*pStop when UC=Inf ✓
+          allLL[allok][tstopNR] <- log(
+            gf[tstopNR] + (1-gf[tstopNR]) * (
+              tf[tstopNR] * S_go_UC +
+              (1-tf[tstopNR]) * (pStop + S_go_UC * S_stop_UC)
+            )
+          )
+        } else {
+          # With ST accumulators:
+          # No deadline: gf*tf (both go-failure and trigger-failure required)
+          # With deadline: tf*(gf + (1-gf)*S_go(UC)) +
+          #                (1-tf)*S_st(UC-SSD)*(gf + (1-gf)*(pStop(UC) + S_go(UC)*S_stop(UC-SSD)))
+          # Unified: S_st(Inf)=0 so deadline formula reduces to tf*gf when UC=Inf ✓
+          uc_st_vals <- pmax(0, UC_ss[ispstopNR_all & !ispGOacc] -
+                               pars[ispstopNR_all & !ispGOacc, "SSD"])
+          log_S_st_UC <- colSums(matrix(
+            log(1 - model$pfunG(rt=uc_st_vals, pars=pars[ispstopNR_all & !ispGOacc,,drop=FALSE])),
+            nrow=n_accST))
+          S_st_UC <- exp(log_S_st_UC)
+
+          core <- gf[tstopNR] + (1-gf[tstopNR]) * (pStop + S_go_UC * S_stop_UC)
+          allLL[allok][tstopNR] <- log(
+            tf[tstopNR] * (gf[tstopNR] + (1-gf[tstopNR]) * S_go_UC) +
+            (1-tf[tstopNR]) * S_st_UC * core
+          )
+        }
       }
     }
 
-    # Response made
-    if (any(!ispNR)) {
+    # ── Lower / both-censored trials (missingness 1 / 3) ──────────────────────
+    # A response occurred but rt < LC (too fast): integrate the response density
+    # over [LT, LC] (mirrors C++ ss_integrate_lc_response_mass). Code 3 (both) is
+    # unreachable for SS (a finite rt cannot be < LC and > UC, and NA rt is code
+    # 4); handled defensively as the lower mass plus the go-deadline probability.
+    if (any(is_lc_trial)) {
+      LT_col <- if (!is.null(dadm$LT)) dadm$LT else rep(0, nrow(dadm))
+      LC_col <- if (!is.null(dadm$LC)) dadm$LC else rep(0, nrow(dadm))
+      go_code <- levels(dadm$lI)[2]
+      for (tt in trials[is_lc_trial]) {
+        rows <- ((tt - 1) * n_acc + 1):(tt * n_acc)
+        r0 <- rows[1]
+        go_pars <- pars[rows[dadm$lI[rows] == go_code], , drop = FALSE]
+        m_lc <- ss_lc_response_mass(go_pars, is.finite(dadm$SSD[r0]), gf[tt], tf[tt],
+                                    as.character(dadm$R[r0]), LT_col[r0], LC_col[r0], model, GoR)
+        mass <- m_lc
+        if (!is.null(dadm$missingness) && !is.na(dadm$missingness[r0]) &&
+            dadm$missingness[r0] == 3L) {
+          S_go_uc <- prod(1 - model$pfunG(rep(UC_ss[r0], nrow(go_pars)), go_pars))
+          mass <- m_lc + (gf[tt] + (1 - gf[tt]) * S_go_uc)   # + upper/deadline
+        }
+        allLL[allok][tt] <- log(max(mass, exp(min_ll)))
+      }
+    }
+
+    # Response made (excluding lower/both-censored)
+    ispResp <- !ispNR & !is_lc_row
+    if (any(ispResp)) {
       # Only keep response trials for further computation
-      allr <- !ispNR[isp1] # used to put back into allLL[allok]
-      pars <- pars[!ispNR,,drop=FALSE]
-      dadm <- dadm[!ispNR,,drop=FALSE]
+      allr <- ispResp[isp1] # used to put back into allLL[allok]
+      pars <- pars[ispResp,,drop=FALSE]
+      dadm <- dadm[ispResp,,drop=FALSE]
       n_trials <- nrow(dadm)/n_acc # number of trials
       trials <- 1:n_trials
       ptrials <- rep(trials,each=n_acc) # trial number for pars/dadm
@@ -1278,8 +1408,10 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
           # ST winner rows
           ispSSTwin <-  dadm$winner &  ispSST
           # Stop probability on ST win trials, only needs go accumulators
+          # pStop before the observed RT: the stop-success integral is over
+          # stop-relative time, so the bound is rt - SSD (not the absolute rt)
           pStop <- model$sfun(pars[ispSST & ispGOacc,,drop=FALSE],n_acc=n_accG,
-                              upper=dadm$rt[ispSSTwin]) # pStop before observed RT
+                              upper=pmax(0, dadm$rt[ispSSTwin]-dadm$SSD[ispSSTwin]))
           # ST win ll
           tST <- ptrials[ispSSTwin]
           like[tST] <- log(model$dfunG(
