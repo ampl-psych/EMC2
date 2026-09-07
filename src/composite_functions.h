@@ -30,7 +30,7 @@
 
 namespace composite_detail {
   constexpr double LOG2 = 0.693147180559945309417232121458176568;
-  constexpr double quiet_nan = std::numeric_limits<double>::quiet_NaN();
+  // constexpr double quiet_nan = std::numeric_limits<double>::quiet_NaN();
 }  // namespace composite_detail
 
 
