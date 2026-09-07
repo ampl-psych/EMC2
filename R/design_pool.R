@@ -1,5 +1,5 @@
 default_memory_columns <- function() {
-  c("subjects", "trials", "rt", "R", "lR", "winner", "lM", "RACE", "TIMEOUT", "Rgo")
+  c("subjects", "trials", "rt", "R", "lR", "winner", "lM", "RACE", "TIMEOUT", "Rgo", "UT", "UC", "LT", "LC", "missingness")
 }
 
 resolve_memory_columns <- function(dadm, model) {
