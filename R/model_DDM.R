@@ -53,7 +53,7 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
     for(id in unique(idx)){
       is_id <- which(idx == id)
       cur_pars <- pars_tmp[is_id[1],]
-      tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+      tmp <- suppress_output(WienR::rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
                                   w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
                                   st0 = cur_pars["st0"], precision = precision, method="p-ars"))
       tmp <- data.frame(R = tmp$response, rt = tmp$q)
@@ -76,7 +76,7 @@ dDDM <- function(rt,R,pars,precision=5e-3)
   # R <- factor(c("left","right")); rt=c(1,1)
 {
   levels(R) <- c("lower","upper")
-  res <- dWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
+  res <- WienR::dWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
        sw = pars[,"SZ"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
   return(res)
 }
@@ -86,7 +86,7 @@ pDDM <- function(rt,R,pars,precision=5e-3)
   # lower is mapped to first level of R and upper to second
 {
   levels(R) <- c("lower","upper")
-  pWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
+  WienR::pWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
               sw = pars[,"SZ"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
 }
 
