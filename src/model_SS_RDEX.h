@@ -5,8 +5,8 @@
 #include <vector>
 #include "nan_check.h" // is_finite
 #include "r_constants.h" // pos / neg infinity; na_real
-#include "model_RDM.h"          // cens Wald functions (digt/pigt/digt0/pigt0)
 #include "exgaussian_functions.h"
+#include "wald_functions.h"
 #include "composite_functions.h" // log1m etc
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
 using namespace Rcpp;
