@@ -9,8 +9,8 @@
 #include "nan_check.h"
 using namespace Rcpp;
 
-inline constexpr double SIG_TAU_EPS = 1e-12;
-inline constexpr double LOG_SQRT_2PI = 0.91893853320467274178;
+static constexpr double SIG_TAU_EPS = 1e-12;
+static constexpr double LOG_SQRT_2PI = 0.91893853320467274178;
 
 // Laplace continued fraction denominator for the Mills ratio.
 // For z > 0, log Phi(-z) = log phi(z) - log(mills_cf_denom(z)).
