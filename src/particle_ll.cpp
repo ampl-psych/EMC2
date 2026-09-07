@@ -20,6 +20,12 @@
 #include "RaceSetup.h"
 #include "CensorSpec.h"
 #include "TruncSpec.h"
+
+// Stop-signal models (after RaceSetup.h: they build on model_RDM.h and
+// model_exgaussian.h). Header-only; include from this translation unit only.
+#include "model_SS_EXG.h"
+#include "model_SS_RDEX.h"
+#include "ss_likelihood.h"
 using namespace Rcpp;
 
 
@@ -731,6 +737,32 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
       // -----------------------------------------------------------------------
+      // Stop-signal models (SSEXG, SSRDEX). The trial loop handles the
+      // missingness codes itself (deadline / lower censoring / intrinsic
+      // no-response), so no CensorSpec/TruncSpec here. Not thread-safe (Rcpp
+      // objects inside the trial loop): calc_ll_multithreaded delegates here.
+      // -----------------------------------------------------------------------
+    } else if (type == "SSEXG" || type == "SSRDEX") {
+      const SSModelAdapter ssa = resolve_ss_adapter(std::string(type.get_cstring()));
+      for (int i = 0; i < n_particles; ++i) {
+        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        // The SS trial loop reads parameters by fixed column index in p_types
+        // order, so materialise exactly the SS columns by name (trend
+        // parameters are thereby excluded and keep_names order is irrelevant).
+        NumericMatrix pars = ctx.param_table.materialize_by_param_names(ssa.cols);
+        std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
+        c_log_likelihood_ss(pars, data, n_choice_trials, min_ll,
+                            ssa.go_lpdf_ptr, ssa.go_lccdf_ptr,
+                            ssa.stop_logsurv_ptr, ssa.stop_success_ptr,
+                            ssa.idx_tf, ssa.idx_gf, ll_buf.data());
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
+        const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+        if (!return_trialwise) result(0, i) = sum;
+      }
+      // -----------------------------------------------------------------------
       // Continuous-choice-RT models (CDM, PSDM, PHSDM)
       // -----------------------------------------------------------------------
     } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
@@ -876,6 +908,13 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     Rcpp::warning("calc_ll_multithreaded: OpenMP not available, running single-threaded.");
   const int n_threads_used = 1;
 #endif
+
+  // Stop-signal models are not thread-safe (Rcpp objects in the trial loop):
+  // run the single-threaded path instead.
+  if (type == "SSEXG" || type == "SSRDEX") {
+    return calc_ll(particle_matrix, data, constants, designs, type, bounds, transforms,
+                   pretransforms, p_types, min_ll, trend, return_trialwise);
+  }
 
   // ---------------------------------------------------------------------------
   // Shared setup

@@ -3,6 +3,7 @@
 
 #include <Rcpp.h>
 #include <cmath>
+#include "model_exgaussian.h"   // log1m, log_diff_exp (shared with the ex-Gaussian race)
 
 /**
  * @file composite_funs.h
@@ -12,39 +13,7 @@
  * numerically stable than their naive implementations.
  */
 
-/**
- * @brief Compute log(1 - x) in a numerically stable way
- *
- * This function computes log(1 - x) without precision loss that would
- * occur with the naive computation when x is close to 0.
- *
- * @param x Input value (should be < 1 for real result)
- * @return log(1 - x)
- */
-inline double log1m(double x) {
-  if (ISNAN(x)) return NA_REAL;
-  if (x >= 1.0) return R_NegInf;  // log(1 - x) = log(0 or negative)
-  if (x == R_NegInf) return 0.0;  // log(1 - (-Inf)) = log(Inf) = Inf, but we return 0 for log(1)
 
-  return std::log1p(-x);
-}
-
-/**
- * @brief Compute log(1 - x) for vectors in a numerically stable way
- *
- * Vectorized version of log1m for element-wise operations.
- *
- * @param x Vector of input values
- * @return Vector of log(1 - x[i])
- */
-inline Rcpp::NumericVector log1m(const Rcpp::NumericVector& x) {
-  int n = x.size();
-  Rcpp::NumericVector result(n);
-  for (int i = 0; i < n; i++) {
-    result[i] = log1m(x[i]);
-  }
-  return result;
-}
 
 /**
  * @brief Compute log(1 + exp(x)) in a numerically stable way
@@ -202,60 +171,7 @@ inline double log_sum_exp(const Rcpp::NumericVector& x) {
   return max_val + std::log(sum);
 }
 
-/**
- * @brief Compute log(exp(a) - exp(b)) in a numerically stable way
- *
- * This function computes the logarithm of the difference of exponentials
- * without intermediate overflow or underflow issues. Requires a >= b.
- *
- * @param a First log-scale value (must be >= b)
- * @param b Second log-scale value (must be <= a)
- * @return log(exp(a) - exp(b)) if a > b, R_NegInf if a == b, NA_REAL if a < b or invalid inputs
- */
-inline double log_diff_exp(double a, double b) {
-  // Handle infinite and NaN cases
-  if (ISNAN(a) || ISNAN(b)) return NA_REAL;
-  if (a == R_PosInf) return NA_REAL;  // +Inf - anything is undefined in log space
-  if (a < b) return NA_REAL;  // log of negative number is undefined
-  if (a == b) return R_NegInf;  // log(exp(a) - exp(a)) = log(0) = -Inf
-  if (b == R_NegInf) return a;
 
-  double diff = b - a;
-
-  // For numerical stability when a and b are close
-  if (diff > -0.693147) {  // diff > -log(2), i.e., exp(b)/exp(a) > 0.5
-    // Use log1m(exp(diff)) = log1m(exp(b-a))
-    return a + log1m(std::exp(diff));
-  } else {
-    // When exp(b-a) is small, use series expansion
-    // log(1 - x) ~= -x - x^2/2 - x^3/3 - ... for small x
-    // Here x = exp(b-a), so log(1 - exp(b-a)) ~= -exp(b-a) when exp(b-a) is small
-    return a + std::log(-std::expm1(diff));
-  }
-}
-
-/**
- * @brief Compute log(exp(a) - exp(b)) for vectors in a numerically stable way
- *
- * Vectorized version of log_diff_exp for element-wise operations.
- *
- * @param a First vector of log-scale values
- * @param b Second vector of log-scale values
- * @return Vector of log(exp(a[i]) - exp(b[i]))
- */
-inline Rcpp::NumericVector log_diff_exp(const Rcpp::NumericVector& a,
-                                        const Rcpp::NumericVector& b) {
-  int n = a.size();
-  if (n != b.size()) {
-    Rcpp::stop("Vectors must have the same length");
-  }
-
-  Rcpp::NumericVector result(n);
-  for (int i = 0; i < n; i++) {
-    result[i] = log_diff_exp(a[i], b[i]);
-  }
-  return result;
-}
 
 /**
  * @brief Compute log mixture density in a numerically stable way
