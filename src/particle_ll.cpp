@@ -597,7 +597,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   const int n_particles = particle_matrix.nrow();
   const int n_rows      = data.nrow();
   const bool has_lR         = (sum(contains(data.names(), "lR")) == 1);
-  const int n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_lR = has_lR ? unique(Rcpp::as<IntegerVector>(data["lR"])).length() : 1;
   const int n_choice_trials = n_rows / n_lR;
 
 
@@ -770,8 +770,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
       NumericVector rts = data["rt"];
       NumericVector Rs  = data["R"];
-      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
-      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+      NumericVector R2s = has_R2 ? Rcpp::as<NumericVector>(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? Rcpp::as<NumericVector>(data["R3"]) : NumericVector();
 
       std::vector<double> ll_trial(n_choice_trials, 0.0);     // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
 
@@ -922,7 +922,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   const int  n_particles     = particle_matrix.nrow();
   const int  n_rows          = data.nrow();
   const bool has_lR          = (sum(contains(data.names(), "lR")) == 1);
-  const int  n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_lR = has_lR ? unique(Rcpp::as<IntegerVector>(data["lR"])).length() : 1;
   const int  n_choice_trials = n_rows / n_lR;
 
   // n_exp needed for out_rows — extract expand early for non-MRI models
@@ -1059,7 +1059,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       const bool     is_probit = (type == "ORDERED_PROBIT");
       ChoiceOnlySpec spec      = make_choice_only_spec(ctx.param_table, std::string(type));
 
-      IntegerVector lR_vec = has_lR ? IntegerVector(data["lR"]) : IntegerVector();
+      IntegerVector lR_vec = has_lR ? Rcpp::as<IntegerVector>(data["lR"]) : IntegerVector();
       const int* lR_ptr    = has_lR ? INTEGER(lR_vec) : nullptr;
 
       std::vector<std::vector<double>> cut_buf_vec(n_threads_used, std::vector<double>(n_rows, 0.0));
@@ -1111,8 +1111,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
       NumericVector rts = data["rt"];
       NumericVector Rs  = data["R"];
-      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
-      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+      NumericVector R2s = has_R2 ? Rcpp::as<NumericVector>(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? Rcpp::as<NumericVector>(data["R3"]) : NumericVector();
 
       std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials, 0.0));
 
