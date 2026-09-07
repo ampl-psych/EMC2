@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <Rcpp.h>
+#include "nan_check.h" // is_finite
 #include "model_RDM.h"          // cens Wald functions (digt/pigt/digt0/pigt0)
 #include "exgaussian_functions.h"
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
@@ -48,7 +49,7 @@ inline NumericVector rdex_go_lpdf(
       );
     }
 
-    out[k] = R_FINITE(log_d) ? log_d : min_ll;
+    out[k] = is_finite(log_d) ? log_d : min_ll;
 
     k++;
   }
@@ -91,7 +92,7 @@ inline NumericVector rdex_go_lccdf(
       );
     }
 
-    out[k] = R_FINITE(log_s) ? log_s : min_ll;
+    out[k] = is_finite(log_s) ? log_s : min_ll;
 
     k++;
   }
@@ -138,14 +139,14 @@ static int rdex_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   const double xx = x[0];
   // log density of stop process finishing at time xx
   double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, true);
-  if (!R_FINITE(log_fS)) { log_fS = w->min_ll; }
+  if (!is_finite(log_fS)) { log_fS = w->min_ll; }
   // log probability that no go accumulator has finished by xx + SSD
   double log_S_go = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
     double dt_i = (xx + w->SSD) - w->t0[i];
     if (dt_i > 0.0) {
       double log_Si = std::log(1.0 - pigt(dt_i, w->alpha[i], w->nu[i], w->gamma[i]));
-      if (!R_FINITE(log_Si)) { log_Si = w->min_ll; }
+      if (!is_finite(log_Si)) { log_Si = w->min_ll; }
       log_S_go += log_Si;
     }
   }
@@ -174,7 +175,7 @@ static inline double ss_rdex_stop_success_lpdf(
   const std::size_t max_eval = static_cast<std::size_t>(max_subdiv) * 64;
   double res = ss_integrate(rdex_stop_success_integrand, &w, lo, hi,
                             abs_tol, rel_tol, max_eval);
-  return (!R_FINITE(res) || res <= 0.0) ? min_ll : std::log(res);
+  return (!is_finite(res) || res <= 0.0) ? min_ll : std::log(res);
 }
 
 // ----------------------------------------------------------------------------

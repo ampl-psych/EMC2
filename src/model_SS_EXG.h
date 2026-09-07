@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <Rcpp.h>
+#include "nan_check.h" // is_finite
 #include "exgaussian_functions.h"
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
 using namespace Rcpp;
@@ -38,7 +39,7 @@ inline NumericVector texg_go_lpdf(
     double log_d = dtexg(
       rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, true
     );
-    out[k] = R_FINITE(log_d) ? log_d : min_ll;
+    out[k] = is_finite(log_d) ? log_d : min_ll;
 
     k++;
   }
@@ -72,7 +73,7 @@ inline NumericVector texg_go_lccdf(
     double log_s = ptexg(
       rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true
     );
-    out[k] = R_FINITE(log_s) ? log_s : min_ll;
+    out[k] = is_finite(log_s) ? log_s : min_ll;
 
     k++;
   }
@@ -117,13 +118,13 @@ static int texg_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   const double xx = x[0];
   // log density of stop process finishing at time xx
   double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, true);
-  if (!R_FINITE(log_fS)) { log_fS = w->min_ll; }
+  if (!is_finite(log_fS)) { log_fS = w->min_ll; }
   // log probability that no go accumulator has finished by xx + SSD
   double log_S_go = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
     double log_Si = ptexg(xx + w->SSD, w->muG[i], w->sigG[i], w->tauG[i], w->lbG[i],
-                      R_PosInf, false, true);
-    if (!R_FINITE(log_Si)) { log_Si = w->min_ll; }
+                          R_PosInf, false, true);
+    if (!is_finite(log_Si)) { log_Si = w->min_ll; }
     log_S_go += log_Si;
   }
   // output: sum of (1) log winner density (stop) and (2) sum of log survival
@@ -152,7 +153,7 @@ static inline double ss_texg_stop_success_lpdf(
   const std::size_t max_eval = static_cast<std::size_t>(max_subdiv) * 64;
   double res = ss_integrate(texg_stop_success_integrand, &w, lo, hi,
                             abs_tol, rel_tol, max_eval);
-  return (!R_FINITE(res) || res <= 0.0) ? min_ll : std::log(res);
+  return (!is_finite(res) || res <= 0.0) ? min_ll : std::log(res);
 }
 
 // ----------------------------------------------------------------------------
