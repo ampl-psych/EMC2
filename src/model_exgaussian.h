@@ -6,6 +6,7 @@
 #include "utility_functions.h"
 #include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
+#include "composite_functions.h"
 #include "ParamTable.h"
 #include "hcubature.h"
 
@@ -19,24 +20,6 @@ inline constexpr double LOG_SQRT_2PI = 0.91893853320467274178;
 // Used by both fast_log_upper_tail and dexg's tail branch.
 inline double mills_cf_denom(double z) {
   return z + 1.0 / (z + 2.0 / (z + 3.0 / (z + 4.0 / (z + 13.0 / 20.0))));
-}
-
-inline double log1m(double x) {
-  return std::log1p(-x);
-}
-
-inline double log_diff_exp(double a, double b) {
-  double diff = b - a;
-
-  // For numerical stability when a and b are close (mirrors log1m_exp branching on diff).
-  // When diff is close to 0, exp(diff) ≈ 1 and log1m(exp(diff)) suffers catastrophic
-  // cancellation; expm1 avoids this. When diff is far from 0, exp(diff) is small and
-  // log1m(exp(diff)) is already stable.
-  if (diff > -0.693147) {  // diff > -log(2), i.e., exp(diff) close to 1 → use expm1
-    return a + std::log(-std::expm1(diff));
-  } else {                 // exp(diff) < 0.5 → log1m(exp(diff)) is stable
-    return a + log1m(std::exp(diff));
-  }
 }
 
 // probability density function of ex-Gaussian distribution
