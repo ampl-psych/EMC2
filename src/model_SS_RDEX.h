@@ -109,14 +109,16 @@ inline NumericVector rdex_go_lccdf(
 
 struct rdex_stop_success_pars {
   double SSD;
+  double min_ll;
   // stop params (truncated EXG): columns muS=5, sigmaS=6, tauS=7, exgS_lb=10
   double muS, sigS, tauS, lbS;
   // precomputed go Wald params: columns v=0, B=1, A=2, t0=3, s=4
   int n_go;
   std::vector<double> alpha, nu, gamma, t0;
 
-  rdex_stop_success_pars(double SSD_, const NumericMatrix& pars_)
+  rdex_stop_success_pars(double SSD_, double min_ll_, const NumericMatrix& pars_)
     : SSD(SSD_),
+      min_ll(min_ll_),
       muS(pars_(0, 5)), sigS(pars_(0, 6)), tauS(pars_(0, 7)), lbS(pars_(0, 10)),
       n_go(pars_.nrow()), alpha(n_go), nu(n_go), gamma(n_go), t0(n_go)
   {
@@ -134,20 +136,22 @@ static int rdex_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
                                        unsigned /*fdim*/, double* out) {
   const rdex_stop_success_pars* w = static_cast<const rdex_stop_success_pars*>(p);
   const double xx = x[0];
-  // density of stop process finishing at time xx
-  double fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, false);
-  if (!R_FINITE(fS) || fS <= 0.0) { out[0] = 0.0; return 0; }
-  // probability that no go accumulator has finished by xx + SSD
-  double S_go = 1.0;
+  // log density of stop process finishing at time xx
+  double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, true);
+  if (!R_FINITE(log_fS)) { log_fS = w->min_ll; }
+  // log probability that no go accumulator has finished by xx + SSD
+  double log_S_go = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
     double dt_i = (xx + w->SSD) - w->t0[i];
-    if (dt_i > 0.) {
-      double Si = 1.0 - pigt(dt_i, w->alpha[i], w->nu[i], w->gamma[i]);
-      if (!R_FINITE(Si) || Si <= 0.0) { out[0] = 0.0; return 0; }
-      S_go *= Si;
+    if (dt_i > 0.0) {
+      double log_Si = std::log(1.0 - pigt(dt_i, w->alpha[i], w->nu[i], w->gamma[i]));
+      if (!R_FINITE(log_Si)) { log_Si = w->min_ll; }
+      log_S_go += log_Si;
     }
   }
-  out[0] = fS * S_go;
+  // output: sum of (1) log winner density (stop) and (2) sum of log survival
+  // probabilities (go), exponentiated to put on likelihood scale
+  out[0] = std::exp(log_fS + log_S_go);
   return 0;
 }
 
@@ -164,7 +168,7 @@ static inline double ss_rdex_stop_success_lpdf(
     double k_sigma = SS_WINDOW_K_SIGMA,
     double k_tau = SS_WINDOW_K_TAU
 ) {
-  rdex_stop_success_pars w(SSD, pars);
+  rdex_stop_success_pars w(SSD, min_ll, pars);
   const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS, k_sigma);
   const double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS, k_sigma, k_tau);
   const std::size_t max_eval = static_cast<std::size_t>(max_subdiv) * 64;
