@@ -7,6 +7,7 @@
 #include "r_constants.h" // pos / neg infinity; na_real
 #include "model_RDM.h"          // cens Wald functions (digt/pigt/digt0/pigt0)
 #include "exgaussian_functions.h"
+#include "composite_functions.h" // log1m etc
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
 using namespace Rcpp;
 
@@ -145,7 +146,7 @@ static int rdex_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   for (int i = 0; i < w->n_go; ++i) {
     double dt_i = (xx + w->SSD) - w->t0[i];
     if (dt_i > 0.0) {
-      double log_Si = std::log(1.0 - pigt(dt_i, w->alpha[i], w->nu[i], w->gamma[i]));
+      double log_Si = log1m(pigt(dt_i, w->alpha[i], w->nu[i], w->gamma[i]));
       if (!is_finite(log_Si)) { log_Si = w->min_ll; }
       log_S_go += log_Si;
     }
