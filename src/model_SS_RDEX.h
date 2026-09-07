@@ -3,8 +3,8 @@
 
 #include <cmath>
 #include <vector>
-#include <Rcpp.h>
 #include "nan_check.h" // is_finite
+#include "r_constants.h" // pos / neg infinity; na_real
 #include "model_RDM.h"          // cens Wald functions (digt/pigt/digt0/pigt0)
 #include "exgaussian_functions.h"
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
@@ -28,7 +28,7 @@ inline NumericVector rdex_go_lpdf(
 
   const int n_acc = rt.size();
   const int n_acc_selected = sum(idx);
-  if (n_acc_selected == 0) return NA_REAL;
+  if (n_acc_selected == 0) return na_real();
 
   NumericVector out(n_acc_selected);
   int k = 0;
@@ -37,7 +37,7 @@ inline NumericVector rdex_go_lpdf(
     if (!idx[i]) continue;
 
     double dt_i = rt[i] - pars(i, 3);
-    double log_d = R_NegInf;
+    double log_d = neg_inf();
     if (dt_i > 0.) {
       log_d = std::log(
         digt(
@@ -71,7 +71,7 @@ inline NumericVector rdex_go_lccdf(
 
   const int n_acc = rt.size();
   const int n_acc_selected = sum(idx);
-  if (n_acc_selected == 0) return NA_REAL;
+  if (n_acc_selected == 0) return na_real();
 
   NumericVector out(n_acc_selected);
   int k = 0;
@@ -138,7 +138,7 @@ static int rdex_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   const rdex_stop_success_pars* w = static_cast<const rdex_stop_success_pars*>(p);
   const double xx = x[0];
   // log density of stop process finishing at time xx
-  double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, true);
+  double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true);
   if (!is_finite(log_fS)) { log_fS = w->min_ll; }
   // log probability that no go accumulator has finished by xx + SSD
   double log_S_go = 0.0;
@@ -162,7 +162,7 @@ static inline double ss_rdex_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
     double min_ll,
-    double upper = R_PosInf,
+    double upper = pos_inf(),
     int max_subdiv = 30,
     double abs_tol = 1e-5,
     double rel_tol = 1e-4,
@@ -225,12 +225,12 @@ NumericVector pTEXG_RDEX(
 ) {
   int n = q.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector cdf(n, NA_REAL);
+    NumericVector cdf(n, na_real());
     return cdf;
   }
   NumericVector cdf(n);
   for (int i = 0; i < n; i++){
-    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, R_PosInf, lower_tail, log_p);
+    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, pos_inf(), lower_tail, log_p);
   }
   return cdf;
 }
@@ -242,12 +242,12 @@ NumericVector dTEXG_RDEX(
 ) {
   int n = x.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector pdf(n, NA_REAL);
+    NumericVector pdf(n, na_real());
     return pdf;
   }
   NumericVector pdf(n);
   for (int i = 0; i < n; i++){
-    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, R_PosInf, log_d);
+    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, pos_inf(), log_d);
   }
   return pdf;
 }

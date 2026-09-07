@@ -3,8 +3,8 @@
 
 #include <cmath>
 #include <vector>
-#include <Rcpp.h>
 #include "nan_check.h" // is_finite
+#include "r_constants.h" // pos / neg infinity; na_real
 #include "exgaussian_functions.h"
 #include "ss_integrate.h"      // cens hcubature wrapper + finite window
 using namespace Rcpp;
@@ -27,7 +27,7 @@ inline NumericVector texg_go_lpdf(
 
   const int n_acc = rt.size();
   const int n_acc_selected = sum(idx);
-  if (n_acc_selected == 0) return NA_REAL;
+  if (n_acc_selected == 0) return na_real();
 
   NumericVector out(n_acc_selected);
   int k = 0;
@@ -37,7 +37,7 @@ inline NumericVector texg_go_lpdf(
 
     // input args: x, mu, sigma, tau, exg_lb, upper = Inf, log_d = TRUE
     double log_d = dtexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), pos_inf(), true
     );
     out[k] = is_finite(log_d) ? log_d : min_ll;
 
@@ -61,7 +61,7 @@ inline NumericVector texg_go_lccdf(
 
   const int n_acc = rt.size();
   const int n_acc_selected = sum(idx);
-  if (n_acc_selected == 0) return NA_REAL;
+  if (n_acc_selected == 0) return na_real();
 
   NumericVector out(n_acc_selected);
   int k = 0;
@@ -71,7 +71,7 @@ inline NumericVector texg_go_lccdf(
 
     // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
     double log_s = ptexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true
+      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), pos_inf(), false, true
     );
     out[k] = is_finite(log_s) ? log_s : min_ll;
 
@@ -117,13 +117,13 @@ static int texg_stop_success_integrand(unsigned /*dim*/, const double* x, void* 
   const texg_stop_success_pars* w = static_cast<const texg_stop_success_pars*>(p);
   const double xx = x[0];
   // log density of stop process finishing at time xx
-  double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, R_PosInf, true);
+  double log_fS = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true);
   if (!is_finite(log_fS)) { log_fS = w->min_ll; }
   // log probability that no go accumulator has finished by xx + SSD
   double log_S_go = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
     double log_Si = ptexg(xx + w->SSD, w->muG[i], w->sigG[i], w->tauG[i], w->lbG[i],
-                          R_PosInf, false, true);
+                          pos_inf(), false, true);
     if (!is_finite(log_Si)) { log_Si = w->min_ll; }
     log_S_go += log_Si;
   }
@@ -139,7 +139,7 @@ static inline double ss_texg_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
     double min_ll,
-    double upper = R_PosInf,
+    double upper = pos_inf(),
     int max_subdiv = 30,
     double abs_tol = 1e-5,
     double rel_tol = 1e-4,
@@ -167,12 +167,12 @@ NumericVector pTEXG_vec(
 ) {
   int n = q.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector cdf(n, NA_REAL);
+    NumericVector cdf(n, na_real());
     return cdf;
   }
   NumericVector cdf(n);
   for (int i = 0; i < n; i++){
-    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, R_PosInf, lower_tail, log_p);
+    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, pos_inf(), lower_tail, log_p);
   }
   return cdf;
 }
@@ -184,12 +184,12 @@ NumericVector dTEXG_vec(
 ) {
   int n = x.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector pdf(n, NA_REAL);
+    NumericVector pdf(n, na_real());
     return pdf;
   }
   NumericVector pdf(n);
   for (int i = 0; i < n; i++){
-    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, R_PosInf, log_d);
+    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, pos_inf(), log_d);
   }
   return pdf;
 }
