@@ -1,6 +1,10 @@
 # src/Makevars.in — processed by ./configure into src/Makevars
 # Do not edit src/Makevars directly; edit this file instead.
 
+# The C++ sources use C++17 (structured bindings, if constexpr); declare it so
+# toolchains whose default is older (e.g. Intel icpc on NCI Gadi) compile.
+CXX_STD = CXX17
+
 PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include -DPNORM_MODE=@PNORM_MODE@
 PKG_LIBS     = @OMP_LIBS@ $(RCPP_ARMA_LIBS) @ACCELERATE_LIBS@
 PKG_CXXFLAGS = @OMP_CXXFLAGS@ @EXTRA_CXXFLAGS@
