@@ -253,13 +253,18 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       }
     }
 
-    pars <- model()$Ttransform(pars, data)
+    # Bounds are checked on the model parameters *before* Ttransform, as the
+    # sampler does (c_do_bound in calc_ll): Ttransform may rewrite a bounded
+    # parameter in place (e.g. the DDM's SZ), and checking the derived value
+    # would reject draws the sampler accepted.
     if (!is.null(optionals$nobound)) {
-      attr(pars,"ok") <- rep(TRUE,nrow(pars))
+      pars_ok <- rep(TRUE,nrow(pars))
     } else {
       pars <- fix_bound(pars, model()$bound, data$lR,fix=!is.null(optionals$shrink2bound))
+      pars_ok <- attr(pars, 'ok')
     }
-    pars_ok <- attr(pars, 'ok')
+    pars <- model()$Ttransform(pars, data)
+    attr(pars, "ok") <- pars_ok
     if(mean(!pars_ok) > .1){
       warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
       return(FALSE)

@@ -167,6 +167,10 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     data <- get_data(emc)
   }
   design <- get_design(emc)
+  if (emc_has_stale_model(emc)) {
+    message("This object was fitted with an older EMC2; its model was refreshed for prediction. ",
+            "Run update2version() on the object to make this permanent.")
+  }
   return_trialwise_parameters <- isTRUE(dots$return_trialwise_parameters)
   if (is.null(dots$conditional_on_data) && has_conditional_covariates(design[[1]])) {
     dots$conditional_on_data <- FALSE
@@ -226,15 +230,21 @@ To override this behavior, pass `conditional_on_data=TRUE` to predict().')
     simDat <- suppressWarnings(mclapply(1:n_post,function(i){
       do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
     },mc.cores=n_cores))
+    # make_data() returns FALSE when > 10% of a draw's trial-wise parameters
+    # fall outside the model bounds; replace such draws by other posterior draws
     in_bounds <- !sapply(simDat, is.logical)
     if(all(!in_bounds)) stop("All samples fall outside of model bounds")
+    post_idx <- 1:n_post
     if(any(!in_bounds)){
-      good_post <- sample(1:n_post, sum(!in_bounds))
+      good_post <- sample(which(in_bounds), sum(!in_bounds), replace = TRUE)
       simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]], check_bounds = TRUE), fix_dots(dots, make_data)))
+        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
       },mc.cores=n_cores))
+      post_idx[!in_bounds] <- good_post
     }
-    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
+    still_in_bounds <- !sapply(simDat, is.logical)
+    out <- cbind(postn=rep(post_idx[still_in_bounds],times=unlist(lapply(simDat[still_in_bounds],function(x)dim(x)[1]))),
+                 do.call(rbind,simDat[still_in_bounds]))
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     if(return_trialwise_parameters) attr(out, 'trialwise_parameters') <- lapply(simDat, function(x) attr(x, "trialwise_parameters"))
@@ -1166,6 +1176,10 @@ get_design.emc <- function(x){
   } else{
     emc_design <- get_design(get_prior(x))
   }
+  # Objects fitted before May 2025 carry a model closure with the old
+  # rfun(lR, pars) interface; refresh it (in memory) so the design is usable
+  # by make_data()/predict(). update2version() makes this permanent.
+  emc_design <- refresh_design_models(emc_design)
   class(emc_design) <- "emc.design"
   return(emc_design)
 }

@@ -24,13 +24,16 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0"),ok=rep(TRUE,dim(pars)[1])){
   nr <- length(levels(lR))
   dt <- matrix(Inf,ncol=nrow(pars)/nr,nrow=nr)
   t0 <- pars[,"t0"]
-  pars <- pars[ok,]
+  pars <- pars[ok,,drop=FALSE]
   dt[ok] <- stats::rlnorm(dim(pars)[1],meanlog=pars[,"m"],sdlog=pars[,"s"])
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
-  R <- factor(levels(lR)[R],levels=levels(lR))
+  # Trials with out-of-bound parameters stay NA (as in rLBA)
+  ok <- matrix(ok,nrow=nr)[1,]
+  R <- factor(ifelse(ok, levels(lR)[R], NA),levels=levels(lR))
+  rt[!ok] <- NA
   cbind.data.frame(R=R,rt=rt)
 }
 

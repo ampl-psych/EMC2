@@ -290,15 +290,17 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   nr <- length(levels(lR))
   dt <- matrix(Inf,nrow=nr,ncol=nrow(pars)/nr)
   t0 <- pars[,"t0"]
-  pars <- pars[ok,]
+  pars <- pars[ok,,drop=FALSE]
   dt[ok] <- rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"])
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
-  out$R <- levels(lR)[R]
+  # Trials with out-of-bound parameters stay NA (as in rLBA)
+  ok <- matrix(ok,nrow=nr)[1,]
+  out$R[ok] <- levels(lR)[R][ok]
   out$R <- factor(out$R,levels=levels(lR))
-  out$rt <- rt
+  out$rt[ok] <- rt[ok]
   out
 }
 
