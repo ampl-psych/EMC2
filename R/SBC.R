@@ -256,8 +256,10 @@ recover_sbc <- function(tempdir, design, fileName = NULL, prior_in = NULL,
 .sbc_assemble_single <- function(reps, par_names = NULL) {
   idx  <- sort(as.integer(names(reps)))
   reps <- reps[as.character(idx)]
+  # a replicate that errored inside mclapply comes back as a try-error (not a
+  # list) and is treated as failed rather than dereferenced
   ok   <- vapply(reps, function(r)
-    !is.null(r) && !isTRUE(r$failed) && !is.null(r$rank), logical(1))
+    is.list(r) && !isTRUE(r$failed) && !is.null(r$rank), logical(1))
   if (!any(ok)) stop("No completed replicates found to assemble")
   used_idx <- idx[ok]
   SBC <- split_list_to_dfs(reps[ok])
@@ -278,7 +280,7 @@ recover_sbc <- function(tempdir, design, fileName = NULL, prior_in = NULL,
   idx  <- sort(as.integer(names(reps)))
   reps <- reps[as.character(idx)]
   ok   <- vapply(reps, function(r)
-    !is.null(r) && !is.null(r$rank_mu_row), logical(1))
+    is.list(r) && !is.null(r$rank_mu_row), logical(1))
   if (!any(ok)) stop("No completed replicates found to assemble")
   used_idx <- idx[ok]
   reps <- reps[ok]
@@ -576,10 +578,27 @@ run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots,
   dots[["verboseProgress"]] <- FALSE
   message("Running data set ", sbc_running_counter(rep, temp_dir, offset))
   p_vector <- prior_alpha[rep,]
-  data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
-  emc <- suppressMessages(do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc))))
-
   p_vector_dir <- if (!is.null(temp_dir)) temp_dir else "."
+  fail_rep <- function(what, msg) {
+    filename <- file.path(p_vector_dir, paste0("p_vector_rep", rep, ".Rdata"))
+    save(p_vector, file = filename)
+    warning(what, " failed for replication ", rep,
+            ". The input parameters have been saved as ", filename, ". ", msg)
+    list(rank = NULL, med = NULL, bias = NULL, coverage = NULL, failed = TRUE)
+  }
+  # Simulation and set-up can fail for a legitimate prior draw (e.g. make_data
+  # returns FALSE when > 10% of the drawn parameters fall outside the model
+  # bounds); report the replicate as failed rather than aborting the run.
+  data <- tryCatch(
+    do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data))),
+    error = function(e) e)
+  if (inherits(data, "error")) return(fail_rep("Data simulation", conditionMessage(data)))
+  if (!is.data.frame(data)) return(fail_rep("Data simulation", "make_data() did not return data (parameters out of bounds?)"))
+  emc <- tryCatch(
+    suppressMessages(do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))),
+    error = function(e) e)
+  if (inherits(emc, "error")) return(fail_rep("make_emc", conditionMessage(emc)))
+
   fit_result <- tryCatch({
     do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
   }, warning = function(w) {
