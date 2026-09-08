@@ -182,3 +182,25 @@ test_that("real-data censoring routes: make_missing() then design(data=), or des
   expect_error(make_emc(datT, desT, type = "single", n_chains = 1, verbose = FALSE),
                "Truncation")
 })
+
+test_that("multithreaded backend gives identical stop-signal likelihoods", {
+  des <- ss_design(SSEXG, formula = exg_formula)
+  p <- p_vec(des, exg_p)
+  set.seed(7)
+  dat <- make_data(p, des, n_trials = 60, functions = list(SSD = make_ssd()), TC = list(UC = 0.9))
+  emc <- make_emc(dat, des, type = "single", n_chains = 1, compress = FALSE, verbose = FALSE)
+  dadm <- emc[[1]]$data[[1]]
+  pm <- rbind(p, matrix(rnorm(20 * length(p), rep(p, each = 20), .3), 20))
+  colnames(pm) <- names(p)
+  ll1 <- as.numeric(calc_ll_manager(pm, dadm, des$model))
+  old <- options(emc.ll_backend = "multithreaded", emc.n_threads = 2)
+  on.exit(options(old))
+  ll2 <- suppressWarnings(as.numeric(calc_ll_manager(pm, dadm, des$model)))  # warns if no OpenMP
+  expect_equal(ll1, ll2, tolerance = 0)
+  # trialwise too
+  tw1 <- as.numeric(calc_ll_manager(pm[1, , drop = FALSE], dadm, des$model, return_trialwise = TRUE))
+  options(emc.ll_backend = "multiprocess")
+  tw0 <- as.numeric(calc_ll_manager(pm[1, , drop = FALSE], dadm, des$model, return_trialwise = TRUE))
+  expect_equal(tw1, tw0, tolerance = 0)
+  expect_equal(sum(tw0), ll1[1], tolerance = 1e-10)
+})

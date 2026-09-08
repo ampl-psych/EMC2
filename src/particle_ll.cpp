@@ -25,9 +25,8 @@
 // model_exgaussian.h). Header-only; include from this translation unit only.
 #include "model_SS_EXG.h"
 #include "model_SS_RDEX.h"
-#include "ss_likelihood.h"
+#include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
 using namespace Rcpp;
-
 
 // =============================================================================
 // PipelineCache — pre-computed specs and masks for the parameter pipeline
@@ -737,25 +736,18 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
       // -----------------------------------------------------------------------
-      // Stop-signal models (SSEXG, SSRDEX). The trial loop handles the
+      // Stop-signal models (SSEXG, SSRDEX). The SS likelihood handles the
       // missingness codes itself (deadline / lower censoring / intrinsic
-      // no-response), so no CensorSpec/TruncSpec here. Not thread-safe (Rcpp
-      // objects inside the trial loop): calc_ll_multithreaded delegates here.
+      // no-response), so no CensorSpec/TruncSpec here.
       // -----------------------------------------------------------------------
     } else if (type == "SSEXG" || type == "SSRDEX") {
-      const SSModelAdapter ssa = resolve_ss_adapter(std::string(type.get_cstring()));
+      const std::string type_str(type.get_cstring());
+      SSSpec ss = make_ss_spec(type_str, data, ctx.param_table);   // data-only, once
       for (int i = 0; i < n_particles; ++i) {
         if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
         run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
-        // The SS trial loop reads parameters by fixed column index in p_types
-        // order, so materialise exactly the SS columns by name (trend
-        // parameters are thereby excluded and keep_names order is irrelevant).
-        NumericMatrix pars = ctx.param_table.materialize_by_param_names(ssa.cols);
         std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
-        c_log_likelihood_ss(pars, data, n_choice_trials, min_ll,
-                            ssa.go_lpdf_ptr, ssa.go_lccdf_ptr,
-                            ssa.stop_logsurv_ptr, ssa.stop_success_ptr,
-                            ssa.idx_tf, ssa.idx_gf, ll_buf.data());
+        ss_log_likelihood(ss, min_ll, ll_buf.data());
         c_do_bound(ctx.param_table, bound_specs, is_ok);
         apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
         double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
@@ -908,13 +900,6 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
     Rcpp::warning("calc_ll_multithreaded: OpenMP not available, running single-threaded.");
   const int n_threads_used = 1;
 #endif
-
-  // Stop-signal models are not thread-safe (Rcpp objects in the trial loop):
-  // run the single-threaded path instead.
-  if (type == "SSEXG" || type == "SSRDEX") {
-    return calc_ll(particle_matrix, data, constants, designs, type, bounds, transforms,
-                   pretransforms, p_types, min_ll, trend, return_trialwise);
-  }
 
   // ---------------------------------------------------------------------------
   // Shared setup
@@ -1100,6 +1085,45 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
           std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
         } else {
           result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Stop-signal branch (SSEXG / SSRDEX): per-thread SSSpec copies bound to
+      // the per-thread ParamTables; no Rcpp inside the parallel region.
+      // -----------------------------------------------------------------------
+    } else if (type == "SSEXG" || type == "SSRDEX") {
+      SSSpec ss0 = make_ss_spec(std::string(type.get_cstring()), data, ctx.param_table);
+      std::vector<SSSpec> ss_vec(n_threads_used, ss0);
+      for (int t = 0; t < n_threads_used; ++t) ss_vec[t].rebind(pt_vec[t]);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_trial = ll_buf_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+        const SSSpec&        ss       = ss_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        ss_log_likelihood(ss, min_ll, ll_trial.data());
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
         }
       }
 
