@@ -21,6 +21,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <map>
 #include <Rcpp.h>
 #include "composite_functions.h"     // log1m, log1m_exp, log_sum_exp, log_mix
 #include "ss_integrate.h"            // ss_integrate (cens hcubature), SS_WINDOW_K_*
@@ -294,6 +295,27 @@ inline void c_log_likelihood_ss(
   const int n_acc = unique_lR.length();
 
   NumericVector tt(n_acc);
+
+  // The stop-success integral depends only on (SSD, upper bound, go/stop
+  // parameter rows). Without trends the parameter rows repeat across trials of
+  // a design cell and staircases produce few distinct SSDs, so memoise it per
+  // likelihood evaluation (the R reference, pstopTEXG, de-duplicates likewise).
+  std::map<std::vector<double>, double> stop_success_cache;
+  auto cached_stop_success = [&](double ssd, const NumericMatrix& P_go, double upper) -> double {
+    std::vector<double> key;
+    key.reserve(2 + P_go.nrow() * P_go.ncol());
+    key.push_back(ssd); key.push_back(upper);
+    for (int r = 0; r < P_go.nrow(); ++r)
+      for (int c = 0; c < P_go.ncol(); ++c) key.push_back(P_go(r, c));
+    auto it = stop_success_cache.find(key);
+    if (it != stop_success_cache.end()) return it->second;
+    double lp = stop_success_ptr(ssd, P_go, min_ll, upper,
+                                 SS_STOP_MAX_SUBDIV, SS_STOP_ABS_TOL, SS_STOP_REL_TOL,
+                                 SS_WINDOW_K_SIGMA, SS_WINDOW_K_TAU);
+    if (!R_FINITE(lp)) lp = R_NegInf;
+    stop_success_cache.emplace(std::move(key), lp);
+    return lp;
+  };
   auto log_surv_mask = [&](double t, const NumericMatrix& Pcur,
                            const LogicalVector& mask) -> double {
     tt.fill(t);
@@ -359,10 +381,7 @@ inline void c_log_likelihood_ss(
       if (!stop_signal_presented) return std::log(gf);   // go failure
       if (n_accST == 0) {
         NumericMatrix P_go = submat_rcpp(P, is_go);
-        double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf,
-                                            SS_STOP_MAX_SUBDIV, SS_STOP_ABS_TOL, SS_STOP_REL_TOL,
-                                        SS_WINDOW_K_SIGMA, SS_WINDOW_K_TAU);
-        if (!R_FINITE(log_pstop)) log_pstop = R_NegInf;
+        double log_pstop = cached_stop_success(SSD[start_row], P_go, R_PosInf);
         return log_sum_exp(std::log(gf), log1m(gf) + log1m(tf) + log_pstop);  // stop-success
       }
       return std::log(gf) + std::log(tf);                // ST intrinsic NR (out of scope)
@@ -389,9 +408,7 @@ inline void c_log_likelihood_ss(
       NumericMatrix P_go = submat_rcpp(P, is_go);
       if (stop_can_act) {
         logS_stop = stop_logsurv_ptr(uc_eff, P);
-        log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, uc_eff, SS_STOP_MAX_SUBDIV, SS_STOP_ABS_TOL, SS_STOP_REL_TOL,
-                                        SS_WINDOW_K_SIGMA, SS_WINDOW_K_TAU);
-        if (!R_FINITE(log_pstop)) log_pstop = R_NegInf;
+        log_pstop = cached_stop_success(SSD[start_row], P_go, uc_eff);
       }
       double log_core_trig = log_sum_exp(log_pstop, logS_go + logS_stop);
       if (n_accST == 0) {
