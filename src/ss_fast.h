@@ -159,7 +159,33 @@ inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
   StopIntegrand w{&s, &pt, ssd, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS),
                   par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS), go_rows, n_go};
   const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS);
-  const double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS);
+  double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS);
+  if (!(hi > lo)) return neg_inf();
+  // The integrand is f_stop(x) * prod_i S_go,i(x + SSD). The stop window can be
+  // very wide (large sigmaS / tauS, as sampled early in a fit) while the go
+  // survivors vanish much earlier; integrating over that dead tail wastes the
+  // whole evaluation budget. Clip hi to the point where the go survival
+  // product drops below exp(-30) (~1e-13, far below the relative tolerance),
+  // found by bisection (survival is monotone decreasing).
+  auto log_S_go = [&](double x) {
+    double ls = 0.0;
+    for (int i = 0; i < n_go; ++i) {
+      double v = go_lsurv(s, pt, go_rows[i], x + ssd);
+      if (!is_finite(v)) return neg_inf();
+      ls += v;
+    }
+    return ls;
+  };
+  const double LS_MIN = -30.0;
+  if (log_S_go(lo) < LS_MIN) return neg_inf();          // go always finishes first
+  if (log_S_go(hi) < LS_MIN) {
+    double a = lo, b = hi;
+    for (int it = 0; it < 30; ++it) {
+      const double m = 0.5 * (a + b);
+      if (log_S_go(m) < LS_MIN) b = m; else a = m;
+    }
+    hi = b;
+  }
   double res = ss_integrate(stop_success_integrand, &w, lo, hi, SSF_ABS_TOL, SSF_REL_TOL,
                             SSF_STOP_MAX_EVAL);
   return (!is_finite(res) || res <= 0.0) ? neg_inf() : std::log(res);
