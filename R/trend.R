@@ -699,17 +699,23 @@ check_trend <- function(trend, covariates = NULL, model = NULL,
                         formula = NULL, parameter_design = NULL) {
 
   # ---- non-premap bases must target existing model parameters ----
+  # (premap bases may also target sampled parameters or design columns)
   if (!is.null(model)) {
     model_pnames <- names(model()$p_types)
     for (b in trend$bases) {
       if (!identical(b$phase, "premap") && !b$target_parameter %in% model_pnames)
         stop("pretransform/posttransform base targets '", b$target_parameter,
              "' which is not a model parameter.")
+      # Stop-signal models: 'b' (= B + A), 'SSD' and 'lI' are columns that the
+      # model's Ttransform derives for the R likelihood, not parameters; the
+      # C++ likelihood cannot bind a trend to them.
+      if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX") &&
+          b$target_parameter %in% c("b", "SSD", "lI"))
+        stop("trend base targets '", b$target_parameter, "', which is a derived column of ",
+             model()$c_name, ", not a model parameter. Target 'B' for the go threshold ",
+             "(valid targets: ", paste(model_pnames, collapse = ", "), ").")
     }
   }
-
-  if (is.null(covariates))
-    stop("must specify covariates when using trend")
 
   # ---- auto-add intercept formulas for missing trend pnames ----
   trend_pnames <- get_trend_pnames(trend)

@@ -661,6 +661,27 @@ loadRData <- function(fileName){
 }
 
 
+# Apply a design's TC (truncation/censoring) list to data that have not been
+# through make_missing(). No-op when TC requests nothing or the data already
+# carry censoring columns.
+apply_design_TC <- function(data, design, rt_resolution = NULL) {
+  TC <- design$TC
+  if (is.null(TC) || !is.data.frame(data)) return(data)
+  if (any(c("LT", "UT", "LC", "UC", "missingness") %in% names(data))) return(data)
+  is_default <- function(x, default) is.null(x) || (is.numeric(x) && all(x == default))
+  if (is_default(TC$LT, 0) && is_default(TC$LC, 0) && is_default(TC$UT, Inf) &&
+      is_default(TC$UC, Inf) && is_default(TC$pContaminant, 0)) return(data)
+  message("Applying the design's truncation/censoring (TC) to the data")
+  make_missing(data, LT = TC$LT, LC = TC$LC, UC = TC$UC, UT = TC$UT,
+               LCresponse = TC$LCresponse, UCresponse = TC$UCresponse,
+               LCdirection = TC$LCdirection, UCdirection = TC$UCdirection,
+               pContaminant = TC$pContaminant,
+               no_truncate = TC$no_truncate, no_censor = TC$no_censor,
+               verbose = isTRUE(TC$verbose), rt_resolution = rt_resolution,
+               digits = if (is.null(TC$digits)) 2 else TC$digits)
+}
+
+
 #' Make an emc Object
 #'
 #' Creates an emc object by combining the data, prior,
@@ -792,6 +813,10 @@ make_emc <- function(data,design,model=NULL,
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
+      # Censoring/truncation requested in design(TC = ...) but the data carry no
+      # LT/UT/LC/UC/missingness columns (i.e. make_missing() was not applied,
+      # as for real data): apply it now rather than silently fit without it.
+      data[[i]] <- apply_design_TC(data[[i]], design[[i]], rt_resolution[i])
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
                                      compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i],
                                      memory_saver = memory_saver,

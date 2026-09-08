@@ -151,3 +151,34 @@ test_that("censored RDM (non-SS) likelihood is compression invariant and matches
   }
   expect_equal(sum(pmax(ll_r, log(1e-10))), llF$ll, tolerance = 1e-10)
 })
+
+test_that("real-data censoring routes: make_missing() then design(data=), or design(TC=)", {
+  des <- ss_design(SSEXG, formula = exg_formula)
+  p <- p_vec(des, exg_p)
+  set.seed(6)
+  raw <- make_data(p, des, n_trials = 40, functions = list(SSD = fixed_ssd))
+  raw <- raw[, c("subjects", "trials", "S", "R", "SSD", "rt")]   # like real data
+  # route 1: censor the data first; censoring columns must not become covariates
+  dat <- make_missing(raw, UC = 0.9, rt_resolution = NULL)
+  des1 <- design(model = SSEXG, data = dat, matchfun = ss_matchfun, formula = exg_formula,
+                 report_p_vector = FALSE)
+  expect_false(any(c("LT", "UT", "LC", "UC", "missingness") %in% des1$Fcovariates))
+  emc1 <- make_emc(dat, des1, type = "single", n_chains = 1, verbose = FALSE)
+  d1 <- emc1[[1]]$data[[1]]
+  expect_true(all(c("UC", "missingness") %in% names(d1)))
+  expect_true(any(d1$missingness %in% 2L))
+  # route 2: TC in the design, raw data -> make_emc applies it
+  des2 <- design(model = SSEXG, data = raw, matchfun = ss_matchfun, formula = exg_formula,
+                 TC = list(UC = 0.9), report_p_vector = FALSE)
+  expect_message(emc2 <- make_emc(raw, des2, type = "single", n_chains = 1, verbose = FALSE),
+                 "truncation/censoring")
+  d2 <- emc2[[1]]$data[[1]]
+  expect_true(all(d2$UC == 0.9))
+  expect_true(any(d2$missingness %in% 2L))
+  # a truncation window is still refused for stop-signal models
+  datT <- make_missing(raw, UT = 0.9, rt_resolution = NULL)
+  desT <- design(model = SSEXG, data = datT, matchfun = ss_matchfun, formula = exg_formula,
+                 report_p_vector = FALSE)
+  expect_error(make_emc(datT, desT, type = "single", n_chains = 1, verbose = FALSE),
+               "Truncation")
+})

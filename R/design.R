@@ -144,7 +144,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
     factors <- facs[names(facs)!="R"]
-    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
+    # censoring/truncation columns (from make_missing) are not covariates: they
+    # must not be imputed with random values in the minimal design
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt","LT","UT","LC","UC","missingness"))]
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)
