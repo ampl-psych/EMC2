@@ -101,3 +101,13 @@ test_that("make_data() checks bounds before Ttransform, as the sampler does", {
   expect_s3_class(d, "data.frame")
   expect_equal(nrow(d), nrow(forstmann))
 })
+
+test_that("rDDM() refuses a/s beyond what rWDM can simulate instead of hanging", {
+  R <- factor(rep("left", 6), levels = c("left", "right"))
+  p <- cbind(v = rep(1, 6), a = 1, sv = 0.5, t0 = .2, st0 = 0, s = c(1, 1, 1, 1e-4, 1e-10, 1), Z = .5, SZ = 0.1)
+  setTimeLimit(elapsed = 20, transient = TRUE)
+  expect_warning(r <- rDDM(R, p), "a/s > 1000")
+  setTimeLimit()
+  expect_equal(nrow(r), 6)
+  expect_equal(is.na(r$rt), c(FALSE, FALSE, FALSE, TRUE, TRUE, FALSE))
+})

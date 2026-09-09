@@ -47,6 +47,18 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
          " (", paste(R_levels, collapse = ", "), ")")
   n <- nrow(pars)
   out <- data.frame(R = rep(NA_character_, n), rt = rep(NA_real_, n))
+  # WienR::rWDM() does not terminate (uninterruptibly, in compiled code) once the
+  # boundary separation in diffusion units, a/s, exceeds ~1e4 -- and it is called
+  # inside suppress_output(), so nothing is visible. Fits whose s has collapsed
+  # towards 0 produce a/s ~ 1e9. Treat such trials as out of bounds instead.
+  a_s <- pars[, "a"] / pars[, "s"]
+  unsim <- ok & !(is.finite(a_s) & a_s <= 1e3 &
+                  is.finite(pars[, "v"] / pars[, "s"]) & is.finite(pars[, "sv"] / pars[, "s"]))
+  if (any(unsim)) {
+    warning(sum(unsim), " trial(s) have a/s > 1000 (s close to 0?), which the Wiener sampler ",
+            "cannot simulate; they are returned as NA")
+    ok[unsim] <- FALSE
+  }
   pars <- as.matrix(pars[ok,,drop=FALSE])
   if (nrow(pars) > 0) {
     # DDM gets unhappy with large trial numbers so split them into separate lists

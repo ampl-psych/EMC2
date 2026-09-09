@@ -233,7 +233,8 @@ To override this behavior, pass `conditional_on_data=TRUE` to predict().')
     # make_data() returns FALSE when > 10% of a draw's trial-wise parameters
     # fall outside the model bounds; replace such draws by other posterior draws
     in_bounds <- !sapply(simDat, is.logical)
-    if(all(!in_bounds)) stop("All samples fall outside of model bounds")
+    if(all(!in_bounds)) stop("All samples fall outside of model bounds, or could not be simulated ",
+                             "(call make_data() on one posterior draw to see the warnings)")
     post_idx <- 1:n_post
     if(any(!in_bounds)){
       good_post <- sample(which(in_bounds), sum(!in_bounds), replace = TRUE)
