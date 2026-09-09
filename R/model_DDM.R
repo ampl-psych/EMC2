@@ -39,6 +39,18 @@ suppress_output <- function(expr) {
 
 rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
+  # WienR::rWDM() does not terminate (uninterruptibly, in compiled code) once the
+  # boundary separation in diffusion units, a/s, exceeds ~1e4 -- and it is called
+  # inside suppress_output(), so nothing is visible. Fits whose s has collapsed
+  # towards 0 produce a/s ~ 1e9. Treat such trials as out of bounds instead.
+  a_s <- pars[, "a"] / pars[, "s"]
+  unsim <- ok & !(is.finite(a_s) & a_s <= 1e3 &
+                  is.finite(pars[, "v"] / pars[, "s"]) & is.finite(pars[, "sv"] / pars[, "s"]))
+  if (any(unsim)) {
+    warning(sum(unsim), " trial(s) have a/s > 1000 (s close to 0?), which the Wiener sampler ",
+            "cannot simulate; they are dropped")
+    ok[unsim] <- FALSE
+  }
   pars <- pars[ok,,drop=FALSE]
   R <- R[ok]
   pars <- as.matrix(pars);
