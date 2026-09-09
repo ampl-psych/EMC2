@@ -134,6 +134,14 @@ kernel_pow_incr <- make_kernel(cov_names = "trial_nr", type = "pow_incr")
 
 Power trends provide another way to model non‑linear relationships, often used for practice effects.
 
+### Saturating Linear Trends
+```{r}
+# Linear rise that saturates: k = min(1, k_sat * c)
+kernel_sat_lin <- make_kernel(cov_names = "trial_nr", type = "sat_lin")
+```
+
+`sat_lin` rises linearly at rate `k_sat` (log-scaled) and is flat at 1 once the covariate exceeds `1/k_sat`. A non-finite covariate (`NA`, `Inf`) gives 0, so rows on which the covariate is undefined keep the untrended parameter value. This is the kernel behind `make_ssd_trend()`, which lets stop-signal parameters change with the stop-signal delay (`SSD = Inf` on go trials) as in the dEXG3 model; pair it with a `"lin"` base and `make_base(transforms = list(w = "exp"))` when the weight must be positive.
+
 ### Polynomial Trends
 ```{r}
 # Quadratic trend

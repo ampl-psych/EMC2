@@ -74,6 +74,30 @@ test_that("exp_incr_Rcpp", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
 })
 
+# sat_lin -----------------------------------------------------------------
+# k = min(1, k_sat * c); non-finite covariates (NA, Inf: e.g. SSD on go trials) give 0
+trend_sat_lin <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'sat_lin')))
+kernel_pars <- c('m.k_sat'=log(2))
+covariate1 <- c(0, .1, .3, 1, Inf, NA)
+emc <- make_minimal_emc(trend_sat_lin, covariate1 = covariate1, n_trials = 6)
+expected_output <- ifelse(is.finite(covariate1), pmin(1, exp(kernel_pars) * covariate1), 0)
+all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+test_that("sat_lin_R", {
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+})
+test_that("sat_lin_Rcpp", {
+  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+})
+test_that("make_base transforms override the base weight transform", {
+  b <- make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "exp"))
+  expect_equal(unname(b$generic_transforms["w"]), "exp")
+  tr <- make_trend(b)
+  expect_equal(unname(tr$bases[[1]]$transforms["m.w"]), "exp")
+  expect_error(make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(z = "exp")), "not parameters")
+  expect_error(make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "log")), "identity")
+  expect_error(make_base('m', 'add', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "exp")), "no parameters")
+})
+
 # pow_decr ----------------------------------------------------------------
 trend_pow_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'pow_decr')))
 kernel_pars <- c('m.d_pd'=1)

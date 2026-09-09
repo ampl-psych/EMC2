@@ -51,6 +51,7 @@ enum class KernelType {
   LinDecr,
   ExpIncr,
   ExpDecr,
+  SatLin,
   PowIncr,
   PowDecr,
   Poly2,
@@ -81,6 +82,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::LinDecr:
   case KernelType::ExpIncr:
   case KernelType::ExpDecr:
+  case KernelType::SatLin:
   case KernelType::PowIncr:
   case KernelType::PowDecr:
   case KernelType::Poly2:
@@ -463,6 +465,39 @@ struct ExpIncrKernel : BaseKernel {
                  out_[j] = 1.0 - std::exp(-lambda * x);
                // }
                // out_[j] = last;
+             }
+
+             mark_run_complete();
+           }
+};
+
+// Saturating linear kernel: k = min(1, k_sat * c). Rises linearly at rate
+// k_sat and saturates at 1 once c >= 1/k_sat. Non-finite covariates (NA, NaN,
+// Inf; e.g. SSD = Inf on go trials of a stop-signal design) give 0, so the
+// trended parameter is left at its untrended value on those rows.
+struct SatLinKernel : BaseKernel {
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("SatLinKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, 0);
+
+             const double* k_col = kernel_pars.cols[0];
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (is_finite(x)) {
+                 double v = k_col[r] * x;
+                 out_[j] = (v < 1.0) ? v : 1.0;
+               } else {
+                 out_[j] = 0.0;
+               }
              }
 
              mark_run_complete();

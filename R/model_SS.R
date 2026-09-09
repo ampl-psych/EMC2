@@ -29,16 +29,23 @@ SSD_function <- function(d,SSD=NA,pSSD=.25) {
   return(out)
 }
 
-staircase_function <- function(dts,staircase) {
-  ns <- ncol(dts)
-  SSD <- sR <- srt <- numeric()
-  SSD[1] <- staircase$SSD0
+# ---- Staircase step logic shared by the vectorised (rfun) and the
+# trial-by-trial (make_data_unconditional) simulation paths ----
+
+# Clamp an SSD to the staircase limits.
+staircase_clamp <- function(SSD, staircase) {
+  if (SSD < staircase$stairmin) SSD <- staircase$stairmin
+  if (SSD > staircase$stairmax) SSD <- staircase$stairmax
+  SSD
+}
+
+# Direction ("up"/"down") of the step after a stop trial.
+#  label:   response label (a level of lR) or NA for no response
+#  stopped: TRUE if the stop process won (no go response)
+#  late:    TRUE if the response was slower than the deadline (unobserved)
+staircase_step_dir <- function(staircase, label, stopped, late = FALSE) {
   rules <- staircase$rules
   if (is.null(rules)) rules <- list(up = NULL, down = NULL)
-  labels <- staircase$labels
-  accST <- staircase$accST
-  iSSD <- 1
-  if (!is.null(accST)) iSSD <- c(iSSD, accST)
   match_rule <- function(label, rule) {
     if (is.null(rule) || !length(rule)) return(FALSE)
     if (is.na(label)) {
@@ -47,9 +54,51 @@ staircase_function <- function(dts,staircase) {
       label %in% rule[!is.na(rule)]
     }
   }
+  # Under a deadline (staircase$UC, set by make_data) a response slower than
+  # UC is not observed in the experiment, so the staircase treats it as a
+  # non-response.
+  if (late) label <- NA_character_
+  step_dir <- NULL
+  if (!is.null(rules$up) || !is.null(rules$down)) {
+    success <- match_rule(label, rules$up)
+    failure <- match_rule(label, rules$down)
+    if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
+      stop("`staircase_up` and `staircase_down` overlap for label ", label)
+    }
+    if (is.null(rules$down) && !is.null(rules$up)) {
+      failure <- !success
+    }
+    if (success) {
+      step_dir <- "up"
+    } else if (failure) {
+      step_dir <- "down"
+    }
+  }
+  if (is.null(step_dir)) {
+    if (stopped || late) step_dir <- "up" else step_dir <- "down"
+  }
+  step_dir
+}
+
+# SSD for the next stop trial given the step direction.
+staircase_next_ssd <- function(SSD, step_dir, staircase) {
+  if (identical(step_dir, "up")) {
+    round(SSD + staircase$stairstep, 3)
+  } else if (identical(step_dir, "down")) {
+    round(SSD - staircase$stairstep, 3)
+  } else SSD
+}
+
+staircase_function <- function(dts,staircase) {
+  ns <- ncol(dts)
+  SSD <- sR <- srt <- numeric()
+  SSD[1] <- staircase$SSD0
+  labels <- staircase$labels
+  accST <- staircase$accST
+  iSSD <- 1
+  if (!is.null(accST)) iSSD <- c(iSSD, accST)
   for (i in 1:ns) {
-    if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
-    if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
+    SSD[i] <- staircase_clamp(SSD[i], staircase)
     trial <- dts[,i]
     trial[iSSD] <- trial[iSSD] + SSD[i]
     if (all(is.infinite(trial[-1]))) {
@@ -78,38 +127,10 @@ staircase_function <- function(dts,staircase) {
       }
       label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
     }
-    # Under a deadline (staircase$UC, set by make_data) a response slower than
-    # UC is not observed in the experiment, so the staircase treats it as a
-    # non-response.
     late <- !is.null(staircase$UC) && is.finite(staircase$UC) &&
       !is.na(srt[i]) && srt[i] > staircase$UC
-    if (late) label <- NA_character_
-    step_dir <- NULL
-    if (!is.null(rules$up) || !is.null(rules$down)) {
-      success <- match_rule(label, rules$up)
-      failure <- match_rule(label, rules$down)
-      if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
-        stop("`staircase_up` and `staircase_down` overlap for label ", label)
-      }
-      if (is.null(rules$down) && !is.null(rules$up)) {
-        failure <- !success
-      }
-      if (success) {
-        step_dir <- "up"
-      } else if (failure) {
-        step_dir <- "down"
-      }
-    }
-    if (is.null(step_dir)) {
-      if (Ri==1 || late) step_dir <- "up" else step_dir <- "down"
-    }
-    if (i<ns) {
-      if (identical(step_dir, "up")) {
-        SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
-      } else if (identical(step_dir, "down")) {
-        SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
-      }
-    }
+    step_dir <- staircase_step_dir(staircase, label, stopped = (Ri == 1), late = late)
+    if (i<ns) SSD[i+1] <- staircase_next_ssd(SSD[i], step_dir, staircase)
   }
   list(sR=sR,srt=srt,SSD=SSD)
 }
@@ -1445,4 +1466,93 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     allLL <- pmax(min_ll,allLL)
 
     sum(allLL[attr(dadm,"expand")])
+}
+
+
+#' Stop-signal delay trends for the stop runner (dEXG3 / dRDEX models)
+#'
+#' @description
+#' Builds an [make_trend()] specification in which stop-signal parameters vary
+#' with the stop-signal delay (`SSD`). The default reproduces the "dynamic EXG3"
+#' (dEXG3) model of Doekemeijer et al., in which the mean of the stop runner's
+#' ex-Gaussian finishing-time distribution increases linearly with SSD and
+#' saturates:
+#'
+#' \deqn{\mu_{stop}(SSD) = \mu_{stop}(0) + d_{stop} \, \min(1, k_{stop} \, SSD)}
+#'
+#' In EMC2 terms this is the built-in saturating-linear kernel
+#' (`type = "sat_lin"`, `k = min(1, k_sat * SSD)`) applied to `muS` with a
+#' `"lin"` base in the `"posttransform"` phase, so that on the natural scale
+#' `muS = exp(eta_muS) + exp(muS.w) * min(1, exp(muS.k_sat) * SSD)`. The two
+#' extra sampled parameters are `muS.k_sat` (\eqn{\log k_{stop}}, the rate in
+#' 1/s; the rise saturates at `SSD = 1/k`) and `muS.w` (\eqn{\log d_{stop}},
+#' the asymptotic increase in seconds). Both are log-scaled so the increase is
+#' positive. On go trials `SSD = Inf` and the kernel returns 0, leaving `muS` at
+#' its baseline (it is not used there anyway).
+#'
+#' `target = "tf"` gives the alternative model in which the trigger-failure
+#' probability changes with SSD on the probit scale,
+#' `tf = pnorm(eta_tf + tf.w * min(1, exp(tf.k_sat) * SSD))`, with `tf.w`
+#' unconstrained in sign (`"pretransform"` phase, identity weight). Several
+#' targets can be combined; each gets its own kernel (and so its own rate
+#' parameter) unless `shared_k = TRUE`.
+#'
+#' The same specification works for [SSEXG()] and [SSRDEX()] since both share
+#' the stop-runner parameters. Supply the result to the `trend` argument of
+#' [design()]. Simulating with a staircase (`make_ssd(staircase = TRUE)`) is
+#' supported: [make_data()] detects a trend on `SSD` and simulates trial by
+#' trial so that each stop trial's parameters use the SSD the staircase
+#' actually produced.
+#'
+#' @param target Character vector of stop-signal parameters to trend on SSD;
+#'   any of `"muS"`, `"sigmaS"`, `"tauS"` (posttransform, positive weight) and
+#'   `"tf"`, `"gf"` (pretransform, unconstrained weight).
+#' @param kernel Kernel type applied to SSD, default `"sat_lin"`. Any
+#'   non-sequential kernel accepting a `"lin"` base can be used (e.g.
+#'   `"exp_incr"` for a smooth saturating rise).
+#' @param covariate Name of the SSD column, default `"SSD"`.
+#' @param shared_k Logical; if `TRUE` and several targets are given, all share
+#'   one rate parameter named `<first target>.<rate>`.
+#'
+#' @return An `emc2_trend` object.
+#'
+#' @examples
+#' trend <- make_ssd_trend()
+#' get_trend_pnames(trend)   # "muS.k_sat" "muS.w"
+#' \dontrun{
+#' des <- design(data = dat, model = SSEXG, matchfun = function(d) d$S == d$lR,
+#'               formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1,
+#'                              tauS ~ 1, gf ~ 1, tf ~ 1),
+#'               trend = make_ssd_trend())
+#' }
+#' @seealso [make_trend()], [make_kernel()], [make_base()], [trend_help()],
+#'   [SSEXG()], [make_ssd()]
+#' @export
+make_ssd_trend <- function(target = "muS", kernel = "sat_lin", covariate = "SSD",
+                           shared_k = FALSE) {
+  positive_targets <- c("muS", "sigmaS", "tauS")
+  probit_targets   <- c("tf", "gf")
+  bad <- setdiff(target, c(positive_targets, probit_targets))
+  if (length(bad))
+    stop("target must be one of ", paste(c(positive_targets, probit_targets), collapse = ", "),
+         "; got: ", paste(bad, collapse = ", "))
+  kinfo <- trend_help(kernel = kernel, do_return = TRUE)
+  if (isTRUE(kinfo$sequential))
+    stop("kernel '", kernel, "' is sequential; make_ssd_trend() needs a non-sequential kernel of SSD.")
+  bases <- lapply(target, function(tg) {
+    k <- make_kernel(cov_names = covariate, type = kernel)
+    if (tg %in% positive_targets) {
+      make_base(tg, "lin", k, phase = "posttransform", transforms = list(w = "exp"))
+    } else {
+      make_base(tg, "lin", k, phase = "pretransform")
+    }
+  })
+  shared <- NULL
+  if (isTRUE(shared_k) && length(target) > 1) {
+    kp <- kinfo$default_pars
+    shared <- stats::setNames(
+      lapply(kp, function(p) paste0(target, ".", p)),
+      paste0(target[1], ".", kp))
+  }
+  do.call(make_trend, c(bases, list(shared = shared)))
 }

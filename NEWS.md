@@ -1,5 +1,12 @@
 # EMC2 3.4.1
 
+## New features (cens_trunc2-SS-dEXG3mu)
+
+-   New built-in trend kernel `sat_lin` (`k = min(1, k_sat * c)`; non-finite covariates give 0).
+-   `make_base()` gains `transforms=` to override the transform of the base weight (e.g. `list(w = "exp")`).
+-   `make_ssd_trend()`: stop-signal parameters that vary with SSD (the dEXG3 model of Doekemeijer et al.: `muS = muS(0) + d * min(1, k * SSD)`), also for `tf`/`gf` on the probit scale and for `SSRDEX`.
+-   `make_data()` with a `make_ssd()` staircase and a trend on `SSD` now simulates trial by trial so the trend sees the realised SSDs; the staircase runs on the trial-by-trial path (`conditional_on_data = FALSE`).
+
 ## Bug fixes
 
 -   Small makevars corrections for new CRAN checks

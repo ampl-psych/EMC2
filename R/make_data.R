@@ -428,15 +428,51 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     kernel_output_codes <- c(1L)
   }
 
+  ## Staircase SSDs: labels (for staircase_up/down rules) and deadline
+  if (!is.null(ssd_meta)) {
+    ssd_meta$labels <- design$Rlevels
+    # Under a (single) deadline UC a response slower than UC is unobserved, so
+    # the staircase must step as for a non-response (see staircase_function).
+    stair_UC <- TC$UC
+    if (!is.numeric(stair_UC) || length(unique(stair_UC)) != 1) stair_UC <- NULL
+    ssd_meta$UC <- stair_UC
+    if (!is.null(ssd_meta$specs)) {
+      for (nm in names(ssd_meta$specs)) {
+        if (is.list(ssd_meta$specs[[nm]])) {
+          ssd_meta$specs[[nm]]$labels <- design$Rlevels
+          ssd_meta$specs[[nm]]$UC <- stair_UC
+        }
+      }
+    }
+    # A trend on SSD must see the SSD the staircase produces, which only the
+    # trial-by-trial path can provide (the vectorised path evaluates parameters
+    # before the staircase runs, when SSD is still NA on stop trials).
+    trend_on_ssd <- !is.null(model()$trend) &&
+      any(vapply(model()$trend$kernels, function(k) "SSD" %in% k$cov_names, logical(1)))
+    if (trend_on_ssd) {
+      if (isTRUE(dots_local$conditional_on_data))
+        stop("A trend on SSD cannot be simulated with a staircase and conditional_on_data = TRUE: ",
+             "the staircase SSDs are only known trial by trial. Drop conditional_on_data, ",
+             "or use fixed SSDs (make_ssd(staircase = FALSE, values = ...)).")
+      if (expand > 1)
+        stop("expand > 1 is not supported when simulating a staircase with a trend on SSD.")
+      if (!simulate_unconditional_on_data)
+        message("Trend on SSD with a staircase: simulating trial by trial (conditional_on_data = FALSE).")
+      simulate_unconditional_on_data <- TRUE
+    }
+  }
+
   ## For both conditional and unconditional simulations...
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- add_constants(pars,design$constants)
   if(simulate_unconditional_on_data) {
     res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                   return_trialwise_parameters, kernel_output_codes, optionals=optionals)
+                                   return_trialwise_parameters, kernel_output_codes, optionals=optionals,
+                                   ssd_meta = ssd_meta)
 
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
+    if (!is.null(ssd_meta)) attr(data, "staircase") <- ssd_meta
   } else {
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
@@ -475,20 +511,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       pars <- apply(pars,2,rep,times=expand)
     }
     if (!is.null(ssd_meta)) {
-      ssd_meta$labels <- lR_levels
-      # Under a (single) deadline UC a response slower than UC is unobserved, so
-      # the staircase must step as for a non-response (see staircase_function).
-      stair_UC <- TC$UC
-      if (!is.numeric(stair_UC) || length(unique(stair_UC)) != 1) stair_UC <- NULL
-      ssd_meta$UC <- stair_UC
-      if (!is.null(ssd_meta$specs)) {
-        for (nm in names(ssd_meta$specs)) {
-          if (is.list(ssd_meta$specs[[nm]])) {
-            ssd_meta$specs[[nm]]$labels <- lR_levels
-            ssd_meta$specs[[nm]]$UC <- stair_UC
-          }
-        }
-      }
       attr(data, "staircase") <- ssd_meta
       attr(pars, "staircase") <- ssd_meta
     }
