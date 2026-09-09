@@ -223,18 +223,27 @@ To override this behavior, pass `conditional_on_data=TRUE` to predict().')
         }
       }
     }
-    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
-      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-    },mc.cores=n_cores))
-    in_bounds <- !sapply(simDat, is.logical)
-    if(all(!in_bounds)) stop("All samples fall outside of model bounds")
-    if(any(!in_bounds)){
-      good_post <- sample(1:n_post, sum(!in_bounds))
-      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]], check_bounds = TRUE), fix_dots(dots, make_data)))
-      },mc.cores=n_cores))
+    # An rfun may refuse a draw it cannot simulate (e.g. rDDM with s ~ 0); the
+    # error is returned as a condition from the worker rather than lost in it
+    sim_one <- function(i, ...) tryCatch(
+      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]], ...), fix_dots(dots, make_data))),
+      error = function(e) e)
+    simDat <- suppressWarnings(mclapply(1:n_post, sim_one, mc.cores=n_cores))
+    failed <- function(x) is.logical(x) || inherits(x, "condition") || inherits(x, "try-error")
+    in_bounds <- !sapply(simDat, failed)
+    if(all(!in_bounds)) {
+      errs <- unique(unlist(lapply(simDat, function(x) if (inherits(x, "condition")) conditionMessage(x))))
+      stop("All samples fall outside of model bounds, or could not be simulated",
+           if (length(errs)) paste0(": ", paste(errs, collapse = " | ")) else "")
     }
-    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
+    post_idx <- 1:n_post
+    if(any(!in_bounds)){
+      good_post <- sample(which(in_bounds), sum(!in_bounds), replace = TRUE)
+      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post, sim_one, check_bounds = TRUE, mc.cores=n_cores))
+      post_idx[!in_bounds] <- good_post
+    }
+    keep <- !sapply(simDat, failed)
+    out <- cbind(postn=rep(post_idx[keep],times=unlist(lapply(simDat[keep],function(x)dim(x)[1]))),do.call(rbind,simDat[keep]))
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     if(return_trialwise_parameters) attr(out, 'trialwise_parameters') <- lapply(simDat, function(x) attr(x, "trialwise_parameters"))
