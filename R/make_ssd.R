@@ -45,9 +45,33 @@
 #'   decrease the staircase. If `NULL` (the default), any stop-trial outcome
 #'   not matched by `staircase_up` will decrease the staircase.
 #'
+#' @param UC Optional response deadline (seconds) used by the trial-by-trial
+#'   staircase (see Details): a response slower than `UC` is unobserved in the
+#'   experiment, so the staircase treats it as a non-response. Ignored when
+#'   `NULL`; when the data carry a `UC` column that is used instead.
+#'
+#' @details
+#' The generator can be used in two places:
+#'
+#' * `make_data(functions = list(SSD = make_ssd(...)))`: SSDs are assigned
+#'   once for the whole data set and a staircase is run inside the model's
+#'   random function. This is the vectorised path and requires that no
+#'   parameter depends on SSD.
+#' * `design(functions = list(SSD = make_ssd(...)))`: the generator is a
+#'   pre-trial design function. [make_data()] then simulates trial by trial
+#'   (the `conditional_on_data = FALSE` path): on each trial the generator
+#'   steps the staircase from the previous stop trial's outcome and assigns
+#'   the current trial's SSD before the parameters for that trial are
+#'   computed. This is required when a trend makes a parameter depend on SSD
+#'   (e.g. [make_ssd_trend()]). With fitted data the default (conditional)
+#'   simulation keeps the observed SSDs, e.g. `predict(emc, conditional_on_data
+#'   = TRUE)`; the unconditional simulation (the default of [predict()] when
+#'   the design holds the generator) re-runs the staircase.
+#'
 #' @return A function of a data frame that returns a numeric vector of SSDs.
-#'   The function carries class `emc_ssd_function` so that [make_data()] can
-#'   attach the generated staircase specifications to the simulated data.
+#'   The function carries class `emc_ssd_function` (and the `pretrial`
+#'   attribute) so that [make_data()] can attach the generated staircase
+#'   specifications to the simulated data or run the staircase trial by trial.
 #'
 #' @examples
 #' # Fixed SSDs sampled on 25% of trials
@@ -92,7 +116,8 @@ make_ssd <- function(values = NULL,
                      factors = NULL,
                      formula = NULL,
                      staircase_up = NA,
-                     staircase_down = NULL) {
+                     staircase_down = NULL,
+                     UC = NULL) {
 
   if (!is.null(values)) {
     if (!is.numeric(values)) {
@@ -159,42 +184,133 @@ make_ssd <- function(values = NULL,
     }
   }
 
-  assign_fun <- function(d) {
-    if (!is.data.frame(d)) {
-      stop("`make_ssd()` generated functions expect a data frame.")
-    }
+  # state for the trial-by-trial mode (design function): the ladder per
+  # subject::group, reset whenever a subject's first trial is seen
+  ladder_env <- new.env(parent = emptyenv())
+  ladder_env$ladder <- list()
+  ladder_env$specs  <- list()
 
+  group_cols_for <- function(d) {
+    gc <- group_cols
+    if ("subjects" %in% names(d)) gc <- c("subjects", setdiff(gc, "subjects"))
+    missing_cols <- setdiff(gc, names(d))
+    if (length(missing_cols)) {
+      stop("Grouping variables not found in data: ", paste(missing_cols, collapse = ", "))
+    }
+    gc
+  }
+
+  group_id_for <- function(d, gc) {
+    if (length(gc)) interaction(d[gc], drop = TRUE, sep = "::") else
+      factor(rep(".all", nrow(d)), levels = ".all")
+  }
+
+  # ---- vectorised assignment (one value per trial) ----
+  assign_vectorised <- function(d) {
     n_trial <- nrow(d)
-    if (!n_trial) {
-      return(numeric(0))
-    }
-
     SSD <- rep(Inf, n_trial)
-    group_cols_local <- group_cols
-    if ("subjects" %in% names(d)) {
-      group_cols_local <- c("subjects", setdiff(group_cols_local, "subjects"))
-    }
-
-    if (length(group_cols_local)) {
-      missing_cols <- setdiff(group_cols_local, names(d))
-      if (length(missing_cols)) {
-        stop("Grouping variables not found in data: ", paste(missing_cols, collapse = ", "))
-      }
-      group_data <- d[group_cols_local]
-      group_id <- interaction(group_data, drop = TRUE, sep = "::")
-    } else {
-      group_id <- factor(rep(".all", n_trial), levels = ".all")
-    }
-
+    gc <- group_cols_for(d)
+    group_id <- group_id_for(d, gc)
     if (isFALSE(staircase)) {
       assign_fixed_ssd(SSD, values, p, p_stop)
     } else {
-      specs <- build_staircase_specs(group_id, d, staircase, base_spec, group_cols_local,
-                                     staircase_rules)
+      specs <- build_staircase_specs(group_id, d, staircase, base_spec, gc, staircase_rules)
       assign_staircase_ssd(SSD, group_id, d, specs, staircase_rules)
     }
   }
 
+  # ---- trial-by-trial mode: d is the context window handed to a pre-trial
+  # design function (previous trial(s) with their simulated R/rt, then the
+  # current trial); SSD already exists, NA on staircase stop trials ----
+  assign_trialwise <- function(d) {
+    SSD <- d$SSD
+    if (!anyNA(SSD)) return(SSD)                          # nothing to resolve
+    gc <- group_cols_for(d)
+    trial <- if ("trials" %in% names(d)) d$trials else seq_len(nrow(d))
+    is_cur <- trial == max(trial)
+    has_prev <- any(!is_cur)
+    if (!has_prev) {                       # a subject's first trial: fresh ladders
+      ladder_env$ladder <- list()
+    }
+    gid_of <- function(rows) {
+      if (!length(gc)) return(".all")
+      paste(vapply(gc, function(g) as.character(d[[g]][rows][1]), character(1)), collapse = "::")
+    }
+    spec_of <- function(gid, rows) {
+      if (is.null(ladder_env$specs[[gid]])) {
+        sp <- build_staircase_specs(factor(gid, levels = gid), d[rows, , drop = FALSE],
+                                    staircase, base_spec, gc, staircase_rules)
+        spec <- sp[[gid]]
+        if (is.null(spec$SSD0)) spec$SSD0 <- attr(sp, "base_spec")$SSD0
+        ladder_env$specs[[gid]] <- spec
+      }
+      ladder_env$specs[[gid]]
+    }
+    # step the ladder from the immediately preceding trial if it was a stop trial
+    if (has_prev && !isFALSE(staircase)) {
+      pr <- which(trial == max(trial[!is_cur]))
+      if (is.finite(SSD[pr[1]])) {
+        gid <- gid_of(pr)
+        spec <- spec_of(gid, pr)
+        R_i  <- d$R[pr[1]]
+        rt_i <- if ("rt" %in% names(d)) d$rt[pr[1]] else NA_real_
+        dl <- if ("UC" %in% names(d)) d$UC[pr[1]] else UC
+        late <- !is.null(dl) && is.finite(dl) && !is.na(rt_i) && rt_i > dl
+        label <- if (is.na(R_i)) NA_character_ else as.character(R_i)
+        step_dir <- staircase_step_dir(spec, label, stopped = is.na(R_i), late = late)
+        ladder_env$ladder[[gid]] <- staircase_next_ssd(SSD[pr[1]], step_dir, spec)
+      }
+    }
+    # the current trial: decide stop vs go, then the SSD (ladder or fixed set)
+    cur <- which(is_cur)
+    if (anyNA(SSD[cur])) {
+      if (isFALSE(staircase)) {
+        pv <- prepare_value_probabilities(values, p, p_stop)
+        SSD[cur] <- if (stats::runif(1) < pv$total_prob)
+          sample(values, 1, prob = pv$weights) else Inf
+      } else {
+        gid <- gid_of(cur)
+        spec <- spec_of(gid, cur)
+        p_group <- spec$p
+        if (is.null(p_group)) p_group <- base_spec$p
+        if (stats::runif(1) < max(min(p_group, 1), 0)) {
+          if (is.null(ladder_env$ladder[[gid]])) ladder_env$ladder[[gid]] <- spec$SSD0
+          ssd_now <- staircase_clamp(ladder_env$ladder[[gid]], spec)
+          ladder_env$ladder[[gid]] <- ssd_now
+          SSD[cur] <- ssd_now
+        } else {
+          SSD[cur] <- Inf
+        }
+      }
+    }
+    SSD
+  }
+
+  assign_fun <- function(d) {
+    if (!is.data.frame(d)) {
+      stop("`make_ssd()` generated functions expect a data frame.")
+    }
+    if (!nrow(d)) {
+      return(numeric(0))
+    }
+    if ("SSD" %in% names(d)) {
+      return(assign_trialwise(d))
+    }
+    # vectorised: one draw per trial, replicated over accumulator rows if present
+    if (all(c("subjects", "trials") %in% names(d)) && "lR" %in% names(d)) {
+      key <- paste(d$subjects, d$trials)
+      first <- !duplicated(key)
+      out <- assign_vectorised(d[first, , drop = FALSE])
+      meta <- attr(out, "emc_ssd")
+      res <- as.numeric(out)[match(key, key[first])]
+      if (!is.null(meta)) attr(res, "emc_ssd") <- meta
+      return(res)
+    }
+    assign_vectorised(d)
+  }
+
+  attr(assign_fun, "pretrial") <- TRUE
+  attr(assign_fun, "staircase") <- !isFALSE(staircase)
   class(assign_fun) <- c("emc_ssd_function", class(assign_fun))
   assign_fun
 }

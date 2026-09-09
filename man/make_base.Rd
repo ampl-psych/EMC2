@@ -10,8 +10,7 @@ make_base(
   kernel,
   kernel_output = 1L,
   coding = NULL,
-  phase = "premap",
-  transforms = NULL
+  phase = "premap"
 )
 }
 \arguments{
@@ -38,14 +37,6 @@ to each accumulator on each trial.}
 \item{phase}{Character string; one of \code{"premap"}, \code{"pretransform"},
 \code{"posttransform"}. Controls when the trend is applied in the parameter
 computation pipeline. Defaults to \code{"premap"}.}
-
-\item{transforms}{Optional named list or character vector overriding the
-sampling-scale transform of the base's own parameters (currently only the
-weight \code{w} of the \code{"lin"} and \code{"centered"} bases, which defaults to
-\code{"identity"}). Values must be one of \code{"identity"}, \code{"exp"} or \code{"pnorm"}.
-For example \code{transforms = list(w = "exp")} constrains the weight to be
-positive, which is what a saturating increase in a parameter such as the
-stop-signal \code{muS} needs (see \code{\link[=make_ssd_trend]{make_ssd_trend()}}).}
 }
 \value{
 An object of class \code{emc2_base}.

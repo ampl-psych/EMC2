@@ -10,7 +10,7 @@ ss_matchfun <- function(d) d$S == d$lR
 ss_design_tr <- function(model, trend = make_ssd_trend(), ...) {
   design(model = model, factors = list(subjects = 1, S = c("left", "right")),
          Rlevels = c("left", "right"), matchfun = ss_matchfun, report_p_vector = FALSE,
-         trend = trend, ...)
+         trend = trend, transform = attr(trend, "transform"), ...)
 }
 
 exg_formula <- list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1, tauS ~ 1, gf ~ 1, tf ~ 1)
@@ -64,12 +64,13 @@ test_that("make_ssd_trend builds the dEXG3 specification", {
   expect_s3_class(tr, "emc2_trend")
   expect_equal(get_trend_pnames(tr), c("muS.k_sat", "muS.w"))
   expect_equal(tr$bases[[1]]$phase, "posttransform")
-  expect_equal(unname(tr$bases[[1]]$transforms["muS.w"]), "exp")
+  expect_equal(attr(tr, "transform"), list(func = c(muS.w = "exp")))
   expect_equal(unname(tr$kernels[[1]]$transforms["muS.k_sat"]), "exp")
   tr2 <- make_ssd_trend(c("muS", "tf"))
   expect_setequal(get_trend_pnames(tr2), c("muS.k_sat", "muS.w", "tf.k_sat", "tf.w"))
   expect_equal(tr2$bases[[2]]$phase, "pretransform")
-  expect_equal(unname(tr2$bases[[2]]$transforms["tf.w"]), "identity")
+  expect_equal(attr(tr2, "transform"), list(func = c(muS.w = "exp")))
+  expect_null(attr(make_ssd_trend("tf"), "transform"))
   tr3 <- make_ssd_trend(c("muS", "tf"), shared_k = TRUE)
   expect_setequal(get_trend_pnames(tr3), c("muS.k_sat", "muS.w", "tf.w"))
   expect_error(make_ssd_trend("mu"), "target must be")
@@ -145,8 +146,8 @@ test_that("muS(SSD): trialwise muS follows the formula and is untouched on go tr
 test_that("memo key: trials with equal SSD and go parameters but different muS", {
   # trend muS on an extra random covariate, so muS differs across trials that
   # share SSD, deadline and go parameters
-  tr_x <- make_trend(make_base("muS", "lin", make_kernel("x", "sat_lin"),
-                               phase = "posttransform", transforms = list(w = "exp")))
+  tr_x <- make_trend(make_base("muS", "lin", make_kernel("x", "sat_lin"), phase = "posttransform"))
+  attr(tr_x, "transform") <- list(func = c(muS.w = "exp"))
   des_x <- ss_design_tr(SSEXG, trend = tr_x, formula = exg_formula, covariates = "x")
   des <- ss_design_tr(SSEXG, formula = exg_formula)
   p <- p_named(des, c(exg_vals, tr_vals))
@@ -191,15 +192,18 @@ test_that("muS(SSD): compression invariance and multithread equality", {
 })
 
 test_that("staircase + trend on SSD simulates trial by trial with a valid ladder", {
-  des <- ss_design_tr(SSEXG, formula = exg_formula)
-  p <- p_named(des, c(exg_vals, tr_vals))
   stair <- make_ssd(staircase = TRUE, SSD0 = .25, stairstep = .05, p_stop = .3)
+  des0 <- ss_design_tr(SSEXG, formula = exg_formula)
+  p <- p_named(des0, c(exg_vals, tr_vals))
+  # the vectorised route refuses a trend on SSD
+  expect_error(make_data(p, des0, n_trials = 50, functions = list(SSD = stair)), "design")
+  des <- ss_design_tr(SSEXG, formula = exg_formula, functions = list(SSD = stair))
+  expect_equal(names(sampled_pars(des)), names(p))
   set.seed(19)
   expect_message(
-    dat <- make_data(p, des, n_trials = 200, functions = list(SSD = stair),
-                     return_trialwise_parameters = TRUE),
+    dat <- make_data(p, des, n_trials = 200, return_trialwise_parameters = TRUE),
     "trial by trial")
-  expect_s3_class(attr(dat, "staircase"), "emc_staircase")
+  expect_true("SSD" %in% names(dat))
   st <- dat[is.finite(dat$SSD), ]
   expect_gt(nrow(st), 30)
   expect_equal(st$SSD[1], .25)
@@ -216,16 +220,24 @@ test_that("staircase + trend on SSD simulates trial by trial with a valid ladder
   expected <- exp(p[["muS"]]) + ifelse(is.finite(dat$SSD), w * pmin(1, k * dat$SSD), 0)
   expect_equal(unname(tw1[, "muS"]), expected, tolerance = 1e-12)
   # explicit conditional_on_data = TRUE is refused
-  expect_error(make_data(p, des, n_trials = 50, functions = list(SSD = stair), conditional_on_data = TRUE),
-               "trial by trial")
+  expect_error(make_data(p, des, n_trials = 50, conditional_on_data = TRUE), "trial by trial")
+  # with data: the conditional path keeps the observed SSDs, the unconditional
+  # path re-runs the ladder (a valid staircase again)
+  dat2 <- make_data(p, des, data = dat)
+  expect_equal(dat2$SSD, dat$SSD)
+  dat3 <- make_data(p, des, data = dat, conditional_on_data = FALSE)
+  expect_false(isTRUE(all.equal(dat3$SSD, dat$SSD)))
+  st3 <- dat3[is.finite(dat3$SSD), ]
+  expect_equal(st3$SSD[1], .25)
+  expect_true(all(abs(diff(st3$SSD)) < 1e-9 | abs(abs(diff(st3$SSD)) - .05) < 1e-9))
 })
 
 test_that("staircase + trend: deadline steps the ladder up after late responses; grouped ladders", {
-  des <- ss_design_tr(SSEXG, formula = exg_formula, TC = list(UC = 0.55))
+  stair <- make_ssd(staircase = TRUE, SSD0 = .2, stairstep = .05, p_stop = .3, UC = 0.55)
+  des <- ss_design_tr(SSEXG, formula = exg_formula, TC = list(UC = 0.55), functions = list(SSD = stair))
   p <- p_named(des, c(exg_vals, tr_vals))
-  stair <- make_ssd(staircase = TRUE, SSD0 = .2, stairstep = .05, p_stop = .3)
   set.seed(20)
-  dat <- suppressMessages(make_data(p, des, n_trials = 200, functions = list(SSD = stair)))
+  dat <- suppressMessages(make_data(p, des, n_trials = 200))
   expect_true(all(dat$UC == 0.55))
   st <- dat[is.finite(dat$SSD), ]
   expect_true(any(st$missingness %in% 2L))                   # late/withheld coded 2
@@ -235,11 +247,13 @@ test_that("staircase + trend: deadline steps the ladder up after late responses;
   expect_true(all((d[d != 0] > 0) == up[d != 0]))
   # separate ladders per S, each starting at SSD0, one subject
   stairS <- make_ssd(staircase = TRUE, SSD0 = .3, stairstep = .05, p_stop = .3, factors = "S")
+  tr <- make_ssd_trend()
   des2 <- design(model = SSEXG, factors = list(subjects = 1:2, S = c("left", "right")),
                  Rlevels = c("left", "right"), matchfun = ss_matchfun, report_p_vector = FALSE,
-                 formula = exg_formula, trend = make_ssd_trend())
+                 formula = exg_formula, trend = tr, transform = attr(tr, "transform"),
+                 functions = list(SSD = stairS))
   set.seed(21)
-  dat2 <- suppressMessages(make_data(p, des2, n_trials = 200, functions = list(SSD = stairS)))
+  dat2 <- suppressMessages(make_data(p, des2, n_trials = 200))
   for (s in levels(dat2$subjects)) for (S in c("left", "right")) {
     st <- dat2[is.finite(dat2$SSD) & dat2$subjects == s & dat2$S == S, ]
     expect_equal(st$SSD[1], .3)
@@ -280,20 +294,22 @@ test_that("SSRDEX + muS(SSD): C++ == R (the trend transfers unchanged)", {
 })
 
 test_that("trended SSEXG: init, predict and stop-signal plots run", {
-  des <- ss_design_tr(SSEXG, formula = exg_formula)
+  des <- ss_design_tr(SSEXG, formula = exg_formula, functions = list(SSD = make_ssd(p_stop = .3)))
   p <- p_named(des, c(exg_vals, tr_vals))
   set.seed(24)
-  dat <- suppressMessages(make_data(p, des, n_trials = 120, functions = list(SSD = make_ssd(p_stop = .3))))
+  dat <- suppressMessages(make_data(p, des, n_trials = 120))
   emc <- make_emc(dat, des, type = "single", n_chains = 2, verbose = FALSE)
   emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 5), cores_for_chains = 1,
                  cores_per_chain = 1, verbose = FALSE)
   samples <- emc[[1]]$samples
   expect_named(samples$alpha[, 1, 1], names(p))
   expect_true(all(is.finite(samples$subj_ll)))
-  pp <- predict(emc, n_post = 3, n_cores = 1)
+  pp <- predict(emc, n_post = 3, n_cores = 1, conditional_on_data = TRUE)
   expect_true(all(c("SSD", "R", "rt") %in% names(pp)))
   expect_equal(nrow(pp), 3 * nrow(dat))
   expect_equal(pp$SSD[seq_len(nrow(dat))], dat$SSD)       # observed SSDs reused
+  ppu <- suppressMessages(predict(emc, n_post = 2, n_cores = 1))  # unconditional: staircase re-run
+  expect_false(isTRUE(all.equal(ppu$SSD[seq_len(nrow(dat))], dat$SSD)))
   pdf(NULL); on.exit(dev.off(), add = TRUE)
   expect_no_error(plot_ss_if(dat, post_predict = pp, factors = "S", probs = seq(0, 1, .5)))
   expect_no_error(plot_ss_srrt(dat, post_predict = pp, factors = "S", probs = seq(0, 1, .5)))

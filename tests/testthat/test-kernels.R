@@ -88,16 +88,6 @@ test_that("sat_lin_R", {
 test_that("sat_lin_Rcpp", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
 })
-test_that("make_base transforms override the base weight transform", {
-  b <- make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "exp"))
-  expect_equal(unname(b$generic_transforms["w"]), "exp")
-  tr <- make_trend(b)
-  expect_equal(unname(tr$bases[[1]]$transforms["m.w"]), "exp")
-  expect_error(make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(z = "exp")), "not parameters")
-  expect_error(make_base('m', 'lin', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "log")), "identity")
-  expect_error(make_base('m', 'add', make_kernel('covariate1', 'sat_lin'), transforms = list(w = "exp")), "no parameters")
-})
-
 # pow_decr ----------------------------------------------------------------
 trend_pow_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'pow_decr')))
 kernel_pars <- c('m.d_pd'=1)

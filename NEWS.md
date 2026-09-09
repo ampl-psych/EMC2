@@ -3,9 +3,8 @@
 ## New features (cens_trunc2-SS-dEXG3mu)
 
 -   New built-in trend kernel `sat_lin` (`k = min(1, k_sat * c)`; non-finite covariates give 0).
--   `make_base()` gains `transforms=` to override the transform of the base weight (e.g. `list(w = "exp")`).
--   `make_ssd_trend()`: stop-signal parameters that vary with SSD (the dEXG3 model of Doekemeijer et al.: `muS = muS(0) + d * min(1, k * SSD)`), also for `tf`/`gf` on the probit scale and for `SSRDEX`.
--   `make_data()` with a `make_ssd()` staircase and a trend on `SSD` now simulates trial by trial so the trend sees the realised SSDs; the staircase runs on the trial-by-trial path (`conditional_on_data = FALSE`).
+-   `make_ssd_trend()`: stop-signal parameters that vary with SSD (the dEXG3 model of Doekemeijer et al.: `muS = muS(0) + d * min(1, k * SSD)`), also for `tf`/`gf` on the probit scale and for `SSRDEX`; the weight's log-scale sampling is set with `design(transform=)`.
+-   `make_ssd()` generators can be given to `design(functions = list(SSD = ...))`: they are pre-trial design functions that run the staircase trial by trial in `make_data()` (`conditional_on_data = FALSE`), so parameters that depend on SSD see the realised SSD. `make_ssd()` gains a `UC` argument for the late-response rule. `make_data(functions = )` keeps the vectorised staircase for models without a trend on SSD.
 
 ## Bug fixes
 

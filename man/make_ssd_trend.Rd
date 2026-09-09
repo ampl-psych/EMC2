@@ -26,7 +26,9 @@ non-sequential kernel accepting a \code{"lin"} base can be used (e.g.
 one rate parameter named \verb{<first target>.<rate>}.}
 }
 \value{
-An \code{emc2_trend} object.
+An \code{emc2_trend} object, with attribute \code{"transform"} holding the
+\code{transform} list to pass to \code{\link[=design]{design()}} (log scale for the weights of the
+positive targets).
 }
 \description{
 Builds an \code{\link[=make_trend]{make_trend()}} specification in which stop-signal parameters vary
@@ -40,12 +42,15 @@ saturates:
 In EMC2 terms this is the built-in saturating-linear kernel
 (\code{type = "sat_lin"}, \code{k = min(1, k_sat * SSD)}) applied to \code{muS} with a
 \code{"lin"} base in the \code{"posttransform"} phase, so that on the natural scale
-\code{muS = exp(eta_muS) + exp(muS.w) * min(1, exp(muS.k_sat) * SSD)}. The two
-extra sampled parameters are \code{muS.k_sat} (\eqn{\log k_{stop}}, the rate in
-1/s; the rise saturates at \code{SSD = 1/k}) and \code{muS.w} (\eqn{\log d_{stop}},
-the asymptotic increase in seconds). Both are log-scaled so the increase is
-positive. On go trials \code{SSD = Inf} and the kernel returns 0, leaving \code{muS} at
-its baseline (it is not used there anyway).
+\code{muS = exp(eta_muS) + d * min(1, exp(muS.k_sat) * SSD)}. The two extra
+sampled parameters are \code{muS.k_sat} (\eqn{\log k_{stop}}, the rate in 1/s;
+the rise saturates at \code{SSD = 1/k}) and the base weight \code{muS.w}
+(\eqn{d_{stop}}, the asymptotic increase in seconds). The kernel rate is
+log-scaled by default; to constrain the increase to be positive, sample the
+weight on the log scale by passing \code{transform = list(func = c(muS.w = "exp"))}
+to \code{\link[=design]{design()}} (the recommended \code{transform} list is attached to the returned
+object as \code{attr(, "transform")}). On go trials \code{SSD = Inf} and the kernel
+returns 0, leaving \code{muS} at its baseline (it is not used there anyway).
 
 \code{target = "tf"} gives the alternative model in which the trigger-failure
 probability changes with SSD on the probit scale,
@@ -56,19 +61,28 @@ parameter) unless \code{shared_k = TRUE}.
 
 The same specification works for \code{\link[=SSEXG]{SSEXG()}} and \code{\link[=SSRDEX]{SSRDEX()}} since both share
 the stop-runner parameters. Supply the result to the \code{trend} argument of
-\code{\link[=design]{design()}}. Simulating with a staircase (\code{make_ssd(staircase = TRUE)}) is
-supported: \code{\link[=make_data]{make_data()}} detects a trend on \code{SSD} and simulates trial by
-trial so that each stop trial's parameters use the SSD the staircase
-actually produced.
+\code{\link[=design]{design()}}. To simulate with a staircase, give the \code{\link[=make_ssd]{make_ssd()}} generator to
+\code{design(functions = list(SSD = make_ssd(...)))} (not to \code{make_data()}):
+\code{\link[=make_data]{make_data()}} then simulates trial by trial so that each stop trial's
+parameters use the SSD the staircase actually produced.
 }
 \examples{
 trend <- make_ssd_trend()
 get_trend_pnames(trend)   # "muS.k_sat" "muS.w"
+attr(trend, "transform") # list(func = c(muS.w = "exp"))
 \dontrun{
 des <- design(data = dat, model = SSEXG, matchfun = function(d) d$S == d$lR,
               formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1,
                              tauS ~ 1, gf ~ 1, tf ~ 1),
-              trend = make_ssd_trend())
+              trend = trend, transform = attr(trend, "transform"))
+# simulating with a staircase: the generator goes into the design
+des_sim <- design(factors = list(subjects = 1, S = c("left", "right")),
+                  Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
+                  model = SSEXG, formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1,
+                  sigmaS ~ 1, tauS ~ 1, gf ~ 1, tf ~ 1),
+                  trend = trend, transform = attr(trend, "transform"),
+                  functions = list(SSD = make_ssd(SSD0 = .25, stairstep = .05)))
+dat <- make_data(p_vector, des_sim, n_trials = 200)
 }
 }
 \seealso{

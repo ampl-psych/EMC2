@@ -1483,12 +1483,15 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 #' In EMC2 terms this is the built-in saturating-linear kernel
 #' (`type = "sat_lin"`, `k = min(1, k_sat * SSD)`) applied to `muS` with a
 #' `"lin"` base in the `"posttransform"` phase, so that on the natural scale
-#' `muS = exp(eta_muS) + exp(muS.w) * min(1, exp(muS.k_sat) * SSD)`. The two
-#' extra sampled parameters are `muS.k_sat` (\eqn{\log k_{stop}}, the rate in
-#' 1/s; the rise saturates at `SSD = 1/k`) and `muS.w` (\eqn{\log d_{stop}},
-#' the asymptotic increase in seconds). Both are log-scaled so the increase is
-#' positive. On go trials `SSD = Inf` and the kernel returns 0, leaving `muS` at
-#' its baseline (it is not used there anyway).
+#' `muS = exp(eta_muS) + d * min(1, exp(muS.k_sat) * SSD)`. The two extra
+#' sampled parameters are `muS.k_sat` (\eqn{\log k_{stop}}, the rate in 1/s;
+#' the rise saturates at `SSD = 1/k`) and the base weight `muS.w`
+#' (\eqn{d_{stop}}, the asymptotic increase in seconds). The kernel rate is
+#' log-scaled by default; to constrain the increase to be positive, sample the
+#' weight on the log scale by passing `transform = list(func = c(muS.w = "exp"))`
+#' to [design()] (the recommended `transform` list is attached to the returned
+#' object as `attr(, "transform")`). On go trials `SSD = Inf` and the kernel
+#' returns 0, leaving `muS` at its baseline (it is not used there anyway).
 #'
 #' `target = "tf"` gives the alternative model in which the trigger-failure
 #' probability changes with SSD on the probit scale,
@@ -1499,10 +1502,10 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 #'
 #' The same specification works for [SSEXG()] and [SSRDEX()] since both share
 #' the stop-runner parameters. Supply the result to the `trend` argument of
-#' [design()]. Simulating with a staircase (`make_ssd(staircase = TRUE)`) is
-#' supported: [make_data()] detects a trend on `SSD` and simulates trial by
-#' trial so that each stop trial's parameters use the SSD the staircase
-#' actually produced.
+#' [design()]. To simulate with a staircase, give the [make_ssd()] generator to
+#' `design(functions = list(SSD = make_ssd(...)))` (not to `make_data()`):
+#' [make_data()] then simulates trial by trial so that each stop trial's
+#' parameters use the SSD the staircase actually produced.
 #'
 #' @param target Character vector of stop-signal parameters to trend on SSD;
 #'   any of `"muS"`, `"sigmaS"`, `"tauS"` (posttransform, positive weight) and
@@ -1514,16 +1517,27 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 #' @param shared_k Logical; if `TRUE` and several targets are given, all share
 #'   one rate parameter named `<first target>.<rate>`.
 #'
-#' @return An `emc2_trend` object.
+#' @return An `emc2_trend` object, with attribute `"transform"` holding the
+#'   `transform` list to pass to [design()] (log scale for the weights of the
+#'   positive targets).
 #'
 #' @examples
 #' trend <- make_ssd_trend()
 #' get_trend_pnames(trend)   # "muS.k_sat" "muS.w"
+#' attr(trend, "transform") # list(func = c(muS.w = "exp"))
 #' \dontrun{
 #' des <- design(data = dat, model = SSEXG, matchfun = function(d) d$S == d$lR,
 #'               formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1,
 #'                              tauS ~ 1, gf ~ 1, tf ~ 1),
-#'               trend = make_ssd_trend())
+#'               trend = trend, transform = attr(trend, "transform"))
+#' # simulating with a staircase: the generator goes into the design
+#' des_sim <- design(factors = list(subjects = 1, S = c("left", "right")),
+#'                   Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
+#'                   model = SSEXG, formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1,
+#'                   sigmaS ~ 1, tauS ~ 1, gf ~ 1, tf ~ 1),
+#'                   trend = trend, transform = attr(trend, "transform"),
+#'                   functions = list(SSD = make_ssd(SSD0 = .25, stairstep = .05)))
+#' dat <- make_data(p_vector, des_sim, n_trials = 200)
 #' }
 #' @seealso [make_trend()], [make_kernel()], [make_base()], [trend_help()],
 #'   [SSEXG()], [make_ssd()]
@@ -1542,7 +1556,7 @@ make_ssd_trend <- function(target = "muS", kernel = "sat_lin", covariate = "SSD"
   bases <- lapply(target, function(tg) {
     k <- make_kernel(cov_names = covariate, type = kernel)
     if (tg %in% positive_targets) {
-      make_base(tg, "lin", k, phase = "posttransform", transforms = list(w = "exp"))
+      make_base(tg, "lin", k, phase = "posttransform")
     } else {
       make_base(tg, "lin", k, phase = "pretransform")
     }
@@ -1554,5 +1568,9 @@ make_ssd_trend <- function(target = "muS", kernel = "sat_lin", covariate = "SSD"
       lapply(kp, function(p) paste0(target, ".", p)),
       paste0(target[1], ".", kp))
   }
-  do.call(make_trend, c(bases, list(shared = shared)))
+  trend <- do.call(make_trend, c(bases, list(shared = shared)))
+  pos <- intersect(target, positive_targets)
+  attr(trend, "transform") <- if (length(pos))
+    list(func = stats::setNames(rep("exp", length(pos)), paste0(pos, ".w"))) else NULL
+  trend
 }
