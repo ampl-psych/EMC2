@@ -385,7 +385,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design_in <- design
-    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    # covariates produced by functions (make_data or design) are not imputed
+    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% c(names(functions), names(design$Ffunctions))]
     acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
     design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
