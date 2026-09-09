@@ -227,23 +227,28 @@ To override this behavior, pass `conditional_on_data=TRUE` to predict().')
         }
       }
     }
-    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
-      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-    },mc.cores=n_cores))
+    sim_one <- function(i) tryCatch(
+      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data))),
+      error = function(e) e)
+    simDat <- suppressWarnings(mclapply(1:n_post, sim_one, mc.cores=n_cores))
     # make_data() returns FALSE when > 10% of a draw's trial-wise parameters
-    # fall outside the model bounds; replace such draws by other posterior draws
-    in_bounds <- !sapply(simDat, is.logical)
-    if(all(!in_bounds)) stop("All samples fall outside of model bounds, or could not be simulated ",
-                             "(call make_data() on one posterior draw to see the warnings)")
+    # fall outside the model bounds, and an rfun may refuse a draw it cannot
+    # simulate (returned as a condition from the worker); replace such draws by
+    # other posterior draws
+    failed <- sapply(simDat, function(x) is.logical(x) || inherits(x, "condition") || inherits(x, "try-error"))
+    in_bounds <- !failed
+    if(all(!in_bounds)) {
+      errs <- unique(unlist(lapply(simDat, function(x) if (inherits(x, "condition")) conditionMessage(x))))
+      stop("All samples fall outside of model bounds, or could not be simulated",
+           if (length(errs)) paste0(": ", paste(errs, collapse = " | ")) else "")
+    }
     post_idx <- 1:n_post
     if(any(!in_bounds)){
       good_post <- sample(which(in_bounds), sum(!in_bounds), replace = TRUE)
-      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-      },mc.cores=n_cores))
+      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post, sim_one, mc.cores=n_cores))
       post_idx[!in_bounds] <- good_post
     }
-    still_in_bounds <- !sapply(simDat, is.logical)
+    still_in_bounds <- !sapply(simDat, function(x) is.logical(x) || inherits(x, "condition") || inherits(x, "try-error"))
     out <- cbind(postn=rep(post_idx[still_in_bounds],times=unlist(lapply(simDat[still_in_bounds],function(x)dim(x)[1]))),
                  do.call(rbind,simDat[still_in_bounds]))
     if (n_post==1) pars <- pars[[1]]

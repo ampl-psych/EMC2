@@ -106,8 +106,17 @@ test_that("rDDM() refuses a/s beyond what rWDM can simulate instead of hanging",
   R <- factor(rep("left", 6), levels = c("left", "right"))
   p <- cbind(v = rep(1, 6), a = 1, sv = 0.5, t0 = .2, st0 = 0, s = c(1, 1, 1, 1e-4, 1e-10, 1), Z = .5, SZ = 0.1)
   setTimeLimit(elapsed = 20, transient = TRUE)
-  expect_warning(r <- rDDM(R, p), "a/s > 1000")
+  expect_error(rDDM(R, p), "a/s > 1000")               # 2 of 6 > 10%: refused
+  p20 <- p[rep(1, 20), ]; p20[3, "s"] <- 1e-10          # 1 of 20: NA + warning
+  expect_warning(r <- rDDM(factor(rep("left", 20), levels = c("left", "right")), p20), "a/s > 1000")
   setTimeLimit()
-  expect_equal(nrow(r), 6)
-  expect_equal(is.na(r$rt), c(FALSE, FALSE, FALSE, TRUE, TRUE, FALSE))
+  expect_equal(nrow(r), 20)
+  expect_equal(which(is.na(r$rt)), 3L)
+})
+
+test_that("predict() reports a draw its rfun refuses instead of returning NA rows", {
+  des <- design(data = forstmann, model = DDM, formula = list(v ~ 1, a ~ 1, t0 ~ 1, s ~ E),
+                report_p_vector = FALSE)
+  p <- sampled_pars(des); p[] <- 0; p["a"] <- log(1); p["t0"] <- log(.2); p["s_Eneutral"] <- -25
+  expect_error(make_data(p, des, data = forstmann), "a/s > 1000")
 })

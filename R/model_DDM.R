@@ -55,8 +55,13 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
   unsim <- ok & !(is.finite(a_s) & a_s <= 1e3 &
                   is.finite(pars[, "v"] / pars[, "s"]) & is.finite(pars[, "sv"] / pars[, "s"]))
   if (any(unsim)) {
-    warning(sum(unsim), " trial(s) have a/s > 1000 (s close to 0?), which the Wiener sampler ",
-            "cannot simulate; they are returned as NA")
+    msg <- paste0(sum(unsim), " of ", n, " trial(s) have a/s > 1000 (s close to 0?), which the ",
+                  "Wiener sampler cannot simulate")
+    # Same rule as make_data() applies to out-of-bound parameters: a few such
+    # trials become NA, more than 10% is a refusal (warnings raised inside
+    # predict()'s forked workers never reach the caller, an error does)
+    if (mean(unsim) > .1) stop(msg)
+    warning(msg, "; they are returned as NA")
     ok[unsim] <- FALSE
   }
   pars <- as.matrix(pars[ok,,drop=FALSE])
