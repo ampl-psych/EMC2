@@ -63,7 +63,7 @@
 #'   steps the staircase from the previous stop trial's outcome and assigns
 #'   the current trial's SSD before the parameters for that trial are
 #'   computed. This is required when a trend makes a parameter depend on SSD
-#'   (e.g. [make_ssd_trend()]). With fitted data the default (conditional)
+#'   (e.g. a `slin_incr` kernel of `SSD` on `muS`). With fitted data the default (conditional)
 #'   simulation keeps the observed SSDs, e.g. `predict(emc, conditional_on_data
 #'   = TRUE)`; the unconditional simulation (the default of [predict()] when
 #'   the design holds the generator) re-runs the staircase.

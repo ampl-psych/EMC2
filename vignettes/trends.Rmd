@@ -137,10 +137,12 @@ Power trends provide another way to model non‑linear relationships, often used
 ### Saturating Linear Trends
 ```{r}
 # Linear rise that saturates: k = min(1, k_sat * c)
-kernel_sat_lin <- make_kernel(cov_names = "trial_nr", type = "sat_lin")
+kernel_slin_incr <- make_kernel(cov_names = "trial_nr", type = "slin_incr")
+# and its mirror image: k = -min(1, k_sat * c)
+kernel_slin_decr <- make_kernel(cov_names = "trial_nr", type = "slin_decr")
 ```
 
-`sat_lin` rises linearly at rate `k_sat` (log-scaled) and is flat at 1 once the covariate exceeds `1/k_sat`. A non-finite covariate (`NA`, `Inf`) gives 0, so rows on which the covariate is undefined keep the untrended parameter value. This is the kernel behind `make_ssd_trend()`, which lets stop-signal parameters change with the stop-signal delay (`SSD = Inf` on go trials) as in the dEXG3 model; pair it with a `"lin"` base and, when the weight must be positive, sample the weight on the log scale via `design(transform = list(func = c(<target>.w = "exp")))`.
+`slin_incr` rises linearly at rate `k_sat` (log-scaled) and is flat at 1 once the covariate exceeds `1/k_sat`; `slin_decr` is its negative. A non-finite covariate (`NA`, `Inf`) gives 0, so rows on which the covariate is undefined keep the untrended parameter value. This is the ramp of the dEXG3 stop-signal model, in which the stop runner's mean rises with the stop-signal delay (`SSD = Inf` on go trials): `make_base("muS", "lin", make_kernel("SSD", "slin_incr"), phase = "posttransform")` with `design(transform = list(func = c(muS.w = "exp")))` for a positive rise; the `slin_decr` version with the same transform gives a shift that is always negative (e.g. a trigger-failure probability that falls with SSD on the probit scale, `phase = "pretransform"`).
 
 ### Polynomial Trends
 ```{r}

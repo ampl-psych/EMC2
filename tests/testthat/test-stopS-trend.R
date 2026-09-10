@@ -1,4 +1,4 @@
-## SSD-dependent stop-signal parameters via trends (dEXG3 / make_ssd_trend()):
+## SSD-dependent stop-signal parameters via trends (dEXG3: slin_incr kernel of SSD on muS):
 ## C++ likelihood == R reference (two ways), memo-key correctness, compression
 ## and multithread invariance, staircase simulation on the trial-by-trial path,
 ## the tf(SSD) variant, and SSRDEX transfer.
@@ -7,7 +7,22 @@ set.seed(321)
 
 ss_matchfun <- function(d) d$S == d$lR
 
-ss_design_tr <- function(model, trend = make_ssd_trend(), ...) {
+# dEXG3-style trend: slin_incr kernel of SSD, lin base; posttransform (positive
+# rise, weight sampled on the log scale) for the stop ex-Gaussian parameters,
+# pretransform (probit shift, free sign) for tf/gf. Returns the trend with the
+# design(transform=) list attached.
+ssd_trend <- function(target = "muS", kernel = "slin_incr") {
+  pos <- target %in% c("muS", "sigmaS", "tauS")
+  bases <- lapply(seq_along(target), function(i)
+    make_base(target[i], "lin", make_kernel("SSD", kernel),
+              phase = if (pos[i]) "posttransform" else "pretransform"))
+  tr <- do.call(make_trend, bases)
+  attr(tr, "transform") <- if (any(pos))
+    list(func = stats::setNames(rep("exp", sum(pos)), paste0(target[pos], ".w"))) else NULL
+  tr
+}
+
+ss_design_tr <- function(model, trend = ssd_trend(), ...) {
   design(model = model, factors = list(subjects = 1, S = c("left", "right")),
          Rlevels = c("left", "right"), matchfun = ss_matchfun, report_p_vector = FALSE,
          trend = trend, transform = attr(trend, "transform"), ...)
@@ -59,24 +74,24 @@ ss_ll_manual_muS <- function(dat, des0, p_tr) {
 fixed_ssd <- make_ssd(staircase = FALSE, values = c(.1, .2, .3, .4))
 tr_vals <- c(muS.k_sat = log(5), muS.w = log(.2))
 
-test_that("make_ssd_trend builds the dEXG3 specification", {
-  tr <- make_ssd_trend()
+test_that("the dEXG3 trend specification: names, phases, transforms", {
+  tr <- ssd_trend()
   expect_s3_class(tr, "emc2_trend")
   expect_equal(get_trend_pnames(tr), c("muS.k_sat", "muS.w"))
   expect_equal(tr$bases[[1]]$phase, "posttransform")
-  expect_equal(attr(tr, "transform"), list(func = c(muS.w = "exp")))
   expect_equal(unname(tr$kernels[[1]]$transforms["muS.k_sat"]), "exp")
-  tr2 <- make_ssd_trend(c("muS", "tf"))
+  tr2 <- ssd_trend(c("muS", "tf"))
   expect_setequal(get_trend_pnames(tr2), c("muS.k_sat", "muS.w", "tf.k_sat", "tf.w"))
   expect_equal(tr2$bases[[2]]$phase, "pretransform")
-  expect_equal(attr(tr2, "transform"), list(func = c(muS.w = "exp")))
-  expect_null(attr(make_ssd_trend("tf"), "transform"))
-  tr3 <- make_ssd_trend(c("muS", "tf"), shared_k = TRUE)
-  expect_setequal(get_trend_pnames(tr3), c("muS.k_sat", "muS.w", "tf.w"))
-  expect_error(make_ssd_trend("mu"), "target must be")
   des <- ss_design_tr(SSEXG, formula = exg_formula)
   expect_true(all(c("muS.k_sat", "muS.w") %in% names(sampled_pars(des))))
   expect_equal(unname(des$model()$transform$func[c("muS.k_sat", "muS.w")]), c("exp", "exp"))
+  des2 <- ss_design_tr(SSEXG, trend = ssd_trend("tf"), formula = exg_formula)
+  expect_equal(unname(des2$model()$transform$func[c("tf.k_sat", "tf.w")]), c("exp", "identity"))
+  # slin_decr with an exp weight: a shift that is always negative
+  tr3 <- ssd_trend("tf", kernel = "slin_decr"); attr(tr3, "transform") <- list(func = c(tf.w = "exp"))
+  des3 <- ss_design_tr(SSEXG, trend = tr3, formula = exg_formula)
+  expect_equal(unname(des3$model()$transform$func["tf.w"]), "exp")
 })
 
 test_that("SSEXG + muS(SSD): C++ == R reference, with and without a deadline", {
@@ -146,7 +161,7 @@ test_that("muS(SSD): trialwise muS follows the formula and is untouched on go tr
 test_that("memo key: trials with equal SSD and go parameters but different muS", {
   # trend muS on an extra random covariate, so muS differs across trials that
   # share SSD, deadline and go parameters
-  tr_x <- make_trend(make_base("muS", "lin", make_kernel("x", "sat_lin"), phase = "posttransform"))
+  tr_x <- make_trend(make_base("muS", "lin", make_kernel("x", "slin_incr"), phase = "posttransform"))
   attr(tr_x, "transform") <- list(func = c(muS.w = "exp"))
   des_x <- ss_design_tr(SSEXG, trend = tr_x, formula = exg_formula, covariates = "x")
   des <- ss_design_tr(SSEXG, formula = exg_formula)
@@ -247,7 +262,7 @@ test_that("staircase + trend: deadline steps the ladder up after late responses;
   expect_true(all((d[d != 0] > 0) == up[d != 0]))
   # separate ladders per S, each starting at SSD0, one subject
   stairS <- make_ssd(staircase = TRUE, SSD0 = .3, stairstep = .05, p_stop = .3, factors = "S")
-  tr <- make_ssd_trend()
+  tr <- ssd_trend()
   des2 <- design(model = SSEXG, factors = list(subjects = 1:2, S = c("left", "right")),
                  Rlevels = c("left", "right"), matchfun = ss_matchfun, report_p_vector = FALSE,
                  formula = exg_formula, trend = tr, transform = attr(tr, "transform"),
@@ -265,7 +280,7 @@ test_that("staircase + trend: deadline steps the ladder up after late responses;
 })
 
 test_that("tf(SSD) variant: pretransform on the probit scale, negative weight allowed", {
-  des <- ss_design_tr(SSEXG, trend = make_ssd_trend("tf"), formula = exg_formula)
+  des <- ss_design_tr(SSEXG, trend = ssd_trend("tf"), formula = exg_formula)
   expect_setequal(setdiff(names(sampled_pars(des)), names(exg_vals)), c("tf.k_sat", "tf.w"))
   p <- p_named(des, c(exg_vals, tf.k_sat = log(4), tf.w = -1))
   set.seed(22)
@@ -278,7 +293,7 @@ test_that("tf(SSD) variant: pretransform on the probit scale, negative weight al
   ll <- ss_ll_cr(dat, des, p)
   expect_equal(ll[["cpp"]], ll[["r"]], tolerance = 1e-8)
   # combined muS + tf trends
-  des2 <- ss_design_tr(SSEXG, trend = make_ssd_trend(c("muS", "tf")), formula = exg_formula)
+  des2 <- ss_design_tr(SSEXG, trend = ssd_trend(c("muS", "tf")), formula = exg_formula)
   p2 <- p_named(des2, c(exg_vals, tr_vals, tf.k_sat = log(4), tf.w = -1))
   ll2 <- ss_ll_cr(dat, des2, p2)
   expect_equal(ll2[["cpp"]], ll2[["r"]], tolerance = 1e-8)

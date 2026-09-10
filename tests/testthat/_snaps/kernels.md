@@ -46,7 +46,7 @@
       [4,] 0.9999810
       [5,] 0.9999987
 
-# sat_lin_Rcpp
+# slin_incr_Rcpp
 
     Code
       matrix(apply_kernel(kernel_pars, emc))
@@ -56,6 +56,19 @@
       [2,]  0.2
       [3,]  0.6
       [4,]  1.0
+      [5,]  0.0
+      [6,]  0.0
+
+# slin_decr_Rcpp
+
+    Code
+      matrix(apply_kernel(kernel_pars, emc))
+    Output
+           [,1]
+      [1,]  0.0
+      [2,] -0.2
+      [3,] -0.6
+      [4,] -1.0
       [5,]  0.0
       [6,]  0.0
 

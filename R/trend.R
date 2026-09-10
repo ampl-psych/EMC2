@@ -1005,13 +1005,20 @@ get_kernels <- function() {
                     sequential   = FALSE,
                     n_outputs    = 1L,
                     NA_allowed   = FALSE),
-    sat_lin = list(description = "Saturating linear kernel: k = min(1, k_sat * c)",
-                   transforms = list(func = list("k_sat" = "exp")),
-                   default_pars = "k_sat",
-                   bases = base_2p,
-                   sequential   = FALSE,
-                   n_outputs    = 1L,
-                   NA_allowed   = TRUE),
+    slin_incr = list(description = "Increasing saturating linear kernel: k = min(1, k_sat * c)",
+                     transforms = list(func = list("k_sat" = "exp")),
+                     default_pars = "k_sat",
+                     bases = base_2p,
+                     sequential   = FALSE,
+                     n_outputs    = 1L,
+                     NA_allowed   = TRUE),
+    slin_decr = list(description = "Decreasing saturating linear kernel: k = -min(1, k_sat * c)",
+                     transforms = list(func = list("k_sat" = "exp")),
+                     default_pars = "k_sat",
+                     bases = base_2p,
+                     sequential   = FALSE,
+                     n_outputs    = 1L,
+                     NA_allowed   = TRUE),
     pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
                     transforms = list(func =list("d_pd" = "exp")),
                     default_pars = "d_pd",
@@ -1235,7 +1242,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
   if(kernel %in% .sequential_kernels()) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
-  if(kernel %in% c('exp_incr', 'pow_incr', 'sat_lin', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
+  if(kernel %in% c('exp_incr', 'pow_incr', 'slin_incr', 'slin_decr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
   if(!is.null(kernel_pars)) {

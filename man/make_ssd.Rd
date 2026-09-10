@@ -98,7 +98,7 @@ pre-trial design function. \code{\link[=make_data]{make_data()}} then simulates 
 steps the staircase from the previous stop trial's outcome and assigns
 the current trial's SSD before the parameters for that trial are
 computed. This is required when a trend makes a parameter depend on SSD
-(e.g. \code{\link[=make_ssd_trend]{make_ssd_trend()}}). With fitted data the default (conditional)
+(e.g. a \code{slin_incr} kernel of \code{SSD} on \code{muS}). With fitted data the default (conditional)
 simulation keeps the observed SSDs, e.g. \code{predict(emc, conditional_on_data = TRUE)}; the unconditional simulation (the default of \code{\link[=predict]{predict()}} when
 the design holds the generator) re-runs the staircase.
 }
