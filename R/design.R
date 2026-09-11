@@ -197,6 +197,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   formula <- prepared_design$formula
   constants <- prepared_design$constants
 
+  # The DDM likelihood maps the first response level to the lower boundary and
+  # every other level to the upper one, so a third level would be fitted as if
+  # it were the second: refuse rather than silently mis-fit.
+  if (identical(model_type(model), "DDM") && !is.null(Rlevels) && length(Rlevels) != 2) {
+    stop("The DDM requires exactly two response levels; R has ", length(Rlevels),
+         " (", paste(Rlevels, collapse = ", "), "). Recode R (e.g. as correct/error) or drop unused levels.")
+  }
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
@@ -1302,6 +1309,89 @@ dm_list <- function(dadm)
   return(dl)
 }
 
+# design() freezes model() into a closure that is serialised with the fit, so a
+# stored emc carries the model *functions* (rfun, dfun, Ttransform, ...) as they
+# were at fit time. Fits made before 058ce1a9 (May 2025) have rfun(lR, pars)
+# whereas make_data() now calls rfun(data, pars): predict() on such an object
+# fails inside rfun. refresh_model() rebuilds the closure from the live
+# constructor, keeping the fit-time transform / pre_transform / bound.
+model_is_stale <- function(model) {
+  ml <- tryCatch(if (is.function(model)) model() else model, error = function(e) NULL)
+  if (!is.list(ml) || !is.function(ml$rfun)) return(FALSE)
+  # The pre-May-2025 signature was rfun(lR, pars); fMRI models legitimately use rfun(pars)
+  identical(names(formals(ml$rfun))[1], "lR")
+}
+
+# Constructors that can be called without arguments, keyed by the c_name/type
+# their model list carries. Custom (user-supplied) models are not refreshable.
+find_model_constructor <- function(old) {
+  ns <- asNamespace("EMC2")
+  candidates <- c("LBA", "RDM", "LNR", "DDM", "DDMGNG", "CDM", "SDM", "HSDM", "PSDM",
+                  "PHSDM", "SSexG", "SShybrid", "SSEXG", "SSRDEX")
+  candidates <- candidates[vapply(candidates, exists, logical(1), envir = ns, mode = "function", inherits = FALSE)]
+  hits <- list()
+  for (nm in candidates) {
+    ctor <- get(nm, envir = ns)
+    ml <- tryCatch(ctor(), error = function(e) NULL)
+    if (is.null(ml)) next
+    same_type <- identical(ml$type, old$type)
+    same_name <- is.null(old$c_name) || identical(ml$c_name, old$c_name)
+    if (same_type && same_name) hits[[nm]] <- ctor
+  }
+  if (length(hits) == 1) return(hits[[1]])
+  if (length(hits) > 1 && !is.null(old$c_name) && old$c_name %in% names(hits)) return(hits[[old$c_name]])
+  NULL
+}
+
+refresh_model <- function(old_model, p_vector = NULL, force = FALSE) {
+  old <- if (is.function(old_model)) old_model() else old_model
+  if (!force && !model_is_stale(old)) return(old_model)
+  ctor <- find_model_constructor(old)
+  if (is.null(ctor)) {
+    stop("The model stored with this object (", if (is.null(old$c_name)) old$type else old$c_name,
+         ") predates the current rfun(data, pars) interface and no matching built-in model was found ",
+         "to refresh it from; custom models must be refreshed by re-running design() with the current model.")
+  }
+  new <- ctor()
+  if (!all(names(old$p_types) %in% names(new$p_types))) {
+    stop("The current ", new$c_name, " model no longer has parameter(s) ",
+         paste(setdiff(names(old$p_types), names(new$p_types)), collapse = ", "))
+  }
+  # Fit-time settings win over the constructor defaults, as they did in design()
+  new$transform <- fill_transform(old$transform, ctor)
+  new$bound <- if (is.list(old$bound) && identical(names(old$bound)[1], "minmax")) {
+    fill_bound(old$bound, ctor)
+  } else fill_bound(NULL, ctor)
+  if (!is.null(old$pre_transform)) {
+    new$pre_transform <- if (is.null(p_vector)) old$pre_transform else
+      fill_transform(old$pre_transform, model = ctor, p_vector = p_vector, is_pre = TRUE)
+  } else if (!is.null(p_vector)) {
+    new$pre_transform <- fill_transform(NULL, model = ctor, p_vector = p_vector, is_pre = TRUE)
+  }
+  # Any non-function extras the fit stored (e.g. trend settings) are kept
+  for (f in setdiff(names(old), names(new))) if (!is.function(old[[f]])) new[[f]] <- old[[f]]
+  model_list <- new
+  function() model_list
+}
+
+emc_has_stale_model <- function(emc) {
+  dl <- attr(emc, "design_list")
+  if (is.null(dl)) dl <- tryCatch(attr(get_prior(emc), "design"), error = function(e) NULL)
+  if (is.null(dl)) return(FALSE)
+  any(vapply(dl, function(d) is.function(d$model) && model_is_stale(d$model), logical(1)))
+}
+
+# Refresh stale model closures of a design list (in memory; see refresh_model)
+refresh_design_models <- function(design_list) {
+  for (i in seq_along(design_list)) {
+    m <- design_list[[i]]$model
+    if (is.function(m) && model_is_stale(m)) {
+      design_list[[i]]$model <- refresh_model(m, attr(design_list[[i]], "p_vector"))
+    }
+  }
+  design_list
+}
+
 #' Update EMC Objects to the Current Version
 #'
 #' This function updates EMC objects created with older versions of the package to be compatible with the current version.
@@ -1316,42 +1406,33 @@ dm_list <- function(dadm)
 update2version <- function(emc){
   # For older versions, ensure that the class is emc:
   class(emc) <- "emc"
-  get_new_model <- function(old_model, pars){
-    if(old_model()$c_name == "LBA"){
-      model <- LBA
-    } else if(old_model()$c_name == "DDM"){
-      model <- DDM
-    } else if(old_model()$c_name == "RDM"){
-      model <- RDM
-    } else if(old_model()$c_name == "LNR"){
-      model <- LNR
-    } else{
-      stop("current model not supported for updating, sorry!!")
-    }
-    model_list <- model()
-    model_list$transform <- fill_transform(transform = old_model()$transform,model)
-    model_list$pre_transform <- fill_transform(transform = old_model()$pre_transform, model = model, p_vector = pars, is_pre = TRUE)
-    model_list$bound <- fill_bound(bound = NULL,model)
-    model <- function(){return(model_list)}
-    return(model)
-  }
+  get_new_model <- function(old_model, pars) refresh_model(old_model, pars, force = TRUE)
 
   new_expand <- function(x){
-    if(!is.null(x$winner)){
-      old_exp <- attr(x, "expand")
-      if(length(unique(old_exp) != length(unique(x$winner)))){
-        # In older versions we were working with a different expand version
-        new_x <- x[old_exp,]
-        new_x <- new_x[new_x$winner,]
-
-        reduced <- unique(new_x)       # keeps the first appearance of every row
-
-        ## ——— 2. create the “expand” index ———
-        key_full    <- do.call(paste, c(new_x,      sep = "\r"))   # one string per row
-        key_reduced <- do.call(paste, c(reduced, sep = "\r"))   # the same for reduced
-        attr(x, "expand") <- match(key_full, key_reduced)
-      }
+    # Before 474bba52 (April 2025) attr(x, "expand") indexed every row of the
+    # compressed dadm, so x[expand, ] rebuilt all accumulator rows of every
+    # trial. Since then, for race models (lR present), it indexes only the
+    # winner rows: x[x$winner, ][expand, ] is the data, one row per trial.
+    # Objects already in the new convention must be left alone: applying the
+    # conversion to them picks a mixture of winner and loser rows and silently
+    # drops about half of the trials.
+    old_exp <- attr(x, "expand")
+    if (is.null(x$winner) || is.null(x$lR) || is.null(old_exp)) return(x)
+    n_acc <- length(unique(x$lR))
+    n_win <- sum(x$winner)
+    if (n_acc < 2 || max(old_exp) <= n_win) return(x)  # new convention (or nothing to expand)
+    # Old convention: every compressed row is referenced, so max(expand) == nrow(x) > n_win.
+    full <- x[old_exp, , drop = FALSE]
+    if (length(old_exp) %% n_acc != 0 || sum(full$winner) != length(old_exp) / n_acc) {
+      stop("Cannot convert the stored 'expand' index of the data to the current convention")
     }
+    full <- full[full$winner, , drop = FALSE]
+    winners <- x[x$winner, , drop = FALSE]
+    key_full    <- do.call(paste, c(full,    sep = "\r"))   # one string per trial
+    key_reduced <- do.call(paste, c(winners, sep = "\r"))   # one per compressed winner row
+    new_exp <- match(key_full, key_reduced)
+    if (anyNA(new_exp)) stop("Cannot convert the stored 'expand' index of the data to the current convention")
+    attr(x, "expand") <- new_exp
     return(x)
   }
   update_expand <- function(emc){

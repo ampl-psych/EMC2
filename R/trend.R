@@ -1741,15 +1741,18 @@ make_data_unconditional <- function(data, pars, design, model,
         attr(pm, "trialwise_parameters") <- covariates
       }
 
-      # 7. Ttransform + bounds on current-trial rows only
-      pr <- model_list$Ttransform(pm[idx_curr, , drop = FALSE], dadm_current)
-
+      # 7. Bounds (before Ttransform, as the sampler does) + Ttransform on
+      #    current-trial rows only
+      pr <- pm[idx_curr, , drop = FALSE]
       if (!is.null(optionals$nobound)) {
-        attr(pr, "ok") <- rep(TRUE, nrow(pr))
+        pr_ok <- rep(TRUE, nrow(pr))
       } else {
         pr <- fix_bound(pr, model_list$bound, dadm_current$lR,
                         fix = !is.null(optionals$shrink2bound))
+        pr_ok <- attr(pr, "ok")
       }
+      pr <- model_list$Ttransform(pr, dadm_current)
+      attr(pr, "ok") <- pr_ok
 
       # 8. Simulate R and rt
       if (any(names(dadm_current) == "RACE")) {
