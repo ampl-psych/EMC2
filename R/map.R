@@ -52,13 +52,13 @@ do_bound <- function(pars,bound, lR = NULL) {
 }
 
 # This form used in make_data
-fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
+fix_bound <- function(pars,bound, lR = NULL,fix=FALSE, used=NULL) {
   # SM: Only consider bounds of parameters that are actually in pars
   # When we move to the oo_refactor we can apply the full bound to all parameters
   bound$minmax <- bound$minmax[,colnames(bound$minmax) %in% colnames(pars), drop=FALSE]
   tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
-  oklo <- tpars >= bound$minmax[1,]
-  okhi <- tpars <= bound$minmax[2,]
+  oklo <- tpars > bound$minmax[1,]
+  okhi <- tpars < bound$minmax[2,]
   if (!is.null(bound$exception)) {
     # SM: Only consider bounds of parameters that are actually in pars
     # When we move to the oo_refactor we can apply the full bound to all parameters
@@ -66,6 +66,11 @@ fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
     exception <- tpars[names(bound$exception),] == bound$exception
     oklo[names(bound$exception),] <- oklo[names(bound$exception),] | exception
     okhi[names(bound$exception),] <- okhi[names(bound$exception),] | exception
+  }
+  if (!is.null(used)) {
+    used <- t(used[, colnames(bound$minmax), drop = FALSE])
+    oklo <- oklo | !used
+    okhi <- okhi | !used
   }
   bounds <- colSums(oklo&okhi) == nrow(oklo)
 

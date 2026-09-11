@@ -21,6 +21,7 @@ struct TransformSpec {
 
 struct BoundSpec {
   int col_idx;   // column in pt
+  int begin, end; // rows using this parameter
   double min_val;
   double max_val;
   bool has_exception;

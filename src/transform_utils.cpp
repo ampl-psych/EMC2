@@ -197,7 +197,7 @@ bool c_do_bound_pt(const ParamTable& pt,
     const double* col = &base(0, col_idx);
 
 #pragma omp simd reduction(&:all_valid)
-    for (int i = 0; i < nrows; ++i) {
+    for (int i = bs.begin; i < bs.end; ++i) {
       const double v = col[i];
       bool ok = (v > min_v && v < max_v);
       if (has_exc) ok = ok || (v == exc_val);
@@ -359,6 +359,8 @@ std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
 
       BoundSpec s;
       s.col_idx = base_idx;           // index into pt.base
+      s.begin = 0;
+      s.end = pt.base.nrow();
       s.min_val = minmax(0, j);
       s.max_val = minmax(1, j);
 

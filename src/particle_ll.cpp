@@ -40,7 +40,8 @@ struct AccumulatRBridgeRecipe {
 
 static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
     const Rcpp::List& bridge,
-    const ParamTable& parameter_table) {
+    const ParamTable& parameter_table,
+    std::vector<BoundSpec>& bounds) {
   Rcpp::NumericMatrix runtime = Rcpp::clone(
     Rcpp::NumericMatrix(bridge["defaults"]));
   Rcpp::CharacterMatrix sources = bridge["source_names"];
@@ -51,6 +52,7 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
   }
 
   std::vector<AccumulatRBridgeRecipe::Binding> bindings;
+  std::vector<unsigned char> used(parameter_table.base.size(), 0);
   bindings.reserve(runtime.length());
   for (int col = 0; col < runtime.ncol(); ++col) {
     for (int row = 0; row < runtime.nrow(); ++row) {
@@ -65,6 +67,7 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
 
       const int destination = row + runtime.nrow() * col;
       const int source_index = row + runtime.nrow() * found->second;
+      used[source_index] = 1;
       if (!bindings.empty() &&
           bindings.back().destination + bindings.back().length == destination &&
           bindings.back().source + bindings.back().length == source_index) {
@@ -74,6 +77,22 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
       }
     }
   }
+  // Restrict bounds to parameter cells consumed by the runtime recipe, once
+  // per particle batch. Reuse the standard bounds evaluator below.
+  std::vector<BoundSpec> active_bounds;
+  for (const auto& bound : bounds) {
+    const int offset = runtime.nrow() * bound.col_idx;
+    int row = 0;
+    while (row < runtime.nrow()) {
+      if (!used[offset + row]) { ++row; continue; }
+      BoundSpec active = bound;
+      active.begin = row;
+      while (row < runtime.nrow() && used[offset + row]) ++row;
+      active.end = row;
+      active_bounds.push_back(active);
+    }
+  }
+  bounds = std::move(active_bounds);
   return {runtime, bindings};
 }
 
@@ -701,7 +720,7 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     Rcpp::List likelihood_context(accumulatr_context);
     SEXP native_context = likelihood_context["native"];
     AccumulatRBridgeRecipe recipe = make_accumulatr_bridge_recipe(
-      Rcpp::List(likelihood_context["bridge"]), ctx.param_table);
+      Rcpp::List(likelihood_context["bridge"]), ctx.param_table, bound_specs);
     Rcpp::IntegerVector trial_counts = likelihood_context["trial_counts"];
     const int accumulatr_trials = trial_counts.size();
     if (accumulatr_trials == 0 ||

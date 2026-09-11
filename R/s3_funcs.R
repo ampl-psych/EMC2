@@ -1084,18 +1084,23 @@ credint <- function(x, ...){
 #' @export
 get_data.emc <- function(emc) {
   if(is.null(emc[[1]]$data)) return(NULL) # Prior samples
+  restore_trials <- function(x) {
+    expand <- attr(x, "expand")
+    if (!is.null(attr(x, "AccumulatR_bridge"))) {
+      x <- x[!duplicated(x$trials), , drop = FALSE]
+      x$racer <- NULL
+    } else if (!is.null(x$winner) && length(unique(x$lR)) > 1) {
+      x <- x[x$winner, , drop = FALSE]
+    }
+    if (is.null(expand)) expand <- seq_len(nrow(x))
+    x[expand, , drop = FALSE]
+  }
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-        cur <- x[[i]]
-        if(!is.null(cur$winner) && (length(unique(cur$lR)) > 1)){
-          cur <- cur[cur$winner,]
-        }
-        expand <- attr(cur,"expand")
-        if(is.null(expand)) expand <- 1:nrow(cur)
-        return(cur[expand,])
+        restore_trials(x[[i]])
       }))
       row.names(tmp) <- NULL
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
@@ -1104,16 +1109,7 @@ get_data.emc <- function(emc) {
     names(dat) <- get_joint_names(emc)
   } else{
     design <- get_design(emc)[[1]]
-    dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-      if(!is.null(x$winner) && (length(unique(x$lR)) > 1)){
-        # Only expand winner for race models
-        x <- x[x$winner,]
-      }
-
-      expand <- attr(x,"expand")
-      if(is.null(expand)) expand <- 1:nrow(x)
-      return(x[expand,])
-    }))
+    dat <- do.call(rbind, lapply(emc[[1]]$data, restore_trials))
     row.names(dat) <- NULL
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }

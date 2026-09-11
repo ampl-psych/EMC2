@@ -55,7 +55,12 @@ model_expand_rows <- function(data, model, matchfun = NULL, simulate = FALSE,
                               covariates = NULL) {
   model_list <- .model_list(model)
   if (identical(model_type(model_list), "AccumulatR")) {
-    return(.accumulatr_expand_rows(data, model_list$spec))
+    data <- .accumulatr_expand_rows(data, model_list$spec)
+    if (!is.null(matchfun)) {
+      data$lM <- matchfun(data)
+      if (!is.factor(data$lM)) data$lM <- factor(data$lM)
+    }
+    return(data)
   }
   add_accumulators(
     data,

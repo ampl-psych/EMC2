@@ -25,10 +25,12 @@
   }
 
   positive <- parameter %in% c("s", "sigma", "tau", "shape", "rate", "B", "A", "sv") ||
-    identical(accumulator$dist, "rdm") && identical(parameter, "v")
+    identical(tolower(accumulator$dist), "rdm") && identical(parameter, "v")
   if (positive) {
     return(c(default = 0, actual = 1, lower = 0, upper = Inf,
-             bound_min = 0, bound_max = Inf, exception = 0, transform = "exp"))
+             bound_min = 0, bound_max = Inf,
+             exception = if (parameter %in% c("A", "v")) 0 else NA,
+             transform = "exp"))
   }
   c(default = 0, actual = 0, lower = -Inf, upper = Inf,
     bound_min = -Inf, bound_max = Inf, exception = NA, transform = "identity")
@@ -51,7 +53,7 @@
 
   field <- function(name, numeric = TRUE) {
     out <- vapply(profiles, `[[`, character(1), name)
-    if (numeric) as.numeric(out) else out
+    setNames(if (numeric) as.numeric(out) else out, public)
   }
   p_types <- field("default")
   names(p_types) <- public
@@ -109,28 +111,34 @@
   defaults <- matrix(0, nrow(data), length(columns), dimnames = list(NULL, columns))
   sources <- matrix(NA_character_, nrow(data), length(columns), dimnames = list(NULL, columns))
 
-  for (row in seq_len(nrow(data))) {
-    id <- as.character(data$racer[[row]])
+  for (id in names(prep$accumulators)) {
+    rows <- which(data$racer == id)
     accumulator <- prep$accumulators[[id]]
     internals <- names(lookup)[startsWith(names(lookup), paste0(id, "."))]
     distribution <- setdiff(internals, paste0(id, ".t0"))
     for (slot in seq_along(distribution)) {
       internal <- distribution[[slot]]
       public <- lookup[[internal]]
-      defaults[row, paste0("p", slot)] <- as.numeric(bridge$profiles[[public]][["actual"]])
-      sources[row, paste0("p", slot)] <- public
+      defaults[rows, paste0("p", slot)] <- as.numeric(bridge$profiles[[public]][["actual"]])
+      sources[rows, paste0("p", slot)] <- public
     }
     t0 <- paste0(id, ".t0")
     if (t0 %in% names(lookup)) {
       public <- lookup[[t0]]
-      defaults[row, "t0"] <- as.numeric(bridge$profiles[[public]][["actual"]])
-      sources[row, "t0"] <- public
+      defaults[rows, "t0"] <- as.numeric(bridge$profiles[[public]][["actual"]])
+      sources[rows, "t0"] <- public
     }
     trigger <- accumulator$shared_trigger_id
     if (!is.null(trigger)) {
       public <- lookup[[trigger]]
-      defaults[row, "q"] <- as.numeric(bridge$profiles[[public]][["actual"]])
-      sources[row, "q"] <- public
+      defaults[rows, "q"] <- as.numeric(bridge$profiles[[public]][["actual"]])
+      sources[rows, "q"] <- public
+    }
+    if (!is.null(data$component) && length(accumulator$components)) {
+      inactive <- !is.na(data$component[rows]) &
+        !data$component[rows] %in% accumulator$components
+      # q belongs to the shared trigger, even when its representative is inactive.
+      sources[rows[inactive], setdiff(columns, "q")] <- NA_character_
     }
   }
 
