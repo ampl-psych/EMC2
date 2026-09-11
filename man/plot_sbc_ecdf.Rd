@@ -4,16 +4,51 @@
 \alias{plot_sbc_ecdf}
 \title{Plot the ECDF Difference in SBC Ranks}
 \usage{
-plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500)
+plot_sbc_ecdf(
+  ranks,
+  layout = NA,
+  add_stats = TRUE,
+  main = NULL,
+  add_to_main = NULL,
+  K = 500
+)
 }
 \arguments{
 \item{ranks}{A list of named dataframes of the rank statistic (raw or normalized)}
 
-\item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}}
+\item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}.
+\code{NA} (the default) auto-computes a grid. \code{NULL} leaves the current device
+layout (\code{mfrow}/\code{mfcol}) untouched, drawing the panels into the existing
+grid with no new page between them.}
 
-\item{add_stats}{Boolean. Should coverage, bias and precision be included in the figure.}
+\item{add_stats}{Controls the statistics overlaid on each panel: the three
+recovery statistics (coverage, bias, precision) and \code{pvalue}, a
+Kolmogorov-Smirnov p-value for uniformity of the ranks (the test matching
+the ECDF-difference curve; high p = consistent with calibration). \code{TRUE}
+(the default) shows all four at default legend positions (coverage
+\code{"topleft"}, bias \code{"topright"}, precision \code{"bottomleft"}, pvalue
+\code{"bottomright"}); \code{FALSE} shows none. Alternatively a named list keyed by a
+subset of \code{"coverage"}, \code{"bias"}, \code{"precision"}, \code{"pvalue"} may be given:
+each value is a \code{legend()} position keyword (e.g. \code{"topright"},
+\code{"bottomleft"}, \code{"center"}) placing that statistic, an entry of \code{FALSE} or
+\code{NA} suppresses it, and omitted names keep their default position. A
+statistic's value may instead be a named list/vector keyed by parameter (a
+subset; parameters not named use that statistic's default position) to set
+its position per panel, with \code{FALSE}/\code{NA} suppressing it on a given panel.
+The three recovery statistics are only available for single-subject SBC
+(omitted, with a warning, for hierarchical SBC output); \code{pvalue} is computed
+from the ranks and is always shown.}
 
-\item{main}{Optional. A character specifying plot title.}
+\item{main}{Optional. \code{NULL} (the default) uses the auto-generated per-panel
+title. A single string is used as the title on every panel. A character
+vector sets one title per panel and must have the same length as the number
+of panels being plotted.}
+
+\item{add_to_main}{Optional. \code{NULL} (the default) does nothing. A single
+string is prepended to the start of the (auto-generated or \code{main}) title of
+every panel. A character vector is prepended panel-by-panel and must have
+the same length as the number of panels being plotted (no separator is
+inserted).}
 
 \item{K}{Optional. Effective sample size of the MCMC that produced the ranks.}
 }

@@ -12,6 +12,7 @@ make_data(
   expand = 1,
   staircase = NULL,
   functions = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -34,6 +35,8 @@ algorithm. If non-null and a list then passed through as is, if not it is assign
 default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
 
 \item{functions}{List of functions you want to apply to the data generation.}
+
+\item{TC}{List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.}
 
 \item{...}{Additional optional arguments}
 }

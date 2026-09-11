@@ -33,8 +33,10 @@
     Code
       compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
     Output
-             MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      diag -579   1 1090    1 1965     1        875   215  -614 -661
+             MD wMD WAIC wWAIC  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      diag -579   1 9762     1 1090    1 1965     1        875   215  -614 -661
+    Message
+      p_waic produced warnings, use waic_warnings() to inspect
 
 # run_blocked
 
@@ -71,8 +73,10 @@
     Code
       compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
-                MD wMD  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
-      blocked -527   1 6464    1 10028     1       3565  2899  -620 -665
+                MD wMD  WAIC wWAIC  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
+      blocked -527   1 68786     1 6464    1 10029     1       3565  2899  -620 -665
+    Message
+      p_waic produced warnings, use waic_warnings() to inspect
 
 # run_single
 
@@ -90,5 +94,8 @@
     Code
       compare(list(single = LNR_single), stage = "preburn", cores_for_props = 1)
     Output
-               MD wMD DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single -390   1 312    1  733     1        421  -109  -463 -530
+               MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      single -390   1 1089     1 312    1  733     1        421  -109  -463 -530
+    Message
+      p_waic produced warnings, use waic_warnings() to inspect
+

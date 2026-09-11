@@ -40,8 +40,8 @@ plot_fit_choice(
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{factors}{Character vector of factor names to aggregate over;
-defaults to plotting full data set ungrouped by factors if \code{NULL}.}
+\item{factors}{Character vector of factor names to aggregate over. Numeric
+variables are split into quartiles, unless they have fewer than four values.}
 
 \item{signalFactor}{The factor defining signal and noise classes for ROC
 plots.}
