@@ -498,8 +498,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
     if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
 
-    ess_message <- if (!is.null(final_progress$curr_min_es)) {
-      sprintf("min ESS=%d", round(final_progress$curr_min_es))
+    ess_message <- if (!is.null(final_progress$curr_min_es) &&
+                       is.finite(final_progress$curr_min_es)) {
+      sprintf("min ESS=%.0f", final_progress$curr_min_es)
     } else NULL
 
     final_iters <- chain_n(emc)[1, "sample"]
