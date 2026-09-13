@@ -29,16 +29,23 @@ SSD_function <- function(d,SSD=NA,pSSD=.25) {
   return(out)
 }
 
-staircase_function <- function(dts,staircase) {
-  ns <- ncol(dts)
-  SSD <- sR <- srt <- numeric()
-  SSD[1] <- staircase$SSD0
+# ---- Staircase step logic shared by the vectorised (rfun) and the
+# trial-by-trial (make_data_unconditional) simulation paths ----
+
+# Clamp an SSD to the staircase limits.
+staircase_clamp <- function(SSD, staircase) {
+  if (SSD < staircase$stairmin) SSD <- staircase$stairmin
+  if (SSD > staircase$stairmax) SSD <- staircase$stairmax
+  SSD
+}
+
+# Direction ("up"/"down") of the step after a stop trial.
+#  label:   response label (a level of lR) or NA for no response
+#  stopped: TRUE if the stop process won (no go response)
+#  late:    TRUE if the response was slower than the deadline (unobserved)
+staircase_step_dir <- function(staircase, label, stopped, late = FALSE) {
   rules <- staircase$rules
   if (is.null(rules)) rules <- list(up = NULL, down = NULL)
-  labels <- staircase$labels
-  accST <- staircase$accST
-  iSSD <- 1
-  if (!is.null(accST)) iSSD <- c(iSSD, accST)
   match_rule <- function(label, rule) {
     if (is.null(rule) || !length(rule)) return(FALSE)
     if (is.na(label)) {
@@ -47,9 +54,51 @@ staircase_function <- function(dts,staircase) {
       label %in% rule[!is.na(rule)]
     }
   }
+  # Under a deadline (staircase$UC, set by make_data) a response slower than
+  # UC is not observed in the experiment, so the staircase treats it as a
+  # non-response.
+  if (late) label <- NA_character_
+  step_dir <- NULL
+  if (!is.null(rules$up) || !is.null(rules$down)) {
+    success <- match_rule(label, rules$up)
+    failure <- match_rule(label, rules$down)
+    if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
+      stop("`staircase_up` and `staircase_down` overlap for label ", label)
+    }
+    if (is.null(rules$down) && !is.null(rules$up)) {
+      failure <- !success
+    }
+    if (success) {
+      step_dir <- "up"
+    } else if (failure) {
+      step_dir <- "down"
+    }
+  }
+  if (is.null(step_dir)) {
+    if (stopped || late) step_dir <- "up" else step_dir <- "down"
+  }
+  step_dir
+}
+
+# SSD for the next stop trial given the step direction.
+staircase_next_ssd <- function(SSD, step_dir, staircase) {
+  if (identical(step_dir, "up")) {
+    round(SSD + staircase$stairstep, 3)
+  } else if (identical(step_dir, "down")) {
+    round(SSD - staircase$stairstep, 3)
+  } else SSD
+}
+
+staircase_function <- function(dts,staircase) {
+  ns <- ncol(dts)
+  SSD <- sR <- srt <- numeric()
+  SSD[1] <- staircase$SSD0
+  labels <- staircase$labels
+  accST <- staircase$accST
+  iSSD <- 1
+  if (!is.null(accST)) iSSD <- c(iSSD, accST)
   for (i in 1:ns) {
-    if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
-    if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
+    SSD[i] <- staircase_clamp(SSD[i], staircase)
     trial <- dts[,i]
     trial[iSSD] <- trial[iSSD] + SSD[i]
     if (all(is.infinite(trial[-1]))) {
@@ -78,38 +127,10 @@ staircase_function <- function(dts,staircase) {
       }
       label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
     }
-    # Under a deadline (staircase$UC, set by make_data) a response slower than
-    # UC is not observed in the experiment, so the staircase treats it as a
-    # non-response.
     late <- !is.null(staircase$UC) && is.finite(staircase$UC) &&
       !is.na(srt[i]) && srt[i] > staircase$UC
-    if (late) label <- NA_character_
-    step_dir <- NULL
-    if (!is.null(rules$up) || !is.null(rules$down)) {
-      success <- match_rule(label, rules$up)
-      failure <- match_rule(label, rules$down)
-      if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
-        stop("`staircase_up` and `staircase_down` overlap for label ", label)
-      }
-      if (is.null(rules$down) && !is.null(rules$up)) {
-        failure <- !success
-      }
-      if (success) {
-        step_dir <- "up"
-      } else if (failure) {
-        step_dir <- "down"
-      }
-    }
-    if (is.null(step_dir)) {
-      if (Ri==1 || late) step_dir <- "up" else step_dir <- "down"
-    }
-    if (i<ns) {
-      if (identical(step_dir, "up")) {
-        SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
-      } else if (identical(step_dir, "down")) {
-        SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
-      }
-    }
+    step_dir <- staircase_step_dir(staircase, label, stopped = (Ri == 1), late = late)
+    if (i<ns) SSD[i+1] <- staircase_next_ssd(SSD[i], step_dir, staircase)
   }
   list(sR=sR,srt=srt,SSD=SSD)
 }
@@ -1446,3 +1467,4 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
     sum(allLL[attr(dadm,"expand")])
 }
+

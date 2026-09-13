@@ -379,12 +379,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
+  data_supplied <- !is.null(data)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design_in <- design
-    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    # covariates produced by functions (make_data or design) are not imputed
+    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% c(names(functions), names(design$Ffunctions))]
     acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
     design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
@@ -420,6 +422,27 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     simulate_unconditional_on_data <- TRUE
   } else if (!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
+  }
+
+  ## Stop-signal staircases and trends on SSD
+  if (!is.null(model) && !is.null(model()$trend)) {
+    trend_on_ssd <- any(vapply(model()$trend$kernels, function(k) "SSD" %in% k$cov_names, logical(1)))
+    if (trend_on_ssd && !is.null(ssd_meta))
+      stop("A parameter depends on SSD (trend) and the staircase was given to make_data(functions = ). ",
+           "The staircase SSDs are only known trial by trial, so supply the generator to the design ",
+           "instead: design(..., functions = list(SSD = make_ssd(...))).")
+  }
+  # A make_ssd() staircase in the design must be run trial by trial whenever
+  # SSDs have to be generated; with data whose SSDs are known the default
+  # (conditional) path keeps them, conditional_on_data = FALSE re-runs the ladder.
+  design_stair <- !is.null(design$Ffunctions) &&
+    any(vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function"))
+  if (design_stair && (!data_supplied || !"SSD" %in% names(data) || anyNA(data$SSD))) {
+    if (isTRUE(dots_local$conditional_on_data))
+      stop("A make_ssd() staircase in the design is simulated trial by trial; drop conditional_on_data = TRUE.")
+    if (!simulate_unconditional_on_data)
+      message("Staircase SSDs from a design function: simulating trial by trial (conditional_on_data = FALSE).")
+    simulate_unconditional_on_data <- TRUE
   }
   return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
   if('kernel_output_codes' %in% names(dots_local)) {

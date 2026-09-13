@@ -30,6 +30,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
     if(is.null(stop_criteria$omit_mpsrf)) stop_criteria$omit_mpsrf <- TRUE
   }
+  # min_es also needs a selection: without one, check_progress() has nothing to
+  # take the effective size of and the criterion is silently always satisfied.
+  if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
+    stop_criteria$selection <- if(type != "single") c('alpha', 'mu') else 'alpha'
+  }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
   return(stop_criteria)
