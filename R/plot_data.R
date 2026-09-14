@@ -110,6 +110,9 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   }
   datasets <- list()
   sources <- c()
+  # to_plot gates the data and the *generation* of predictives; predictives that
+  # are supplied explicitly are always plotted.
+  plot_data <- "data" %in% to_plot
   # Check for regular input
   if(!is.data.frame(input) && !inherits(input, "emc")){
     if(is.null(names(input))) stop("If input is a list, it must have names")
@@ -128,9 +131,12 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   } else if(!is.null(post_predict)){
     datasets[['posterior']] <- post_predict
     sources['posterior'] <- 'posterior'
-  } else{
+    post_predict <- list(post_predict)
+  }
+  if (!is.list(post_predict) || is.data.frame(post_predict) || length(post_predict) != length(input)) {
     post_predict <- vector("list", length(input))
   }
+
   if(!is.data.frame(prior_predict)  && is.list(prior_predict)){
     if(is.null(names(prior_predict))) stop("If prior_predict is a list, it must have names")
     datasets[names(prior_predict)] <- prior_predict
@@ -138,7 +144,9 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   } else if(!is.null(prior_predict)){
     datasets[['prior']] <- prior_predict
     sources['prior'] <- 'prior'
-  }  else{
+    prior_predict <- list(prior_predict)
+  }
+  if (!is.list(prior_predict) || is.data.frame(prior_predict) || length(prior_predict) != length(input)) {
     prior_predict <- vector("list", length(input))
   }
 
@@ -151,13 +159,15 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       functions <- c(get_emc_functions(input[[k]]), functions)
     } else all_data[names(input)[k]] <- input[k]
   }
-  if(length(unique(all_data)) == 1){
-    all_data <- all_data[1]
-    datasets['data'] <- all_data
-    sources['data'] <- 'data'
-  } else{
-    datasets[names(input)] <- all_data
-    sources[names(input)] <- 'data'
+  if(plot_data){
+    if(length(unique(all_data)) == 1){
+      all_data <- all_data[1]
+      datasets['data'] <- all_data
+      sources['data'] <- 'data'
+    } else{
+      datasets[names(input)] <- all_data
+      sources[names(input)] <- 'data'
+    }
   }
   # Check if posterior or prior predictives need to be generated
   for(k in 1:length(input)){
@@ -201,7 +211,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       }
       quants <- aggregate(datasets[[j]][density_over],
                           list(group_key = datasets[[j]]$group_key),
-                          quantile, probs = x_lim_probs)
+                          quantile, probs = x_lim_probs, na.rm = TRUE)  # NA rts kept when remove_na = FALSE
       xlim <- range(xlim, unlist(quants[[density_over]]))
     }
   }
@@ -215,6 +225,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
 
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
+
 
 #' Plot Statistics on Data
 #'

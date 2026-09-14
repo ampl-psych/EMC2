@@ -144,13 +144,18 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
     factors <- facs[names(facs)!="R"]
-    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
+    # censoring/truncation columns (from make_missing) are not covariates: they
+    # must not be imputed with random values in the minimal design
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt","LT","UT","LC","UC","missingness"))]
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)
       # covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
+  }
+  if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
+    covariates <- unique(c(covariates, "SSD"))
   }
 
   if(!is.null(parameter_design)) {
@@ -445,6 +450,10 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   if("LC"%in%colnames(da)) LC=da$LC else{LC <- attr(da,"LC")}; if (is.null(LC)) LC <- 0
   if("UC"%in%colnames(da)) UC=da$UC else{UC <- attr(da,"UC")}; if (is.null(UC)) UC <- Inf
   if("missingness"%in%colnames(da)) { missingness=da$missingness } else {missingness <- NA}
+  # stop-signal delay: go (SSD=Inf) and stop trials with different SSDs must not
+  # compress together (the SS likelihood depends on SSD; it is not in Fcov when
+  # the data are simulated)
+  if("SSD"%in%colnames(da)) { SSD=da$SSD } else {SSD <- NA}
   nacc <- length(unique(da$lR))
   # contract output
   design_cells_list <- lapply(designs, function(x) {
@@ -454,7 +463,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 
   cells <- paste(design_cells,
                  da$subjects, da$R, da$lR, da$rt,
-                 LT, UT, LC, UC, missingness,  # <--- ZH Added these columns
+                 LT, UT, LC, UC, missingness, SSD,  # <--- ZH Added these columns
                  sep="+"
   )
   # Make sure that if row is included for a trial so are other rows
@@ -485,14 +494,14 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 
   # indices to use to contract further ignoring rt then expand back
   cells_nort <- paste(
-    design_cells, da$subjects, da$R, da$lR, LT, UT, LC, UC, sep = "+"
+    design_cells, da$subjects, da$R, da$lR, LT, UT, LC, UC, SSD, sep = "+"
   )[contract]
   attr(out,"unique_nort") <- !duplicated(cells_nort)
   attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
 
   # indices to use to contract ignoring rt and response (R), then expand back
   cells_nortR <- paste(
-    design_cells, da$subjects, LT, UT, LC, UC, sep = "+"
+    design_cells, da$subjects, LT, UT, LC, UC, SSD, sep = "+"
   )[contract] #  ,da$lR
   attr(out,"unique_nortR") <- !duplicated(cells_nortR)
   attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
@@ -796,6 +805,16 @@ design_model <- function(data,design,model=NULL,
     if(i %in% names(da)) next  # SM don't overwrite existing columns
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da[,i] <- newF
+  }
+
+  # Stop-signal models support censoring (LC/UC) but not yet truncation: the
+  # likelihood is not renormalised for a truncation window, so refuse rather
+  # than fit a biased model.
+  if (!is.null(model_info$c_name) && model_info$c_name %in% c("SSEXG", "SSRDEX")) {
+    trunc_LT <- if ("LT" %in% names(da)) any(da$LT > 0, na.rm = TRUE) else FALSE
+    trunc_UT <- if ("UT" %in% names(da)) any(is.finite(da$UT)) else FALSE
+    if (trunc_LT || trunc_UT)
+      stop("Truncation (LT/UT) is not yet supported for stop-signal models; use censoring (LC/UC).")
   }
 
   # Trend checks to apply now that we have the data

@@ -65,6 +65,14 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' expanded as in case (3). For rows with response (column R) "nogo" the following
 #' are enforced: UC=LC=LT=0, UT=Inf, UCdirection=UCresponse=TRUE
 #'
+#' The added \code{missingness} column codes each row as NA (observed), 1 (lower
+#' censored), 2 (upper censored) or 3 (both). For stop-signal data (an SSD
+#' column is present) an intrinsic no-response (successful stop or go failure)
+#' is coded 2: under a finite UC it cannot be distinguished from a too-slow
+#' response, and with UC = Inf the code-2 likelihood is the no-response
+#' probability. Codes 0 (accumulator not participating) and 4 (silent
+#' accumulator) are set by the user through design functions, not here.
+#'
 #' @param data Data frame to be modified
 #' @param LT Lower truncation bound below which data are removed, default 0.
 #' @param UT Upper truncation bound above which data are removed, default Inf.
@@ -105,13 +113,15 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
                          pContaminant=NULL,verbose=FALSE,rt_resolution=1/60,digits = 2)
 {
 
-  # no censor/truncation, leave unaltered unless go/nogo model
+  # no censor/truncation, leave unaltered unless go/nogo or stop-signal model
+  # (both have intrinsic no-responses that need a missingness code)
   is_gng_data <- "R" %in% names(data) &&  any(data$R == "nogo" | "nogo" %in% levels(data$R), na.rm = TRUE)
-  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data) return(data)
+  is_ss_data <- "SSD" %in% names(data)
+  if(is.null(LT) && is.null(UT) && is.null(LC) && is.null(UC) && is.null(pContaminant)  && !is_gng_data && !is_ss_data) return(data)
   if (!is.null(LT) && !is.function(LT) && all(LT == 0) &&
       !is.null(LC) && !is.function(LC) && all(LC == 0) &&
       !is.null(UT) && !is.function(UT) && all(is.infinite(UT)) &&
-      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data) {
+      !is.null(UC) && !is.function(UC) && all(is.infinite(UC)) && !is_gng_data && !is_ss_data) {
     return(data)
   }
 
@@ -229,6 +239,14 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
   cutL[is.na(cutL)] <- TRUE; cutL[no_censor] <- FALSE
   cutU <- (data$rt > UC_eff)
   cutU[is.na(cutU)] <- TRUE; cutU[no_censor] <- FALSE
+  # Stop-signal data (SSD column): an NA rt before censoring is an intrinsic
+  # no-response (successful stop or go failure). It is never lower-censored and
+  # is coded as upper-censored (2): under a finite deadline UC it cannot be told
+  # apart from a too-slow response, and with UC = Inf the likelihood reduces to
+  # the intrinsic no-response probability.
+  is_nr <- is_ss_data & is.na(data$rt)
+  cutL[is_nr] <- FALSE
+  cutU[is_nr] <- !no_censor[is_nr]
   if (verbose) {
     if (!all(LC_eff==0)) {
       if (!attr(LT,"subjectwise")) stat <- mean(cutL) else
@@ -278,9 +296,6 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
-#' algorithm. If non-null and a list then passed through as is, if not it is assigned the
-#' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
 #' @param TC List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.
 #' @param ... Additional optional arguments
@@ -310,15 +325,12 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                       functions = NULL, TC=NULL, ...)
 {
   # This handles censoring and truncation where TC is not specified -- first check data, then design as a fallback (need to agree on the accepted order)
   TC <- check_missing(TC,design=design,data=data)
 
-  if (!is.null(staircase)){
-    staircase <- check_staircase(staircase)
-  }
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
@@ -367,12 +379,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
+  data_supplied <- !is.null(data)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
     design_in <- design
-    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    # covariates produced by functions (make_data or design) are not imputed
+    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% c(names(functions), names(design$Ffunctions))]
     acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
     design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
     data <- minimal_design(design_in, covariates = list(...)$covariates,
@@ -382,9 +396,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   } else {
     data <- add_trials(data[order(data$subjects),])
   }
+  ssd_meta <- NULL
   if(!is.null(functions)){
     for(i in 1:length(functions)){
-      data[[names(functions)[i]]] <- functions[[i]](data)
+      fun <- functions[[i]]
+      value <- fun(data)
+      meta <- attr(value, "emc_ssd")
+      if (!is.null(meta)) {
+        attr(value, "emc_ssd") <- NULL
+        ssd_meta <- meta$staircase
+      }
+      data[[names(functions)[i]]] <- value
     }
   }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
@@ -400,6 +422,27 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     simulate_unconditional_on_data <- TRUE
   } else if (!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
+  }
+
+  ## Stop-signal staircases and trends on SSD
+  if (!is.null(model) && !is.null(model()$trend)) {
+    trend_on_ssd <- any(vapply(model()$trend$kernels, function(k) "SSD" %in% k$cov_names, logical(1)))
+    if (trend_on_ssd && !is.null(ssd_meta))
+      stop("A parameter depends on SSD (trend) and the staircase was given to make_data(functions = ). ",
+           "The staircase SSDs are only known trial by trial, so supply the generator to the design ",
+           "instead: design(..., functions = list(SSD = make_ssd(...))).")
+  }
+  # A make_ssd() staircase in the design must be run trial by trial whenever
+  # SSDs have to be generated; with data whose SSDs are known the default
+  # (conditional) path keeps them, conditional_on_data = FALSE re-runs the ladder.
+  design_stair <- !is.null(design$Ffunctions) &&
+    any(vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function"))
+  if (design_stair && (!data_supplied || !"SSD" %in% names(data) || anyNA(data$SSD))) {
+    if (isTRUE(dots_local$conditional_on_data))
+      stop("A make_ssd() staircase in the design is simulated trial by trial; drop conditional_on_data = TRUE.")
+    if (!simulate_unconditional_on_data)
+      message("Staircase SSDs from a design function: simulating trial by trial (conditional_on_data = FALSE).")
+    simulate_unconditional_on_data <- TRUE
   }
   return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
   if('kernel_output_codes' %in% names(dots_local)) {
@@ -422,6 +465,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=F,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+    lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
+
     pars <- get_pars_oo(parameters, data, model())
     if(return_trialwise_parameters) {
       if(!is.null(model()$trend)) {
@@ -452,8 +497,23 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                     data.frame(lapply(data,rep,times=expand)))
       pars <- apply(pars,2,rep,times=expand)
     }
-    if (!is.null(staircase)) {
-      attr(data, "staircase") <- staircase
+    if (!is.null(ssd_meta)) {
+      ssd_meta$labels <- lR_levels
+      # Under a (single) deadline UC a response slower than UC is unobserved, so
+      # the staircase must step as for a non-response (see staircase_function).
+      stair_UC <- TC$UC
+      if (!is.numeric(stair_UC) || length(unique(stair_UC)) != 1) stair_UC <- NULL
+      ssd_meta$UC <- stair_UC
+      if (!is.null(ssd_meta$specs)) {
+        for (nm in names(ssd_meta$specs)) {
+          if (is.list(ssd_meta$specs[[nm]])) {
+            ssd_meta$specs[[nm]]$labels <- lR_levels
+            ssd_meta$specs[[nm]]$UC <- stair_UC
+          }
+        }
+      }
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
     }
     if (any(names(data)=="RACE")) {
       Rrt <- RACE_rfun(data, pars, model)
@@ -461,8 +521,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     dropNames <- c("lR","lM")
     if (!return_Ffunctions && !is.null(design$Ffunctions))
       dropNames <- c(dropNames,names(design$Ffunctions))
+    # SSD is drawn at random per trial and cannot be re-derived from a function
+    dropNames <- setdiff(dropNames, "SSD")
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
+    if (!is.null(ssd_meta)) {
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
+    }
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
     if (is_choice_only_model_type(model()) &&
         "rt" %in% names(data) &&

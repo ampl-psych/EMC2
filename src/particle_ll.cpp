@@ -20,8 +20,13 @@
 #include "RaceSetup.h"
 #include "CensorSpec.h"
 #include "TruncSpec.h"
-using namespace Rcpp;
 
+// Stop-signal models (after RaceSetup.h: they build on model_RDM.h and
+// model_exgaussian.h). Header-only; include from this translation unit only.
+#include "model_SS_EXG.h"
+#include "model_SS_RDEX.h"
+#include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
+using namespace Rcpp;
 
 // =============================================================================
 // PipelineCache — pre-computed specs and masks for the parameter pipeline
@@ -591,7 +596,7 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   const int n_particles = particle_matrix.nrow();
   const int n_rows      = data.nrow();
   const bool has_lR         = (sum(contains(data.names(), "lR")) == 1);
-  const int n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_lR = has_lR ? unique(Rcpp::as<IntegerVector>(data["lR"])).length() : 1;
   const int n_choice_trials = n_rows / n_lR;
 
 
@@ -731,6 +736,25 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
       // -----------------------------------------------------------------------
+      // Stop-signal models (SSEXG, SSRDEX). The SS likelihood handles the
+      // missingness codes itself (deadline / lower censoring / intrinsic
+      // no-response), so no CensorSpec/TruncSpec here.
+      // -----------------------------------------------------------------------
+    } else if (type == "SSEXG" || type == "SSRDEX") {
+      const std::string type_str(type.get_cstring());
+      SSSpec ss = make_ss_spec(type_str, data, ctx.param_table);   // data-only, once
+      for (int i = 0; i < n_particles; ++i) {
+        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
+        ss_log_likelihood(ss, min_ll, ll_buf.data());
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
+        const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+        if (!return_trialwise) result(0, i) = sum;
+      }
+      // -----------------------------------------------------------------------
       // Continuous-choice-RT models (CDM, PSDM, PHSDM)
       // -----------------------------------------------------------------------
     } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
@@ -738,8 +762,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
       NumericVector rts = data["rt"];
       NumericVector Rs  = data["R"];
-      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
-      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+      NumericVector R2s = has_R2 ? Rcpp::as<NumericVector>(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? Rcpp::as<NumericVector>(data["R3"]) : NumericVector();
 
       std::vector<double> ll_trial(n_choice_trials, 0.0);     // compressed scratch for (log)likelihoods in race (compressed! so needs expanding)
 
@@ -883,7 +907,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   const int  n_particles     = particle_matrix.nrow();
   const int  n_rows          = data.nrow();
   const bool has_lR          = (sum(contains(data.names(), "lR")) == 1);
-  const int  n_lR            = has_lR ? unique(IntegerVector(data["lR"])).length() : 1;
+  const int n_lR = has_lR ? unique(Rcpp::as<IntegerVector>(data["lR"])).length() : 1;
   const int  n_choice_trials = n_rows / n_lR;
 
   // n_exp needed for out_rows — extract expand early for non-MRI models
@@ -1020,7 +1044,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       const bool     is_probit = (type == "ORDERED_PROBIT");
       ChoiceOnlySpec spec      = make_choice_only_spec(ctx.param_table, std::string(type));
 
-      IntegerVector lR_vec = has_lR ? IntegerVector(data["lR"]) : IntegerVector();
+      IntegerVector lR_vec = has_lR ? Rcpp::as<IntegerVector>(data["lR"]) : IntegerVector();
       const int* lR_ptr    = has_lR ? INTEGER(lR_vec) : nullptr;
 
       std::vector<std::vector<double>> cut_buf_vec(n_threads_used, std::vector<double>(n_rows, 0.0));
@@ -1065,6 +1089,45 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       }
 
       // -----------------------------------------------------------------------
+      // Stop-signal branch (SSEXG / SSRDEX): per-thread SSSpec copies bound to
+      // the per-thread ParamTables; no Rcpp inside the parallel region.
+      // -----------------------------------------------------------------------
+    } else if (type == "SSEXG" || type == "SSRDEX") {
+      SSSpec ss0 = make_ss_spec(std::string(type.get_cstring()), data, ctx.param_table);
+      std::vector<SSSpec> ss_vec(n_threads_used, ss0);
+      for (int t = 0; t < n_threads_used; ++t) ss_vec[t].rebind(pt_vec[t]);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_trial = ll_buf_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+        const SSSpec&        ss       = ss_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        ss_log_likelihood(ss, min_ll, ll_trial.data());
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+        }
+      }
+
+      // -----------------------------------------------------------------------
       // CDM / PSDM / PHSDM branch
       // -----------------------------------------------------------------------
     } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
@@ -1072,8 +1135,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       const bool has_R3 = (sum(contains(data.names(), "R3")) == 1);
       NumericVector rts = data["rt"];
       NumericVector Rs  = data["R"];
-      NumericVector R2s = has_R2 ? NumericVector(data["R2"]) : NumericVector();
-      NumericVector R3s = has_R3 ? NumericVector(data["R3"]) : NumericVector();
+      NumericVector R2s = has_R2 ? Rcpp::as<NumericVector>(data["R2"]) : NumericVector();
+      NumericVector R3s = has_R3 ? Rcpp::as<NumericVector>(data["R3"]) : NumericVector();
 
       std::vector<std::vector<double>> ll_trial_vec(n_threads_used, std::vector<double>(n_choice_trials, 0.0));
 
