@@ -37,60 +37,44 @@ pWald <- function(t, v, B, A, t0) {
     .Call(`_EMC2_pWald`, t, v, B, A, t0)
 }
 
-pEXG <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
-    .Call(`_EMC2_pEXG`, q, mu, sigma, tau, lower_tail, log_p)
+pTEXG_vec <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_vec`, q, mu, sigma, tau, lb, lower_tail, log_p)
 }
 
-dEXG <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
-    .Call(`_EMC2_dEXG`, x, mu, sigma, tau, log_d)
+dTEXG_vec <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_vec`, x, mu, sigma, tau, lb, log_d)
 }
 
-dEXGrace <- function(dt, mu, sigma, tau) {
-    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
+dTEXGrace <- function(dt, mu, sigma, tau, lb) {
+    .Call(`_EMC2_dTEXGrace`, dt, mu, sigma, tau, lb)
 }
 
-stopfn_exg <- function(t, mu, sigma, tau, SSD) {
-    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
+stopfn_texg <- function(t, mu, sigma, tau, lb, SSD) {
+    .Call(`_EMC2_stopfn_texg`, t, mu, sigma, tau, lb, SSD)
 }
 
-pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
-    .Call(`_EMC2_pEXG_RDEX`, q, mu, sigma, tau, lower_tail, log_p)
+dWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0, s)
 }
 
-dEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
-    .Call(`_EMC2_dEXG_RDEX`, x, mu, sigma, tau, log_d)
+pWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0, s)
 }
 
-pigt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_pigt0_RDEX`, t, k, l)
+pTEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_RDEX`, q, mu, sigma, tau, lb, lower_tail, log_p)
 }
 
-digt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_digt0_RDEX`, t, k, l)
+dTEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_RDEX`, x, mu, sigma, tau, lb, log_d)
 }
 
-pigt_RDEX <- function(t, k = 1, l = 1, a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_pigt_RDEX`, t, k, l, a, threshold)
+dRDEXrace <- function(dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner = TRUE) {
+    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner)
 }
 
-digt_RDEX <- function(t, k = 1., l = 1., a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_digt_RDEX`, t, k, l, a, threshold)
-}
-
-dWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0)
-}
-
-pWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0)
-}
-
-dRDEXrace <- function(dt, mu, sigma, tau, v, B, A, t0, exgWinner = TRUE) {
-    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, v, B, A, t0, exgWinner)
-}
-
-stopfn_rdex <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
-    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
+stopfn_rdex <- function(t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD) {
+    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD)
 }
 
 fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {
@@ -121,12 +105,20 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL) {
-    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
+calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE) {
+    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise)
+}
+
+calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, n_threads = -1L) {
+    .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads)
 }
 
 get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {
     .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
+}
+
+omp_diagnostics <- function(n_threads = -1L) {
+    invisible(.Call(`_EMC2_omp_diagnostics`, n_threads))
 }
 
 rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {

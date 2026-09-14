@@ -45,4 +45,20 @@ inline bool is_inf(double x) {
   return (bits & 0x7FFFFFFFFFFFFFFFULL) == 0x7FF0000000000000ULL;
 }
 
+/// Returns true if x is +Inf.
+/// Safe under -ffast-math / -ffinite-math-only.
+inline bool is_pos_inf(double x) {
+  uint64_t bits;
+  std::memcpy(&bits, &x, sizeof(bits));
+  return bits == 0x7FF0000000000000ULL;
+}
+
+/// Returns true if x is -Inf.
+/// Safe under -ffast-math / -ffinite-math-only.
+inline bool is_neg_inf(double x) {
+  uint64_t bits;
+  std::memcpy(&bits, &x, sizeof(bits));
+  return bits == 0xFFF0000000000000ULL;
+}
+
 #endif // NAN_CHECK_H

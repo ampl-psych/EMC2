@@ -10,7 +10,7 @@ using std::string;
 // make_transform_specs (NumericMatrix)
 // ---------------------
 
-std::vector<TransformSpec> make_transform_specs_matrix(const NumericMatrix& pars, const List& transform) {
+std::vector<TransformSpec> make_transform_specs(const NumericMatrix& pars, const List& transform) {
     CharacterVector func_charvec = transform["func"];
     NumericVector   lower_numvec = transform["lower"];
     NumericVector   upper_numvec = transform["upper"];
@@ -73,10 +73,10 @@ std::vector<TransformSpec> make_transform_specs_matrix(const NumericMatrix& pars
 
 
 // ---------------------
-// make_transform_specs_pt
+// make_transform_specs
 // ---------------------
 
-std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const List& transform) {
+std::vector<TransformSpec> make_transform_specs(const ParamTable& pt, const List& transform) {
     CharacterVector func_charvec = transform["func"];
     NumericVector lower_numvec   = transform["lower"];
     NumericVector upper_numvec   = transform["upper"];
@@ -89,7 +89,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
         string name = as<string>(fnames[i]);
         string f    = as<string>(func_charvec[i]);
         TransformCode code = IDENTITY;
-        if (f == "exp")      code = EXP;
+        if (f == "exp")        code = EXP;
         else if (f == "pnorm") code = PNORM;
         codeMap.emplace(name, code);
       }
@@ -113,7 +113,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
 
     for (int k = 0; k < n_active; ++k) {
       int base_idx = pt.active_cols[k];
-      string colname = as<string>(pt.base_names[base_idx]);
+      const std::string& colname = pt.base_names[base_idx];
 
       TransformSpec sp;
       sp.col_idx = base_idx;
@@ -141,7 +141,7 @@ std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt, const L
 // c_do_transform (NumericMatrix)
 // ---------------------
 
-NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<TransformSpec>& specs) {
+NumericMatrix c_do_transform(NumericMatrix pars, const std::vector<TransformSpec>& specs) {
   int nrow = pars.nrow();
 
   for (size_t j = 0; j < specs.size(); j++) {
@@ -176,12 +176,12 @@ NumericMatrix c_do_transform_matrix(NumericMatrix pars, const std::vector<Transf
 
 
 // void, pass result to avoid repeated allocation
-void c_do_bound_pt(const ParamTable& pt,
-                   const std::vector<BoundSpec>& specs,
-                   std::vector<int>& result)
+void c_do_bound(const ParamTable& pt,
+                const std::vector<BoundSpec>& specs,
+                std::vector<int>& result)
 {
-  const Rcpp::NumericMatrix& base = pt.base;
-  const int nrows = base.nrow();
+  const Mat base = pt.base;
+  const int nrows = base.nrow;
 
   std::fill(result.begin(), result.begin() + nrows, 1);
   int* res = result.data();
@@ -195,55 +195,32 @@ void c_do_bound_pt(const ParamTable& pt,
 
     const double* col = &base(0, col_idx);
 
+    if (pt.col_is_constant[bs.col_idx]) {
+      // value is constant across trials - check the first, then fill ok with the result
+      const double v = col[0];
+      bool ok = (v > bs.min_val && v < bs.max_val);
+      if (bs.has_exception) ok = ok || (v == bs.exception_val);
+      if (!ok) std::fill(res, res + nrows, 0);
+    } else {
+      // values vary across trials - check all
 #pragma omp simd
-    for (int i = 0; i < nrows; ++i) {
-      const double v = col[i];
-      bool ok = (v > min_v && v < max_v);
-      if (has_exc) ok = ok || (v == exc_val);
-      res[i] = res[i] & (ok ? 1 : 0);
+      for (int i = 0; i < nrows; ++i) {
+        const double v = col[i];
+        bool ok = (v > min_v && v < max_v);
+        if (has_exc) ok = ok || (v == exc_val);
+        res[i] = res[i] & (ok ? 1 : 0);
+      }
     }
   }
 }
 
-// Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
-//                                   const std::vector<BoundSpec>& specs)
-// {
-//   using Rcpp::LogicalVector;
-//   using Rcpp::NumericMatrix;
-//
-//   const NumericMatrix& base = pt.base;
-//   const int nrows = base.nrow();
-//
-//   LogicalVector result(nrows, true);
-//
-//   for (std::size_t j = 0; j < specs.size(); ++j) {
-//     const BoundSpec& bs = specs[j];
-//     const int col_idx   = bs.col_idx;   // MUST be a base-column index
-//     const double min_v  = bs.min_val;
-//     const double max_v  = bs.max_val;
-//     const bool has_exc  = bs.has_exception;
-//     const double exc_val= bs.exception_val;
-//
-//     for (int i = 0; i < nrows; ++i) {
-//       const double val = base(i, col_idx);
-//       bool ok = (val > min_v && val < max_v);
-//       if (!ok && has_exc) {
-//         ok = (val == exc_val);
-//       }
-//       if (result[i] && !ok) {
-//         result[i] = false;
-//       }
-//     }
-//   }
-//
-//   return result;
-// }
+
 
 // ---------------------
-// c_do_transform_pt (ParamTable version)
+// c_do_transform (ParamTable version)
 // ---------------------
 
-void c_do_transform_pt(ParamTable& pt,
+void c_do_transform(ParamTable& pt,
                   const std::vector<TransformSpec>& specs)
 {
   const int nrow = pt.n_trials;
@@ -257,22 +234,34 @@ void c_do_transform_pt(ParamTable& pt,
 
     double* __restrict__ col = &pt.base(0, col_idx);
 
-    switch (c) {
-    case EXP: {
-      vec_exp_offset(col, nrow, lw);
+    if (pt.col_is_constant[col_idx]) {
+      // values are constant across trials - transform once, fill
+      double val = col[0];
+      switch (sp.code) {
+      case EXP:   val = std::exp(val) + lw; break;
+      case PNORM: val = lw + (up - lw) * PNORM_STD(val, true, false); break;
+      default: break;
+      }
+      std::fill(col, col + nrow, val);
+    } else {
+      // values vary between trials - check all trials
+      switch (c) {
+      case EXP: {
+        vec_exp_offset(col, nrow, lw);
+        break;
+      }
+      case PNORM: {
+      const double range = up - lw;
+      for (int i = 0; i < nrow; ++i) {
+        col[i] = lw + range * PNORM_STD(col[i], true, false);
+        // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
+      }
       break;
-    }
-    case PNORM: {
-    const double range = up - lw;
-    for (int i = 0; i < nrow; ++i) {
-      col[i] = lw + range * PNORM_STD(col[i], true, false);
-      // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
-    }
-    break;
-    }
-    case IDENTITY:
-    default:
-      break;
+      }
+      case IDENTITY:
+      default:
+        break;
+      }
     }
   }
 }
@@ -288,7 +277,8 @@ std::vector<TransformSpec> filter_specs_by_param_set(
 
   for (const auto& sp : full_specs) {
     int base_idx = sp.col_idx;
-    std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    const std::string& nm = pt.base_names[base_idx];
+    // std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
     if (allowed.find(nm) != allowed.end()) {
       out.push_back(sp);
     }
@@ -307,7 +297,8 @@ std::vector<TransformSpec> complement_specs_for_premap(
 
   for (const auto& sp : full_specs) {
     int base_idx = sp.col_idx;
-    std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    // std::string nm = Rcpp::as<std::string>(pt.base_names[base_idx]);
+    const std::string& nm = pt.base_names[base_idx];
     if (premap_set.find(nm) == premap_set.end()) {
       out.push_back(sp);
     }
@@ -317,10 +308,10 @@ std::vector<TransformSpec> complement_specs_for_premap(
 
 
 // Same logic as above, but with a ParamTable instead of NumericMatrix
-std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
-                                           Rcpp::CharacterVector minmax_colnames,
-                                           const ParamTable& pt,
-                                           Rcpp::List bound)
+std::vector<BoundSpec> make_bound_specs(Rcpp::NumericMatrix minmax,
+                                        Rcpp::CharacterVector minmax_colnames,
+                                        const ParamTable& pt,
+                                        Rcpp::List bound)
 {
   using namespace Rcpp;
   using std::string;
@@ -346,7 +337,8 @@ std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
 
     // 3) Create BoundSpec for each column in minmax
     const int ncols = minmax_colnames.size();
-    std::vector<BoundSpec> specs(ncols);
+    std::vector<BoundSpec> specs;
+    specs.reserve(ncols);  // reserve, don't resize
 
     for (int j = 0; j < ncols; ++j) {
       string var_name = as<string>(minmax_colnames[j]);
@@ -368,7 +360,9 @@ std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
         s.exception_val = NA_REAL;  // same as before
       }
 
-      specs[j] = s;
+      // don't make a spec at all if bounds are -Inf and +inf -- Skips a loop over all particles with pointless checks
+      if (std::isinf(s.min_val) && std::isinf(s.max_val) && !s.has_exception) continue;
+      specs.push_back(s);  // only adds when not skipped
     }
 
     return specs;

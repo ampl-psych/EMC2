@@ -10,8 +10,8 @@ make_data(
   n_trials = NULL,
   data = NULL,
   expand = 1,
-  staircase = NULL,
   functions = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -29,11 +29,9 @@ or an emc object with sampled parameters
 
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
 
-\item{staircase}{Default NULL, used with stop-signal paradigm simulation to specify a staircase
-algorithm. If non-null and a list then passed through as is, if not it is assigned the
-default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
-
 \item{functions}{List of functions you want to apply to the data generation.}
+
+\item{TC}{List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.}
 
 \item{...}{Additional optional arguments}
 }

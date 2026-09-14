@@ -28,25 +28,27 @@ struct BoundSpec {
 };
 
 // --- Declarations: transforms ---
-std::vector<TransformSpec> make_transform_specs_matrix(const Rcpp::NumericMatrix& pars,
-                                                       const Rcpp::List& transform);
+std::vector<TransformSpec> make_transform_specs(const Rcpp::NumericMatrix& pars,
+                                                const Rcpp::List& transform);
 
-Rcpp::NumericMatrix c_do_transform_matrix(Rcpp::NumericMatrix pars,
-                                          const std::vector<TransformSpec>& specs);
+Rcpp::NumericMatrix c_do_transform(Rcpp::NumericMatrix pars,
+                                   const std::vector<TransformSpec>& specs);
 
-void c_do_bound_pt(const ParamTable& pt,
-                   const std::vector<BoundSpec>& specs,
-                   std::vector<int>& result);
+std::vector<TransformSpec> make_transform_specs(const ParamTable& pt,
+                                                const Rcpp::List& transform);
 
-std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt,
-                                                   const Rcpp::List& transform);
+void c_do_transform(ParamTable& pt, const std::vector<TransformSpec>& specs);
 
-void c_do_transform_pt(ParamTable& pt, const std::vector<TransformSpec>& specs);
 
-std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
-                                           Rcpp::CharacterVector minmax_colnames,
-                                           const ParamTable& pt,
-                                           Rcpp::List bound);
+std::vector<BoundSpec> make_bound_specs(Rcpp::NumericMatrix minmax,
+                                        Rcpp::CharacterVector minmax_colnames,
+                                        const ParamTable& pt,
+                                        Rcpp::List bound);
+
+void c_do_bound(const ParamTable& pt,
+                const std::vector<BoundSpec>& specs,
+                std::vector<int>& result);
+
 
 std::vector<TransformSpec> filter_specs_by_param_set(
     const ParamTable& pt,

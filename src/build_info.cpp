@@ -10,5 +10,6 @@ void emc2_build_info() {
   << "  fast-math   : " << EMC2_FAST_MATH      << "\n"
   << "  native      : " << EMC2_ENABLE_NATIVE  << "\n"
   << "  CXXFLAGS    : " << EMC2_EXTRA_CXXFLAGS << "\n"
-  << "  Accelerate  : " << EMC2_ACCELERATE     << "\n";
+  << "  Accelerate  : " << EMC2_ACCELERATE     << "\n"
+  << "  OMP_CXXFLAGS: " << EMC2_OMP_CXXFLAGS   << "\n";
 }

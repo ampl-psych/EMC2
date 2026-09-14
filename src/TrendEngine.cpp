@@ -215,7 +215,7 @@ static void build_covariate_coding(BaseSpec& bs,
     Rf_error("BaseSpec '%s': 'coding' specified but data has no 'covariate_coding' attribute",
              bs.target_parameter.c_str());
 
-  Rcpp::List coding_spec = b_lst["coding"];
+  Rcpp::List coding_spec = Rcpp::as<Rcpp::List>(b_lst["coding"]);
   Rcpp::CharacterVector coding_names = coding_spec.names();
   if (coding_names.size() != coding_spec.size())
     Rf_error("BaseSpec '%s': 'coding' list must be named", bs.target_parameter.c_str());
@@ -410,11 +410,17 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
     }
 
     // fill data covariates, pre-allocate par_input memory
-    if (!variadic) {
+    if (variadic) {
+      // Variadic: own a copy of kernel_input in KernelRuntime.
+      // run_kernel writes par_input columns into this buffer per-particle,
+      // so each thread's KernelRuntime must have its own copy.
+      k_rt.kernel_input = ks.kernel_input.clone();
+    } else {
+      // Non-variadic: one slot_input buffer per covariate/par_input
       const int n = ks.kernel_input.nrow;
       k_rt.slot_inputs.reserve(n_slots);
 
-      // covariate slots: copy data in once, never touched again
+      // Covariate slots: copy data in once, never touched again at runtime
       for (int s = 0; s < (int)ks.covariate_indices.size(); ++s) {
         Mat buf(n, 1);
         std::copy(ks.kernel_input.colptr(ks.covariate_indices[s]),
@@ -423,14 +429,36 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
         k_rt.slot_inputs.push_back(std::move(buf));
       }
 
-      // par_input slots: allocate zero buffer, record which par_input feeds it
+      // Par_input slots: zero buffer, filled per-particle in run_kernel
       for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
         int slot_idx = (int)ks.covariate_indices.size() + i;
-        k_rt.slot_inputs.push_back(Mat(n, 1));  // zero-init, filled per particle
+        k_rt.slot_inputs.push_back(Mat(n, 1));
         k_rt.par_input_slot_indices.push_back(slot_idx);
-        k_rt.par_input_param_col.push_back(i);  // index into ks.par_input
+        k_rt.par_input_param_col.push_back(i);
       }
     }
+
+    // if (!variadic) {
+    //   const int n = ks.kernel_input.nrow;
+    //   k_rt.slot_inputs.reserve(n_slots);
+    //
+    //   // covariate slots: copy data in once, never touched again
+    //   for (int s = 0; s < (int)ks.covariate_indices.size(); ++s) {
+    //     Mat buf(n, 1);
+    //     std::copy(ks.kernel_input.colptr(ks.covariate_indices[s]),
+    //               ks.kernel_input.colptr(ks.covariate_indices[s]) + n,
+    //               buf.colptr(0));
+    //     k_rt.slot_inputs.push_back(std::move(buf));
+    //   }
+    //
+    //   // par_input slots: allocate zero buffer, record which par_input feeds it
+    //   for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
+    //     int slot_idx = (int)ks.covariate_indices.size() + i;
+    //     k_rt.slot_inputs.push_back(Mat(n, 1));  // zero-init, filled per particle
+    //     k_rt.par_input_slot_indices.push_back(slot_idx);
+    //     k_rt.par_input_param_col.push_back(i);  // index into ks.par_input
+    //   }
+    // }
     kernels.emplace(ks.kernel_id, std::move(k_rt));
   }
 
@@ -508,13 +536,13 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
     // fill par_input columns into shared matrix in-place
     for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
       const double* src = pt.column_by_name_ptr(ks.par_input[i]);
-      double*       dst = ks.kernel_input.colptr(ks.par_input_indices[i]);
+      double*       dst = k_rt.kernel_input.colptr(ks.par_input_indices[i]);
       std::copy(src, src + n, dst);
     }
     auto& kptr = k_rt.kernel_ptrs[0];
     kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-              ks.kernel_input, ks.comp_index);
+              k_rt.kernel_input, ks.comp_index);
     if (ks.has_at && ks.at_mode == AtMode::Filter) {
       // only expand in filter mode; push mode output is already full-length
       kptr->set_expand_idx(ks.expand_idx);
@@ -730,5 +758,97 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
 
   Rcpp::colnames(out) = cn;
   return out;
+}
+
+
+// Copy TrendRuntime (for multithreade ops)
+// Creates a fully independent TrendRuntime for use in a single thread.
+// - plan pointer is shared (TrendPlan is read-only after construction)
+// - all mutable runtime state (kernel_ptrs, slot_inputs, kernel_input) is fresh
+// - internal BaseRuntime::kernel_rt pointers are fixed up to point into the NEW kernels map
+// - bind_all_to_paramtable() is called so kernel_par_indices / base_par_indices are filled
+
+TrendRuntime clone_trend_runtime(const TrendRuntime& src, const ParamTable& pt_local)
+{
+  TrendRuntime dst;
+  dst.plan = src.plan;  // shared, read-only
+
+  // -----------------------------------------------------------------------
+  // 1. Rebuild KernelRuntime map — fresh kernel objects + fresh slot buffers
+  // -----------------------------------------------------------------------
+  for (const auto& kv : src.kernels) {
+    const std::string&    kid   = kv.first;
+    const KernelRuntime&  k_src = kv.second;
+    const KernelSpec&     ks    = *k_src.spec;
+
+    KernelRuntime k_dst;
+    k_dst.spec = k_src.spec;  // points into TrendPlan — safe, read-only
+
+    // Fresh kernel objects (own their internal state — Q values, beliefs, etc.)
+    const int n_kptrs = (int)k_src.kernel_ptrs.size();
+    k_dst.kernel_ptrs.reserve(n_kptrs);
+    for (int k = 0; k < n_kptrs; ++k) {
+      auto new_kptr = make_kernel(ks.kernel_type, ks.custom_fun);
+      new_kptr->set_kernel_args(ks.kernel_args);
+      k_dst.kernel_ptrs.push_back(std::move(new_kptr));
+    }
+
+    // Read-only index vectors — plain copy is fine
+    k_dst.kernel_par_indices     = k_src.kernel_par_indices;
+    k_dst.par_input_slot_indices = k_src.par_input_slot_indices;
+    k_dst.par_input_param_col    = k_src.par_input_param_col;
+
+    // Fresh slot_input buffers (written per-particle in run_kernel)
+    // Copy the covariate slots (data-derived, never mutated after construction)
+    // and allocate fresh zero buffers for par_input slots
+    k_dst.slot_inputs.reserve(k_src.slot_inputs.size());
+    const int n_cov_slots = (int)ks.covariate_indices.size();
+    for (int s = 0; s < (int)k_src.slot_inputs.size(); ++s) {
+      if (s < n_cov_slots) {
+        // Covariate slot: copy data in once, never touched again at runtime
+        k_dst.slot_inputs.push_back(k_src.slot_inputs[s].clone());
+      } else {
+        // Par-input slot: fresh zero buffer, filled per-particle
+        k_dst.slot_inputs.push_back(Mat(k_src.slot_inputs[s].nrow, 1));
+      }
+    }
+
+    // Fresh kernel_input for variadic kernels
+    // This is the mutable field that lives on KernelSpec (marked mutable) in the
+    // original design. We own a copy here so the shared TrendPlan is never written to.
+    // (Non-variadic kernels use slot_inputs instead; kernel_input is unused at runtime.)
+    if (k_dst.is_variadic()) {
+      k_dst.kernel_input = ks.kernel_input.clone();
+    }
+
+    dst.kernels.emplace(kid, std::move(k_dst));
+  }
+
+  // -----------------------------------------------------------------------
+  // 2. Rebuild BaseRuntime vectors — fix up kernel_rt pointers into dst.kernels
+  // -----------------------------------------------------------------------
+  auto build_base_rts = [&](const std::vector<BaseRuntime>& src_bases,
+                            std::vector<BaseRuntime>&       dst_bases) {
+    dst_bases.reserve(src_bases.size());
+    for (const auto& b_src : src_bases) {
+      BaseRuntime b_dst;
+      b_dst.spec            = b_src.spec;   // points into TrendPlan — safe
+      b_dst.base_par_indices = b_src.base_par_indices;
+      // Fix up: must point into dst.kernels, not src.kernels
+      b_dst.kernel_rt = &dst.kernels.at(b_src.spec->kernel_id);
+      dst_bases.push_back(std::move(b_dst));
+    }
+  };
+
+  build_base_rts(src.premap_bases,        dst.premap_bases);
+  build_base_rts(src.pretransform_bases,  dst.pretransform_bases);
+  build_base_rts(src.posttransform_bases, dst.posttransform_bases);
+
+  // -----------------------------------------------------------------------
+  // 3. Bind to the thread-local ParamTable
+  // -----------------------------------------------------------------------
+  dst.bind_all_to_paramtable(pt_local);
+
+  return dst;
 }
 

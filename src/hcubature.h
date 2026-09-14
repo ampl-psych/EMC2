@@ -1,3 +1,6 @@
+#ifndef HCUBATURE_H
+#define HCUBATURE_H
+
 #include <iostream>
 #include <iomanip>
 #include <vector>
@@ -61,3 +64,5 @@ void integrate_GenzMalik(GenzMalik g, int n, const double* a, const double* b, o
 
 int hcubature(int integrand(unsigned dim, const double* x, void* p, unsigned fdim, double* retval), void* pars, unsigned n, const double* a, const double* b,
               size_t maxEval, double reqAbsError, double reqRelError, double* val, double* err);
+
+#endif
