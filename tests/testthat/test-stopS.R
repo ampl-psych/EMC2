@@ -30,7 +30,7 @@ mySSD_function <- make_ssd()
 designSSexG <- design(model=SSEXG,
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
-                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)
+                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1), report_p_vector = FALSE
 )
 
 p_vector <- sampled_pars(designSSexG,doMap = FALSE)
@@ -63,7 +63,7 @@ test_that("staircase resets per subject", {
                          matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
                          formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
                                          muS ~ 1, sigmaS ~ 1, tauS ~ 1,
-                                         gf ~ 1, tf ~ 1))
+                                         gf ~ 1, tf ~ 1), report_p_vector = FALSE)
 
   p_multi <- sampled_pars(design_multi, doMap = FALSE)
   p_multi[1:length(p_multi)] <- c(log(.6), log(.8), log(0.05), log(0.2),
