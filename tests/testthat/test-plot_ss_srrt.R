@@ -1,8 +1,7 @@
 dat <- make_ss_forstmann_data(seed = 123)
 
 test_that("plot_ss_srrt produces stable snapshot", {
-  vdiffr::expect_doppelganger(
-    "SRRT_plot_ss",
+  vdiffr::expect_doppelganger("SRRT_plot_ss", {
     plot_ss_srrt(
       dat,
       probs = seq(0, 1, length.out = 5),
@@ -12,5 +11,6 @@ test_that("plot_ss_srrt produces stable snapshot", {
       factors = "E",
       within_plot = "S"
     )
-  )
+    NULL
+  })
 })
