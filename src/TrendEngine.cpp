@@ -199,6 +199,21 @@ static void build_kernel_args(KernelSpec& ks,
     SEXP gr = ka["grid_res"];
     if (!Rf_isNull(gr)) ks.kernel_args.grid_res = Rcpp::as<int>(gr);
   }
+  // sarsa
+  if (ka.containsElementNamed("n_states")) {
+    SEXP ns = ka["n_states"];
+    if (!Rf_isNull(ns)) ks.kernel_args.n_states = Rf_asInteger(ns);
+  }
+  if (ka.containsElementNamed("n_actions")) {
+    SEXP na = ka["n_actions"];
+    if (!Rf_isNull(na)) ks.kernel_args.n_actions = Rf_asInteger(na);
+  }
+
+  if (ks.kernel_type == KernelType::SARSA) {
+    if (ks.kernel_args.n_states <= 0 || ks.kernel_args.n_actions <= 0)
+      Rf_error("SARSAKernel '%s': kernel_args$n_states and kernel_args$n_actions "
+                 "must be specified as positive integers.", ks.kernel_id.c_str());
+  }
   ks.build_kernel_args();
 }
 
@@ -743,13 +758,27 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
           const double* src = ko.data + c * ko.n_rows;
           std::copy(src, src + n, &out(0, col));
 
+          std::string iname;
+          if (code == 3 && ks.kernel_type == KernelType::SARSA) {
+            // column c is in row-major order: s * n_actions + a
+            const int n_actions = k_rt.spec->kernel_args.n_actions;
+            const int state  = c / n_actions + 1;
+            const int action = c % n_actions + 1;
+            iname = "s" + std::to_string(state) + "_a" + std::to_string(action);
+          } else {
+            int name_idx = k_rt.is_variadic() ? c : s;
+            iname = (name_idx < (int)input_names.size())
+              ? input_names[name_idx]
+            : std::to_string(name_idx + 1);
+          }
+          cn[col] = ks.kernel_id + "." + iname + "." + suffix;
           // arity-1: slot s maps directly to input_names[s]
           // variadic: column c maps to input_names[c] (all inputs fed as one matrix)
-          int name_idx      = k_rt.is_variadic() ? c : s;
-          std::string iname = (name_idx < (int)input_names.size())
-            ? input_names[name_idx]
-          : std::to_string(name_idx + 1);
-          cn[col] = ks.kernel_id + "." + iname + "." + suffix;
+          // int name_idx      = k_rt.is_variadic() ? c : s;
+          // std::string iname = (name_idx < (int)input_names.size())
+          //   ? input_names[name_idx]
+          // : std::to_string(name_idx + 1);
+          // cn[col] = ks.kernel_id + "." + iname + "." + suffix;
           ++col;
         }
       }

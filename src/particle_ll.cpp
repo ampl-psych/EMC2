@@ -1309,6 +1309,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
   if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
   }
+
   const int n_trials    = data.nrow();
   const int n_particles = particle_matrix.nrow();
   const bool has_lR     = (sum(contains(data.names(), "lR")) == 1);

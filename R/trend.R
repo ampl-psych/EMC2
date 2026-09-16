@@ -84,6 +84,16 @@ make_kernel <- function(cov_names,
   if (identical(type, "custom") && is.null(custom_kernel))
     stop("custom_kernel must be provided when type = 'custom'.")
 
+  if (identical(type, "sarsa")) {
+    if (length(cov_names) != 4)
+      stop("SARSA kernel requires exactly 4 cov_names in order: S, R, reward, is_terminal")
+    # n_states and n_actions must be pre-specified via kernel_args to skip inference
+    if (!is.null(kernel_args$n_states) || !is.null(kernel_args$n_actions)) {
+      if (is.null(kernel_args$n_states) || is.null(kernel_args$n_actions))
+        stop("SARSA kernel_args: both n_states and n_actions must be specified together.")
+    }
+  }
+
   # validate at_mode
   if (!at_mode %in% c("filter", "push"))
     stop("at_mode must be 'filter' or 'push'.")
@@ -110,6 +120,7 @@ make_kernel <- function(cov_names,
       kernel_args$belief_reset_column <- NULL
     }
   }
+
 
   # ---- generic parameter names and transforms (no prefix yet) ----
   if (identical(type, "custom")) {
@@ -1220,7 +1231,23 @@ get_kernels <- function() {
     sequential   = TRUE,
     n_outputs    = 4L,
     experimental = TRUE,
-    NA_allowed=TRUE)
+    NA_allowed=TRUE),
+  sarsa = list(
+    description = paste(
+      "SARSA (on-policy TD) kernel: k = Q(s_t, a_t).\n",
+      "        Backward-looking update: Q(s,a) <- Q(s,a) + alpha * [r + gamma * Q(s',a') - Q(s,a)]\n",
+      "        completed at trial t+1 once a' is observed.\n",
+      "        Covariate columns must be: S, R, reward (in that order).\n",
+      "        Parameters: q0 (initial Q-value), alpha (learning rate), gamma (discount factor)."
+    ),
+    default_pars = c("q0", "alpha", "gamma"),
+    transforms   = list(func = list("q0" = "identity", "alpha" = "pnorm", "gamma" = "pnorm")),
+    bases        = base_2p,
+    sequential   = TRUE,
+    n_outputs    = 3L,
+    experimental = TRUE,
+    NA_allowed   = TRUE
+  )
   # delta2kernel2 = list(description = paste(
   #               "Steven fucking around with the delta2kernel. You shouldn't see this! Dual kernel delta rule: k = q[i].\n",
   #               "         Combines fast and slow learning rates\n",

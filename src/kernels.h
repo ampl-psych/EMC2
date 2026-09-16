@@ -25,6 +25,8 @@ struct KernelArgs {
   const int* belief_reset = nullptr;
   // Future extensible fields go here, e.g.:
   // const double* some_other_col = nullptr;
+  int        n_states           = 0;   // pre-computed for SARSA
+  int        n_actions          = 0;   // pre-computed for SARSA
 };
 
 // Struct for outputs. Outputs sometimes have 1 column, sometimes multiple. Pure C++ (for future threadsafe ops)
@@ -64,7 +66,8 @@ enum class KernelType {
   BetaBinomialDecay,
   BetaBinomialWindow,
   DBM,
-  TPM
+  TPM,
+  SARSA
 };
 
 // Some meta-data for kernels -- mostly for the future
@@ -93,6 +96,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
     return {1, true};   // all above kernels: 1D input, grouping allowed
   case KernelType::Custom: return{1, false};
   case KernelType::RescorlaWagner: return{-1, false};  // N columns allowed
+  case KernelType::SARSA: return{-1, false};  // Exactly 4 columns needed
   case KernelType::BetaBinomial:
   case KernelType::BetaBinomialDecay:
   case KernelType::BetaBinomialWindow:
@@ -1880,6 +1884,230 @@ public:
              sync_out_to_mean();
              mark_run_complete();
            }
+};
+
+// =============================================================================
+// SARSA  —  on-policy TD(0) (SARSA) with backward update
+//
+// The update for trial j is completed at trial j+1, once a' is known:
+//   Q(s,a) <- Q(s,a) + alpha * [r + gamma * Q(s',a') - Q(s,a)]
+//
+// The Q-snapshot at trial j reflects all completed updates from trials
+// 0..j-1, i.e. the Q-table the agent actually had when choosing at trial j.
+// The last trial's PE is always NA (no a' ever arrives).
+//
+// Covariate columns (0-based, 1-based integer indices in data):
+//   0: S              — current state
+//   1: R              — current action
+//   2: reward         — scalar reward
+//   3: terminal       - boolean indicating if the current state is a terminal state (so no Q(s', a'))
+//
+// Parameter columns (KernelParsView):
+//   0: q0    — initial Q-value for all (s,a) pairs
+//   1: alpha — learning rate
+//   2: gamma — discount factor
+//
+// Streams:
+//   1 = Q(s_t, a_t) entering trial t   [n_rows x 1]
+//   2 = TD error delta_t                [n_rows x 1]
+//   3 = full Q-table, column-major      [n_rows x (n_states * n_actions)]
+//
+// n_states and n_actions are set once via set_kernel_args() and never
+// recomputed. Enforced non-zero before run() proceeds.
+//
+// Supports q_reset_ to reinitialise the full Q-table mid-sequence;
+// a pending update that straddles a reset boundary is discarded.
+// Does not support at_mode = 'push'.
+// =============================================================================
+
+struct SARSA : SequentialKernel {
+private:
+  int n_states_  = 0;
+  int n_actions_ = 0;
+
+  // Row-major: [trial * n_sa + s * n_actions_ + a], length n_comp * n_sa
+  std::vector<double> q_table_;
+  std::vector<double> pe_;
+
+  const int* q_reset_ = nullptr;
+
+  mutable std::vector<double> qtable_buf_;
+
+public:
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_   = args.q_reset;
+    n_states_  = args.n_states;
+    n_actions_ = args.n_actions;
+    if (args.is_first_level_comp != nullptr)
+      Rcpp::stop("SARSAKernel does not support at_mode = 'push'.");
+  }
+
+  void reset() override {
+    BaseKernel::reset();
+    q_table_.clear();
+    pe_.clear();
+    qtable_buf_.clear();
+  }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 3);
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qvalue";
+    if (code == 2) return "PE";
+    if (code == 3) return "Qmatrix";
+    throw std::runtime_error("SARSAKernel::output_stream_name: unsupported code");
+  }
+
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 3)
+               Rcpp::stop("SARSAKernel expects 3 parameter columns (q0, alpha, gamma), got %d",
+                          (int)kernel_pars.cols.size());
+             if (covariate.ncol < 4)
+               Rcpp::stop("SARSAKernel expects 4 covariate columns "
+                            "(S, R, reward, terminal), got %d", covariate.ncol);
+             if (n_states_ <= 0 || n_actions_ <= 0)
+               Rcpp::stop("SARSAKernel: n_states/n_actions not set — "
+                            "specify kernel_args$n_states and kernel_args$n_actions in make_kernel().");
+
+             const int n_comp = static_cast<int>(comp_idx.size());
+             if (n_comp == 0) {
+               out_.clear();
+               pe_.clear();
+               q_table_.clear();
+               mark_run_complete();
+               return;
+             }
+
+             const double* q0_col    = kernel_pars.cols[0];
+             const double* alpha_col = kernel_pars.cols[1];
+             const double* gamma_col = kernel_pars.cols[2];
+
+             const int n_sa = n_states_ * n_actions_;
+
+             out_.resize(n_comp);
+             pe_.assign(n_comp, NA_REAL);
+             q_table_.resize(n_comp * n_sa);
+
+             std::vector<double> q_cur(n_sa, q0_col[comp_idx[0]]);
+
+             // Pending transition from the previous trial, completed once a' is known
+             bool   has_pending    = false;
+             int    pend_s = 0, pend_a = 0, pend_j = -1;
+             bool   pend_terminal  = false;
+             double pend_r = 0.0, pend_alpha = 0.0, pend_gamma = 0.0;
+
+             for (int j = 0; j < n_comp; ++j) {
+               const int r = comp_idx[j];
+
+               // Reset: discard pending update and reinitialise Q-table
+               if (q_reset_ && q_reset_[r]) {
+                 has_pending = false;
+                 std::fill(q_cur.begin(), q_cur.end(), q0_col[r]);
+               }
+
+               // a' is now known — complete the SARSA update staged at trial j-1
+               if (has_pending) {
+                 double q_sp_ap = 0.0;  // q-value of s' (sprime) and a'
+                 if (!pend_terminal) {
+                   const double sp_raw = covariate(r, 0);
+                   const double ap_raw = covariate(r, 1);
+                   if (!std::isnan(sp_raw) && !std::isnan(ap_raw)) {
+                     const int sp = static_cast<int>(sp_raw) - 1;
+                     const int ap = static_cast<int>(ap_raw) - 1;
+                     q_sp_ap = q_cur[sp * n_actions_ + ap];
+                   }
+                 }
+                 const double q_sa  = q_cur[pend_s * n_actions_ + pend_a];
+                 const double delta = pend_r + pend_gamma * q_sp_ap - q_sa;  // [~] q_sp_ap is 0 if terminal
+                 pe_[pend_j]                           = delta;
+                 q_cur[pend_s * n_actions_ + pend_a] += pend_alpha * delta;
+                 has_pending = false;
+               }
+
+               // Snapshot Q after the retroactive update — this is what the agent
+               // had available when choosing at trial j
+               std::copy(q_cur.begin(), q_cur.end(),
+                         q_table_.begin() + j * n_sa);
+
+               const double s_raw = covariate(r, 0);
+               const double a_raw = covariate(r, 1);
+
+               if (!is_nan(s_raw) && !is_nan(a_raw)) {
+                 const int s = static_cast<int>(s_raw) - 1;
+                 const int a = static_cast<int>(a_raw) - 1;
+                 out_[j] = q_cur[s * n_actions_ + a];
+               } else {
+                 out_[j] = NA_REAL;
+               }
+
+               // Stage transition only if s, a, and reward are valid
+               const double reward   = covariate(r, 2);
+               const double term_raw = covariate(r, 3);
+               if (!is_nan(s_raw) && !is_nan(a_raw) && !is_nan(reward)) {
+                 pend_s        = static_cast<int>(s_raw) - 1;
+                 pend_a        = static_cast<int>(a_raw) - 1;
+                 pend_r        = reward;
+                 pend_alpha    = alpha_col[r];
+                 pend_gamma    = gamma_col[r];
+                 pend_j        = j;
+                 pend_terminal = (!std::isnan(term_raw) && static_cast<int>(term_raw) == 1);
+                 has_pending   = true;
+               }
+               // NA reward: no transition staged, PE for this trial stays NA
+             }
+
+             mark_run_complete();
+           }
+
+  KernelOutput get_output_stream(int code) const override {
+    const int n_full = static_cast<int>(out_.size());
+
+    if (code == 1) {
+      if (!has_expand_idx_)
+        return KernelOutput{ out_.data(), n_full, 1 };
+      stream_buf_[0].resize(n_full);
+      for (int i = 0; i < n_full; ++i)
+        stream_buf_[0][i] = out_[expand_idx_[i] - 1];
+      return KernelOutput{ stream_buf_[0].data(), n_full, 1 };
+    }
+
+    if (code == 2) {
+      stream_buf_[1].resize(n_full);
+      if (!has_expand_idx_) {
+        for (int i = 0; i < n_full; ++i) stream_buf_[1][i] = pe_[i];
+      } else {
+        for (int i = 0; i < n_full; ++i) stream_buf_[1][i] = pe_[expand_idx_[i] - 1];
+      }
+      return KernelOutput{ stream_buf_[1].data(), n_full, 1 };
+    }
+
+    if (code == 3) {
+      const int n_sa   = n_states_ * n_actions_;
+      const int n_comp = static_cast<int>(q_table_.size()) / n_sa;
+
+      if (!has_expand_idx_) {
+        qtable_buf_.resize(n_comp * n_sa);
+        for (int c = 0; c < n_sa; ++c)
+          for (int row = 0; row < n_comp; ++row)
+            qtable_buf_[c * n_comp + row] = q_table_[row * n_sa + c];
+        return KernelOutput{ qtable_buf_.data(), n_comp, n_sa };
+      } else {
+        qtable_buf_.resize(n_full * n_sa);
+        for (int c = 0; c < n_sa; ++c)
+          for (int i = 0; i < n_full; ++i)
+            qtable_buf_[c * n_full + i] = q_table_[(expand_idx_[i] - 1) * n_sa + c];
+        return KernelOutput{ qtable_buf_.data(), n_full, n_sa };
+      }
+    }
+
+    Rcpp::stop("SARSAKernel::get_output_stream: unsupported code %d "
+                 "(1=Qvalue, 2=PE, 3=Qmatrix)", code);
+  }
 };
 
 

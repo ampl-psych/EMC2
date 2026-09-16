@@ -23,6 +23,7 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   if (k == "beta_binomial_window")return KernelType::BetaBinomialWindow;
   if (k == "dbm")                 return KernelType::DBM;
   if (k == "tpm")                 return KernelType::TPM;
+  if (k == "sarsa") return KernelType::SARSA;
 
   Rcpp::stop("Unknown kernel type");
 }
@@ -52,6 +53,7 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   case KernelType::BetaBinomialWindow: return std::make_unique<BetaBinomialWindowKernel>();
   case KernelType::DBM:                return std::make_unique<DBMKernel>();
   case KernelType::TPM:                return std::make_unique<TPMKernel>();
+  case KernelType::SARSA:                return std::make_unique<SARSA>();
 
   case KernelType::Custom:
     if (custom_fun == R_NilValue) {

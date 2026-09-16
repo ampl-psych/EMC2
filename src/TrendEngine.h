@@ -76,14 +76,23 @@ struct KernelSpec {
   std::vector<int>         covariate_indices;
   std::vector<int>         par_input_indices;
 
+  // void build_kernel_args() {
+  //   kernel_args = KernelArgs{};  // <- SM: this was silly, since it overwrites anything that's already set by trendplan::build_kernel_args().
+  //   if (!q_reset_col.empty())
+  //     kernel_args.q_reset = q_reset_col.data();
+  //   if (!is_first_level_comp.empty())
+  //     kernel_args.is_first_level_comp = is_first_level_comp.data();
+  //   if (!belief_reset_col.empty())
+  //     kernel_args.belief_reset = belief_reset_col.data();
+  // }
   void build_kernel_args() {
-    kernel_args = KernelArgs{};
-    if (!q_reset_col.empty())
-      kernel_args.q_reset = q_reset_col.data();
-    if (!is_first_level_comp.empty())
-      kernel_args.is_first_level_comp = is_first_level_comp.data();
-    if (!belief_reset_col.empty())
-      kernel_args.belief_reset = belief_reset_col.data();
+    // Preserve scalar arguments parsed from R, e.g. grid_res,
+    // SARSA n_states, and SARSA n_actions.
+    kernel_args.q_reset = q_reset_col.empty() ? nullptr : q_reset_col.data();
+
+    kernel_args.is_first_level_comp = is_first_level_comp.empty() ? nullptr : is_first_level_comp.data();
+
+    kernel_args.belief_reset = belief_reset_col.empty() ? nullptr : belief_reset_col.data();
   }
 };
 
