@@ -1,5 +1,14 @@
 # EMC2 3.4.1
 
+## New features (dSSfix)
+
+-   `make_kernel()` gains `centre`: the kernel output is centred over the rows it applies to (those with a finite covariate), so the target parameter becomes its value at the *average* covariate instead of at covariate zero. This removes the collinearity between a target parameter and its base weight that otherwise arises whenever the covariate varies over a narrow range away from zero -- stop-signal delays being the motivating case. Rows with a non-finite covariate carry no trend and stay at zero, and centring is per subject.
+-   New kernels `sat_incr` / `sat_decr`: the same saturating shape as `slin_incr` / `slin_decr` but parameterised by the saturation point, `k = +/- min(1, c / s_sat)`. `s_sat` is in the units of the covariate ("where the plateau starts"), which is the quantity data can speak to and a far easier thing to put a prior on than a rate. Bound it to the observed covariate range with a `pnorm` transform (`design(transform = list(func = c(<target>.s_sat = "pnorm"), lower = ..., upper = ...))`).
+
+## Bug fixes
+
+-   Every non-sequential kernel (`lin_*`, `exp_*`, `pow_*`, `poly2/3/4`) now treats a non-finite covariate as "no covariate on this row" and contributes no trend there, as the `slin_*` kernels already did. Previously `design()` refused them outright if the covariate contained `NA`, which made them unusable on stop-signal delays (`SSD` is `Inf` on go trials, and `NA` while data are simulated trial by trial).
+
 ## New features (cens_trunc2-SS-dEXG3mu)
 
 -   New built-in trend kernels `slin_incr` (`k = min(1, k_sat * c)`) and `slin_decr` (`k = -min(1, k_sat * c)`); non-finite covariates give 0. With a `lin` base and `design(transform = list(func = c(<target>.w = "exp")))` they give a rise (or fall) that saturates, e.g. the dEXG3 stop-signal model (`muS = muS(0) + d * min(1, k * SSD)`).

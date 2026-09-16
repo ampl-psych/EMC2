@@ -53,6 +53,8 @@ enum class KernelType {
   ExpDecr,
   SLinIncr,
   SLinDecr,
+  SatIncr,
+  SatDecr,
   PowIncr,
   PowDecr,
   Poly2,
@@ -85,6 +87,8 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::ExpDecr:
   case KernelType::SLinIncr:
   case KernelType::SLinDecr:
+  case KernelType::SatIncr:
+  case KernelType::SatDecr:
   case KernelType::PowIncr:
   case KernelType::PowDecr:
   case KernelType::Poly2:
@@ -200,7 +204,36 @@ public:
   }
 
 
+  // Centre the kernel output (see make_kernel(centre = TRUE)). Only meaningful
+  // for the non-sequential kernels; set from the kernel spec.
+  void set_centre(bool c) { centre_ = c; }
+  bool centre() const { return centre_; }
+
 protected:
+  bool centre_ = false;
+
+  // Subtract the mean of the output over the rows the kernel actually applies
+  // to, i.e. those with a finite covariate. Rows with a non-finite covariate
+  // contribute no trend and stay at 0, so they are excluded from the mean and
+  // left untouched -- otherwise centring would introduce a trend on exactly the
+  // rows that are meant to have none (e.g. the go trials of a stop-signal
+  // design, where SSD is Inf). Centring makes the base parameter the value at
+  // the average covariate, which removes its collinearity with the weight.
+  void centre_output(const Mat& covariate, const std::vector<int>& comp_idx) {
+    if (!centre_) return;
+    const int n = static_cast<int>(out_.size());
+    double sum = 0.0;
+    int n_used = 0;
+    for (int j = 0; j < n; ++j) {
+      if (is_finite(covariate(comp_idx[j], 0))) { sum += out_[j]; ++n_used; }
+    }
+    if (n_used == 0) return;
+    const double m = sum / n_used;
+    for (int j = 0; j < n; ++j) {
+      if (is_finite(covariate(comp_idx[j], 0))) out_[j] -= m;
+    }
+  }
+
   void mark_run_complete() { has_run_ = true; }
 };
 
@@ -381,12 +414,14 @@ struct LinIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
+               if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                out_[j] = x;
                // if (!is_nan(x)) {
                //   out_[j] = x;  // compressed index
                // }
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -404,6 +439,7 @@ struct LinDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
+               if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                out_[j] = -x;
                // if (!is_nan(x)) {
                //   out_[j] = -x;
@@ -411,6 +447,7 @@ struct LinDecrKernel : BaseKernel {
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -434,12 +471,14 @@ struct ExpDecrKernel : BaseKernel {
                int r = comp_idx[j];
                double x = covariate(r,0);
                // if (!is_nan(x)) {
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -463,12 +502,14 @@ struct ExpIncrKernel : BaseKernel {
                int r = comp_idx[j];
                double x = covariate(r,0);
                // if (!is_nan(x)) {
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -504,11 +545,51 @@ struct SLinKernel : BaseKernel {
                }
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
 using SLinIncrKernel = SLinKernel<1>;
 using SLinDecrKernel = SLinKernel<-1>;
+
+// Saturating kernels parameterised by the saturation point rather than the rate:
+// sat_incr k = min(1, c / s_sat) reaches its plateau at c = s_sat, sat_decr is
+// its negative. Identical shape to slin_* with s_sat = 1 / k_sat, but s_sat is in
+// the units of the covariate, so a prior can be put on "where the plateau starts"
+// -- which is what the data can speak to. Non-finite covariates give 0.
+template <int SIGN>
+struct SatKernel : BaseKernel {
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("SatKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, 0);
+
+             const double* s_col = kernel_pars.cols[0];
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               double s = s_col[r];
+               if (is_finite(x) && is_finite(s) && s > 0.0) {
+                 double v = x / s;
+                 out_[j] = SIGN * ((v < 1.0) ? v : 1.0);
+               } else {
+                 out_[j] = 0.0;
+               }
+             }
+
+             centre_output(covariate, comp_idx);
+             mark_run_complete();
+           }
+};
+using SatIncrKernel = SatKernel<1>;
+using SatDecrKernel = SatKernel<-1>;
 
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
@@ -529,12 +610,14 @@ struct PowDecrKernel : BaseKernel {
                int r = comp_idx[j];
                double x = covariate(r,0);
                // if (!is_nan(x)) {
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -558,12 +641,14 @@ struct PowIncrKernel : BaseKernel {
                int r = comp_idx[j];
                double x = covariate(r,0);
                // if (!is_nan(x)) {
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -591,11 +676,13 @@ struct Poly2Kernel : BaseKernel {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  out_[j] = a1 * x + a2 * x2;
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -626,11 +713,13 @@ struct Poly3Kernel : BaseKernel {
                  double a3 = a3_col[r];
                  double x2 = x * x;
                  double x3 = x2 * x;
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  out_[j] = a1 * x + a2 * x2 + a3 * x3;
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };
@@ -665,11 +754,13 @@ struct Poly4Kernel : BaseKernel {
                  double x2 = x * x;
                  double x3 = x2 * x;
                  double x4 = x2 * x2;
+                 if (!is_finite(x)) { out_[j] = 0.0; continue; }  // no covariate -> no trend
                  out_[j] = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
                // }
                // out_[j] = last;
              }
 
+             centre_output(covariate, comp_idx);
              mark_run_complete();
            }
 };

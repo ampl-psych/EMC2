@@ -43,6 +43,26 @@
 #'       all preceding observations should be forgotten.
 #'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}#'
 #'   }
+#' @param centre Boolean. If `TRUE`, the kernel output is centred: the mean of
+#'   the output over the rows the kernel applies to (those with a finite
+#'   covariate) is subtracted, so the output averages zero. Rows with a
+#'   non-finite covariate contribute no trend and are left at zero. Centring
+#'   makes the target parameter the value at the *average* covariate rather than
+#'   at covariate zero, which removes the collinearity between the target
+#'   parameter and the base weight -- worth doing whenever the covariate varies
+#'   over a narrow range that excludes zero (e.g. stop-signal delays). It changes
+#'   the meaning, and so the prior, of the target parameter. The mean is taken
+#'   within each subject's data, so the target parameter is that subject's value
+#'   at their own average covariate. Not available for the sequential (delta/DBM
+#'   family) kernels. Defaults to `FALSE`.
+#'
+#'   Saturating kernels (`slin_*`, `sat_*`, `exp_*`, `pow_*`) become constant
+#'   once the covariate is past the point of saturation, and a constant kernel is
+#'   absorbed by the base weight and the target parameter. Their shape parameter
+#'   is therefore identified only from below unless the covariate has mass on
+#'   both sides of the bend: profile the likelihood before interpreting one, and
+#'   consider bounding it with a `pnorm` transform whose `lower`/`upper` span the
+#'   observed covariate range (see [design()]).
 #' @param custom_kernel A custom kernel registered with [register_kernel()].
 #'   Required when `kernel = "custom"`.
 #' @param at If `NULL`, the kernel is applied to every row in `dadm`. If a
@@ -74,7 +94,8 @@ make_kernel <- function(cov_names,
                         kernel_args        = NULL,
                         custom_kernel      = NULL,
                         at                 = "lR",
-                        at_mode            = "filter") {
+                        at_mode            = "filter",
+                        centre             = FALSE) {
 
   # ---- validate kernel type ----
   known <- names(trend_help(type, return_types = TRUE)$kernels)
@@ -83,6 +104,13 @@ make_kernel <- function(cov_names,
 
   if (identical(type, "custom") && is.null(custom_kernel))
     stop("custom_kernel must be provided when type = 'custom'.")
+
+  # validate centre
+  if (!is.logical(centre) || length(centre) != 1 || is.na(centre))
+    stop("centre must be TRUE or FALSE.")
+  if (centre && type %in% .sequential_kernels())
+    stop("centre = TRUE is not supported for the sequential (delta/DBM family) kernels, ",
+         "whose output is a running estimate rather than a function of the covariate.")
 
   # validate at_mode
   if (!at_mode %in% c("filter", "push"))
@@ -144,6 +172,7 @@ make_kernel <- function(cov_names,
       kernel_pointer     = if (!is.null(custom_kernel)) custom_kernel$kernel_pointer else NULL,
       at                 = at,
       at_mode            = at_mode,
+      centre             = centre,
       sequential         = type %in% .sequential_kernels(),
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
@@ -983,28 +1012,28 @@ get_kernels <- function() {
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     lin_incr = list(description = "Increasing linear kernel: k = c",
                     transforms = NULL,
                     default_pars = character(0),
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d_ed * c)",
                     transforms = list(func =list("d_ed" = "exp")),
                     default_pars = "d_ed",
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d_ei * c)",
                     transforms = list(func =list("d_ei" = "exp")),
                     default_pars = "d_ei",
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     slin_incr = list(description = "Increasing saturating linear kernel: k = min(1, k_sat * c)",
                      transforms = list(func = list("k_sat" = "exp")),
                      default_pars = "k_sat",
@@ -1019,41 +1048,55 @@ get_kernels <- function() {
                      sequential   = FALSE,
                      n_outputs    = 1L,
                      NA_allowed   = TRUE),
+    sat_incr = list(description = "Increasing saturating kernel, parameterised by the saturation point: k = min(1, c / s_sat)",
+                    transforms = list(func = list("s_sat" = "exp")),
+                    default_pars = "s_sat",
+                    bases = base_2p,
+                    sequential   = FALSE,
+                    n_outputs    = 1L,
+                    NA_allowed   = TRUE),
+    sat_decr = list(description = "Decreasing saturating kernel, parameterised by the saturation point: k = -min(1, c / s_sat)",
+                    transforms = list(func = list("s_sat" = "exp")),
+                    default_pars = "s_sat",
+                    bases = base_2p,
+                    sequential   = FALSE,
+                    n_outputs    = 1L,
+                    NA_allowed   = TRUE),
     pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
                     transforms = list(func =list("d_pd" = "exp")),
                     default_pars = "d_pd",
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d_pi)",
                     transforms = list(func =list("d_pi" = "exp")),
                     default_pars = "d_pi",
                     bases = base_2p,
                     sequential   = FALSE,
                     n_outputs    = 1L,
-                    NA_allowed   = FALSE),
+                    NA_allowed   = TRUE),
     poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
                  transforms = list(func = list("d1" = "identity", "d2" = "identity")),
                  default_pars = c("d1", "d2"),
                  bases = base_1p,
                  sequential   = FALSE,
                  n_outputs    = 1L,
-                 NA_allowed   = FALSE),
+                 NA_allowed   = TRUE),
     poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
                  transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
                  default_pars = c("d1", "d2", "d3"),
                  bases = base_1p,
                  sequential   = FALSE,
                  n_outputs    = 1L,
-                 NA_allowed   = FALSE),
+                 NA_allowed   = TRUE),
     poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
                  transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
                  default_pars = c("d1", "d2", "d3", "d4"),
                  bases = base_1p,
                  sequential   = FALSE,
                  n_outputs    = 1L,
-                 NA_allowed   = FALSE),
+                 NA_allowed   = TRUE),
     delta = list(description = paste(
                  "Standard delta rule kernel: k = q[i].\n",
                  "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",

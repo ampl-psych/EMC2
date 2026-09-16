@@ -59,6 +59,9 @@ struct KernelSpec {
   // sequential flag
   bool sequential = false;
 
+  // centre the kernel output over the rows with a finite covariate
+  bool centre = false;
+
   // kernel_args
   std::vector<int> q_reset_col;   // length n_trials, or empty
   std::vector<int> belief_reset_col;

@@ -11,7 +11,8 @@ make_kernel(
   kernel_args = NULL,
   custom_kernel = NULL,
   at = "lR",
-  at_mode = "filter"
+  at_mode = "filter",
+  centre = FALSE
 )
 }
 \arguments{
@@ -63,6 +64,27 @@ the same trial. Use this when covariate values differ across
 accumulators within a trial (e.g. per-symbol feedback in RL models
 with multiple accumulators).}
 }}
+
+\item{centre}{Boolean. If \code{TRUE}, the kernel output is centred: the mean of
+the output over the rows the kernel applies to (those with a finite
+covariate) is subtracted, so the output averages zero. Rows with a
+non-finite covariate contribute no trend and are left at zero. Centring
+makes the target parameter the value at the \emph{average} covariate rather than
+at covariate zero, which removes the collinearity between the target
+parameter and the base weight -- worth doing whenever the covariate varies
+over a narrow range that excludes zero (e.g. stop-signal delays). It changes
+the meaning, and so the prior, of the target parameter. The mean is taken
+within each subject's data, so the target parameter is that subject's value
+at their own average covariate. Not available for the sequential (delta/DBM
+family) kernels. Defaults to \code{FALSE}.
+
+Saturating kernels (\verb{slin_*}, \verb{sat_*}, \verb{exp_*}, \verb{pow_*}) become constant
+once the covariate is past the point of saturation, and a constant kernel is
+absorbed by the base weight and the target parameter. Their shape parameter
+is therefore identified only from below unless the covariate has mass on
+both sides of the bend: profile the likelihood before interpreting one, and
+consider bounding it with a \code{pnorm} transform whose \code{lower}/\code{upper} span the
+observed covariate range (see \code{\link[=design]{design()}}).}
 }
 \value{
 An object of class \code{emc2_kernel}.
