@@ -2005,72 +2005,72 @@ public:
 
              std::vector<double> q_cur(n_sa, q0_col[comp_idx[0]]);
 
-             // Pending transition staged at trial j, completed at trial j+1 once a' is known
-             bool   has_pending   = false;
+             bool   has_pending = false;
              int    pend_s = 0, pend_a = 0, pend_j = -1;
-             bool   pend_terminal = false;
              double pend_r = 0.0, pend_alpha = 0.0, pend_gamma = 0.0;
 
              for (int j = 0; j < n_comp; ++j) {
                const int r = comp_idx[j];
 
-               // Reset: discard pending update and reinitialise Q-table
                if (q_reset_ && q_reset_[r]) {
                  has_pending = false;
                  std::fill(q_cur.begin(), q_cur.end(), q0_col[r]);
                }
 
-               // Step 1+2: snapshot Q and record Q(s_j, a_j) BEFORE completing any update
-               // This is the Q-table the agent had when choosing at trial j
-               std::copy(q_cur.begin(), q_cur.end(),
-                         q_table_.begin() + j * n_sa);
+               const double s_raw    = covariate(r, 0);
+               const double a_raw    = covariate(r, 1);
+               const double reward   = covariate(r, 2);
+               const double term_raw = covariate(r, 3);
 
-               const double s_raw = covariate(r, 0);
-               const double a_raw = covariate(r, 1);
+               const bool has_sa = !std::isnan(s_raw) && !std::isnan(a_raw);
 
-               if (!std::isnan(s_raw) && !std::isnan(a_raw)) {
-                 const int s = static_cast<int>(s_raw) - 1;
-                 const int a = static_cast<int>(a_raw) - 1;
+               // Step 1: snapshot Q before updating — this is what the agent used to choose a_j
+               std::copy(q_cur.begin(), q_cur.end(), q_table_.begin() + j * n_sa);
+
+               // Step 2: read Q(s_j, a_j) from that snapshot
+               int s = 0, a = 0;
+               if (has_sa) {
+                 s = static_cast<int>(s_raw) - 1;
+                 a = static_cast<int>(a_raw) - 1;
                  out_[j] = q_cur[s * n_actions_ + a];
                } else {
                  out_[j] = NA_REAL;
                }
 
-               // Step 3: a_j is now known — complete the SARSA update staged at trial j-1
+               // Step 3: complete the pending non-terminal transition now that a' = a_j is known
                if (has_pending) {
-                 double q_sp_ap = 0.0;  // default for terminal
-                 if (!pend_terminal) {
-                   // a' = a_j, s' read from current trial
-                   const double sp_raw = covariate(r, 0);
-                   const double ap_raw = covariate(r, 1);
-                   if (!std::isnan(sp_raw) && !std::isnan(ap_raw)) {
-                     const int sp = static_cast<int>(sp_raw) - 1;
-                     const int ap = static_cast<int>(ap_raw) - 1;
-                     q_sp_ap = q_cur[sp * n_actions_ + ap];
-                   }
+                 if (has_sa) {
+                   const int    pend_idx = pend_s * n_actions_ + pend_a;
+                   const double q_sp_ap  = q_cur[s * n_actions_ + a];
+                   const double delta    = pend_r + pend_gamma * q_sp_ap - q_cur[pend_idx];
+                   pe_[pend_j]           = delta;
+                   q_cur[pend_idx]      += pend_alpha * delta;
                  }
-                 const double q_sa  = q_cur[pend_s * n_actions_ + pend_a];
-                 const double delta = pend_r + pend_gamma * q_sp_ap - q_sa;
-                 pe_[pend_j]                           = delta;
-                 q_cur[pend_s * n_actions_ + pend_a] += pend_alpha * delta;
                  has_pending = false;
                }
 
-               // Step 4: stage (s_j, a_j, r_j) — waits for a_{j+1}
-               const double reward   = covariate(r, 2);
-               const double term_raw = covariate(r, 3);
-               if (!std::isnan(s_raw) && !std::isnan(a_raw) && !is_nan(reward)) {
-                 pend_s        = static_cast<int>(s_raw) - 1;
-                 pend_a        = static_cast<int>(a_raw) - 1;
-                 pend_r        = reward;
-                 pend_alpha    = alpha_col[r];
-                 pend_gamma    = gamma_col[r];
-                 pend_j        = j;
-                 pend_terminal = (!std::isnan(term_raw) &&
-                   static_cast<int>(term_raw) == 1);
-                 has_pending   = true;
+               if (!has_sa || is_nan(reward))
+                 continue;
+
+               const int    idx      = s * n_actions_ + a;
+               const bool   terminal = !std::isnan(term_raw) && static_cast<int>(term_raw) == 1;
+
+               // Step 4a: terminal — update immediately, no successor action needed
+               if (terminal) {
+                 const double delta = reward - q_cur[idx];
+                 pe_[j]        = delta;
+                 q_cur[idx]   += alpha_col[r] * delta;
+                 continue;
                }
-               // NA reward: no transition staged, PE for this trial stays NA
+
+               // Step 4b: non-terminal — stage and wait for a_{j+1}
+               pend_s     = s;
+               pend_a     = a;
+               pend_r     = reward;
+               pend_alpha = alpha_col[r];
+               pend_gamma = gamma_col[r];
+               pend_j     = j;
+               has_pending = true;
              }
 
              mark_run_complete();
