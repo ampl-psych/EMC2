@@ -1886,21 +1886,31 @@ public:
            }
 };
 
-// =============================================================================
-// SARSA  —  on-policy TD(0) (SARSA) with backward update
+// SARSA  —  on-policy TD(0) (SARSA) with forward update
 //
-// The update for trial j is completed at trial j+1, once a' is known:
+// The snapshot for trial j is taken BEFORE completing the pending update
+// from trial j-1. This ensures Q(j) is identical whether the kernel is
+// run on trials 1:j or 1:T, making simulation and fitting consistent:
+//
+//   Per iteration j:
+//     1. Snapshot Q into q_table_[j]        — agent uses this to choose at j
+//     2. Read out_[j] = Q(s_j, a_j)         — from that snapshot
+//     3. Complete pending update from j-1   — a_j is now known, use as a'
+//     4. Stage (s_j, a_j, r_j) as pending  — waits for a_{j+1}
+//
+// The update rule (once a' = a_{j+1} is known at step j+1):
 //   Q(s,a) <- Q(s,a) + alpha * [r + gamma * Q(s',a') - Q(s,a)]
 //
-// The Q-snapshot at trial j reflects all completed updates from trials
-// 0..j-1, i.e. the Q-table the agent actually had when choosing at trial j.
+// If the staged trial was terminal, Q(s',a') = 0:
+//   Q(s,a) <- Q(s,a) + alpha * [r - Q(s,a)]
+//
 // The last trial's PE is always NA (no a' ever arrives).
 //
 // Covariate columns (0-based, 1-based integer indices in data):
 //   0: S              — current state
 //   1: R              — current action
 //   2: reward         — scalar reward
-//   3: terminal       - boolean indicating if the current state is a terminal state (so no Q(s', a'))
+//   3: terminal       — 1 if current state is terminal (no bootstrap from Q(s',a'))
 //
 // Parameter columns (KernelParsView):
 //   0: q0    — initial Q-value for all (s,a) pairs
@@ -1995,10 +2005,10 @@ public:
 
              std::vector<double> q_cur(n_sa, q0_col[comp_idx[0]]);
 
-             // Pending transition from the previous trial, completed once a' is known
-             bool   has_pending    = false;
+             // Pending transition staged at trial j, completed at trial j+1 once a' is known
+             bool   has_pending   = false;
              int    pend_s = 0, pend_a = 0, pend_j = -1;
-             bool   pend_terminal  = false;
+             bool   pend_terminal = false;
              double pend_r = 0.0, pend_alpha = 0.0, pend_gamma = 0.0;
 
              for (int j = 0; j < n_comp; ++j) {
@@ -2010,10 +2020,27 @@ public:
                  std::fill(q_cur.begin(), q_cur.end(), q0_col[r]);
                }
 
-               // a' is now known — complete the SARSA update staged at trial j-1
+               // Step 1+2: snapshot Q and record Q(s_j, a_j) BEFORE completing any update
+               // This is the Q-table the agent had when choosing at trial j
+               std::copy(q_cur.begin(), q_cur.end(),
+                         q_table_.begin() + j * n_sa);
+
+               const double s_raw = covariate(r, 0);
+               const double a_raw = covariate(r, 1);
+
+               if (!std::isnan(s_raw) && !std::isnan(a_raw)) {
+                 const int s = static_cast<int>(s_raw) - 1;
+                 const int a = static_cast<int>(a_raw) - 1;
+                 out_[j] = q_cur[s * n_actions_ + a];
+               } else {
+                 out_[j] = NA_REAL;
+               }
+
+               // Step 3: a_j is now known — complete the SARSA update staged at trial j-1
                if (has_pending) {
-                 double q_sp_ap = 0.0;  // q-value of s' (sprime) and a'
+                 double q_sp_ap = 0.0;  // default for terminal
                  if (!pend_terminal) {
+                   // a' = a_j, s' read from current trial
                    const double sp_raw = covariate(r, 0);
                    const double ap_raw = covariate(r, 1);
                    if (!std::isnan(sp_raw) && !std::isnan(ap_raw)) {
@@ -2023,39 +2050,24 @@ public:
                    }
                  }
                  const double q_sa  = q_cur[pend_s * n_actions_ + pend_a];
-                 const double delta = pend_r + pend_gamma * q_sp_ap - q_sa;  // [~] q_sp_ap is 0 if terminal
+                 const double delta = pend_r + pend_gamma * q_sp_ap - q_sa;
                  pe_[pend_j]                           = delta;
                  q_cur[pend_s * n_actions_ + pend_a] += pend_alpha * delta;
                  has_pending = false;
                }
 
-               // Snapshot Q after the retroactive update — this is what the agent
-               // had available when choosing at trial j
-               std::copy(q_cur.begin(), q_cur.end(),
-                         q_table_.begin() + j * n_sa);
-
-               const double s_raw = covariate(r, 0);
-               const double a_raw = covariate(r, 1);
-
-               if (!is_nan(s_raw) && !is_nan(a_raw)) {
-                 const int s = static_cast<int>(s_raw) - 1;
-                 const int a = static_cast<int>(a_raw) - 1;
-                 out_[j] = q_cur[s * n_actions_ + a];
-               } else {
-                 out_[j] = NA_REAL;
-               }
-
-               // Stage transition only if s, a, and reward are valid
+               // Step 4: stage (s_j, a_j, r_j) — waits for a_{j+1}
                const double reward   = covariate(r, 2);
                const double term_raw = covariate(r, 3);
-               if (!is_nan(s_raw) && !is_nan(a_raw) && !is_nan(reward)) {
+               if (!std::isnan(s_raw) && !std::isnan(a_raw) && !is_nan(reward)) {
                  pend_s        = static_cast<int>(s_raw) - 1;
                  pend_a        = static_cast<int>(a_raw) - 1;
                  pend_r        = reward;
                  pend_alpha    = alpha_col[r];
                  pend_gamma    = gamma_col[r];
                  pend_j        = j;
-                 pend_terminal = (!std::isnan(term_raw) && static_cast<int>(term_raw) == 1);
+                 pend_terminal = (!std::isnan(term_raw) &&
+                   static_cast<int>(term_raw) == 1);
                  has_pending   = true;
                }
                // NA reward: no transition staged, PE for this trial stays NA
@@ -2109,7 +2121,6 @@ public:
                  "(1=Qvalue, 2=PE, 3=Qmatrix)", code);
   }
 };
-
 
 // ---- Type mapping + factory ----
 
