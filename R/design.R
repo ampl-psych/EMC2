@@ -159,8 +159,16 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(!is.null(parameter_design)) {
-    parameter_design <- parse_parameter_design(parameter_design)  # translate once here
-    formula <- check_parameter_design(parameter_design, formula, constants)
+    # parameter_design <- parse_parameter_design(parameter_design)  # translate once here
+    # formula <- check_parameter_design(parameter_design, formula, constants)
+    target_pars <- vapply(parameter_design, function(f) as.character(f[[2]]), character(1))
+    if (!is.null(constants) && any(target_pars %in% names(constants)))
+      stop("parameter_design targets cannot be constants: ",
+           paste(target_pars[target_pars %in% names(constants)], collapse = ", "))
+    lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+    if (any(target_pars %in% lhs_terms))
+      stop("parameter_design targets cannot also appear in formula: ",
+           paste(target_pars[target_pars %in% lhs_terms], collapse = ", "))
   }
   if(!is.null(trend)) {
     formula <- check_trend(trend,c(names(functions), covariates), model, formula, parameter_design)
@@ -227,11 +235,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   # Check that all formula LHS terms are valid model p_types or parameter_design sources
   if (!is.null(formula) && !all(lhs_terms %in% names(model()$p_types))) {
-    if(!is.null(parameter_design)) {
-      pd_sources <- colnames(parameter_design$weights)
-    } else {
-      pd_sources <- character(0)
-    }
+    # Check that all formula LHS terms are valid model p_types or parameter_design sources
+    pd_sources <- if (!is.null(parameter_design)) {
+      unique(unlist(lapply(parameter_design, function(f) all.vars(f[[3]]))))
+    } else character(0)
+
     invalid_terms <- lhs_terms[!lhs_terms %in% c(names(model()$p_types), pd_sources)]
     if (length(invalid_terms) > 0) {
       stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse = ", "),
@@ -888,9 +896,9 @@ design_model <- function(data,design,model=NULL,
   )
   names(out) <- names(design$Flist)
   if (!is.null(design$parameter_design)) {
-    design$parameter_design <- parse_parameter_design(design$parameter_design)
-    pd_dms <- expand_parameter_design(design$parameter_design, da, compress_dms = compress_dms)
-    out <- c(out, pd_dms)
+    parsed     <- parse_parameter_design(design$parameter_design, out)
+    out        <- expand_parameter_design(parsed, out)
+    pd_targets <- rownames(parsed$weights)
   }
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
@@ -914,25 +922,33 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
-  #
   p_names_raw <- unlist(lapply(out, function(x) {
-    ass <- attr(x, "assign")  # use assign to filter out factor columns
-    dimnames(x)[[2]][!is.na(ass)] }), use.names = FALSE)
+    ass <- attr(x, "assign")
+    dimnames(x)[[2]][!is.na(ass)]
+  }), use.names = FALSE)
 
-  # Duplicates are only allowed if they involve parameter_design columns
-  is_pd <- vapply(out, function(x) isTRUE(attr(x, "parameter_design")), logical(1))
-  regular_p_names <- unlist(lapply(out[!is_pd], function(x) {
-    ass <- attr(x, "assign")  # use assign to filter out factor columns
-    dimnames(x)[[2]][!is.na(ass)]}), use.names = FALSE)
+  # Duplicates are only allowed for parameter_design link targets (intentionally shared columns)
+  pd_links <- if (!is.null(design$parameter_design)) {
+    unique(unlist(lapply(design$parameter_design, function(f) all.vars(f[[3]]))))
+  } else character(0)
 
-  bad_dups <- regular_p_names[duplicated(regular_p_names)]
+  all_p_names <- unlist(lapply(out, function(x) {
+    ass <- attr(x, "assign")
+    dimnames(x)[[2]][!is.na(ass)]
+  }), use.names = FALSE)
+
+  bad_dups <- all_p_names[duplicated(all_p_names) & !all_p_names %in% pd_links]
   if (length(bad_dups) > 0) {
     stop("Duplicated parameter names in design matrices: ",
          paste(bad_dups, collapse = ", "))
   }
 
   p_names <- unique(p_names_raw)
+
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+  if (!is.null(design$parameter_design)) {
+    sampled_p_names <- sampled_p_names[!sampled_p_names %in% pd_targets]
+  }
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
 
@@ -981,102 +997,199 @@ design_model <- function(data,design,model=NULL,
 
 
 
-# Parse parameter_design: now only accepts weights matrix format
-parse_parameter_design <- function(parameter_design) {
-  if (!is.matrix(parameter_design$weights))
-    stop("parameter_design must contain a 'weights' matrix")
-  parameter_design
-}
+# # Parse parameter_design: now only accepts weights matrix format
+# parse_parameter_design <- function(parameter_design) {
+#   if (!is.matrix(parameter_design$weights))
+#     stop("parameter_design must contain a 'weights' matrix")
+#   parameter_design
+# }
 
+parse_parameter_design <- function(parameter_design, out) {
+  base_names <- names(out)
 
-# Check and update formula list for parameter_design
-check_parameter_design <- function(parameter_design, formula, constants = NULL) {
-  if (is.null(parameter_design)) return(formula)
-
-  weights     <- parameter_design$weights
-  source_pars <- colnames(weights)
-  target_pars <- rownames(weights)
-
-  # --- 1. Error if any target parameter is in constants ----------------------
-  if (!is.null(constants)) {
-    bad_constants <- target_pars[target_pars %in% names(constants)]
-    if (length(bad_constants) > 0)
-      stop(paste0(
-        "Parameter(s) ", paste(bad_constants, collapse = ", "),
-        " appear in both `parameter_design` targets and `constants`. ",
-        "parameter_design output parameters cannot be constants."
-      ))
+  get_sub_pars <- function(base) {
+    dm  <- out[[base]]
+    ass <- attr(dm, "assign")
+    colnames(dm)[!is.na(ass)]
   }
 
-  # --- 2. Extract current LHS terms from formula -----------------------------
-  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
-
-  # --- 3. Error if any target parameter appears as a formula LHS -------------
-  bad_formula <- target_pars[target_pars %in% lhs_terms]
-  if (length(bad_formula) > 0)
-    stop(paste0(
-      "Parameter(s) ", paste(bad_formula, collapse = ", "),
-      " appear in both `parameter_design` targets and `formula`. ",
-      "parameter_design output parameters should not have their own formula."
-    ))
-
-  # --- 4. Auto-add intercept formulas for source parameters not yet in formula
-  missing_sources <- source_pars[!source_pars %in% lhs_terms]
-
-  # Don't add intercept if source will already be generated as a column
-  # of an existing formula (e.g. "B_lRd.alpha_errorFALSE" from "B_lRd.alpha")
-  missing_sources <- missing_sources[!vapply(missing_sources, function(src) {
-    any(vapply(lhs_terms, function(lhs) {
-      startsWith(src, paste0(lhs, "_"))
-    }, logical(1)))
-  }, logical(1))]
-
-  if (length(missing_sources) > 0) {
-    message(paste0(
-      "Intercept formula added for parameter_design source parameter(s): ",
-      paste(missing_sources, collapse = ", ")
-    ))
-    new_formulas <- lapply(missing_sources, function(p) stats::as.formula(paste0(p, " ~ 1")))
-    formula <- c(formula, new_formulas)
+  get_parameter_basename <- function(sub_par) {
+    matches <- base_names[sapply(base_names, function(b) startsWith(sub_par, b))]
+    if (length(matches) == 0)
+      stop("Cannot find base parameter for sub-parameter: ", sub_par)
+    if (length(matches) > 1)
+      matches <- matches[which.max(nchar(matches))]
+    matches
   }
 
-  return(formula)
-}
+  get_suffix <- function(sub_par, base) {
+    substr(sub_par, nchar(base) + 1, nchar(sub_par))
+  }
 
-
-# Expand a parameter_design weights matrix into a named list of design matrices,
-# one per output parameter (row of weights)
-expand_parameter_design <- function(parameter_design, da, compress_dms = TRUE) {
-  weights  <- parameter_design$weights
-  n_trials <- nrow(da)
-  out      <- list()
-
-  for (par in rownames(weights)) {
-    # Each output parameter gets a constant design matrix (one unique row)
-    dm <- matrix(
-      weights[par, ],
-      nrow = 1L,
-      ncol = ncol(weights),
-      dimnames = list(NULL, colnames(weights))
-    )
-
-    if (compress_dms) {
-      attr(dm, "expand")           <- rep(1L, n_trials)
-      attr(dm, "parameter_design") <- TRUE
-      attr(dm, "assign")           <- rep(0L, ncol(dm))
-    } else {
-      dm <- dm[rep(1L, n_trials), , drop = FALSE]
-      attr(dm, "expand")           <- seq_len(n_trials)
-      attr(dm, "parameter_design") <- TRUE
-      attr(dm, "assign")           <- rep(0L, ncol(dm))
+  extract_weights <- function(expr, sign = 1) {
+    if (is.numeric(expr)) return(numeric(0))
+    if (is.name(expr)) {
+      w <- sign; names(w) <- as.character(expr); return(w)
     }
-
-    out[[par]] <- dm
+    if (is.call(expr)) {
+      op <- as.character(expr[[1]])
+      if (op == "+")
+        return(c(extract_weights(expr[[2]], sign), extract_weights(expr[[3]], sign)))
+      if (op == "-" && length(expr) == 3)
+        return(c(extract_weights(expr[[2]], sign), extract_weights(expr[[3]], -sign)))
+      if (op == "-" && length(expr) == 2)
+        return(extract_weights(expr[[2]], -sign))
+      if (op == "*") {
+        if (is.numeric(expr[[2]])) return(extract_weights(expr[[3]], sign * expr[[2]]))
+        if (is.numeric(expr[[3]])) return(extract_weights(expr[[2]], sign * expr[[3]]))
+      }
+    }
+    stop("Cannot parse RHS expression: ", deparse(expr))
   }
 
-  return(out)
+  expanded <- list()
+
+  for (f in parameter_design) {
+    lhs     <- as.character(f[[2]])
+    rhs     <- f[[3]]
+    rhs_str <- deparse(rhs)
+
+    if (lhs %in% base_names && rhs_str %in% base_names) {
+      # Full linking: both sides are base parameter names
+      lhs_subs     <- get_sub_pars(lhs)
+      rhs_subs     <- get_sub_pars(rhs_str)
+      lhs_suffixes <- sapply(lhs_subs, get_suffix, base = lhs)
+      rhs_suffixes <- sapply(rhs_subs, get_suffix, base = rhs_str)
+      for (i in seq_along(lhs_subs)) {
+        suf       <- lhs_suffixes[[i]]
+        rhs_match <- rhs_subs[rhs_suffixes == suf]
+        if (length(rhs_match) != 1)
+          stop("No suffix match for ", lhs_subs[i], " in ", rhs_str)
+        w <- 1; names(w) <- rhs_match
+        expanded[[lhs_subs[i]]] <- w
+      }
+    } else {
+      if (rhs_str %in% base_names) {
+        # Partial linking: match by suffix
+        base         <- get_parameter_basename(lhs)
+        suf          <- get_suffix(lhs, base)
+        rhs_subs     <- get_sub_pars(rhs_str)
+        rhs_suffixes <- sapply(rhs_subs, get_suffix, base = rhs_str)
+        rhs_match    <- rhs_subs[rhs_suffixes == suf]
+        if (length(rhs_match) != 1)
+          stop("Cannot find suffix match for ", lhs, " in ", rhs_str)
+        w <- 1; names(w) <- rhs_match
+        expanded[[lhs]] <- w
+      } else {
+        # Direct sub-parameter link or reparametrisation
+        weights <- extract_weights(rhs)
+        # Validate that all named sources exist in out
+        for (src in names(weights)) {
+          found <- any(sapply(out, function(dm) src %in% colnames(dm)))
+          if (!found) stop("Source sub-parameter not found in any DM: ", src)
+        }
+        expanded[[lhs]] <- weights
+      }
+    }
+  }
+
+  pd_sources <- unique(unlist(lapply(parameter_design, function(f) {
+    all.vars(f[[3]])
+  })))
+
+  list(expanded = expanded, pd_sources = pd_sources)
+
+  # # Build weights matrix: rows = targets, cols = all unique sources
+  # all_sources <- unique(unlist(lapply(expanded, names)))
+  # weights <- matrix(0,
+  #                   nrow = length(expanded),
+  #                   ncol = length(all_sources),
+  #                   dimnames = list(names(expanded), all_sources))
+  # for (target in names(expanded)) {
+  #   w <- expanded[[target]]
+  #   weights[target, names(w)] <- w
+  # }
+  #
+  # # Collect all source base names from parameter_design RHS
+  # # (virtual parameters that exist only to feed reparametrisation)
+  # pd_sources <- unique(unlist(lapply(parameter_design, function(f) {
+  #   all.vars(f[[3]])
+  # })))
+  #
+  # list(weights = weights, expanded = expanded, pd_sources = pd_sources)
 }
 
+expand_parameter_design <- function(parsed, out) {
+  is_compressed <- !is.null(attr(out[[1]], "expand"))
+
+  n_trials <- if (is_compressed) {
+    length(attr(out[[1]], "expand"))
+  } else {
+    nrow(out[[1]])
+  }
+
+  for (par in names(parsed$expanded)) {
+    weights <- parsed$expanded[[par]]
+    active  <- names(weights)
+
+    if (par %in% names(out)) {
+      # Own-DM: replace with weighted DM, mark parameter_design
+      if (is_compressed) {
+        dm <- matrix(weights, nrow = 1L, ncol = length(active),
+                     dimnames = list(NULL, active))
+        attr(dm, "expand") <- rep(1L, n_trials)
+      } else {
+        dm <- matrix(rep(weights, each = n_trials), nrow = n_trials, ncol = length(active),
+                     dimnames = list(NULL, active))
+      }
+      attr(dm, "parameter_design") <- TRUE
+      attr(dm, "assign")           <- rep(0L, ncol(dm))
+      out[[par]] <- dm
+    } else {
+      # Column-in-DM: rename
+      for (nm in names(out)) {
+        if (par %in% colnames(out[[nm]])) {
+          colnames(out[[nm]])[colnames(out[[nm]]) == par] <- active[1]
+          break
+        }
+      }
+    }
+  }
+
+  out
+}
+
+# expand_parameter_design <- function(parsed, out, compress_dms = TRUE) {
+#   weights  <- parsed$weights
+#   n_trials <- nrow(out[[1]])
+#
+#   for (par in rownames(weights)) {
+#     row    <- weights[par, , drop = FALSE]
+#     active <- colnames(row)[row[1, ] != 0]
+#
+#     nm <- names(out)[sapply(names(out), function(nm) par %in% colnames(out[[nm]]))]
+#
+#     if (length(nm) > 0 && nm[1] != par) {
+#       # Column-in-DM: simple rename
+#       colnames(out[[nm[1]]])[colnames(out[[nm[1]]]) == par] <- active[1]
+#     } else {
+#       # Own-DM or new entry: build compressed DM from weights row
+#       dm <- matrix(row, nrow = 1L, ncol = length(active),
+#                    dimnames = list(NULL, active))
+#       if (compress_dms) {
+#         attr(dm, "expand") <- rep(1L, n_trials)
+#       } else {
+#         dm <- dm[rep(1L, n_trials), , drop = FALSE]
+#         attr(dm, "expand") <- seq_len(n_trials)
+#       }
+#       attr(dm, "parameter_design") <- TRUE
+#       attr(dm, "assign")           <- rep(0L, ncol(dm))
+#       out[[par]] <- dm
+#     }
+#   }
+#
+#   out
+# }
 
 
 
@@ -1684,6 +1797,13 @@ sampled_pars.emc.design <- function(x,group_design=NULL,doMap=FALSE, add_da = FA
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
+
+    # Exclude parameter_design targets — they are computed, not sampled
+    if (!is.null(cur_design$parameter_design)) {
+      pd_targets <- rownames(cur_design$parameter_design$weights)
+      sampled_p_names <- sampled_p_names[!sampled_p_names %in% pd_targets]
+    }
+
     if(length(design) != 1){
       map_list[[cur_name]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
       sampled_p_names <- paste(cur_name, sampled_p_names, sep = "|")
