@@ -223,12 +223,19 @@ fill_transform <- function(transform, model, p_vector,
 
 fill_bound <- function(bound, model) {
   filled_bound <- model()$bound
-  if (!is.null(bound)) {
-    if (names(bound)[1] != "minmax")
-      stop("first entry of bound must be named minmax")
-    if (!all(colnames(bound$minmax) %in% names(model()$p_types)))
-      stop("minmax column names must correspond to parameter types")
-    if (!is.null(bound$exception) && (!all(names(bound$exception) %in% names(model()$p_types)))) {
+  if(!is.null(bound)) {
+    if(names(bound)[1] != "minmax") stop("first entry of bound must be named minmax")
+
+    p_types <- names(model()$p_types)
+    trend_targets <- if (!is.null(model()$trend)) {
+      sapply(model()$trend$bases, `[[`, "target_parameter")
+    } else {
+      character(0)
+    }
+    if(!all(colnames(bound$minmax) %in% c(p_types, trend_targets))) stop("minmax column names must correspond to parameter types")
+
+
+    if(!is.null(bound$exception) && (!all(names(bound$exception) %in% names(model()$p_types)))) {
       stop("exception names must correspond to parameter types")
     }
     ## minmax
