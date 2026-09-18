@@ -161,11 +161,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if(!is.null(parameter_design)) {
     # parameter_design <- parse_parameter_design(parameter_design)  # translate once here
     # formula <- check_parameter_design(parameter_design, formula, constants)
-    target_pars <- vapply(parameter_design, function(f) as.character(f[[2]]), character(1))
+    target_pars <- vapply(parameter_design, function(f) deparse(f[[2]]), character(1))
     if (!is.null(constants) && any(target_pars %in% names(constants)))
       stop("parameter_design targets cannot be constants: ",
            paste(target_pars[target_pars %in% names(constants)], collapse = ", "))
-    lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+    lhs_terms <- unlist(lapply(formula, function(x) deparse(stats::terms(x)[[2]])))
     if (any(target_pars %in% lhs_terms))
       stop("parameter_design targets cannot also appear in formula: ",
            paste(target_pars[target_pars %in% lhs_terms], collapse = ", "))
@@ -809,10 +809,19 @@ design_model <- function(data,design,model=NULL,
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
-  if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
-    if(i %in% names(da)) next  # SM don't overwrite existing columns
-    newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
-    da[,i] <- newF
+  Ffunction_names <- character(0)  # keep track for compress_dadm
+  if(!is.null(design$Ffunctions)) {
+    for(i in names(design$Ffunctions)) {
+      output <- design$Ffunctions[[i]](da)
+      Ffunction_names <- c(Ffunction_names, names(output))
+      if(is.list(output)) {  # data.frame is also a list, so output can be either a list or dataframe
+        new_columns <- setdiff(names(output), names(da))  # only new columns
+        if(length(new_columns) > 0) da[, new_columns] <- output[new_columns]
+      } else {
+        Ffunction_names <- c(Ffunction_names, i)
+        if(!i %in% names(da)) da[, i] <- output
+      }
+    }
   }
 
   # Stop-signal models support censoring (LC/UC) but not yet truncation: the
@@ -902,7 +911,7 @@ design_model <- function(data,design,model=NULL,
   }
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
-    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=unique(Ffunction_names))
     # Change expansion names
     # attr(dadm,"expand_all") <- attr(dadm,"expand")
     if(!is.null(dadm$lR)){
@@ -929,7 +938,7 @@ design_model <- function(data,design,model=NULL,
 
   # Duplicates are only allowed for parameter_design link targets (intentionally shared columns)
   pd_links <- if (!is.null(design$parameter_design)) {
-    unique(unlist(lapply(design$parameter_design, function(f) all.vars(f[[3]]))))
+    unique(unlist(lapply(design$parameter_design, function(f) deparse(f[[3]]))))
   } else character(0)
 
   all_p_names <- unlist(lapply(out, function(x) {
@@ -1033,6 +1042,11 @@ parse_parameter_design <- function(parameter_design, out) {
     }
     if (is.call(expr)) {
       op <- as.character(expr[[1]])
+      if (op == ":")  {
+        # e.g. B_lRd.alpha_errorFALSE:difficultyd; a literal column name containing ':'
+        col_name <- paste(deparse(expr[[2]]), deparse(expr[[3]]), sep = ":")
+        w <- sign; names(w) <- col_name; return(w)
+      }
       if (op == "+")
         return(c(extract_weights(expr[[2]], sign), extract_weights(expr[[3]], sign)))
       if (op == "-" && length(expr) == 3)
@@ -1050,7 +1064,7 @@ parse_parameter_design <- function(parameter_design, out) {
   expanded <- list()
 
   for (f in parameter_design) {
-    lhs     <- as.character(f[[2]])
+    lhs     <- deparse(f[[2]])
     rhs     <- f[[3]]
     rhs_str <- deparse(rhs)
 
@@ -1159,37 +1173,6 @@ expand_parameter_design <- function(parsed, out) {
   out
 }
 
-# expand_parameter_design <- function(parsed, out, compress_dms = TRUE) {
-#   weights  <- parsed$weights
-#   n_trials <- nrow(out[[1]])
-#
-#   for (par in rownames(weights)) {
-#     row    <- weights[par, , drop = FALSE]
-#     active <- colnames(row)[row[1, ] != 0]
-#
-#     nm <- names(out)[sapply(names(out), function(nm) par %in% colnames(out[[nm]]))]
-#
-#     if (length(nm) > 0 && nm[1] != par) {
-#       # Column-in-DM: simple rename
-#       colnames(out[[nm[1]]])[colnames(out[[nm[1]]]) == par] <- active[1]
-#     } else {
-#       # Own-DM or new entry: build compressed DM from weights row
-#       dm <- matrix(row, nrow = 1L, ncol = length(active),
-#                    dimnames = list(NULL, active))
-#       if (compress_dms) {
-#         attr(dm, "expand") <- rep(1L, n_trials)
-#       } else {
-#         dm <- dm[rep(1L, n_trials), , drop = FALSE]
-#         attr(dm, "expand") <- seq_len(n_trials)
-#       }
-#       attr(dm, "parameter_design") <- TRUE
-#       attr(dm, "assign")           <- rep(0L, ncol(dm))
-#       out[[par]] <- dm
-#     }
-#   }
-#
-#   out
-# }
 
 
 

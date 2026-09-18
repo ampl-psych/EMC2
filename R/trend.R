@@ -1515,10 +1515,36 @@ make_data_unconditional <- function(data, pars, design, model,
   # Step 2: Set up design cache.
   # -----------------------------------------------------------------------
   factor_cols <- setdiff(names(design$Ffactors), "subjects")
-  ffun_cols   <- names(design$Ffunctions)
   p_types     <- names(design$Flist)
 
-  #
+  # Build ffun_cols first, initialise dadm_full columns for pre-trial functions
+  ffun_cols       <- character(0)
+  has_ffunctions  <- !is.null(design$Ffunctions)
+  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
+  if (has_ffunctions) {
+    ffunctions      <- design$Ffunctions
+    ffunctions_pre  <- ffunctions[sapply(ffunctions, function(x) isTRUE(attr(x, "pretrial")))]
+    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) !isTRUE(attr(x, "pretrial")))]
+    has_ffunctions_pre  <- length(ffunctions_pre) > 0
+    has_ffunctions_post <- length(ffunctions_post) > 0
+    for (i in names(ffunctions_pre)) {
+      output <- ffunctions_pre[[i]](dadm_full)
+      if (is.list(output)) {
+        ffun_cols <- c(ffun_cols, names(output))
+        for (col in names(output)) dadm_full[[col]][] <- NA
+      } else {
+        ffun_cols <- c(ffun_cols, i)
+        dadm_full[[i]][] <- NA
+      }
+    }
+    for (i in names(ffunctions_post)) {
+      output <- ffunctions_post[[i]](dadm_full)
+      if (is.list(output)) ffun_cols <- c(ffun_cols, names(output))
+      else                 ffun_cols <- c(ffun_cols, i)
+    }
+  }
+
+  # Now key_cols uses the correct ffun_cols
   formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
   key_cols <- union(factor_cols, intersect(ffun_cols, formula_vars))
 
@@ -1578,20 +1604,6 @@ make_data_unconditional <- function(data, pars, design, model,
   } else list()
   has_covariate_coding <- length(bases_with_coding) > 0
 
-  has_ffunctions <- !is.null(design$Ffunctions)
-  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
-  # By default, ffunctions are assumed to be applied post-trial (after R and rt are recorded).
-  # Functions marked 'pretrial' will be applied pretrial
-  if(has_ffunctions) {
-    ffunctions <- design$Ffunctions
-    ffunctions_pre <- ffunctions[sapply(ffunctions, function(x) { isTRUE(attr(x, 'pretrial'))})]
-    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) { !isTRUE(attr(x, 'pretrial'))})]
-    has_ffunctions_pre <- length(ffunctions_pre) > 0
-    has_ffunctions_post <- length(ffunctions_post) > 0
-    for(i in names(ffunctions_pre)) {
-      dadm_full[[i]][] <- NA  # Set all columns corresponding to pre-trial function outputs to NA - no lingering empirical data
-    }
-  }
   # dadm_full$rt[] <- NA
   # dadm_full$R[] <- NA
 
@@ -1693,13 +1705,30 @@ make_data_unconditional <- function(data, pars, design, model,
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(ffunctions_pre)) {
-          result_full             <- ffunctions_pre[[i]](dadm_ctx)
-          result_curr             <- utils::tail(result_full, length(idx_curr))
-          dadm_ctx[[i]]           <- result_full
-          dadm_current[[i]]       <- result_curr
-          dadm_subj_df[[i]][idx_curr] <- result_curr
+        for(i in names(ffunctions_pre)) {
+          result_full <- ffunctions_pre[[i]](dadm_ctx)
+          if (is.list(result_full)) {
+            for (col in names(result_full)) {
+              result_curr             <- utils::tail(result_full[[col]], length(idx_curr))
+              dadm_ctx[[col]]         <- result_full[[col]]
+              dadm_current[[col]]     <- result_curr
+              dadm_subj_df[[col]][idx_curr] <- result_curr
+            }
+          } else {
+            result_curr                   <- utils::tail(result_full, length(idx_curr))
+            dadm_ctx[[i]]                 <- result_full
+            dadm_current[[i]]             <- result_curr
+            dadm_subj_df[[i]][idx_curr]   <- result_curr
+          }
         }
+
+        # for (i in names(ffunctions_pre)) {
+        #   result_full             <- ffunctions_pre[[i]](dadm_ctx)
+        #   result_curr             <- utils::tail(result_full, length(idx_curr))
+        #   dadm_ctx[[i]]           <- result_full
+        #   dadm_current[[i]]       <- result_curr
+        #   dadm_subj_df[[i]][idx_curr] <- result_curr
+        # }
       }
 
 
@@ -1799,10 +1828,22 @@ make_data_unconditional <- function(data, pars, design, model,
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
         for (i in names(ffunctions_post)) {
-          result_full             <- ffunctions_post[[i]](dadm_ctx)
-          dadm_ctx[[i]]           <- result_full
-          dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
+          result_full <- ffunctions_post[[i]](dadm_ctx)
+          if (is.list(result_full)) {
+            for (col in names(result_full)) {
+              dadm_ctx[[col]]               <- result_full[[col]]
+              dadm_subj_df[[col]][idx_curr] <- utils::tail(result_full[[col]], length(idx_curr))
+            }
+          } else {
+            dadm_ctx[[i]]                   <- result_full
+            dadm_subj_df[[i]][idx_curr]     <- utils::tail(result_full, length(idx_curr))
+          }
         }
+        # for (i in names(ffunctions_post)) {
+        #   result_full             <- ffunctions_post[[i]](dadm_ctx)
+        #   dadm_ctx[[i]]           <- result_full
+        #   dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
+        # }
 
         # Update design matrices for parameters that depend on ffunctions_post (should be only learning-related)
         key_post <- paste(sapply(key_cols, function(fc) {

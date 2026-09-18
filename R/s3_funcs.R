@@ -1093,11 +1093,24 @@ credint <- function(x, ...){
 # Design-function columns are dropped from returned data because they can be
 # re-derived, except stop-signal delays from make_ssd(): these are drawn at
 # random per trial (or by a staircase) and are part of the observed data.
-.rederivable_functions <- function(design) {
-  fn <- design$Ffunctions
-  if (is.null(fn)) return(character(0))
-  names(fn)[!vapply(fn, inherits, logical(1), "emc_ssd_function")]
+.rederivable_functions <- function(design, dat) {
+  if (is.null(design$Ffunctions)) return(character(0))
+
+  fns <- character(0)
+  for (fn in names(design$Ffunctions)) {
+    output <- design$Ffunctions[[fn]](dat)
+    if (is.list(output)) {
+      fns <- c(fns, names(output))
+    } else {
+      fns <- c(fns, fn)
+    }
+  }
+
+  # Filter out ssd functions by their source function name
+  ssd_fns <- names(design$Ffunctions)[vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function")]
+  fns[!fns %in% ssd_fns]
 }
+
 
 #' @rdname get_data
 #' @export
@@ -1117,7 +1130,7 @@ get_data.emc <- function(emc) {
         return(cur[expand,])
       }))
       row.names(tmp) <- NULL
-      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", .rederivable_functions(design)))]
+      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", .rederivable_functions(design, tmp)))]
       dat[[i]] <- tmp
     }
     names(dat) <- get_joint_names(emc)
@@ -1134,7 +1147,7 @@ get_data.emc <- function(emc) {
       return(x[expand,])
     }))
     row.names(dat) <- NULL
-    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", .rederivable_functions(design)))]
+    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", .rederivable_functions(design, dat)))]
   }
   return(dat)
 }
