@@ -14,7 +14,9 @@
 #                        catches a card whose context_names were permuted
 # The parameter types, transforms, defaults and simulator are the analytic
 # twin's (the card's `model`: DDM, RDM, ...), so an un-sampled parameter means
-# exactly what it means in the analytic model (the defaults trap).
+# exactly what it means in the analytic model (the defaults trap). A network
+# with no analytic model gets its defaults from `p_types` (transforms follow
+# the card; no simulator) or from a hand-written model function as `twin`.
 #
 # Registry: cards are read once per session, keyed by normalised path (re-read
 # when the file changes); compiled evaluators are rebuilt lazily because
@@ -200,7 +202,8 @@ nn_ptr <- function(reg) {
 #' defaults and data-generating function are those of the *analytic twin*, the
 #' EMC2 model the network approximates (the card's `model` field: `"DDM"`,
 #' `"RDM"`, `"LNR"` or `"LBA"`, or `twin`). An un-sampled parameter therefore
-#' takes the same default as in the analytic model; when that default lies
+#' takes the same default as in the analytic model (for a network without an
+#' analytic model, see below); when that default lies
 #' outside the network's training region (e.g. `sv = 0` for a DDM flow
 #' trained on `sv >= 0.01`) the model refuses it, at [design()] time and again
 #' when the likelihood is evaluated, instead of silently changing the model.
@@ -240,6 +243,25 @@ nn_ptr <- function(reg) {
 #'   responses 1 and 2; default `c(1, 2)`) and `output_scaler` (`mean`,
 #'   `scale`: output = raw * scale + mean). It has no CDF.
 #'
+#' **Networks without an analytic model.** Nothing requires an analytic
+#' twin. There are two ways to supply the parameterisation yourself:
+#' * `p_types`: a named vector of defaults on the sampled scale, one per
+#'   network input (plus any parameter used by `pre` or fixed by
+#'   `exceptions`). Each input's transform follows the card's scale (`"log"`
+#'   -> `"exp"`, `"probit"` -> `"pnorm"`, `"identity"` -> `"identity"`); any
+#'   other parameter gets `"identity"` (override with `design(transform = )`).
+#'   The model type follows `kind`. There is no simulator, so [make_data()]
+#'   refuses; fit observed data, or use the next route.
+#' * `twin = function() list(type = , p_types = , transform = , rfun = )`: a
+#'   hand-written model function giving the parameterisation and, if you have
+#'   one, a simulator (`rfun(data, pars)` as in any EMC2 model; an optional
+#'   `Ttransform` is applied before it, and an optional `bound$minmax` bounds
+#'   parameters the network does not take as input).
+#'
+#' Either way the same checks apply as with an analytic twin: a default
+#' outside the training region is refused for an un-sampled parameter, and
+#' every parameter must be a network input, used by `pre`, or fixed.
+#'
 #' **Checks that refuse a registration.** A `pars` that would permute the
 #' card's inputs; a card whose `bounds_sampled` disagrees with its transformed
 #' `bounds_natural` (e.g. permuted `context_names`); `transforms` that
@@ -275,19 +297,48 @@ nn_ptr <- function(reg) {
 #'   (no Jacobian is applied). Times <= 0 get zero density and CDF.
 #' @param twin The analytic twin: an EMC2 model function supplying
 #'   `p_types`, `transform` and `rfun` (and `Ttransform`, applied before
-#'   `rfun`). Default: from the card's `model` field. Required when the card
-#'   names no known model.
+#'   `rfun`). Default: from the card's `model` field. For a network with no
+#'   analytic model, a hand-written model function (see Details), or use
+#'   `p_types` instead.
+#' @param p_types For a network with no analytic model: named defaults on the
+#'   sampled scale for the model's parameters (see Details). Give either
+#'   `twin` or `p_types`; with `p_types` no twin is used, even if the card
+#'   names a model.
 #'
 #' @return A model function (like [DDM]) whose list carries, besides the usual
 #'   elements, `nn`: the registration (`kind`, `sha256`, `pars` and
 #'   `context_names` in the network's order, `transforms`, the training box,
 #'   `fixed`, `pre`, `cdf`, `ll_floor` and the card's metadata).
 #' @examples
+#' # A shipped artefact; the card names its analytic twin (RDM)
 #' m <- register_nn_model("rdm_small")
 #' m()$nn$context_names
+#'
+#' # A network with no analytic model. Here the shipped RDM flow with its
+#' # `model` field removed stands in for your own card: give the defaults
+#' # (sampled scale); the transforms follow the card's input scales.
+#' card <- readRDS(system.file("extdata", "flownn", "rdm_small.rds", package = "EMC2"))
+#' card$model <- NULL
+#' path <- tempfile(fileext = ".rds")
+#' saveRDS(card, path)
+#' m2 <- register_nn_model(path, p_types = c(v = log(1), B = log(1), t0 = log(0.3),
+#'                                           s = log(1), A = log(0.3)))
+#' m2()$transform$func
+#'
+#' # The same network with a simulator: a hand-written model function as twin.
+#' # rfun(data, pars) is your simulator (here RDM's stands in for it), called
+#' # on the parameters after Ttransform.
+#' my_model <- function() list(
+#'   type = "RACE",
+#'   p_types = c(v = log(1), B = log(1), t0 = log(0.3), s = log(1), A = log(0.3)),
+#'   transform = list(func = c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp")),
+#'   Ttransform = function(pars, dadm) cbind(pars, b = pars[, "B"] + pars[, "A"]),
+#'   rfun = RDM()$rfun)
+#' m3 <- register_nn_model(path, twin = my_model)
 #' @export
 register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
-                              cdf = NULL, exceptions = NULL, pre = NULL, twin = NULL) {
+                              cdf = NULL, exceptions = NULL, pre = NULL, twin = NULL,
+                              p_types = NULL) {
   res <- nn_resolve(path)
   hit <- nn_card(res)
   card <- hit$card
@@ -348,21 +399,31 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   if (kind != "regression_joint" && is.null(m1$bounds_sampled))   # read by the compiled evaluators
     stop(what, "a flow card must carry bounds_sampled (or bounds_natural with context_transforms)")
 
-  # --- the analytic twin --------------------------------------------------------
-  if (is.null(twin) && !is.null(m1$model) && m1$model %in% names(nn_twin_names))
-    twin <- get(nn_twin_names[[m1$model]], envir = asNamespace("EMC2"))
-  if (is.null(twin))
-    stop(what, "no analytic twin (card model '", if (is.null(m1$model)) "" else m1$model, "'); ",
-         "pass twin = <an EMC2 model function> for its parameter types, transforms and simulator")
-  if (!is.function(twin)) stop(what, "twin must be an EMC2 model function (e.g. DDM)")
-  tl <- twin()
+  # --- parameterisation: the analytic twin, or the user's own defaults -----------
   want_type <- if (kind == "flow_race") "RACE" else "DDM"
+  if (!is.null(p_types)) {
+    if (!is.null(twin))
+      stop(what, "give either twin (a model supplies the defaults) or p_types (your own defaults), not both")
+    tl <- nn_own_parameterisation(p_types, pars, tfs, want_type, what)
+  } else {
+    if (is.null(twin) && !is.null(m1$model) && m1$model %in% names(nn_twin_names))
+      twin <- get(nn_twin_names[[m1$model]], envir = asNamespace("EMC2"))
+    if (is.null(twin))
+      stop(what, "no analytic twin (card model '", if (is.null(m1$model)) "" else m1$model, "'). ",
+           "Give the defaults with p_types = c(<parameter> = <sampled-scale default>, ...) ",
+           "(transforms follow the card; no simulator), or pass twin = <a model function> ",
+           "with p_types, transform and, to simulate, rfun")
+    if (!is.function(twin)) stop(what, "twin must be an EMC2 model function (e.g. DDM)")
+    tl <- twin()
+  }
   if (!identical(tl$type, want_type))
-    stop(what, "a ", kind, " network needs a twin of type ", want_type, "; the twin's type is ", tl$type)
+    stop(what, "a ", kind, " network needs a model of type ", want_type, "; the twin's type is ",
+         if (is.null(tl$type)) "missing" else tl$type)
   pt <- tl$p_types
+  if (!is.numeric(pt) || is.null(names(pt))) stop(what, "the twin has no named p_types")
   notp <- setdiff(pars, names(pt))
   if (length(notp)) stop(what, "network input(s) ", paste(notp, collapse = ", "),
-                         " are not parameters of the twin model (", paste(names(pt), collapse = ", "), ")")
+                         " are not parameters of the model (", paste(names(pt), collapse = ", "), ")")
   tr_filled <- fill_transform(NULL, function() list(p_types = pt, transform = tl$transform))
   defaults <- nn_natural(pt, tr_filled)
 
@@ -386,7 +447,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   pre_pars <- nn_check_pre(pre, pars, defaults, box, what)
   ignored <- setdiff(names(pt), c(pars, names(fixed), pre_pars))
   if (length(ignored))
-    stop(what, "the twin's parameter(s) ", paste(ignored, collapse = ", "), " are not network inputs, ",
+    stop(what, "the model's parameter(s) ", paste(ignored, collapse = ", "), " are not network inputs, ",
          "not used by pre and not fixed by exceptions: the network would ignore them")
 
   # --- CDF --------------------------------------------------------------------------
@@ -421,6 +482,19 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     input_layout = m1$input_layout, card = card_meta)
   class(reg) <- "emc_nn"
   nn_model_function(nn_model_list(reg, tl, minmax))
+}
+
+# The parameterisation of a network with no analytic model: the user's
+# defaults, transforms from the card's input scales, no simulator.
+nn_own_parameterisation <- function(p_types, pars, tfs, type, what) {
+  if (!is.numeric(p_types) || is.null(names(p_types)) || any(!nzchar(names(p_types))) ||
+      anyDuplicated(names(p_types)) || anyNA(p_types))
+    stop(what, "p_types must be a named numeric vector of defaults on the sampled scale")
+  miss <- setdiff(pars, names(p_types))
+  if (length(miss)) stop(what, "p_types has no default for network input(s) ", paste(miss, collapse = ", "))
+  func <- stats::setNames(rep("identity", length(p_types)), names(p_types))
+  func[pars] <- unname(c(identity = "identity", log = "exp", probit = "pnorm")[tfs])
+  list(type = type, p_types = p_types, transform = list(func = func))
 }
 
 # Training box: natural scale per input (network order), sampled scale per
@@ -470,7 +544,7 @@ nn_check_pre <- function(pre, pars, defaults, box, what) {
   if (is.null(pre)) return(character(0))
   if (is.character(pre)) {
     if (length(pre) != 1L || !(pre %in% names(defaults)))
-      stop(what, "pre must name one parameter of the twin model (e.g. \"t0\") or be a function(rt, pars)")
+      stop(what, "pre must name one parameter of the model (e.g. \"t0\") or be a function(rt, pars)")
     return(pre)
   }
   if (!is.function(pre)) stop(what, "pre must be NULL, a parameter name or a function(rt, pars)")
@@ -536,7 +610,8 @@ nn_model_list <- function(reg, tl, minmax) {
       nn_prepare_design(reg, formula, constants, Rlevels, joint),
     # The twin's simulator on the twin's parameterisation (exact data)
     rfun = if (is.null(twin_rfun)) function(data = NULL, pars)
-      stop("Neural likelihood '", reg$label, "' has no simulator (its twin has no rfun)") else
+      stop("Neural likelihood '", reg$label, "' has no simulator; to simulate, register it with ",
+           "twin = <a model function with an rfun>") else
         function(data = NULL, pars) {
           tp <- if (is.null(twin_T)) pars else twin_T(pars, data)
           attr(tp, "ok") <- attr(pars, "ok")

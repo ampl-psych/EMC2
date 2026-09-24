@@ -12,7 +12,8 @@ register_nn_model(
   cdf = NULL,
   exceptions = NULL,
   pre = NULL,
-  twin = NULL
+  twin = NULL,
+  p_types = NULL
 )
 }
 \arguments{
@@ -47,8 +48,14 @@ network sees it (\code{"t0"} for a decision-time network), or a
 
 \item{twin}{The analytic twin: an EMC2 model function supplying
 \code{p_types}, \code{transform} and \code{rfun} (and \code{Ttransform}, applied before
-\code{rfun}). Default: from the card's \code{model} field. Required when the card
-names no known model.}
+\code{rfun}). Default: from the card's \code{model} field. For a network with no
+analytic model, a hand-written model function (see Details), or use
+\code{p_types} instead.}
+
+\item{p_types}{For a network with no analytic model: named defaults on the
+sampled scale for the model's parameters (see Details). Give either
+\code{twin} or \code{p_types}; with \code{p_types} no twin is used, even if the card
+names a model.}
 }
 \value{
 A model function (like \link{DDM}) whose list carries, besides the usual
@@ -68,7 +75,8 @@ and checked when it is registered; nothing is assumed.
 defaults and data-generating function are those of the \emph{analytic twin}, the
 EMC2 model the network approximates (the card's \code{model} field: \code{"DDM"},
 \code{"RDM"}, \code{"LNR"} or \code{"LBA"}, or \code{twin}). An un-sampled parameter therefore
-takes the same default as in the analytic model; when that default lies
+takes the same default as in the analytic model (for a network without an
+analytic model, see below); when that default lies
 outside the network's training region (e.g. \code{sv = 0} for a DDM flow
 trained on \code{sv >= 0.01}) the model refuses it, at \code{\link[=design]{design()}} time and again
 when the likelihood is evaluated, instead of silently changing the model.
@@ -109,6 +117,27 @@ responses 1 and 2; default \code{c(1, 2)}) and \code{output_scaler} (\code{mean}
 \code{scale}: output = raw * scale + mean). It has no CDF.
 }
 
+\strong{Networks without an analytic model.} Nothing requires an analytic
+twin. There are two ways to supply the parameterisation yourself:
+\itemize{
+\item \code{p_types}: a named vector of defaults on the sampled scale, one per
+network input (plus any parameter used by \code{pre} or fixed by
+\code{exceptions}). Each input's transform follows the card's scale (\code{"log"}
+-> \code{"exp"}, \code{"probit"} -> \code{"pnorm"}, \code{"identity"} -> \code{"identity"}); any
+other parameter gets \code{"identity"} (override with \code{design(transform = )}).
+The model type follows \code{kind}. There is no simulator, so \code{\link[=make_data]{make_data()}}
+refuses; fit observed data, or use the next route.
+\item \code{twin = function() list(type = , p_types = , transform = , rfun = )}: a
+hand-written model function giving the parameterisation and, if you have
+one, a simulator (\code{rfun(data, pars)} as in any EMC2 model; an optional
+\code{Ttransform} is applied before it, and an optional \code{bound$minmax} bounds
+parameters the network does not take as input).
+}
+
+Either way the same checks apply as with an analytic twin: a default
+outside the training region is refused for an un-sampled parameter, and
+every parameter must be a network input, used by \code{pre}, or fixed.
+
 \strong{Checks that refuse a registration.} A \code{pars} that would permute the
 card's inputs; a card whose \code{bounds_sampled} disagrees with its transformed
 \code{bounds_natural} (e.g. permuted \code{context_names}); \code{transforms} that
@@ -121,6 +150,29 @@ check calibration and identifiability (parameter recovery, likelihood
 profiles, SBC) before drawing conclusions.
 }
 \examples{
+# A shipped artefact; the card names its analytic twin (RDM)
 m <- register_nn_model("rdm_small")
 m()$nn$context_names
+
+# A network with no analytic model. Here the shipped RDM flow with its
+# `model` field removed stands in for your own card: give the defaults
+# (sampled scale); the transforms follow the card's input scales.
+card <- readRDS(system.file("extdata", "flownn", "rdm_small.rds", package = "EMC2"))
+card$model <- NULL
+path <- tempfile(fileext = ".rds")
+saveRDS(card, path)
+m2 <- register_nn_model(path, p_types = c(v = log(1), B = log(1), t0 = log(0.3),
+                                          s = log(1), A = log(0.3)))
+m2()$transform$func
+
+# The same network with a simulator: a hand-written model function as twin.
+# rfun(data, pars) is your simulator (here RDM's stands in for it), called
+# on the parameters after Ttransform.
+my_model <- function() list(
+  type = "RACE",
+  p_types = c(v = log(1), B = log(1), t0 = log(0.3), s = log(1), A = log(0.3)),
+  transform = list(func = c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp")),
+  Ttransform = function(pars, dadm) cbind(pars, b = pars[, "B"] + pars[, "A"]),
+  rfun = RDM()$rfun)
+m3 <- register_nn_model(path, twin = my_model)
 }

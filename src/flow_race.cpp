@@ -121,7 +121,8 @@ SEXP flow_build(List fl) {
   } catch (...) { delete m; throw; }
   XPtr<FlowModel> ptr(m, true);
   ptr.attr("class") = "flow_model";
-  ptr.attr("model") = as<std::string>(fl["model"]);
+  if (fl.containsElementNamed("model"))       // a label only; cards without an
+    ptr.attr("model") = as<std::string>(fl["model"]);   // analytic model omit it
   return ptr;
 }
 

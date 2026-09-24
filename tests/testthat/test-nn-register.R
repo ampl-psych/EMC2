@@ -246,6 +246,72 @@ test_that("a card naming no model and given no twin is refused", {
   expect_error(register_nn_model(tmp), "no analytic twin")
 })
 
+# --- networks without an analytic model --------------------------------------
+no_model_card <- function() {
+  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
+  x$model <- NULL
+  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
+  tmp
+}
+own_p <- c(v = log(1), B = log(1), t0 = log(0.3), s = log(1), A = log(0.3))
+
+test_that("p_types: a network with no analytic model takes the user's defaults", {
+  m <- register_nn_model(no_model_card(), p_types = own_p)()
+  expect_identical(m$type, "RACE")
+  expect_identical(m$p_types, own_p)
+  expect_identical(m$transform$func[names(own_p)], c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp"))
+  rt <- exp(runif(20, log(.1), log(2)))
+  pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 20), ]
+  expect_identical(m$dfun(rt, pars), RDMnn()$dfun(rt, pars))
+  # un-sampled parameters take the user's defaults; one outside the box is refused
+  des <- suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
+    model = register_nn_model(no_model_card(), p_types = own_p),
+    formula = list(v ~ S, B ~ 1, t0 ~ 1), report_p_vector = FALSE))
+  expect_equal(des$constants[c("s", "A")], own_p[c("s", "A")])
+  expect_error(suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
+    model = register_nn_model(no_model_card(), p_types = replace(own_p, "A", log(5))),
+    formula = list(v ~ S, B ~ 1, t0 ~ 1), report_p_vector = FALSE)), "'A' is at the model default")
+  # no simulator
+  expect_error(m$rfun(NULL, pars), "no simulator")
+  # a joint (DDM-type) flow without a model field evaluates too
+  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
+  x$members[[1]]$model <- NULL; x$model <- NULL
+  f <- tempfile(fileext = ".rds"); saveRDS(x, f)
+  mj <- register_nn_model(f, p_types = c(v = 1, a = log(1), t0 = log(.3), s = log(1), Z = qnorm(.5),
+                                         SZ = qnorm(.3), sv = log(.5), st0 = 0))()
+  expect_identical(mj$type, "DDM")
+  rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
+  pj <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
+  expect_identical(mj$dfun(rt, R, pj), DDMnn("ddm_st0zero")$dfun(rt, R, pj))
+})
+
+test_that("p_types: malformed defaults and ambiguous parameterisations are refused", {
+  f <- no_model_card()
+  expect_error(register_nn_model(f, p_types = own_p[-5]), "no default for network input")
+  expect_error(register_nn_model(f, p_types = unname(own_p)), "named numeric")
+  expect_error(register_nn_model(f, p_types = c(own_p, extra = 0)), "would ignore")
+  expect_error(register_nn_model(f, p_types = own_p, twin = RDM), "either twin")
+  expect_error(register_nn_model(f), "p_types = c\\(")
+})
+
+test_that("a hand-written model function as twin supplies defaults and a simulator", {
+  my_model <- function() list(
+    type = "RACE", p_types = own_p,
+    transform = list(func = c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp")),
+    Ttransform = function(pars, dadm) cbind(pars, b = pars[, "B"] + pars[, "A"]),
+    rfun = RDM()$rfun)
+  des <- suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
+    model = register_nn_model(no_model_card(), twin = my_model),
+    formula = list(v ~ S, B ~ 1, t0 ~ 1, A ~ 1), report_p_vector = FALSE))
+  expect_equal(des$constants[["s"]], own_p[["s"]])
+  p <- sampled_pars(des, doMap = FALSE)
+  p[] <- c(log(1.5), log(.8), log(1.1), log(.25), log(.3))
+  dat <- make_data(p, des, n_trials = 20)
+  expect_true(all(is.finite(dat$rt)))
+  expect_error(register_nn_model(no_model_card(), twin = function() list(type = "DDM", p_types = own_p)),
+               "type RACE")
+})
+
 # --- f. renaming is allowed ---------------------------------------------------
 test_that("renaming a context name (in context_names and context_transforms) is allowed", {
   x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))

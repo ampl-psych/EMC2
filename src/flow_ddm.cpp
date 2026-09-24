@@ -262,7 +262,8 @@ SEXP ddm_build(List fl) {
   try { load_ddm_from_list(fl, *m); } catch (...) { delete m; throw; }
   XPtr<DdmModel> ptr(m, true);
   ptr.attr("class") = "ddm_flow_model";
-  ptr.attr("model") = as<std::string>(fl["model"]);
+  if (fl.containsElementNamed("model"))       // a label only; cards without an
+    ptr.attr("model") = as<std::string>(fl["model"]);   // analytic model omit it
   return ptr;
 }
 
