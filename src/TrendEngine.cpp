@@ -281,6 +281,7 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
     ks.cov_names   = list_strvec(k_lst, "cov_names");
     ks.par_input   = list_strvec(k_lst, "par_input");
     ks.pnames      = list_strvec(k_lst, "pnames");
+    ks.centre      = list_bool(k_lst, "centre", false);
 
     if (k_lst.containsElementNamed("at") && !Rf_isNull(k_lst["at"])) {
       ks.has_at = true;
@@ -406,6 +407,7 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
     for (int s = 0; s < n_slots; ++s) {
       auto kptr = make_kernel(ks.kernel_type, ks.custom_fun);
       kptr->set_kernel_args(ks.kernel_args);
+      kptr->set_centre(ks.centre);
       k_rt.kernel_ptrs.push_back(std::move(kptr));
     }
 
@@ -790,6 +792,7 @@ TrendRuntime clone_trend_runtime(const TrendRuntime& src, const ParamTable& pt_l
     for (int k = 0; k < n_kptrs; ++k) {
       auto new_kptr = make_kernel(ks.kernel_type, ks.custom_fun);
       new_kptr->set_kernel_args(ks.kernel_args);
+      new_kptr->set_centre(ks.centre);
       k_dst.kernel_ptrs.push_back(std::move(new_kptr));
     }
 
