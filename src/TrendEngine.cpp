@@ -1,4 +1,5 @@
 #include "TrendEngine.h"
+#include <cmath>
 
 // =============================================================================
 // Rcpp boundary helpers — used only during TrendPlan construction
@@ -34,6 +35,18 @@ static bool list_bool(const Rcpp::List& lst, const char* field, bool def = false
   SEXP x = lst[field];
   if (Rf_isNull(x)) return def;
   return Rcpp::as<bool>(x);
+}
+
+// optional finite double: returns false (and leaves out untouched) when the
+// field is absent, NULL, or NA
+static bool list_double(const Rcpp::List& lst, const char* field, double& out) {
+  if (!lst.containsElementNamed(field)) return false;
+  SEXP x = lst[field];
+  if (Rf_isNull(x) || Rf_length(x) == 0) return false;
+  double v = Rcpp::as<double>(x);
+  if (!std::isfinite(v)) return false;
+  out = v;
+  return true;
 }
 
 static int list_int(const Rcpp::List& lst, const char* field, int def = 0) {
@@ -281,6 +294,7 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
     ks.cov_names   = list_strvec(k_lst, "cov_names");
     ks.par_input   = list_strvec(k_lst, "par_input");
     ks.pnames      = list_strvec(k_lst, "pnames");
+    ks.has_reference = list_double(k_lst, "reference", ks.reference);
 
     if (k_lst.containsElementNamed("at") && !Rf_isNull(k_lst["at"])) {
       ks.has_at = true;
@@ -427,6 +441,12 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
                   ks.kernel_input.colptr(ks.covariate_indices[s]) + n,
                   buf.colptr(0));
         k_rt.slot_inputs.push_back(std::move(buf));
+        // Reference-point buffer: the same rows, all set to the reference value
+        if (ks.has_reference) {
+          Mat ref(n, 1);
+          std::fill(ref.colptr(0), ref.colptr(0) + n, ks.reference);
+          k_rt.ref_inputs.push_back(std::move(ref));
+        }
       }
 
       // Par_input slots: zero buffer, filled per-particle in run_kernel
@@ -561,9 +581,19 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
     // run each slot kernel against its pre-allocated buffer
     for (int s = 0; s < k_rt.n_slots(); ++s) {
       auto& kptr = k_rt.kernel_ptrs[s];
+      const bool use_ref = ks.has_reference && s < (int)k_rt.ref_inputs.size();
+      if (use_ref) {
+        // k(reference) with this particle's kernel parameters, row by row
+        kptr->reset();
+        kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
+                  k_rt.ref_inputs[s], ks.comp_index);
+        kptr->copy_output_to(k_rt.ref_out);
+      }
       kptr->reset();
       kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
                 k_rt.slot_inputs[s], ks.comp_index);
+      if (use_ref)
+        kptr->subtract_reference(k_rt.ref_out, k_rt.slot_inputs[s], ks.comp_index);
       // only expand in filter mode; push mode output is already full-length
       if (ks.has_at && ks.at_mode == AtMode::Filter) {
         kptr->set_expand_idx(ks.expand_idx);
@@ -812,6 +842,9 @@ TrendRuntime clone_trend_runtime(const TrendRuntime& src, const ParamTable& pt_l
         k_dst.slot_inputs.push_back(Mat(k_src.slot_inputs[s].nrow, 1));
       }
     }
+    // Reference-point buffers: data-derived constants, copy as is
+    k_dst.ref_inputs.reserve(k_src.ref_inputs.size());
+    for (const auto& m : k_src.ref_inputs) k_dst.ref_inputs.push_back(m.clone());
 
     // Fresh kernel_input for variadic kernels
     // This is the mutable field that lives on KernelSpec (marked mutable) in the
