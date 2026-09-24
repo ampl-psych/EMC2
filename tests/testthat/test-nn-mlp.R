@@ -175,3 +175,66 @@ test_that("the converter's JSON card registers the same network as the .rds", {
   pars <- as.matrix(g[, c("v", "a", "z", "t", "st")])
   expect_lt(max(abs(log(m$dfun(g$rt, R, pars)) - g$logp_ort)), 1e-4)
 })
+
+# The documented mapping is where the LAN and the DDM density agree best: for
+# each mapped quantity, scan it around its documented value; the best value
+# must sit within a small band of it (a LAN is an approximation, so the minimum
+# is not exactly at the documented value: measured minima are a = 2.05, t0 shift
+# +0.01, st0 factor 2.1; the bands below are about twice that) and the
+# documented value must beat values one band further out on both sides.
+test_that("the mapping's parameters are recovered as the best agreement (profile scan)", {
+  set.seed(31)
+  n <- 4000
+  th <- cbind(v = runif(n, -2, 2), a = runif(n, .5, 2), z = runif(n, .4, .6),
+              t = runif(n, .35, 1), st = runif(n, .02, .2))
+  rt <- th[, "t"] + th[, "st"] + rexp(n, 1.2) + .05
+  R <- sample(1:2, n, TRUE)
+  lan <- log(lan_model()()$dfun(rt, R, th))
+  d <- DDM()
+  ll <- function(a_scale = 2, dt = 0, st_scale = 2, dz = 0, v_scale = 1)
+    log(d$dfun(rt, R, d$Ttransform(cbind(
+      v = v_scale * th[, "v"], a = a_scale * th[, "a"], sv = 0, t0 = th[, "t"] - th[, "st"] + dt,
+      st0 = st_scale * th[, "st"], s = 1, Z = th[, "z"] + dz, SZ = 0), NULL)))
+  dense <- is.finite(ll()) & ll() > -5
+  score <- function(x) median(abs(lan - x)[dense & is.finite(x)])
+  scan <- function(arg, doc, band) {
+    grid <- doc + band * c(-2, -1, -.5, 0, .5, 1, 2)
+    sc <- vapply(grid, function(g) score(do.call(ll, stats::setNames(list(g), arg))), 0)
+    best <- grid[which.min(sc)]
+    expect_lte(abs(best - doc), band, label = paste0("best ", arg, " (", format(best), ")"))
+    expect_lt(sc[4], sc[1]); expect_lt(sc[4], sc[7])          # beats the values two bands away on both sides
+  }
+  scan("a_scale", 2, .1)
+  scan("dt", 0, .02)
+  scan("st_scale", 2, .3)
+  scan("dz", 0, .01)
+  scan("v_scale", 1, .05)
+})
+
+# --- g. the converter itself (inst/scripts/onnx_to_card.py) ---------------------------------------
+# Needs python with onnx and onnxruntime; point EMC2_NLE_PYTHON at it (default python3).
+test_that("onnx_to_card.py turns the original ONNX file into the golden card, --verify passes", {
+  skip_if_not_installed("jsonlite")
+  py <- Sys.getenv("EMC2_NLE_PYTHON", "python3")
+  has <- suppressWarnings(system2(py, c("-c", shQuote("import onnx, onnxruntime, numpy")),
+                                  stdout = FALSE, stderr = FALSE)) == 0
+  skip_if_not(has, "python with onnx and onnxruntime not available (set EMC2_NLE_PYTHON)")
+  script <- system.file("scripts", "onnx_to_card.py", package = "EMC2")
+  if (!nzchar(script)) script <- test_path("..", "..", "inst", "scripts", "onnx_to_card.py")
+  skip_if_not(file.exists(script))
+  out <- tempfile(fileext = ".json")
+  msg <- system2(py, c(shQuote(script), shQuote(test_path("golden", "ddm_uniform_st.onnx")), shQuote(out),
+                       "--preset", "ddm_uniform_st", "--verify", "500"), stdout = TRUE, stderr = TRUE)
+  expect_null(attr(msg, "status"))
+  diff <- as.numeric(sub(".*max \\|diff\\| = ([0-9.e+-]+).*", "\\1", grep("--verify", msg, value = TRUE)))
+  expect_lt(diff, 1e-4)
+  new <- jsonlite::fromJSON(out, simplifyDataFrame = FALSE)
+  old <- readRDS(lan_card_path)
+  for (f in c("kind", "context_names", "context_transforms", "bounds_natural", "input_layout",
+              "response_values", "ll_floor_log", "mlp", "source_sha256"))
+    expect_identical(new[[f]], old[[f]], label = f)
+  # refuses what it cannot convert or was not told
+  bad <- system2(py, c(shQuote(script), shQuote(test_path("golden", "ddm_uniform_st.onnx")), shQuote(out)),
+                 stdout = TRUE, stderr = TRUE)
+  expect_true(!is.null(attr(bad, "status")) && any(grepl("--params is required", bad)))
+})
