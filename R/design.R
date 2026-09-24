@@ -171,7 +171,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
            paste(target_pars[target_pars %in% lhs_terms], collapse = ", "))
   }
   if(!is.null(trend)) {
-    formula <- check_trend(trend,c(names(functions), covariates), model, formula, parameter_design)
+    formula <- check_trend(trend, model, formula, parameter_design)
   }
 
   # Check if all parameters in the model are specified in the formula
@@ -809,18 +809,25 @@ design_model <- function(data,design,model=NULL,
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
-  Ffunction_names <- character(0)  # keep track for compress_dadm
+  # Apply functions
+  Ffunction_names <- character(0)
   if(!is.null(design$Ffunctions)) {
     for(i in names(design$Ffunctions)) {
       output <- design$Ffunctions[[i]](da)
-      Ffunction_names <- c(Ffunction_names, names(output))
-      if(is.list(output)) {  # data.frame is also a list, so output can be either a list or dataframe
-        new_columns <- setdiff(names(output), names(da))  # only new columns
+      if(is.list(output)) {
+        out_names <- names(output)
+        # don't overwrite existing columns
+        new_columns <- setdiff(out_names, names(da))
+        already_in_data <- intersect(out_names, names(da))
         if(length(new_columns) > 0) da[, new_columns] <- output[new_columns]
       } else {
-        Ffunction_names <- c(Ffunction_names, i)
-        if(!i %in% names(da)) da[, i] <- output
+        out_names <- i
+        already_in_data <- if (i %in% names(da)) i else character(0)
+        if (!i %in% names(da)) da[, i] <- output   # don't overwrite existing columns
       }
+      Ffunction_names <- c(Ffunction_names, out_names)
+      attr(design$Ffunctions[[i]], "output_column_names") <- out_names
+      attr(design$Ffunctions[[i]], "output_column_names_in_data") <- already_in_data
     }
   }
 
@@ -978,6 +985,7 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- if (!is.null(data$rt)) is.finite(data$rt) else rep(TRUE, nrow(data))
   attr(dadm,"s_data") <- data$subjects
+  attr(dadm,"design") <- design
   if (memory_saver) {
     if (!is.null(attr(dadm, "custom_ll"))) {
       warning("memory_saver not supported for custom likelihoods; ignored")
