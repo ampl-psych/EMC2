@@ -12,7 +12,7 @@ make_kernel(
   custom_kernel = NULL,
   at = "lR",
   at_mode = "filter",
-  centre = FALSE
+  reference = NULL
 )
 }
 \arguments{
@@ -65,18 +65,22 @@ accumulators within a trial (e.g. per-symbol feedback in RL models
 with multiple accumulators).}
 }}
 
-\item{centre}{Boolean. If \code{TRUE}, the kernel output is centred: the mean of
-the output over the rows the kernel applies to (those with a finite
-covariate) is subtracted, so the output averages zero. Rows with a
-non-finite covariate contribute no trend and are left at zero. Centring
-makes the target parameter the value at the \emph{average} covariate rather than
-at covariate zero, which removes the collinearity between the target
-parameter and the base weight -- worth doing whenever the covariate varies
-over a narrow range that excludes zero (e.g. stop-signal delays). It changes
-the meaning, and so the prior, of the target parameter. The mean is taken
-within each subject's data, so the target parameter is that subject's value
-at their own average covariate. Not available for the sequential (delta/DBM
-family) kernels. Defaults to \code{FALSE}.
+\item{reference}{Optional numeric scalar, a value of the covariate. If given,
+the kernel output is expressed relative to its value at that point:
+\code{k(c) - k(reference)}, evaluated row by row with the row's own kernel
+parameters. The target parameter then becomes the parameter's value at
+\code{c = reference} instead of at \code{c = 0}, which removes the collinearity
+between the target parameter and the base weight that arises whenever the
+covariate varies over a narrow range that excludes zero (e.g. stop-signal
+delays: choose a \code{reference} near the middle of the delays used). It changes
+the meaning, and so the prior, of the target parameter. Because it is a
+fixed constant, it needs no knowledge of the other trials, so the sampler
+and the trial-by-trial simulator see exactly the same model. Rows with a
+non-finite covariate are left as the kernel produces them: the \verb{slin_*} and
+\verb{sat_*} kernels give 0 there (no trend on that row); every other kernel
+expects a finite covariate, so give such rows the covariate value
+\code{reference} and they contribute exactly 0. Only for a single, non-sequential,
+built-in kernel. Defaults to \code{NULL} (no shift).
 
 Saturating kernels (\verb{slin_*}, \verb{sat_*}, \verb{exp_*}, \verb{pow_*}) become constant
 once the covariate is past the point of saturation, and a constant kernel is

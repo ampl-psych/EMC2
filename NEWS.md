@@ -1,13 +1,10 @@
 # EMC2 3.4.1
 
-## New features (dSSfix)
+## New features (dSSfix1)
 
--   `make_kernel()` gains `centre`: the kernel output is centred over the rows it applies to (those with a finite covariate), so the target parameter becomes its value at the *average* covariate instead of at covariate zero. This removes the collinearity between a target parameter and its base weight that otherwise arises whenever the covariate varies over a narrow range away from zero -- stop-signal delays being the motivating case. Rows with a non-finite covariate carry no trend and stay at zero, and centring is per subject.
+-   `make_kernel()` gains `reference`: a value of the covariate at which the kernel output is taken as zero, i.e. the output becomes `k(c) - k(reference)` row by row. The target parameter is then the parameter's value at `c = reference` instead of at `c = 0`, which removes the collinearity between a target parameter and its base weight that otherwise arises whenever the covariate varies over a narrow range away from zero -- stop-signal delays being the motivating case. The shift is a fixed constant, so it needs no knowledge of the other trials: the sampler and the trial-by-trial simulator see exactly the same model. (This replaces the data-dependent `centre = TRUE` of the unmerged `dSSfix` branch, which centred on the mean of whatever trials were present -- the full data set in the sampler but only the trials simulated so far on the trial-by-trial path.)
 -   New kernels `sat_incr` / `sat_decr`: the same saturating shape as `slin_incr` / `slin_decr` but parameterised by the saturation point, `k = +/- min(1, c / s_sat)`. `s_sat` is in the units of the covariate ("where the plateau starts"), which is the quantity data can speak to and a far easier thing to put a prior on than a rate. Bound it to the observed covariate range with a `pnorm` transform (`design(transform = list(func = c(<target>.s_sat = "pnorm"), lower = ..., upper = ...))`).
-
-## Bug fixes
-
--   Every non-sequential kernel (`lin_*`, `exp_*`, `pow_*`, `poly2/3/4`) now treats a non-finite covariate as "no covariate on this row" and contributes no trend there, as the `slin_*` kernels already did. Previously `design()` refused them outright if the covariate contained `NA`, which made them unusable on stop-signal delays (`SSD` is `Inf` on go trials, and `NA` while data are simulated trial by trial).
+-   A non-finite covariate still means "no trend on this row" for the `slin_*` / `sat_*` kernels only. The other kernels expect a finite covariate and `design()` refuses an `NA` covariate for them, as before: what a missing covariate means is the user's decision. To put such a kernel on a covariate that is undefined on some trials (e.g. `SSD` on go trials, which must stay `Inf` for the stop-signal likelihood), derive a second covariate with a design function that fills those trials with the `reference` value, so they contribute exactly zero.
 
 ## New features (cens_trunc2-SS-dEXG3mu)
 
