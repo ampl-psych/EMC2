@@ -695,7 +695,7 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
 #' @param parameter_design A parameter_design list, or NULL.
 #' @return Updated formula list with intercept formulas added for missing trend
 #'   parameters.
-check_trend <- function(trend, covariates = NULL, model = NULL,
+check_trend <- function(trend, model = NULL,
                         formula = NULL, parameter_design = NULL) {
 
   # ---- non-premap bases must target existing model parameters ----
