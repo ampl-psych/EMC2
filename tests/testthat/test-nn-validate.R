@@ -208,6 +208,12 @@ test_that("nn_sbc_cell writes an archive bundle without running, and a README af
   expect_true(any(grepl("**PASS** (provisional", rd, fixed = TRUE)))
   expect_true(all(file.exists(file.path(dir, "results", c("summary.csv", "ecdf_nn.pdf", "ecdf_control.pdf")))))
   expect_error(nn_sbc_cell(cell, run = FALSE), "archive_dir")
+  # a finished model is loaded, not re-run, when the call is repeated
+  SBC <- fake_sbc(p = names(cell$mean)); prior_alpha <- NULL
+  save(SBC, prior_alpha, file = file.path(dir, "results", "sbc_nn.RData"))
+  res2 <- suppressMessages(nn_sbc_cell(cell, trials = 50, replicates = 4, run_control = FALSE, archive_dir = dir))
+  expect_identical(res2$nn, SBC)
+  expect_identical(res2$summary$std_bias, nn_sbc_summary(SBC)$std_bias)
   unlink(dir, recursive = TRUE)
 })
 

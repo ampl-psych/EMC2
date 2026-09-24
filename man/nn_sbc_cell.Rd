@@ -25,7 +25,8 @@ defaults is built).}
 
 \item{archive_dir}{Directory to write the run into (created); \code{NULL} for
 none. Result files go to \verb{results/}, the SBC temporary files next to
-them (so an interrupted run resumes when the call is repeated).}
+them: repeating an interrupted call resumes it (a model whose run
+finished is loaded, not repeated).}
 
 \item{run}{\code{FALSE} to only write the bundle (needs \code{archive_dir}).}
 
@@ -33,7 +34,7 @@ them (so an interrupted run resumes when the call is repeated).}
 \code{why}, \code{where}, \code{topic}.}
 
 \item{...}{Passed to \code{\link[=run_sbc]{run_sbc()}} (and on to \code{\link[=fit]{fit()}}), e.g.
-\code{cores_per_chain}, \code{stop_criteria}.}
+\code{cores_per_chain}, \code{cores_for_chains}, \code{stop_criteria}.}
 }
 \value{
 (Invisibly) a list: \code{nn} and \code{control} (the SBC objects),
@@ -61,4 +62,11 @@ commit of the EMC2 checkout, why the cell was run, where) come from
 (gate: |standardised bias| <= 0.5 for every parameter; ECDF envelopes and
 KS p-values reported). File it following \code{ARCHIVING.md} (add the
 \code{INDEX.md} row, commit).
+
+\strong{Cores.} In \code{\link[=run_sbc]{run_sbc()}}, \code{cores_per_chain} is the number of replicates
+fitted at once, and each replicate's \code{\link[=fit]{fit()}} also runs its chains in
+parallel (\code{cores_for_chains}, by default the number of chains): the
+total is their product. For a cell, parallel replicates are the
+efficient choice, e.g. \verb{cores_per_chain = 8, cores_for_chains = 1} for 8
+cores in all.
 }

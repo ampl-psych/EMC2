@@ -76,11 +76,12 @@ nn_in_box(des, pri)
 ## Four checks, cheapest first
 
 ```{r, eval = FALSE}
-nn_total_mass(cell)                        # seconds
-nn_score_bias(cell, n_draws = 200)         # seconds
-nn_posterior_shift(cell, n_datasets = 60)  # about a minute
-nn_sbc_cell(cell, trials = 400, replicates = 500, cores_per_chain = 10,
-            archive_dir = "2026-10-01_dev-nle_cap256w-sbc")   # hours
+nn_total_mass(cell)                                   # seconds
+nn_score_bias(cell, n_draws = 200)                    # seconds
+nn_posterior_shift(cell, n_datasets = 60, cores = 8)  # about a minute
+nn_sbc_cell(cell, trials = 400, replicates = 500,     # hours
+            cores_per_chain = 8, cores_for_chains = 1,
+            archive_dir = "2026-10-01_dev-nle_cap256w-sbc")
 ```
 
 **Total mass** (`nn_total_mass()`) integrates the network's likelihood over rt
@@ -120,7 +121,10 @@ runs `run_sbc()` on the network's cell and on the control's, summarises both
 the KS test of the ranks; the ECDF envelope), and, given `archive_dir`, writes
 the run in the layout of the EMC2 SBC archive. With `run = FALSE` it only
 writes the bundle (the cell and a script that runs it), to be copied to a
-cluster.
+cluster. In `run_sbc()`, `cores_per_chain` is the number of replicates fitted
+at once, and each fit runs its chains in parallel too (`cores_for_chains`,
+by default the number of chains), so the call above with
+`cores_for_chains = 1` uses 8 cores, and without it 24.
 
 None of these checks identifiability: SBC passes by construction for a
 parameter the data do not inform. For a new model, add parameter recovery
@@ -178,8 +182,8 @@ every printed digit. For the LAN the grid has to reach 60 s: with the default
 parameter vectors with probability beyond 8 s (the print reports how much of
 the probability the grid holds).
 
-**Posterior shift** (60 data sets x 400 trials, 2000 draws; about a minute for
-all four networks on 10 cores). Network standardised bias, with the shift
+**Posterior shift** (60 data sets x 400 trials, 2000 draws; under two minutes
+for all four networks on 10 cores). Network standardised bias, with the shift
 from the control's posterior in control posterior sds in brackets; every
 control column is within +-0.36 (standard error 0.13).
 

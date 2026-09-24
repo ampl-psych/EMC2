@@ -981,18 +981,26 @@ nn_wstats <- function(lw, X) {
 #'   KS p-values reported). File it following `ARCHIVING.md` (add the
 #'   `INDEX.md` row, commit).
 #'
+#'   **Cores.** In [run_sbc()], `cores_per_chain` is the number of replicates
+#'   fitted at once, and each replicate's [fit()] also runs its chains in
+#'   parallel (`cores_for_chains`, by default the number of chains): the
+#'   total is their product. For a cell, parallel replicates are the
+#'   efficient choice, e.g. `cores_per_chain = 8, cores_for_chains = 1` for 8
+#'   cores in all.
+#'
 #' @param x An [nn_cell()], or a neural-likelihood model (a cell with the
 #'   defaults is built).
 #' @param trials,replicates Trials per replicate and number of replicates.
 #' @param run_control Also run the control cell.
 #' @param archive_dir Directory to write the run into (created); `NULL` for
 #'   none. Result files go to `results/`, the SBC temporary files next to
-#'   them (so an interrupted run resumes when the call is repeated).
+#'   them: repeating an interrupted call resumes it (a model whose run
+#'   finished is loaded, not repeated).
 #' @param run `FALSE` to only write the bundle (needs `archive_dir`).
 #' @param info Optional named list for the README: `branch`, `commit`,
 #'   `why`, `where`, `topic`.
 #' @param ... Passed to [run_sbc()] (and on to [fit()]), e.g.
-#'   `cores_per_chain`, `stop_criteria`.
+#'   `cores_per_chain`, `cores_for_chains`, `stop_criteria`.
 #' @return (Invisibly) a list: `nn` and `control` (the SBC objects),
 #'   `summary` (a data frame, both models), `cell`.
 #' @export
@@ -1012,16 +1020,29 @@ nn_sbc_cell <- function(x, trials = 400, replicates = 500, run_control = TRUE, a
   }
   out <- list(nn = NULL, control = NULL, summary = NULL, cell = cell)
   if (run) {
-    out$nn <- do.call(run_sbc, c(list(cell$design, cell$prior, replicates = replicates, trials = trials,
-                                      fileName = f_nn), dots))
+    out$nn <- nn_sbc_run(cell$design, cell$prior, replicates, trials, f_nn, dots)
     if (run_control)
-      out$control <- do.call(run_sbc, c(list(cell$control_design, cell$control_prior, replicates = replicates,
-                                             trials = trials, fileName = f_ctl), dots))
+      out$control <- nn_sbc_run(cell$control_design, cell$control_prior, replicates, trials, f_ctl, dots)
     out$summary <- rbind(cbind(model = "network", nn_sbc_summary(out$nn)),
                          if (run_control) cbind(model = "control", nn_sbc_summary(out$control)))
   }
   if (!is.null(archive_dir)) nn_sbc_write(archive_dir, out, trials, replicates, dots, info)
   invisible(out)
+}
+
+# run_sbc() for one model of a cell. A finished run in `f` (its SBC saved and
+# its temporary directory gone) is loaded, not repeated, so repeating an
+# interrupted nn_sbc_cell() call resumes where it stopped.
+nn_sbc_run <- function(des, pri, replicates, trials, f, dots) {
+  if (!is.null(f) && file.exists(f) && !dir.exists(paste0(tools::file_path_sans_ext(f), "_temp"))) {
+    env <- new.env(parent = emptyenv())
+    load(f, envir = env)
+    if (!is.null(env$SBC)) {
+      message("Loading the finished SBC run in ", f)
+      return(env$SBC)
+    }
+  }
+  do.call(run_sbc, c(list(des, pri, replicates = replicates, trials = trials, fileName = f), dots))
 }
 
 #' Calibration Summary of an SBC Run
