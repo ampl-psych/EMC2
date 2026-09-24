@@ -148,6 +148,91 @@ test_that("C++ evaluator agrees with the R port over 40 random thetas (1e-10)", 
   expect_lt(check("rdm_small", FALSE), 1e-10)
 })
 
+# --- batched evaluator (distinct-row index, GEMM blocks) ---------------------
+# random in-box rows on the sampled scale, away from the box faces
+box_rows <- function(fl, n) {
+  lo <- fl$bounds_sampled$lower; hi <- fl$bounds_sampled$upper
+  t(replicate(n, lo + (hi - lo) * runif(length(lo), .02, .98)))
+}
+
+test_that("batched MLP forward pass matches R matrix algebra, with and without LayerNorm", {
+  set.seed(3)
+  mk <- function(dims, norm) {
+    layers <- lapply(seq_len(length(dims) - 1), function(i)
+      list(W = matrix(rnorm(dims[i] * dims[i + 1], sd = 1 / sqrt(dims[i])), dims[i]),
+           b = rnorm(dims[i + 1], sd = .1)))
+    mlp <- list(activation = "gelu_tanh", layers = layers, use_norm = norm)
+    if (norm) mlp$norms <- lapply(dims[2:(length(dims) - 1)], function(d)
+      list(scale = runif(d, .5, 1.5), bias = rnorm(d, sd = .1), eps = 1e-5))
+    mlp
+  }
+  for (norm in c(FALSE, TRUE)) {
+    mlp <- mk(c(6, 40, 30, 11), norm)
+    X <- matrix(rnorm(300 * 6, sd = 3), 300)      # wide inputs reach the GELU tails
+    ref <- port$.mlp_fwd(mlp, X, use_norm = norm, norms = mlp$norms)
+    expect_lt(max(abs(nle("nle_mlp_forward")(mlp, X) - ref)), 1e-12)
+    expect_lt(max(abs(nle("nle_mlp_forward")(mlp, X[1, , drop = FALSE]) - ref[1, ])), 1e-12)
+  }
+})
+
+test_that("distinct-row batching equals row-by-row evaluation (interleaved, out-of-box, NaN rows)", {
+  set.seed(11)
+  for (name in c("ddm_cap256w_c4", "ddm_st0zero", "rdm_small")) {
+    fl <- artefact_member(name)
+    D <- box_rows(fl, 40)
+    D[1:3, 1] <- fl$bounds_sampled$upper[1] + 1               # out of box
+    D[4, 2] <- NaN
+    Th <- D[sample(40, 700, TRUE), ]                          # interleaved repeats
+    rt <- exp(runif(700, log(.06), log(3)))
+    if (!is.null(fl$flow_mlp)) {
+      R <- sample(1:2, 700, TRUE)
+      p1 <- nle("ddm_build")(fl)
+      tv <- nle("ddm_eval_trials_cpp")(p1, Th, rt, R)
+      rw <- lapply(1:700, function(t) nle("ddm_eval_cpp")(p1, Th[t, ], rt[t], R[t]))
+      for (o in c("pdf", "cdf", "log_pdf", "p_R"))
+        expect_equal(tv[[o]], vapply(rw, `[[`, 0, o), tolerance = 1e-10, label = paste(name, o))
+      # an ensemble of identical members is the member itself (log-sum-exp path)
+      e3 <- nle("ddm_ens_eval_trials_cpp")(nle("ddm_build_ensemble")(list(fl, fl, fl)), Th, rt, R)
+      for (o in c("pdf", "cdf", "log_pdf", "p_R"))
+        expect_equal(e3[[o]], tv[[o]], tolerance = 1e-12, label = paste(name, "ensemble", o))
+    } else {
+      ptr <- nle("nle_get")(name)
+      tv <- nle("flow_eval_trials_cpp")(ptr, Th, rt)
+      rw <- lapply(1:700, function(t) nle("flow_eval_cpp")(ptr, Th[t, ], rt[t]))
+      for (o in c("pdf", "cdf", "log_pdf", "log_sf"))
+        expect_equal(tv[[o]], vapply(rw, `[[`, 0, o), tolerance = 1e-10, label = paste(name, o))
+    }
+    expect_true(all(tv$log_pdf[Th[, 1] > fl$bounds_sampled$upper[1] | is.nan(Th[, 2])] == -Inf))
+  }
+})
+
+test_that("per-trial rows over several GEMM blocks agree with the R port (1e-10), incl. triple encoding", {
+  set.seed(5)
+  n <- 300                                   # > one 256-column block for every network
+  check <- function(fl) {
+    Th <- box_rows(fl, n); rt <- exp(runif(n, log(.06), log(3)))
+    if (!is.null(fl$flow_mlp)) {
+      R <- sample(1:2, n, TRUE)
+      cv <- nle("ddm_eval_trials_cpp")(nle("ddm_build")(fl), Th, rt, R)
+      ref <- lapply(1:n, function(t) port$ddm_eval(fl, Th[t, ], rt[t], R[t]))
+    } else {
+      cv <- nle("flow_eval_trials_cpp")(nle("flow_build")(fl), Th, rt)
+      ref <- lapply(1:n, function(t) port$flow_eval(fl, Th[t, ], rt[t]))
+    }
+    max(abs(cv$log_pdf - vapply(ref, `[[`, 0, "log_pdf")),
+        abs(cv$cdf - vapply(ref, `[[`, 0, "cdf")))
+  }
+  expect_lt(check(artefact_member("ddm_cap256w_c4")), 1e-10)
+  expect_lt(check(artefact_member("ddm_st0zero")), 1e-10)
+  expect_lt(check(artefact_member("rdm_small")), 1e-10)
+  # No shipped artefact uses the (SZ0, SZ, SZ1) encoding; exercise it on a
+  # relabelled copy (the numbers are meaningless, the agreement is the test).
+  fl <- artefact_member("ddm_cap256w_c4")
+  fl$context_encoding <- "triple"
+  fl$classifier_scaler <- list(mean = fl$scaler$mean + .1, scale = fl$scaler$scale * 1.2)
+  expect_lt(check(fl), 1e-10)
+})
+
 # --- model definitions ------------------------------------------------------
 test_that("DDMnn / RDMnn defaults are identical to DDM / RDM (defaults trap)", {
   expect_identical(DDMnn()$p_types, DDM()$p_types)

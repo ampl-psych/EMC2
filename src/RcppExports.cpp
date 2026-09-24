@@ -176,6 +176,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// nle_mlp_forward
+NumericMatrix nle_mlp_forward(List mlp, NumericMatrix X);
+RcppExport SEXP _EMC2_nle_mlp_forward(SEXP mlpSEXP, SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type mlp(mlpSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(nle_mlp_forward(mlp, X));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calculate_subject_means
 arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params);
 RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP) {
@@ -734,6 +746,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_flow_build", (DL_FUNC) &_EMC2_flow_build, 1},
     {"_EMC2_flow_eval_cpp", (DL_FUNC) &_EMC2_flow_eval_cpp, 3},
     {"_EMC2_flow_eval_trials_cpp", (DL_FUNC) &_EMC2_flow_eval_trials_cpp, 3},
+    {"_EMC2_nle_mlp_forward", (DL_FUNC) &_EMC2_nle_mlp_forward, 2},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
     {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},

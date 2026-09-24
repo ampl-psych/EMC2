@@ -5,8 +5,8 @@
 # simulated data (Wuth, 2026, MSc thesis, UvA; NLE project). The trained
 # artefacts ship as inst/extdata/flownn/*.rds, are pinned by sha256 in
 # inst/extdata/flownn/MANIFEST, and are evaluated by compiled code
-# (src/flow_ddm.cpp, src/flow_race.cpp; both copied verbatim from the NLE
-# handover package, which is their source of truth).
+# (src/flow_ddm.cpp, src/flow_race.cpp, derived from the NLE handover package,
+# which defines the models; the batched evaluator core is src/nle_flow.h).
 #
 # The flows are only valid inside their training region. That box is enforced
 # twice: as the model's `bound` (EMC2 rejects proposals outside it via the

@@ -53,6 +53,10 @@ flow_eval_trials_cpp <- function(ptr_, theta, rt) {
     .Call(`_EMC2_flow_eval_trials_cpp`, ptr_, theta, rt)
 }
 
+nle_mlp_forward <- function(mlp, X) {
+    .Call(`_EMC2_nle_mlp_forward`, mlp, X)
+}
+
 calculate_subject_means <- function(group_designs, params) {
     .Call(`_EMC2_calculate_subject_means`, group_designs, params)
 }
