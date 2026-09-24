@@ -38,6 +38,15 @@ test_that("shipped artefacts register by name and by full path", {
   expect_identical(by_name$sha256, by_path$sha256)
   expect_identical(by_path$artefact, "rdm_small")   # shipped, however it was addressed
 
+  # a directory named like the artefact (an output folder) does not shadow it
+  wd <- file.path(tempdir(), "nn_shadow")
+  dir.create(file.path(wd, "rdm_small"), recursive = TRUE, showWarnings = FALSE)
+  old_wd <- setwd(wd)
+  shadowed <- tryCatch(RDMnn()$nn, finally = setwd(old_wd))
+  expect_identical(shadowed$artefact, "rdm_small")
+  expect_identical(shadowed$sha256, by_name$sha256)
+  unlink(wd, recursive = TRUE)
+
   codes <- c(identity = 0, log = 1, probit = 2)[by_name$transforms]
   expect_equal(unname(codes), by_name$transform_codes)
 

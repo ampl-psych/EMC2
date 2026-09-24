@@ -70,7 +70,9 @@ nn_resolve <- function(path) {
   if (!is.character(path) || length(path) != 1L || is.na(path))
     stop("path must be a single file path or the name of a shipped artefact")
   shipped <- sub("\\.rds$", "", names(nle_manifest()))
-  if (!file.exists(path)) {
+  # only an existing regular file is a file: a directory that happens to carry
+  # an artefact's name (e.g. an output folder "rdm_small") must not shadow it
+  if (!file.exists(path) || dir.exists(path)) {
     if (path %in% shipped) return(nn_shipped(path))
     stop("No neural-likelihood artefact or file '", path, "'; shipped artefacts: ",
          paste(shipped, collapse = ", "))
