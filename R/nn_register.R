@@ -305,7 +305,16 @@ nn_ptr <- function(reg) {
 #'
 #' Loading a neural likelihood is not the same as being able to infer with it:
 #' check calibration and identifiability (parameter recovery, likelihood
-#' profiles, SBC) before drawing conclusions.
+#' profiles, SBC) before drawing conclusions. The validation kit runs the
+#' checks against the analytic twin: [nn_cell()] builds matched cells,
+#' [nn_total_mass()], [nn_score_bias()] and [nn_posterior_shift()] screen a
+#' network in minutes, and [nn_sbc_cell()] runs an SBC cell with its matched
+#' analytic control (see `vignette("neural-likelihoods", package = "EMC2")`).
+#'
+#' **Parallel work on macOS.** Accelerate, the BLAS EMC2 uses there,
+#' multithreads large matrix products in a way that crashes forked processes
+#' (parallel chains, [run_sbc()]); EMC2 therefore sets
+#' `VECLIB_MAXIMUM_THREADS=1` when it is loaded, unless it is already set.
 #'
 #' @param path An `.rds` bundle or `.json` model card, or the name of an
 #'   artefact shipped with EMC2 (`"ddm_cap256w_c4"`, `"ddm_st0zero"`,
@@ -343,7 +352,9 @@ nn_ptr <- function(reg) {
 #' @return A model function (like [DDM]) whose list carries, besides the usual
 #'   elements, `nn`: the registration (`kind`, `sha256`, `pars` and
 #'   `context_names` in the network's order, `transforms`, the training box,
-#'   `fixed`, `pre`, `cdf`, `ll_floor` and the card's metadata).
+#'   `fixed`, `pre`, `cdf`, `ll_floor`, the card's metadata and `twin`: the
+#'   name of an EMC2 analytic twin, a hand-written twin function, or `NULL`).
+#' @seealso [nn_cell()] and the validation kit; [DDMnn()], [RDMnn()].
 #' @examples
 #' # A shipped artefact; the card names its analytic twin (RDM)
 #' m <- register_nn_model("rdm_small")
@@ -516,10 +527,23 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
     ll_floor = m1$ll_floor_log, oob = oob, n_members = length(card$members),
-    input_layout = m1$input_layout, card = card_meta)
+    input_layout = m1$input_layout, card = card_meta,
+    # the analytic twin, the default control of the validation kit
+    # (R/nn_validate.R): the name of an EMC2 model, a hand-written model
+    # function, or NULL (p_types)
+    twin = nn_twin_ref(twin))
   reg$native <- nn_native_spec(reg)
   class(reg) <- "emc_nn"
   nn_model_function(nn_model_list(reg, tl, minmax))
+}
+
+# An EMC2 analytic model is kept by name (small, and resolved in the installed
+# package); a hand-written twin as the function itself.
+nn_twin_ref <- function(twin) {
+  if (is.null(twin)) return(NULL)
+  for (nm in nn_twin_names)
+    if (identical(twin, get(nm, envir = asNamespace("EMC2")))) return(nm)
+  twin
 }
 
 # The parameterisation of a network with no analytic model: the user's
@@ -647,7 +671,7 @@ nn_model_list <- function(reg, tl, minmax) {
     # DDM flows take raw SZ, not DDM's 2 * SZ * min(Z, 1 - Z)); only refuse
     # values it cannot represent.
     Ttransform = function(pars, dadm) {
-      nn_check_pars(pars, reg)
+      nn_check_pars(pars, reg, dadm)
       pars
     },
     prepare_design = function(formula, constants, Rlevels = NULL, ...)
@@ -706,7 +730,15 @@ nn_native_spec <- function(reg) {
 }
 
 # The native spec with the live evaluator (rebuilt if the session lost it).
-nn_native_args <- function(reg) c(reg$native, list(ptr = nn_ptr(reg)))
+# `constants`: the dadm's constants; the default refusal applies only to them
+# (see nn_refused_defaults()).
+nn_native_args <- function(reg, constants = NULL) {
+  a <- c(reg$native, list(ptr = nn_ptr(reg)))
+  keep <- names(a$refuse) %in% names(constants)
+  a$refuse <- a$refuse[keep]
+  a$refuse_msg <- a$refuse_msg[keep]
+  a
+}
 
 # ---------------------------------------------------------------------------
 # Evaluation (R path)
@@ -769,14 +801,25 @@ nn_fixed_message <- function(p, reg)
          "' (the network was trained without it); it cannot be sampled or set to another value.")
 
 # Run time (every likelihood evaluation): a backstop for what design() refuses.
-nn_check_pars <- function(pars, reg) {
+nn_check_pars <- function(pars, reg, dadm = NULL) {
   for (p in names(reg$fixed))
     if (p %in% colnames(pars) && any(pars[, p] != reg$fixed[[p]], na.rm = TRUE))
       stop(nn_fixed_message(p, reg))
-  for (p in reg$refuse_default)
+  for (p in nn_refused_defaults(reg, dadm))
     if (p %in% colnames(pars) && all(pars[, p] == reg$defaults[[p]]))
       stop(nn_default_message(p, reg$defaults[[p]], reg))
   invisible(TRUE)
+}
+
+# The parameters whose default outside the training region is refused: those
+# a design leaves at their default (its constants). A sampled parameter that
+# reaches the default value exactly (a probit input underflowing to 0 at an
+# extreme proposal) is outside the region like any other value, and the
+# bounds reject it. Without a dadm (e.g. simulated data) every such parameter
+# is checked.
+nn_refused_defaults <- function(reg, dadm) {
+  if (is.null(dadm) || is.null(attr(dadm, "p_names"))) return(reg$refuse_default)
+  intersect(reg$refuse_default, names(attr(dadm, "constants")))
 }
 
 # Censoring and truncation are not wired for neural likelihoods; both paths

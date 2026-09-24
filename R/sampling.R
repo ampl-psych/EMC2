@@ -1007,7 +1007,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       backend   <- getOption("emc.ll_backend", default = "multiprocess")
       n_threads <- getOption("emc.n_threads", default = 1)
       # neural likelihoods: the registration and the live evaluator
-      nn <- if (identical(model$c_name, "NN")) nn_native_args(model$nn)
+      nn <- if (identical(model$c_name, "NN")) nn_native_args(model$nn, attr(dadm, "constants"))
 
       if (backend == "multithreaded") {
         lls <- calc_ll_multithreaded(proposals, dadm, constants = constants, designs = designs,

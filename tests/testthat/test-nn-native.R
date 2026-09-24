@@ -216,6 +216,20 @@ test_that("the run-time refusals (fixed parameter, default outside the box) matc
   expect_error(ll_manager(P2, d2, r_path(s2$model)), "'sv' is at the model default")
 })
 
+test_that("a sampled parameter that reaches its default exactly is out of bounds, not refused", {
+  # SZ is sampled; probit -40 underflows to SZ = 0, the twin's default outside
+  # the box (an optimiser or a wild proposal can get there): floored, no error
+  des <- ddm_design()
+  p <- ddm_p(des)
+  s <- setup_nn(des, p, 30)
+  P <- rbind(p, replace(p, "SZ", -40))
+  for (m in list(s$model, r_path(s$model))) {
+    ll <- as.numeric(ll_manager(P, s$dadm, m))
+    expect_true(is.finite(ll[1]))
+    expect_equal(ll[2], nrow(s$dat) * log(1e-10))
+  }
+})
+
 # --- d. registry: the evaluator is rebuilt for the native path ------------------
 test_that("after save/load and a cleared cache the native path rebuilds the evaluator", {
   des <- race_design()

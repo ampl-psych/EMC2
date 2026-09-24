@@ -5,6 +5,15 @@
 #' the (implied) group-level (co-)variance are returned.
 #' For non-hierarchical models only the subject-level parameters rank is returned.
 #'
+#' For a neural-likelihood model (e.g. [DDMnn], or one made with
+#' [register_nn_model()]) the prior must lie inside the network's training
+#' region to +-4 prior sds ([nn_in_box()]; the width is
+#' `getOption("emc.nn_box_k", 4)`, and for a hierarchical prior the group-mean
+#' prior is checked): a replicate whose true parameters leave the region
+#' cannot be recovered by the network, so such an SBC is refused.
+#' [nn_sbc_cell()] builds a cell that satisfies this, with a matched analytic
+#' control.
+#'
 #' @param design_in An emc design list. The design of the model to be used in SBC
 #' @param prior_in An emc prior list. The prior for the design to be used in SBC
 #' @param replicates Integer. The number of samples to draw from the prior
@@ -21,6 +30,8 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                     plot_data = FALSE, verbose = TRUE,
                     fileName = NULL, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
+  # neural likelihoods: a prior leaving the training region cannot calibrate
+  nn_sbc_box_check(design_in, prior_in)
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,

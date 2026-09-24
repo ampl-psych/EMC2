@@ -62,7 +62,8 @@ names a model.}
 A model function (like \link{DDM}) whose list carries, besides the usual
 elements, \code{nn}: the registration (\code{kind}, \code{sha256}, \code{pars} and
 \code{context_names} in the network's order, \code{transforms}, the training box,
-\code{fixed}, \code{pre}, \code{cdf}, \code{ll_floor} and the card's metadata).
+\code{fixed}, \code{pre}, \code{cdf}, \code{ll_floor}, the card's metadata and \code{twin}: the
+name of an EMC2 analytic twin, a hand-written twin function, or \code{NULL}).
 }
 \description{
 Turns a trained neural likelihood (a normalizing flow or a regression net
@@ -181,7 +182,16 @@ by \code{pre}, nor fixed by \code{exceptions}); a \code{pre} that is not a shift
 
 Loading a neural likelihood is not the same as being able to infer with it:
 check calibration and identifiability (parameter recovery, likelihood
-profiles, SBC) before drawing conclusions.
+profiles, SBC) before drawing conclusions. The validation kit runs the
+checks against the analytic twin: \code{\link[=nn_cell]{nn_cell()}} builds matched cells,
+\code{\link[=nn_total_mass]{nn_total_mass()}}, \code{\link[=nn_score_bias]{nn_score_bias()}} and \code{\link[=nn_posterior_shift]{nn_posterior_shift()}} screen a
+network in minutes, and \code{\link[=nn_sbc_cell]{nn_sbc_cell()}} runs an SBC cell with its matched
+analytic control (see \code{vignette("neural-likelihoods", package = "EMC2")}).
+
+\strong{Parallel work on macOS.} Accelerate, the BLAS EMC2 uses there,
+multithreads large matrix products in a way that crashes forked processes
+(parallel chains, \code{\link[=run_sbc]{run_sbc()}}); EMC2 therefore sets
+\code{VECLIB_MAXIMUM_THREADS=1} when it is loaded, unless it is already set.
 }
 \examples{
 # A shipped artefact; the card names its analytic twin (RDM)
@@ -209,4 +219,7 @@ my_model <- function() list(
   Ttransform = function(pars, dadm) cbind(pars, b = pars[, "B"] + pars[, "A"]),
   rfun = RDM()$rfun)
 m3 <- register_nn_model(path, twin = my_model)
+}
+\seealso{
+\code{\link[=nn_cell]{nn_cell()}} and the validation kit; \code{\link[=DDMnn]{DDMnn()}}, \code{\link[=RDMnn]{RDMnn()}}.
 }

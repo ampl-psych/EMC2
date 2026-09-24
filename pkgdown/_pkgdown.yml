@@ -14,6 +14,18 @@ reference:
   - RDM
   - DDMGNG
   - SDT
+- title: Neural Likelihoods
+- contents:
+  - DDMnn
+  - RDMnn
+  - register_nn_model
+  - nn_cell
+  - nn_in_box
+  - nn_total_mass
+  - nn_score_bias
+  - nn_posterior_shift
+  - nn_sbc_cell
+  - nn_sbc_summary
 - title: Design and Mapping
 - contents:
   - design

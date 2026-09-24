@@ -50,7 +50,8 @@
 #'
 #' Loading a neural likelihood is not the same as being able to infer with it:
 #' check calibration and identifiability (parameter recovery, likelihood
-#' profiles, SBC) before drawing conclusions.
+#' profiles, SBC) before drawing conclusions; [nn_cell()] and the validation
+#' kit run these checks against [DDM].
 #'
 #' `DDMnn(artefact)` is `register_nn_model(artefact, kind = "flow_joint",
 #' twin = DDM)()`; see [register_nn_model()] for the contract.
@@ -98,7 +99,7 @@ DDMnn <- function(artefact = "ddm_cap256w_c4")
 #' Data generation (`rfun`) uses the analytic RDM, so simulation-based
 #' checks compare flow-based inference against exact data. Loading a neural
 #' likelihood is not the same as being able to infer with it; validate before
-#' use.
+#' use ([nn_cell()] and the validation kit run the checks against [RDM]).
 #'
 #' Wuth, J. (2026). *Likelihood approximation in evidence accumulation
 #' models: A comparison of kernel density and neural likelihood methods*

@@ -54,7 +54,8 @@ generated with the exact sampler (\code{WienR::rWDM}).
 
 Loading a neural likelihood is not the same as being able to infer with it:
 check calibration and identifiability (parameter recovery, likelihood
-profiles, SBC) before drawing conclusions.
+profiles, SBC) before drawing conclusions; \code{\link[=nn_cell]{nn_cell()}} and the validation
+kit run these checks against \link{DDM}.
 
 \code{DDMnn(artefact)} is \code{register_nn_model(artefact, kind = "flow_joint", twin = DDM)()}; see \code{\link[=register_nn_model]{register_nn_model()}} for the contract.
 

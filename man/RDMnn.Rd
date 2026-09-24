@@ -41,7 +41,7 @@ Unlike \link{RDM}, \code{A = 0} and \code{v = 0} are not available (the flow tra
 Data generation (\code{rfun}) uses the analytic RDM, so simulation-based
 checks compare flow-based inference against exact data. Loading a neural
 likelihood is not the same as being able to infer with it; validate before
-use.
+use (\code{\link[=nn_cell]{nn_cell()}} and the validation kit run the checks against \link{RDM}).
 
 Wuth, J. (2026). \emph{Likelihood approximation in evidence accumulation
 models: A comparison of kernel density and neural likelihood methods}
