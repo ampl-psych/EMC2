@@ -254,3 +254,65 @@ test_that("a native fit reproduces the R-path fit draw for draw", {
   aR <- get_pars(fR, stage = "sample", merge_chains = TRUE, return_mcmc = FALSE)
   expect_equal(aN, aR, tolerance = 1e-8)
 })
+
+# --- plain-MLP kinds: mlp_joint (a LAN) and regression_joint -------------------------------------
+# The LAN has no simulator, so data come from EMC2's DDM (its own parameterisation).
+lan_path <- test_path("golden", "lan_ddm_uniform_st.rds")
+lan_fun <- register_nn_model(lan_path, p_types = c(v = 0, a = 1, z = .5, t = .5, st = .05))
+
+lan_setup <- function(n_trials = 150, seed = 3) {
+  set.seed(seed)
+  ddm <- suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
+                                 model = DDM, formula = list(v ~ S, a ~ 1, t0 ~ 1),
+                                 constants = c(s = 0, Z = 0, SZ = -Inf, sv = -Inf, st0 = -Inf),
+                                 report_p_vector = FALSE))
+  pd <- sampled_pars(ddm, doMap = FALSE)
+  pd[] <- c(v = 1, v_Sb = -.5, a = log(2.4), t0 = log(.4))[names(pd)]
+  dat <- make_data(pd, ddm, n_trials = n_trials)
+  des <- ddm_design(model = lan_fun, formula = list(v ~ S, a ~ 1, z ~ 1, t ~ 1, st ~ 1), constants = NULL)
+  emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 1, compress = TRUE,
+                                   verbose = FALSE, rt_resolution = .001))
+  p <- sampled_pars(des, doMap = FALSE)
+  p[] <- c(v = 1, v_Sb = -.5, a = 1.2, z = .5, t = .5, st = .1)[names(p)]
+  list(dadm = emc[[1]]$data[[1]], model = emc[[1]]$model, p = p, des = des)
+}
+
+test_that("mlp_joint (a LAN): native equals the R path, incl. out-of-box particles", {
+  s <- lan_setup()
+  expect_true(all(is.finite(ll_manager(rbind(s$p), s$dadm, s$model))))
+  P <- proposals_around(s$p, n = 40, sd = .04, n_out = 3)
+  P[10, "st"] <- .5                                      # outside the network's box: floor rows / bound
+  expect_native_matches_r(P, s$dadm, s$model)
+})
+
+test_that("mlp_joint: trials whose time is below the LAN's box of rt are floored, not dropped", {
+  s <- lan_setup()
+  d <- s$dadm; d$rt[1:5] <- .05                         # rt below t - st: density ~ the floor
+  P <- proposals_around(s$p, n = 10, sd = .02, n_out = 0)
+  llN <- ll_manager(P, d, s$model)
+  expect_lt(rel_diff(llN, ll_manager(P, d, r_path(s$model))), 1e-9)
+})
+
+mk_reg_model <- function() {
+  set.seed(5)
+  m1 <- readRDS(file.path(nle("nle_dir")(), "ddm_cap256w_c4.rds"))$members[[1]]
+  layers <- function(dims) lapply(seq_len(length(dims) - 1), function(i)
+    list(W = matrix(rnorm(dims[i] * dims[i + 1], sd = 1 / sqrt(dims[i])), dims[i]), b = rnorm(dims[i + 1], sd = .1)))
+  card <- list(context_names = m1$context_names, context_transforms = m1$context_transforms,
+               bounds_natural = m1$bounds_natural, bounds_sampled = m1$bounds_sampled, model = "DDM",
+               mlp = list(activation = "gelu_tanh", layers = layers(c(10, 32, 16, 1)), use_norm = FALSE),
+               input_layout = c("v", "a", "t0", "log_rt", "R", "s", "Z", "SZ", "sv", "st0"),
+               scaler = list(mean = rnorm(10, sd = .1), scale = runif(10, .5, 2)),
+               response_values = c(-1, 1), output_scaler = list(mean = -1, scale = 2))
+  tmp <- tempfile(fileext = ".rds"); saveRDS(card, tmp)
+  register_nn_model(tmp)
+}
+
+test_that("regression_joint: native equals the R path (per-trial rt and the response enter the network)", {
+  des <- ddm_design(model = mk_reg_model(), formula = list(v ~ S, a ~ 1, t0 ~ 1),
+                    constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), st0 = log(.1), Z = qnorm(.5)))
+  p <- sampled_pars(des, doMap = FALSE)
+  p[] <- c(.5, -.5, log(1.2), log(.25))[seq_along(p)]
+  s <- setup_nn(des, p, 150)
+  expect_native_matches_r(proposals_around(p, sd = .05), s$dadm, s$model)
+})

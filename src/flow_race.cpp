@@ -196,7 +196,7 @@ List flow_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt) {
 // [[Rcpp::export]]
 NumericMatrix nle_mlp_forward(List mlp, NumericMatrix X) {
   nle::Mlp m;
-  nle::load_mlp(mlp, m, "nle_mlp_forward");
+  nle::load_mlp(mlp, m, "nle_mlp_forward", true);
   if (X.ncol() != m.n_in()) stop("X must have %d columns.", m.n_in());
   const arma::mat Xt = arma::mat(X.begin(), X.nrow(), X.ncol(), false, true).t();
   const arma::mat Y = nle::mlp_forward_batch(m, Xt);

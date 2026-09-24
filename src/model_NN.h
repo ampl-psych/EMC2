@@ -6,7 +6,7 @@
 // order with their scales, and an optional parameter subtracted from rt
 // (`pre`). Per particle, after the ordinary parameter pipeline:
 //   natural-scale columns of the ParamTable -> network inputs -> evaluator
-//   flow_joint: log p(rt - pre, R | theta) per trial
+//   flow_joint, regression_joint, mlp_joint: log p(rt - pre, R | theta) per trial
 //   flow_race:  log pdf for the winning accumulator, log survivor for the
 //               losers, summed per trial
 // Bounds, expansion and clamping are the pipeline's, as for other models.
@@ -33,7 +33,9 @@ struct NnCheck {        // a run-time refusal (see nn_check_pars() in R)
 };
 
 struct NnSpec {
-  bool race = false;                       // flow_race; else flow_joint
+  bool race = false;                       // flow_race; else a joint (two-response) network
+  bool mlp_kind = false;                   // regression_joint / mlp_joint (plain MLP)
+  const MlpLik* mlp = nullptr;
   const DdmEnsemble* ddm = nullptr;
   const FlowModel* flow = nullptr;
   int nc = 0;                              // network inputs
@@ -73,6 +75,7 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   const std::string kind = as<std::string>(nn["kind"]);
   if (kind == "flow_joint") s.race = false;
   else if (kind == "flow_race") s.race = true;
+  else if (kind == "regression_joint" || kind == "mlp_joint") s.mlp_kind = true;
   else stop(what + "no compiled likelihood for kind '" + kind + "'");
 
   s.n_rows = data.nrow();
@@ -102,6 +105,7 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   // evaluator and inputs
   SEXP ptr = nn["ptr"];
   if (s.race) { s.flow = nle_flow_handle(ptr); s.nc = nle_flow_n_ctx(s.flow); }
+  else if (s.mlp_kind) { s.mlp = nle_mlp_handle(ptr); s.nc = nle_mlp_n_ctx(s.mlp); }
   else        { s.ddm = nle_ddm_handle(ptr);   s.nc = nle_ddm_n_ctx(s.ddm); }
   CharacterVector pars = nn["pars"];
   IntegerVector codes = nn["transform_codes"];
@@ -210,7 +214,10 @@ inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
   if (!s.race) {
     w.Rr.resize(m);
     for (int i = 0; i < m; ++i) w.Rr[i] = s.R[w.rows[i]];
-    if (m > 0) nle_ddm_native(s.ddm, w.th.data(), m, s.tf.data(), w.tn.data(), w.Rr.data(), w.lp.data());
+    if (m > 0) {
+      if (s.mlp_kind) nle_mlp_native(s.mlp, w.th.data(), m, s.tf.data(), w.tn.data(), w.Rr.data(), w.lp.data());
+      else nle_ddm_native(s.ddm, w.th.data(), m, s.tf.data(), w.tn.data(), w.Rr.data(), w.lp.data());
+    }
     std::fill(ll_trial, ll_trial + s.n_trials, R_NegInf);
     for (int i = 0; i < m; ++i) ll_trial[w.rows[i]] = w.lp[i];
     return;

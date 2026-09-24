@@ -46,7 +46,8 @@ nle_manifest <- function() {
   stats::setNames(lapply(parts, function(p) p[1]), vapply(parts, `[`, "", 2))
 }
 
-nn_kinds <- c("flow_joint", "flow_race", "regression_joint")
+nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint")
+nn_mlp_kinds <- c("regression_joint", "mlp_joint")
 nn_transform_codes <- c(identity = 0L, log = 1L, probit = 2L)
 # card `model` field -> analytic twin (an EMC2 model function)
 nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA")
@@ -159,7 +160,7 @@ nn_fill_sampled_box <- function(m) {
 nn_infer_kind <- function(m) {
   if (!is.null(m$flow_mlp) && !is.null(m$classifier_mlp)) "flow_joint"
   else if (!is.null(m$mlp) && !is.null(m$spline)) "flow_race"
-  else if (!is.null(m$mlp)) "regression_joint"
+  else if (!is.null(m$mlp)) if (identical(m$kind, "mlp_joint")) "mlp_joint" else "regression_joint"
   else stop("Cannot tell what kind of network this card holds (neither flow_mlp + classifier_mlp nor mlp)")
 }
 
@@ -169,7 +170,7 @@ nn_ptr <- function(reg) {
   key <- paste0("ptr:", reg$kind, ":", reg$sha256)
   ptr <- nle_cache[[key]]
   valid <- !is.null(ptr) && switch(reg$kind, flow_joint = ddm_ptr_valid(ptr),
-                                   flow_race = flow_ptr_valid(ptr), regression_joint = TRUE)
+                                   flow_race = flow_ptr_valid(ptr), mlp_lik_valid(ptr))
   if (!valid) {
     res <- if (!is.null(reg$artefact)) nn_shipped(reg$artefact) else list(path = reg$path)
     hit <- nn_card(res)
@@ -178,7 +179,7 @@ nn_ptr <- function(reg) {
            "(sha256 ", reg$sha256, ", now ", hit$sha256, "); re-register it and re-make the design")
     mem <- hit$card$members
     ptr <- switch(reg$kind, flow_joint = ddm_build_ensemble(mem), flow_race = flow_build(mem[[1]]),
-                  regression_joint = mem[[1]])
+                  mlp_lik_build(mem[[1]], reg$lower_s, reg$upper_s, reg$oob))
     nle_cache[[key]] <- ptr
   }
   ptr
@@ -219,7 +220,7 @@ nn_ptr <- function(reg) {
 #' scale in `context_names` order; if both are present they must agree), the
 #' weights (`flow_mlp` + `classifier_mlp` + `spline` + `scaler` for
 #' `"flow_joint"`, `mlp` + `spline` + `scaler` for `"flow_race"`, `mlp` for
-#' `"regression_joint"`), and optionally `model`, `kind`, `ll_floor_log`,
+#' `"regression_joint"` and `"mlp_joint"`), and optionally `model`, `kind`, `ll_floor_log`,
 #' `context_encoding`. A name in `context_transforms` that is not in
 #' `context_names` was fixed when the network was trained; its value must be
 #' given in `exceptions` unless the card implies it (`context_encoding =
@@ -241,16 +242,39 @@ nn_ptr <- function(reg) {
 #'   optionally `scaler` (`mean`, `scale`; one entry per input, standardising
 #'   the whole input vector), `response_values` (the input values coding
 #'   responses 1 and 2; default `c(1, 2)`) and `output_scaler` (`mean`,
-#'   `scale`: output = raw * scale + mean). It has no CDF.
+#'   `scale`: output = raw * scale + mean). It has no CDF. Hidden layers are
+#'   GELU (tanh approximation) or tanh; rows outside the training box have log
+#'   density `-Inf`.
+#' * `"mlp_joint"`: the same evaluator for a likelihood approximation network
+#'   (LAN, e.g. the published HSSM networks) converted from ONNX. The card
+#'   is written by `inst/scripts/onnx_to_card.py` (in the installed package:
+#'   `system.file("scripts", "onnx_to_card.py", package = "EMC2")`); EMC2 does
+#'   not run ONNX, a LAN being a plain MLP whose `.onnx` file only holds the
+#'   weights. As for `"regression_joint"` the card declares `input_layout` and
+#'   `response_values` (HSSM: `c(-1, 1)` for responses 1, 2), and in addition
+#'   `ll_floor_log`, the log density that rows outside the training box
+#'   return (the floor of the labels the network was trained on) instead of
+#'   `-Inf`. A LAN is in its own parameterisation, so give `p_types` (the
+#'   defaults for its parameters as it takes them) and read the mapping to
+#'   the corresponding analytic model from the card; for HSSM's
+#'   `ddm_uniform_st` (inputs `v, a, z, t, st`) it is `a_DDM = 2 * a`,
+#'   `Z = z`, `t0 = t - st`, `st0 = 2 * st`, `sv = SZ = 0`, `s = 1`.
+#'   **Loading a LAN is not the same as being able to infer with it.** Its
+#'   calibration is unknown until checked: an approximation error of the
+#'   log density that varies over the parameter space biases the posterior
+#'   (for `ddm_uniform_st` the NLE project measured a mean score of -0.122 on
+#'   log `a`, where a calibrated likelihood gives 0), and the box, the floor and any
+#'   rt range the network was trained on are not enforced beyond what the card
+#'   states. Run parameter recovery and a simulation-based calibration cell
+#'   for the LAN in your own design before using it for inference.
 #'
-#' **Evaluation.** Flow networks (`"flow_joint"`, `"flow_race"`) whose `pre`
+#' **Evaluation.** Networks whose `pre`
 #' is `NULL` or a parameter name run inside EMC2's compiled likelihood (the
 #' model's `c_name` is `"NN"`): for every particle the parameters are mapped,
 #' passed to the network and the log-likelihood summed in C++, so fits need no
 #' R code per particle and can use
 #' `options(emc.ll_backend = "multithreaded", emc.n_threads = )`. A `pre`
-#' function and `"regression_joint"` networks take the R path (the model's
-#' `dfun`/`pfun` for each particle). Both paths give the same log-likelihood
+#' function takes the R path (the model's `dfun`/`pfun` for each particle). Both paths give the same log-likelihood
 #' (to rounding); both refuse censored or truncated data.
 #'
 #' **Networks without an analytic model.** Nothing requires an analytic
@@ -293,10 +317,11 @@ nn_ptr <- function(reg) {
 #' @param transforms The scale of each input (`"identity"`, `"log"`,
 #'   `"probit"`), in the network's order or named. Default: the card's
 #'   `context_transforms`; if both are given they must agree.
-#' @param kind `"flow_joint"`, `"flow_race"` or `"regression_joint"`. Default:
+#' @param kind `"flow_joint"`, `"flow_race"`, `"regression_joint"` or
+#'   `"mlp_joint"`. Default:
 #'   inferred from the card; if given it must match.
 #' @param cdf Whether the network provides a CDF. Default `TRUE` for flows,
-#'   `FALSE` for regression nets. With `cdf = FALSE`, `pfun` refuses.
+#'   `FALSE` for the MLP kinds. With `cdf = FALSE`, `pfun` refuses.
 #' @param exceptions Named natural-scale values of twin parameters that the
 #'   network does not take as input because they were fixed in training
 #'   (e.g. `c(st0 = 0)`). The model admits exactly that value and refuses
@@ -406,7 +431,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
 
   # --- training box -----------------------------------------------------------
   box <- nn_box(m1, ctx, tr_card, tfs, what)
-  if (kind != "regression_joint" && is.null(m1$bounds_sampled))   # read by the compiled evaluators
+  if (!(kind %in% nn_mlp_kinds) && is.null(m1$bounds_sampled))   # read by the compiled evaluators
     stop(what, "a flow card must carry bounds_sampled (or bounds_natural with context_transforms)")
 
   # --- parameterisation: the analytic twin, or the user's own defaults -----------
@@ -461,13 +486,15 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
          "not used by pre and not fixed by exceptions: the network would ignore them")
 
   # --- CDF --------------------------------------------------------------------------
-  if (is.null(cdf)) cdf <- kind != "regression_joint"
+  is_mlp <- kind %in% nn_mlp_kinds
+  if (is.null(cdf)) cdf <- !is_mlp
   if (!is.logical(cdf) || length(cdf) != 1L || is.na(cdf)) stop(what, "cdf must be TRUE or FALSE")
-  if (kind == "regression_joint" && cdf) stop(what, "a regression net has no CDF (cdf must be FALSE)")
+  if (is_mlp && cdf) stop(what, "a ", kind, " network has no CDF (cdf must be FALSE)")
   if (kind == "flow_race" && !cdf)
     stop(what, "a race needs the survivor function (1 - CDF) of the losing accumulators, ",
          "so a flow_race network without a CDF cannot be assembled into a race")
-  if (kind == "regression_joint") nn_check_regression(m1, ctx, what)
+  if (is_mlp) nn_check_regression(m1, ctx, kind, what)
+  oob <- if (kind == "mlp_joint") m1$ll_floor_log else -Inf
 
   # --- bounds -------------------------------------------------------------------------
   minmax <- vapply(names(pt), function(p) {
@@ -488,7 +515,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     lower = lower, upper = upper, lower_s = box$lower_s, upper_s = box$upper_s,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
-    ll_floor = m1$ll_floor_log, n_members = length(card$members),
+    ll_floor = m1$ll_floor_log, oob = oob, n_members = length(card$members),
     input_layout = m1$input_layout, card = card_meta)
   reg$native <- nn_native_spec(reg)
   class(reg) <- "emc_nn"
@@ -577,9 +604,11 @@ nn_check_pre <- function(pre, pars, defaults, box, what) {
   used
 }
 
-nn_check_regression <- function(m, ctx, what) {
+nn_check_regression <- function(m, ctx, kind, what) {
   lay <- m$input_layout
-  if (is.null(lay)) stop(what, "a regression_joint card must declare input_layout (the network's inputs in order)")
+  if (is.null(lay)) stop(what, "a ", kind, " card must declare input_layout (the network's inputs in order)")
+  if (kind == "mlp_joint" && !(is.numeric(m$ll_floor_log) && length(m$ll_floor_log) == 1L && is.finite(m$ll_floor_log)))
+    stop(what, "a mlp_joint card must give ll_floor_log, the finite log density returned outside the training box")
   lay <- as.character(lay)
   bad <- setdiff(lay, c(ctx, nn_data_inputs))
   if (length(bad)) stop(what, "input_layout entries ", paste(bad, collapse = ", "),
@@ -589,11 +618,13 @@ nn_check_regression <- function(m, ctx, what) {
   n_in <- nrow(m$mlp$layers[[1]]$W)
   if (n_in != length(lay)) stop(what, "input_layout has ", length(lay), " entries; the network has ", n_in, " inputs")
   if (ncol(m$mlp$layers[[length(m$mlp$layers)]]$W) != 1L)
-    stop(what, "a regression_joint network must have a single output (the joint log density)")
+    stop(what, "a ", kind, " network must have a single output (the joint log density)")
   if (!is.null(m$scaler) && (length(m$scaler$mean) != n_in || length(m$scaler$scale) != n_in))
-    stop(what, "a regression_joint scaler needs one mean and scale per input (", n_in, ")")
+    stop(what, "a ", kind, " scaler needs one mean and scale per input (", n_in, ")")
   if (!is.null(m$response_values) && length(m$response_values) != 2L)
     stop(what, "response_values must give the input values for responses 1 and 2")
+  if (!is.null(m$output_scaler) && !(length(m$output_scaler$mean) == 1L && length(m$output_scaler$scale) == 1L))
+    stop(what, "output_scaler needs one mean and one scale")
   nle_mlp_forward(m$mlp, matrix(0, 1L, n_in))     # refuses an unsupported activation now
   invisible(TRUE)
 }
@@ -659,11 +690,10 @@ nn_model_function <- function(ml) {
 # ---------------------------------------------------------------------------
 
 # What calc_ll()/calc_ll_multithreaded() (type "NN", src/model_NN.h) need
-# besides the evaluator; NULL when the model must take the R path: a `pre`
-# function (R code), or a kind with no compiled likelihood yet
-# (regression_joint). The refusals mirror nn_check_pars().
+# besides the evaluator; NULL when the model must take the R path (a `pre`
+# function is R code). The refusals mirror nn_check_pars().
 nn_native_spec <- function(reg) {
-  if (!(reg$kind %in% c("flow_joint", "flow_race")) || is.function(reg$pre)) return(NULL)
+  if (is.function(reg$pre)) return(NULL)
   refuse <- reg$defaults[reg$refuse_default]
   list(kind = reg$kind, label = reg$label, pars = reg$pars,
        transform_codes = reg$transform_codes,
@@ -709,10 +739,8 @@ nn_eval_joint <- function(reg, rt, R, pars, what) {
   if (!any(use)) return(out)
   if (!all(use)) { pars <- pars[use, , drop = FALSE]; tn <- tn[use]; R <- R[use] }
   theta <- nn_context(pars, reg)
-  out[use] <- if (reg$kind == "regression_joint") {
-    lp <- nn_regression_logpdf(reg, theta, tn, R)
-    if (what == "pdf") exp(lp) else stop("regression nets have no CDF")
-  } else ddm_ens_eval_trials_cpp(nn_ptr(reg), theta, tn, R)[[what]]
+  out[use] <- if (reg$kind %in% nn_mlp_kinds) exp(mlp_lik_eval_cpp(nn_ptr(reg), theta, tn, R))
+  else ddm_ens_eval_trials_cpp(nn_ptr(reg), theta, tn, R)[[what]]
   out
 }
 
@@ -724,27 +752,6 @@ nn_eval_race <- function(reg, rt, pars, what) {
   if (!all(use)) { pars <- pars[use, , drop = FALSE]; tn <- tn[use] }
   out[use] <- flow_eval_trials_cpp(nn_ptr(reg), nn_context(pars, reg), tn)[[what]]
   out
-}
-
-# Joint log density from a regression net; out-of-box rows are -Inf.
-nn_regression_logpdf <- function(reg, theta, tn, R) {
-  m <- nn_ptr(reg)
-  lay <- as.character(m$input_layout)
-  rv <- if (is.null(m$response_values)) c(1, 2) else as.numeric(m$response_values)
-  X <- matrix(0, length(tn), length(lay))
-  for (i in seq_along(lay))
-    X[, i] <- switch(lay[i], rt = tn, log_rt = log(tn), R = rv[R], theta[, match(lay[i], reg$context_names)])
-  if (!is.null(m$scaler))
-    X <- sweep(sweep(X, 2L, as.numeric(m$scaler$mean)), 2L, as.numeric(m$scaler$scale), "/")
-  inb <- rowSums(is.na(theta) | theta < rep(reg$lower_s, each = nrow(theta)) |
-                   theta > rep(reg$upper_s, each = nrow(theta))) == 0
-  lp <- rep(-Inf, length(tn))
-  if (any(inb)) {
-    y <- nle_mlp_forward(m$mlp, X[inb, , drop = FALSE])[, 1L]
-    if (!is.null(m$output_scaler)) y <- y * m$output_scaler$scale + m$output_scaler$mean
-    lp[inb] <- y
-  }
-  lp
 }
 
 # ---------------------------------------------------------------------------

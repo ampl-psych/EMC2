@@ -65,6 +65,18 @@ draw_alpha_from_design <- function(group_designs, mu, var) {
     .Call(`_EMC2_draw_alpha_from_design`, group_designs, mu, var)
 }
 
+mlp_lik_valid <- function(ptr_) {
+    .Call(`_EMC2_mlp_lik_valid`, ptr_)
+}
+
+mlp_lik_build <- function(card, lower_s, upper_s, oob) {
+    .Call(`_EMC2_mlp_lik_build`, card, lower_s, upper_s, oob)
+}
+
+mlp_lik_eval_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_mlp_lik_eval_cpp`, ptr_, theta, rt, R)
+}
+
 dlba <- function(t, A, b, v, sv, posdrift = TRUE) {
     .Call(`_EMC2_dlba`, t, A, b, v, sv, posdrift)
 }

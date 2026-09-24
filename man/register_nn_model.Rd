@@ -30,11 +30,12 @@ permutation is refused).}
 \code{"probit"}), in the network's order or named. Default: the card's
 \code{context_transforms}; if both are given they must agree.}
 
-\item{kind}{\code{"flow_joint"}, \code{"flow_race"} or \code{"regression_joint"}. Default:
+\item{kind}{\code{"flow_joint"}, \code{"flow_race"}, \code{"regression_joint"} or
+\code{"mlp_joint"}. Default:
 inferred from the card; if given it must match.}
 
 \item{cdf}{Whether the network provides a CDF. Default \code{TRUE} for flows,
-\code{FALSE} for regression nets. With \code{cdf = FALSE}, \code{pfun} refuses.}
+\code{FALSE} for the MLP kinds. With \code{cdf = FALSE}, \code{pfun} refuses.}
 
 \item{exceptions}{Named natural-scale values of twin parameters that the
 network does not take as input because they were fixed in training
@@ -92,7 +93,7 @@ parameter inputs in order), \code{context_transforms} (per name: \code{"identity
 scale in \code{context_names} order; if both are present they must agree), the
 weights (\code{flow_mlp} + \code{classifier_mlp} + \code{spline} + \code{scaler} for
 \code{"flow_joint"}, \code{mlp} + \code{spline} + \code{scaler} for \code{"flow_race"}, \code{mlp} for
-\code{"regression_joint"}), and optionally \code{model}, \code{kind}, \code{ll_floor_log},
+\code{"regression_joint"} and \code{"mlp_joint"}), and optionally \code{model}, \code{kind}, \code{ll_floor_log},
 \code{context_encoding}. A name in \code{context_transforms} that is not in
 \code{context_names} was fixed when the network was trained; its value must be
 given in \code{exceptions} unless the card implies it (\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
@@ -114,17 +115,40 @@ name (entered on its sampled scale) or one of \code{"rt"}, \code{"log_rt"}, \cod
 optionally \code{scaler} (\code{mean}, \code{scale}; one entry per input, standardising
 the whole input vector), \code{response_values} (the input values coding
 responses 1 and 2; default \code{c(1, 2)}) and \code{output_scaler} (\code{mean},
-\code{scale}: output = raw * scale + mean). It has no CDF.
+\code{scale}: output = raw * scale + mean). It has no CDF. Hidden layers are
+GELU (tanh approximation) or tanh; rows outside the training box have log
+density \code{-Inf}.
+\item \code{"mlp_joint"}: the same evaluator for a likelihood approximation network
+(LAN, e.g. the published HSSM networks) converted from ONNX. The card
+is written by \code{inst/scripts/onnx_to_card.py} (in the installed package:
+\code{system.file("scripts", "onnx_to_card.py", package = "EMC2")}); EMC2 does
+not run ONNX, a LAN being a plain MLP whose \code{.onnx} file only holds the
+weights. As for \code{"regression_joint"} the card declares \code{input_layout} and
+\code{response_values} (HSSM: \code{c(-1, 1)} for responses 1, 2), and in addition
+\code{ll_floor_log}, the log density that rows outside the training box
+return (the floor of the labels the network was trained on) instead of
+\code{-Inf}. A LAN is in its own parameterisation, so give \code{p_types} (the
+defaults for its parameters as it takes them) and read the mapping to
+the corresponding analytic model from the card; for HSSM's
+\code{ddm_uniform_st} (inputs \verb{v, a, z, t, st}) it is \code{a_DDM = 2 * a},
+\code{Z = z}, \code{t0 = t - st}, \code{st0 = 2 * st}, \code{sv = SZ = 0}, \code{s = 1}.
+\strong{Loading a LAN is not the same as being able to infer with it.} Its
+calibration is unknown until checked: an approximation error of the
+log density that varies over the parameter space biases the posterior
+(for \code{ddm_uniform_st} the NLE project measured a mean score of -0.122 on
+log \code{a}, where a calibrated likelihood gives 0), and the box, the floor and any
+rt range the network was trained on are not enforced beyond what the card
+states. Run parameter recovery and a simulation-based calibration cell
+for the LAN in your own design before using it for inference.
 }
 
-\strong{Evaluation.} Flow networks (\code{"flow_joint"}, \code{"flow_race"}) whose \code{pre}
+\strong{Evaluation.} Networks whose \code{pre}
 is \code{NULL} or a parameter name run inside EMC2's compiled likelihood (the
 model's \code{c_name} is \code{"NN"}): for every particle the parameters are mapped,
 passed to the network and the log-likelihood summed in C++, so fits need no
 R code per particle and can use
 \code{options(emc.ll_backend = "multithreaded", emc.n_threads = )}. A \code{pre}
-function and \code{"regression_joint"} networks take the R path (the model's
-\code{dfun}/\code{pfun} for each particle). Both paths give the same log-likelihood
+function takes the R path (the model's \code{dfun}/\code{pfun} for each particle). Both paths give the same log-likelihood
 (to rounding); both refuse censored or truncated data.
 
 \strong{Networks without an analytic model.} Nothing requires an analytic

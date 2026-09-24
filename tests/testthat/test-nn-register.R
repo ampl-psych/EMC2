@@ -443,7 +443,7 @@ test_that("a regression_joint model runs through design() + make_emc() + calc_ll
   pm <- matrix(p_vector, nrow = 1, dimnames = list(NULL, names(p_vector)))
   ll <- calc_ll_manager(pm, dadm, des$model)
   expect_true(is.finite(ll))
-  expect_null(des$model()$c_name)       # no compiled likelihood yet: the R path
+  expect_identical(des$model()$c_name, "NN")   # regression nets run natively too (test-nn-native.R)
 })
 
 # --- i. registry: lazy rebuild, save/load, sha256 pin, no weights ------------

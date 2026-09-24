@@ -1,3 +1,9 @@
+# EMC2 (development)
+
+## New features (dev-nle)
+
+-   `register_nn_model()` accepts two more kinds of neural likelihood, `"regression_joint"` (direct-regression MLPs) and `"mlp_joint"` (likelihood approximation networks such as HSSM's LANs). Both run in the compiled likelihood, like the flows, with the weights loaded once. `inst/scripts/onnx_to_card.py` converts an ONNX MLP (tanh hidden layers) into a model card; EMC2 does not depend on onnxruntime.
+
 # EMC2 3.4.1
 
 ## New features (cens_trunc2-SS-dEXG3mu)

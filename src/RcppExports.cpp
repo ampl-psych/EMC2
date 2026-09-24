@@ -213,6 +213,45 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mlp_lik_valid
+bool mlp_lik_valid(SEXP ptr_);
+RcppExport SEXP _EMC2_mlp_lik_valid(SEXP ptr_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_valid(ptr_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mlp_lik_build
+SEXP mlp_lik_build(List card, NumericVector lower_s, NumericVector upper_s, double oob);
+RcppExport SEXP _EMC2_mlp_lik_build(SEXP cardSEXP, SEXP lower_sSEXP, SEXP upper_sSEXP, SEXP oobSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type card(cardSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lower_s(lower_sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type upper_s(upper_sSEXP);
+    Rcpp::traits::input_parameter< double >::type oob(oobSEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_build(card, lower_s, upper_s, oob));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mlp_lik_eval_cpp
+NumericVector mlp_lik_eval_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt, IntegerVector R);
+RcppExport SEXP _EMC2_mlp_lik_eval_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP RSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type R(RSEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_eval_cpp(ptr_, theta, rt, R));
+    return rcpp_result_gen;
+END_RCPP
+}
 // dlba
 NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift);
 RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP) {
@@ -751,6 +790,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_nle_mlp_forward", (DL_FUNC) &_EMC2_nle_mlp_forward, 2},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
     {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
+    {"_EMC2_mlp_lik_valid", (DL_FUNC) &_EMC2_mlp_lik_valid, 1},
+    {"_EMC2_mlp_lik_build", (DL_FUNC) &_EMC2_mlp_lik_build, 4},
+    {"_EMC2_mlp_lik_eval_cpp", (DL_FUNC) &_EMC2_mlp_lik_eval_cpp, 4},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 6},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},

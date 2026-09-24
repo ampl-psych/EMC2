@@ -54,15 +54,20 @@ struct Mlp {
   std::vector<arma::mat> Wt;
   std::vector<arma::vec> b;
   bool use_norm = false;
+  bool tanh_act = false;      // hidden activation tanh (LANs) instead of GELU(tanh)
   std::vector<arma::vec> norm_scale, norm_bias;
   std::vector<double> norm_eps;
   int n_in()  const { return (int)Wt.front().n_cols; }
   int n_out() const { return (int)Wt.back().n_rows; }
 };
 
-inline void load_mlp(Rcpp::List mlp_list, Mlp& m, const char* who) {
-  if (Rcpp::as<std::string>(mlp_list["activation"]) != "gelu_tanh")
-    Rcpp::stop("%s: unsupported activation.", who);
+// Flow conditioners are GELU(tanh) only; plain likelihood networks (allow_tanh)
+// may also use tanh hidden layers, as the published LANs do.
+inline void load_mlp(Rcpp::List mlp_list, Mlp& m, const char* who, bool allow_tanh = false) {
+  const std::string act = Rcpp::as<std::string>(mlp_list["activation"]);
+  if (act == "tanh" && allow_tanh) m.tanh_act = true;
+  else if (act != "gelu_tanh")
+    Rcpp::stop("%s: unsupported activation '%s'.", who, act.c_str());
   Rcpp::List layers = mlp_list["layers"];
   if (layers.size() < 1) Rcpp::stop("%s: MLP has no layers.", who);
   for (int i = 0; i < layers.size(); ++i) {
@@ -104,6 +109,20 @@ inline void gelu_block(double* z, arma::uword N, std::vector<double>& e) {
   for (arma::uword k = 0; k < N; ++k) z[k] = z[k] / (1.0 + e[k]);
 }
 
+// tanh over a block, tanh(x) = sign(x) (1 - E) / (1 + E), E = exp(-2 |x|) <= 1:
+// exact algebra with one vectorised exp per element (std::tanh dominated the
+// runtime of the tanh networks). Absolute error ~1e-16 (relative error grows
+// only as |x| -> 0, where tanh(x) ~ x).
+inline void tanh_block(double* z, arma::uword N, std::vector<double>& e) {
+  e.resize(N);
+  for (arma::uword k = 0; k < N; ++k) e[k] = -2.0 * std::fabs(z[k]);
+  vec_exp(e.data(), (int)N);
+  for (arma::uword k = 0; k < N; ++k) {
+    const double t = (1.0 - e[k]) / (1.0 + e[k]);
+    z[k] = z[k] < 0.0 ? -t : t;
+  }
+}
+
 // X: n_in x U, one input vector per column -> n_out x U. One matrix product per
 // layer (GEMV when U = 1); columns never interact.
 inline arma::mat mlp_forward_batch(const Mlp& m, const arma::mat& X) {
@@ -131,7 +150,8 @@ inline arma::mat mlp_forward_batch(const Mlp& m, const arma::mat& X) {
             z[j] = (z[j] - mu) * inv_sd * sc[j] + bi[j];
         }
       }
-      gelu_block(Z.memptr(), Z.n_elem, e);
+      if (m.tanh_act) tanh_block(Z.memptr(), Z.n_elem, e);
+      else gelu_block(Z.memptr(), Z.n_elem, e);
     }
     H.steal_mem(Z);
   }

@@ -14,11 +14,14 @@
 
 struct DdmEnsemble;
 struct FlowModel;
+struct MlpLik;
 
 const DdmEnsemble* nle_ddm_handle(SEXP ptr);
 const FlowModel*   nle_flow_handle(SEXP ptr);
+const MlpLik*      nle_mlp_handle(SEXP ptr);
 int nle_ddm_n_ctx(const DdmEnsemble* e);
 int nle_flow_n_ctx(const FlowModel* f);
+int nle_mlp_n_ctx(const MlpLik* m);
 
 // th: m x n_ctx natural-scale network inputs (column-major, the network's
 // order); tf: per input 0 identity, 1 log, 2 probit; tn: the network's time
@@ -27,6 +30,12 @@ int nle_flow_n_ctx(const FlowModel* f);
 
 // Joint DDM flow: log p(tn, R | theta), R in {1, 2}.
 void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf,
+                    const double* tn, const int* R, double* log_pdf);
+
+// Plain-MLP likelihood (mlp_lik.cpp; regression_joint and mlp_joint cards):
+// log p(tn, R | theta) per row, R in {1, 2}. Rows outside the training box
+// get the network's out-of-box value (-Inf, or the card's log floor).
+void nle_mlp_native(const MlpLik* m, const double* th, int n, const int* tf,
                     const double* tn, const int* R, double* log_pdf);
 
 // Race flow: per row, want = 1 -> log pdf into log_pdf, want = 2 -> log
