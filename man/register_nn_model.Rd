@@ -117,6 +117,16 @@ responses 1 and 2; default \code{c(1, 2)}) and \code{output_scaler} (\code{mean}
 \code{scale}: output = raw * scale + mean). It has no CDF.
 }
 
+\strong{Evaluation.} Flow networks (\code{"flow_joint"}, \code{"flow_race"}) whose \code{pre}
+is \code{NULL} or a parameter name run inside EMC2's compiled likelihood (the
+model's \code{c_name} is \code{"NN"}): for every particle the parameters are mapped,
+passed to the network and the log-likelihood summed in C++, so fits need no
+R code per particle and can use
+\code{options(emc.ll_backend = "multithreaded", emc.n_threads = )}. A \code{pre}
+function and \code{"regression_joint"} networks take the R path (the model's
+\code{dfun}/\code{pfun} for each particle). Both paths give the same log-likelihood
+(to rounding); both refuse censored or truncated data.
+
 \strong{Networks without an analytic model.} Nothing requires an analytic
 twin. There are two ways to supply the parameterisation yourself:
 \itemize{

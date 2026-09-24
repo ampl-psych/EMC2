@@ -319,6 +319,34 @@ inline RowIndex index_rows(const double* M, int n, int k) {
   return ix;
 }
 
+// Natural-scale parameter -> the network's input scale (code 0 identity,
+// 1 log, 2 probit), as R's log()/qnorm() compute it. Arguments outside the
+// domain give NaN (out of box) without the R warning qnorm would raise, so
+// this is safe inside OpenMP threads.
+inline double to_net_scale(double v, int code) {
+  switch (code) {
+  case 1: return std::log(v);
+  case 2: return (v >= 0.0 && v <= 1.0) ? R::qnorm(v, 0.0, 1.0, 1, 0) : NAN;
+  default: return v;
+  }
+}
+
+// Distinct rows of the natural-scale inputs th (m x nc, column-major) and
+// those rows on the network's scale (nc x U, one distinct row per column).
+// Indexing before transforming means each distinct row is transformed once;
+// the transforms are monotone, so the grouping is the one the transformed
+// rows would give.
+inline RowIndex index_net_rows(const double* th, int m, int nc, const int* tf,
+                               std::vector<double>& Theta_u) {
+  RowIndex ix = index_rows(th, m, nc);
+  const int U = ix.U();
+  Theta_u.resize((size_t)U * nc);
+  for (int u = 0; u < U; ++u)
+    for (int j = 0; j < nc; ++j)
+      Theta_u[(size_t)u * nc + j] = to_net_scale(th[ix.first[u] + (size_t)j * m], tf[j]);
+  return ix;
+}
+
 // Group items 0..n-1 by key in [0, n_keys) (key < 0 = skip): counting sort.
 // Items of key q are order[start[q] .. start[q + 1]).
 struct Groups {

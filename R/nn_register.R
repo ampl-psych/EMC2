@@ -243,6 +243,16 @@ nn_ptr <- function(reg) {
 #'   responses 1 and 2; default `c(1, 2)`) and `output_scaler` (`mean`,
 #'   `scale`: output = raw * scale + mean). It has no CDF.
 #'
+#' **Evaluation.** Flow networks (`"flow_joint"`, `"flow_race"`) whose `pre`
+#' is `NULL` or a parameter name run inside EMC2's compiled likelihood (the
+#' model's `c_name` is `"NN"`): for every particle the parameters are mapped,
+#' passed to the network and the log-likelihood summed in C++, so fits need no
+#' R code per particle and can use
+#' `options(emc.ll_backend = "multithreaded", emc.n_threads = )`. A `pre`
+#' function and `"regression_joint"` networks take the R path (the model's
+#' `dfun`/`pfun` for each particle). Both paths give the same log-likelihood
+#' (to rounding); both refuse censored or truncated data.
+#'
 #' **Networks without an analytic model.** Nothing requires an analytic
 #' twin. There are two ways to supply the parameterisation yourself:
 #' * `p_types`: a named vector of defaults on the sampled scale, one per
@@ -480,6 +490,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
     ll_floor = m1$ll_floor_log, n_members = length(card$members),
     input_layout = m1$input_layout, card = card_meta)
+  reg$native <- nn_native_spec(reg)
   class(reg) <- "emc_nn"
   nn_model_function(nn_model_list(reg, tl, minmax))
 }
@@ -595,7 +606,9 @@ nn_model_list <- function(reg, tl, minmax) {
   joint <- reg$kind != "flow_race"
   ml <- list(
     type = if (joint) "DDM" else "RACE",
-    c_name = NULL, # R-path likelihood; the evaluator is compiled
+    # "NN": the compiled likelihood pipeline evaluates the network directly
+    # (calc_ll_manager passes nn_native_args()); NULL: the R path below
+    c_name = if (!is.null(reg$native)) "NN",
     p_types = tl$p_types,
     transform = tl$transform,
     bound = list(minmax = minmax, exception = reg$fixed),
@@ -621,13 +634,17 @@ nn_model_list <- function(reg, tl, minmax) {
   if (joint) {
     ml$dfun <- function(rt, R, pars) nn_eval_joint(reg, rt, R, pars, "pdf")
     ml$pfun <- function(rt, R, pars) nn_eval_joint(reg, rt, R, pars, "cdf")
-    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10))
+    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) {
+      nn_check_data(dadm, reg)
       log_likelihood_ddm(pars = pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
   } else {
     ml$dfun <- function(rt, pars) nn_eval_race(reg, rt, pars, "pdf")
     ml$pfun <- function(rt, pars) nn_eval_race(reg, rt, pars, "cdf")
-    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10))
+    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) {
+      nn_check_data(dadm, reg)
       log_likelihood_race(pars = pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
   }
   ml
 }
@@ -636,6 +653,30 @@ nn_model_function <- function(ml) {
   force(ml)
   function() ml
 }
+
+# ---------------------------------------------------------------------------
+# Evaluation (native: the compiled likelihood pipeline)
+# ---------------------------------------------------------------------------
+
+# What calc_ll()/calc_ll_multithreaded() (type "NN", src/model_NN.h) need
+# besides the evaluator; NULL when the model must take the R path: a `pre`
+# function (R code), or a kind with no compiled likelihood yet
+# (regression_joint). The refusals mirror nn_check_pars().
+nn_native_spec <- function(reg) {
+  if (!(reg$kind %in% c("flow_joint", "flow_race")) || is.function(reg$pre)) return(NULL)
+  refuse <- reg$defaults[reg$refuse_default]
+  list(kind = reg$kind, label = reg$label, pars = reg$pars,
+       transform_codes = reg$transform_codes,
+       pre = if (is.null(reg$pre)) "" else reg$pre,
+       fixed = reg$fixed,
+       fixed_msg = vapply(names(reg$fixed), nn_fixed_message, "", reg = reg, USE.NAMES = FALSE),
+       refuse = refuse,
+       refuse_msg = vapply(names(refuse), function(p) nn_default_message(p, refuse[[p]], reg), "",
+                           USE.NAMES = FALSE))
+}
+
+# The native spec with the live evaluator (rebuilt if the session lost it).
+nn_native_args <- function(reg) c(reg$native, list(ptr = nn_ptr(reg)))
 
 # ---------------------------------------------------------------------------
 # Evaluation (R path)
@@ -728,6 +769,22 @@ nn_check_pars <- function(pars, reg) {
   for (p in reg$refuse_default)
     if (p %in% colnames(pars) && all(pars[, p] == reg$defaults[[p]]))
       stop(nn_default_message(p, reg$defaults[[p]], reg))
+  invisible(TRUE)
+}
+
+# Censoring and truncation are not wired for neural likelihoods; both paths
+# refuse such data (src/model_NN.h makes the same checks).
+nn_check_data <- function(dadm, reg) {
+  what <- paste0("Neural likelihood '", reg$label, "': ")
+  miss <- dadm[["missingness"]]
+  if (!is.null(miss) && any(!is.na(miss)))
+    stop(what, "censored data (a non-missing 'missingness' code) is not supported")
+  lt <- dadm[["LT"]]
+  if (!is.null(lt) && any(lt > 0 & is.finite(lt), na.rm = TRUE))
+    stop(what, "truncated data (LT > 0) is not supported")
+  ut <- dadm[["UT"]]
+  if (!is.null(ut) && any(is.finite(ut)))
+    stop(what, "truncated data (finite UT) is not supported")
   invisible(TRUE)
 }
 

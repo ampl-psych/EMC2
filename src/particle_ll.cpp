@@ -26,6 +26,7 @@
 #include "model_SS_EXG.h"
 #include "model_SS_RDEX.h"
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
+#include "model_NN.h"        // neural likelihoods (type "NN"): registration-driven, thread-safe per particle
 using namespace Rcpp;
 
 // =============================================================================
@@ -591,7 +592,7 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
 NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                      bool return_trialwise = false) {
+                      bool return_trialwise = false, Rcpp::Nullable<Rcpp::List> nn = R_NilValue) {
 
   const int n_particles = particle_matrix.nrow();
   const int n_rows      = data.nrow();
@@ -633,6 +634,28 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   CharacterVector mm_names = colnames(minmax);
   std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, ctx.param_table, bounds);
   std::vector<bool> participating(n_rows, true);
+
+  // -----------------------------------------------------------------------
+  // Neural likelihoods (NN): the model list's registration supplies the
+  // evaluator and the network's inputs (model_NN.h)
+  // -----------------------------------------------------------------------
+  if (type == "NN") {
+    if (nn.isNull()) stop("calc_ll: type 'NN' needs the model's neural-likelihood registration (nn)");
+    NnSpec spec = make_nn_spec(Rcpp::List(nn.get()), data, ctx.param_table, n_lR);
+    NnScratch scratch;
+    for (int i = 0; i < n_particles; ++i) {
+      if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+      run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+      if (i == 0) nn_check_refusals(spec, ctx.param_table);
+      nn_trial_ll(spec, ctx.param_table, scratch, min_ll, ll_buf.data());
+      c_do_bound(ctx.param_table, bound_specs, is_ok);
+      apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+      double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
+      const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+      if (!return_trialwise) result(0, i) = sum;
+    }
+    return result;
+  }
 
   // -----------------------------------------------------------------------
   // MRI / MRI_AR1 -- no expand, rt, R attributes
@@ -886,7 +909,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                     CharacterVector p_types, double min_ll,
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                                     bool return_trialwise = false,
-                                    int n_threads = -1) {
+                                    int n_threads = -1,
+                                    Rcpp::Nullable<Rcpp::List> nn = R_NilValue) {
 
   // ---------------------------------------------------------------------------
   // Thread count
@@ -958,6 +982,46 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
   // tw_vec sized n_exp — written by expand_clamp_sum then copied into result
   std::vector<std::vector<double>> tw_vec    (n_threads_used,
                                               std::vector<double>(return_trialwise ? n_exp : 0));
+
+  // ---------------------------------------------------------------------------
+  // Neural likelihoods (NN). Spec, refusal check and evaluator handles on the
+  // main thread; the evaluator cores are reentrant.
+  // ---------------------------------------------------------------------------
+  if (type == "NN") {
+    if (nn.isNull()) stop("calc_ll_multithreaded: type 'NN' needs the model's neural-likelihood registration (nn)");
+    const NnSpec spec = make_nn_spec(Rcpp::List(nn.get()), data, ctx.param_table, n_lR);
+    run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);     // the first particle, for the refusals
+    nn_check_refusals(spec, ctx.param_table);
+    const std::vector<bool> participating(n_rows, true);
+    std::vector<NnScratch> scratch_vec(n_threads_used);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+    for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+      const int tid = omp_get_thread_num();
+#else
+      const int tid = 0;
+#endif
+      ParamTable&          pt_local = pt_vec[tid];
+      std::vector<double>& ll_buf   = ll_buf_vec[tid];
+      std::vector<int>&    is_ok    = is_ok_vec[tid];
+
+      pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+      run_pars_pipeline(pt_local, tr_vec[tid].get(), cache);
+      nn_trial_ll(spec, pt_local, scratch_vec[tid], min_ll, ll_buf.data());
+      c_do_bound(pt_local, bound_specs, is_ok);
+      apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+
+      if (return_trialwise) {
+        std::vector<double>& tw = tw_vec[tid];
+        expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw.data());
+        std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+      } else {
+        result_ptr[i] = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll);
+      }
+    }
+    return result;
+  }
 
   // ---------------------------------------------------------------------------
   // MRI / MRI_AR1

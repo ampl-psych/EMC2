@@ -20,6 +20,9 @@
 //                                  -> trial-wise parameter rows; each distinct
 //                                     row is conditioned once, all distinct
 //                                     rows in one batched conditioner pass
+//   nle_flow_native()              -> native calc_ll branch (nle_native.h,
+//                                     model_NN.h): natural-scale rows; log pdf
+//                                     for winners, log survivor for losers
 //
 // Out-of-box parameters (training-region bounding box, sampled scale):
 // pdf = 0, cdf = 0 immediately (log_pdf = -Inf, log_sf = 0). Rejection
@@ -28,6 +31,7 @@
 // Uses Rmath dnorm/pnorm so results are comparable with the R reference.
 
 #include "nle_flow.h"
+#include "nle_native.h"
 using namespace Rcpp;
 
 struct FlowModel {
@@ -38,13 +42,19 @@ struct FlowModel {
   nle::Mlp mlp;
 };
 
-struct RaceOut { double *pdf, *cdf, *log_pdf, *log_sf; };
+// Any pointer may be null (that output is not computed). With `want`, trial
+// t gets only its density outputs (pdf, log_pdf) if want[t] == 1 and only its
+// distribution outputs (cdf, log_sf) if want[t] == 2: race winners need the
+// density, losers the survivor function.
+struct RaceOut { double *pdf, *cdf, *log_pdf, *log_sf; const unsigned char* want; };
 
 // Trials t = 0..n-1 with parameter row uid[t] of Theta_u (n_ctx x U, one
 // distinct row per column) and rt[t]. The conditioner runs once per in-box
 // distinct row, on blocks of rows.
 static void flow_eval_core(const FlowModel& m, const double* Theta_u, int U,
                            const int* uid, const double* rt, int n, RaceOut out) {
+  auto want_d = [&](int t) { return out.want == nullptr || out.want[t] == 1; };
+  auto want_p = [&](int t) { return out.want == nullptr || out.want[t] == 2; };
   const int nc = m.n_ctx;
   const int K = m.sp.num_bins;
   std::vector<int> inb_id(U, -1), inb;
@@ -56,7 +66,15 @@ static void flow_eval_core(const FlowModel& m, const double* Theta_u, int U,
   std::vector<int> trial_c(n, -1);
   for (int t = 0; t < n; ++t) {
     trial_c[t] = inb_id[uid[t]];
-    if (trial_c[t] < 0) { out.pdf[t] = 0.0; out.cdf[t] = 0.0; out.log_pdf[t] = R_NegInf; out.log_sf[t] = 0.0; }
+    if (trial_c[t] >= 0) continue;
+    if (want_d(t)) {
+      if (out.pdf) out.pdf[t] = 0.0;
+      if (out.log_pdf) out.log_pdf[t] = R_NegInf;
+    }
+    if (want_p(t)) {
+      if (out.cdf) out.cdf[t] = 0.0;
+      if (out.log_sf) out.log_sf[t] = 0.0;
+    }
   }
   const nle::Groups grp = nle::group_by(trial_c, Uin);
 
@@ -78,11 +96,15 @@ static void flow_eval_core(const FlowModel& m, const double* Theta_u, int U,
         const double u = std::log(rt[t]);
         double z, logdet;
         nle::rqs_inverse_one(kb.xc(c), kb.yc(c), kb.dc(c), K, u, z, logdet);
-        const double lp = R::dnorm(z, 0.0, 1.0, 1) + logdet - u;
-        out.log_pdf[t] = lp;
-        out.pdf[t] = std::exp(lp);
-        out.cdf[t] = R::pnorm(z, 0.0, 1.0, 1, 0);
-        out.log_sf[t] = R::pnorm(z, 0.0, 1.0, 0, 1);
+        if (want_d(t)) {
+          const double lp = R::dnorm(z, 0.0, 1.0, 1) + logdet - u;
+          if (out.log_pdf) out.log_pdf[t] = lp;
+          if (out.pdf) out.pdf[t] = std::exp(lp);
+        }
+        if (want_p(t)) {
+          if (out.cdf) out.cdf[t] = R::pnorm(z, 0.0, 1.0, 1, 0);
+          if (out.log_sf) out.log_sf[t] = R::pnorm(z, 0.0, 1.0, 0, 1);
+        }
       }
     }
   }
@@ -138,7 +160,7 @@ List flow_eval_cpp(SEXP ptr_, NumericVector theta, NumericVector rt) {
   NumericVector pdf(n), cdf(n), log_pdf(n), log_sf(n);
   std::vector<int> uid(n, 0);
   flow_eval_core(m, theta.begin(), 1, uid.data(), rt.begin(), n,
-                 RaceOut{pdf.begin(), cdf.begin(), log_pdf.begin(), log_sf.begin()});
+                 RaceOut{pdf.begin(), cdf.begin(), log_pdf.begin(), log_sf.begin(), nullptr});
   return List::create(_["pdf"] = pdf, _["cdf"] = cdf,
                       _["log_pdf"] = log_pdf, _["log_sf"] = log_sf,
                       _["in_box"] = nle::in_box(m.lower, m.upper, theta.begin()));
@@ -162,7 +184,7 @@ List flow_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt) {
   for (int u = 0; u < U; ++u)
     for (int j = 0; j < nc; ++j) Theta_u[(size_t)u * nc + j] = theta(ix.first[u], j);
   flow_eval_core(m, Theta_u.data(), U, ix.uid.data(), rt.begin(), n,
-                 RaceOut{pdf.begin(), cdf.begin(), log_pdf.begin(), log_sf.begin()});
+                 RaceOut{pdf.begin(), cdf.begin(), log_pdf.begin(), log_sf.begin(), nullptr});
   return List::create(_["pdf"] = pdf, _["cdf"] = cdf,
                       _["log_pdf"] = log_pdf, _["log_sf"] = log_sf);
 }
@@ -179,4 +201,26 @@ NumericMatrix nle_mlp_forward(List mlp, NumericMatrix X) {
   const arma::mat Xt = arma::mat(X.begin(), X.nrow(), X.ncol(), false, true).t();
   const arma::mat Y = nle::mlp_forward_batch(m, Xt);
   return wrap(arma::mat(Y.t()));
+}
+
+// ---------------------------------------------------------------------------
+// Native calc_ll branch (nle_native.h)
+// ---------------------------------------------------------------------------
+
+const FlowModel* nle_flow_handle(SEXP ptr) {
+  if (TYPEOF(ptr) != EXTPTRSXP || !Rf_inherits(ptr, "flow_model") ||
+      R_ExternalPtrAddr(ptr) == nullptr)
+    stop("Neural likelihood: the evaluator is not a live race flow.");
+  return static_cast<const FlowModel*>(R_ExternalPtrAddr(ptr));
+}
+
+int nle_flow_n_ctx(const FlowModel* f) { return f->n_ctx; }
+
+void nle_flow_native(const FlowModel* f, const double* th, int m, const int* tf,
+                     const double* tn, const unsigned char* want,
+                     double* log_pdf, double* log_sf) {
+  std::vector<double> Theta_u;
+  const nle::RowIndex ix = nle::index_net_rows(th, m, f->n_ctx, tf, Theta_u);
+  flow_eval_core(*f, Theta_u.data(), ix.U(), ix.uid.data(), tn, m,
+                 RaceOut{nullptr, nullptr, log_pdf, log_sf, want});
 }

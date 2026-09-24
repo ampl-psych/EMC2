@@ -124,7 +124,7 @@ test_that("DDMnn: calc_ll_manager's sum equals a hand-summed dfun over dadm", {
   m <- des$model()
   pars <- get_pars_matrix_oo(p_vector, dadm, des$model)
   ll2 <- sum(pmax(log(1e-10), log(m$dfun(dadm$rt, dadm$R, pars))))
-  expect_equal(ll1, ll2)
+  expect_equal(as.numeric(ll1), ll2)   # native path: a 1 x n_particles matrix
 })
 
 test_that("RDMnn: calc_ll_manager's sum equals a hand-summed race likelihood over dadm", {
@@ -148,7 +148,7 @@ test_that("RDMnn: calc_ll_manager's sum equals a hand-summed race likelihood ove
   lds[!dadm$winner] <- log(1 - m$pfun(dadm$rt[!dadm$winner], pars[!dadm$winner, , drop = FALSE]))
   ll <- (lds[dadm$winner] + lds[!dadm$winner])[attr(dadm, "expand")]
   ll2 <- sum(pmax(log(1e-10), ll))
-  expect_equal(ll1, ll2)
+  expect_equal(as.numeric(ll1), ll2)
 })
 
 # --- d. JSON cards ------------------------------------------------------------
@@ -443,6 +443,7 @@ test_that("a regression_joint model runs through design() + make_emc() + calc_ll
   pm <- matrix(p_vector, nrow = 1, dimnames = list(NULL, names(p_vector)))
   ll <- calc_ll_manager(pm, dadm, des$model)
   expect_true(is.finite(ll))
+  expect_null(des$model()$c_name)       # no compiled likelihood yet: the R path
 })
 
 # --- i. registry: lazy rebuild, save/load, sha256 pin, no weights ------------

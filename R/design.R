@@ -1801,7 +1801,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
   data <- data[!is.na(data$rt) & !is.infinite(data$rt),]
   data <- design_model(data, x, compress = FALSE, rt_resolution = 1e-15)
 
-  if(is.null(x$model()$c_name)) stop("Current design type not supported for plotting")
+  if(is.null(x$model()$c_name) || !is.null(x$model()$nn)) stop("Current design type not supported for plotting")
   # if(x$model()$c_name == "LNR") stop("LNR designs not supported for plotting")
   type <- ifelse(x$model()$c_name == "DDM", "DDM", ifelse(x$model()$c_name == "LNR", "LNR", "race"))
   within_noise <- ifelse(x$model()$c_name == "LBA", FALSE, TRUE)

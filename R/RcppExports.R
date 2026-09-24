@@ -149,12 +149,12 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE) {
-    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise)
+calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, nn = NULL) {
+    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, nn)
 }
 
-calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, n_threads = -1L) {
-    .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads)
+calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, n_threads = -1L, nn = NULL) {
+    .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads, nn)
 }
 
 get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {

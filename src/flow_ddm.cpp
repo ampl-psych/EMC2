@@ -26,12 +26,15 @@
 //                                        -> trial-wise mixture pdf/cdf
 //                                           (mean over members); the batches
 //                                           run member by member
+// Native calc_ll branch (nle_native.h, model_NN.h): nle_ddm_native() takes
+// natural-scale parameter rows and returns log densities only (no CDF).
 //
 // Outputs: joint (defective) pdf and cdf, log pdf, and P(R | params).
 // Out-of-box parameters: pdf = 0, cdf = 0, log_pdf = -Inf, p_R = NA
 // (rejection sentinel, not extrapolation).
 
 #include "nle_flow.h"
+#include "nle_native.h"
 using namespace Rcpp;
 
 struct DdmModel {
@@ -72,6 +75,7 @@ static void emc2_to_triple(const double* theta, int n, double* out) {
   out[5] = std::log(std::max(SZ1, eps));
 }
 
+// cdf may be null (not computed: saves a pnorm per trial).
 struct DdmOut { double *pdf, *cdf, *log_pdf, *p_R; };
 
 // Trials t = 0..n-1 with parameter row uid[t] of Theta_u (n_ctx x U, one
@@ -85,6 +89,7 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
   const DdmModel& m0 = *mem[0];
   const int nc = m0.n_ctx;
   const int n_mem = (int)mem.size();
+  const bool want_cdf = out.cdf != nullptr;
 
   // distinct rows in the box (members share the box)
   std::vector<int> inb_id(U, -1), inb;              // row u -> in-box index
@@ -108,7 +113,10 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
   std::vector<int> trial_f(n, -1);
   for (int t = 0; t < n; ++t) {
     if (inb_id[uid[t]] >= 0) trial_f[t] = fkey[(size_t)2 * uid[t] + R[t] - 1];
-    else { out.pdf[t] = 0.0; out.cdf[t] = 0.0; out.log_pdf[t] = R_NegInf; out.p_R[t] = NA_REAL; }
+    else {
+      out.pdf[t] = 0.0; out.log_pdf[t] = R_NegInf; out.p_R[t] = NA_REAL;
+      if (want_cdf) out.cdf[t] = 0.0;
+    }
   }
   const nle::Groups grp = nle::group_by(trial_f, F);
 
@@ -116,7 +124,7 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
   if (n_mem > 1) {
     lp_mem.assign((size_t)n * n_mem, R_NegInf);
     for (int t = 0; t < n; ++t)
-      if (trial_f[t] >= 0) { out.pdf[t] = 0.0; out.cdf[t] = 0.0; out.p_R[t] = 0.0; }
+      if (trial_f[t] >= 0) { out.pdf[t] = 0.0; out.p_R[t] = 0.0; if (want_cdf) out.cdf[t] = 0.0; }
   }
 
   std::vector<double> lpR((size_t)2 * Uin);         // log P(R = 1), log P(R = 2)
@@ -166,12 +174,14 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
           double z, logdet;
           nle::rqs_inverse_one(kb.xc(c), kb.yc(c), kb.dc(c), K, u, z, logdet);
           const double lp = R::dnorm(z, 0.0, 1.0, 1) + logdet - u + lp_R;
-          const double cdf = R::pnorm(z, 0.0, 1.0, 1, 0) * p_R;
+          const double cdf = want_cdf ? R::pnorm(z, 0.0, 1.0, 1, 0) * p_R : 0.0;
           if (n_mem == 1) {
-            out.log_pdf[t] = lp; out.pdf[t] = std::exp(lp); out.cdf[t] = cdf; out.p_R[t] = p_R;
+            out.log_pdf[t] = lp; out.pdf[t] = std::exp(lp); out.p_R[t] = p_R;
+            if (want_cdf) out.cdf[t] = cdf;
           } else {
             lp_mem[(size_t)t * n_mem + k] = lp;
-            out.pdf[t] += std::exp(lp); out.cdf[t] += cdf; out.p_R[t] += p_R;
+            out.pdf[t] += std::exp(lp); out.p_R[t] += p_R;
+            if (want_cdf) out.cdf[t] += cdf;
           }
         }
       }
@@ -182,7 +192,8 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
     const double log_k = std::log((double)n_mem);
     for (int t = 0; t < n; ++t) {
       if (trial_f[t] < 0) continue;
-      out.pdf[t] /= n_mem; out.cdf[t] /= n_mem; out.p_R[t] /= n_mem;
+      out.pdf[t] /= n_mem; out.p_R[t] /= n_mem;
+      if (want_cdf) out.cdf[t] /= n_mem;
       const double* lp = lp_mem.data() + (size_t)t * n_mem;
       double mx = lp[0];
       for (int k = 1; k < n_mem; ++k) mx = std::fmax(mx, lp[k]);
@@ -335,4 +346,27 @@ List ddm_ens_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt,
   std::vector<const DdmModel*> mem;
   for (const DdmModel& m : ptr->members) mem.push_back(&m);
   return ddm_eval_trials(mem, theta, rt, R);
+}
+
+// ---------------------------------------------------------------------------
+// Native calc_ll branch (nle_native.h)
+// ---------------------------------------------------------------------------
+
+const DdmEnsemble* nle_ddm_handle(SEXP ptr) {
+  if (TYPEOF(ptr) != EXTPTRSXP || !Rf_inherits(ptr, "ddm_flow_ensemble") ||
+      R_ExternalPtrAddr(ptr) == nullptr)
+    stop("Neural likelihood: the evaluator is not a live DDM flow ensemble.");
+  return static_cast<const DdmEnsemble*>(R_ExternalPtrAddr(ptr));
+}
+
+int nle_ddm_n_ctx(const DdmEnsemble* e) { return e->members[0].n_ctx; }
+
+void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf,
+                    const double* tn, const int* R, double* log_pdf) {
+  std::vector<const DdmModel*> mem;
+  for (const DdmModel& d : e->members) mem.push_back(&d);
+  std::vector<double> Theta_u, pdf(m), p_R(m);
+  const nle::RowIndex ix = nle::index_net_rows(th, m, e->members[0].n_ctx, tf, Theta_u);
+  ddm_eval_core(mem, Theta_u.data(), ix.U(), ix.uid.data(), tn, R, m,
+                DdmOut{pdf.data(), nullptr, log_pdf, p_R.data()});
 }
