@@ -36,6 +36,8 @@ Unlike \link{RDM}, \code{A = 0} and \code{v = 0} are not available (the flow tra
 \code{constants = c(A = log(1e-3))}. Out-of-box parameter vectors are rejected
 (likelihood floored at \code{min_ll}).
 
+\code{RDMnn(artefact)} is \code{register_nn_model(artefact, kind = "flow_race", twin = RDM)()}; see \code{\link[=register_nn_model]{register_nn_model()}} for the contract.
+
 Data generation (\code{rfun}) uses the analytic RDM, so simulation-based
 checks compare flow-based inference against exact data. Loading a neural
 likelihood is not the same as being able to infer with it; validate before

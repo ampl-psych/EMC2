@@ -43,8 +43,9 @@ The defaults are \strong{identical to \link{DDM}'s}, including \code{sv = SZ = s
 full-DDM artefact cannot represent those zeros, so an un-sampled \code{sv}, \code{SZ}
 or \code{st0} is refused with an error instead of silently changing the model:
 sample the parameter, or fix it inside the box (e.g.
-\code{constants = c(sv = log(0.5))}). The \code{"ddm_st0zero"} artefact was trained
-without \code{st0} and supports \code{st0 = 0} exactly.
+\code{constants = c(sv = log(0.5))}). The refusal happens in \code{\link[=design]{design()}} (and again
+at run time). The \code{"ddm_st0zero"} artefact was trained without \code{st0}: it
+admits exactly \code{st0 = 0} and refuses a sampled or non-zero \code{st0}.
 
 Unlike \link{DDM}, \code{SZ} here is the raw proportion the flow was trained on, not
 remapped by \code{2 * SZ * min(Z, 1 - Z)}; data generation applies that remapping
@@ -54,6 +55,8 @@ generated with the exact sampler (\code{WienR::rWDM}).
 Loading a neural likelihood is not the same as being able to infer with it:
 check calibration and identifiability (parameter recovery, likelihood
 profiles, SBC) before drawing conclusions.
+
+\code{DDMnn(artefact)} is \code{register_nn_model(artefact, kind = "flow_joint", twin = DDM)()}; see \code{\link[=register_nn_model]{register_nn_model()}} for the contract.
 
 Wuth, J. (2026). \emph{Likelihood approximation in evidence accumulation
 models: A comparison of kernel density and neural likelihood methods}

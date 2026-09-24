@@ -27,20 +27,20 @@ artefact_member <- function(name) {
 test_that("artefacts are pinned and report what was loaded", {
   man <- nle("nle_manifest")()
   expect_setequal(names(man), c("ddm_cap256w_c4.rds", "ddm_st0zero.rds", "rdm_small.rds"))
-  m <- nle("nle_meta")("ddm_cap256w_c4")
-  expect_identical(m$context_names, c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0"))
-  expect_equal(as.numeric(m$checkpoint_step[["flow"]]), 72)
-  expect_equal(nle("nle_meta")("rdm_small")$checkpoint_step, 195)
+  reg <- register_nn_model("ddm_cap256w_c4")()$nn
+  expect_identical(reg$context_names, c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0"))
+  expect_equal(as.numeric(reg$card$checkpoint_step_flow), 72)
+  expect_equal(register_nn_model("rdm_small")()$nn$card$checkpoint_step, 195)
   expect_output(nle("nle_artefact_info")("rdm_small"), "sha256=")
-  expect_error(nle("nle_meta")("no_such_artefact"), "No neural-likelihood artefact")
+  expect_error(register_nn_model("no_such_artefact"), "No neural-likelihood artefact")
 })
 
 # --- golden vectors ---------------------------------------------------------
 check_ddm_golden <- function(name, tag, joint = TRUE) {
   golden <- read.csv(file.path(golden_dir, paste0(tag, "_golden.csv")))
-  meta <- nle("nle_meta")(name)
-  ptr <- nle("nle_get")(name)
-  ctx <- meta$context_names
+  reg <- register_nn_model(name)()$nn
+  ptr <- nle("nn_ptr")(reg)
+  ctx <- reg$context_names
   d_lp <- d_cdf <- d_flow <- d_flowcdf <- 0
   for (pid in unique(golden$param_id)) {
     g <- golden[golden$param_id == pid, ]
@@ -63,10 +63,10 @@ test_that("DDM cap256w_c4: flow matches golden (classifier checked separately)",
   # classifier, so only the flow columns are compared; the classifier is
   # checked for normalisation below.
   check_ddm_golden("ddm_cap256w_c4", "ddm_cap256w", joint = FALSE)
-  meta <- nle("nle_meta")("ddm_cap256w_c4")
+  ptr <- nle("nn_ptr")(register_nn_model("ddm_cap256w_c4")()$nn)
   th <- matrix(c(1, log(1), log(.3), 0, 0, qnorm(.3), log(.5), log(.1)), 1)
   p <- vapply(1:2, function(r)
-    nle("ddm_ens_eval_trials_cpp")(nle("nle_get")("ddm_cap256w_c4"), th, 1, r)$p_R, 0)
+    nle("ddm_ens_eval_trials_cpp")(ptr, th, 1, r)$p_R, 0)
   expect_equal(sum(p), 1, tolerance = 1e-12)
 })
 
@@ -76,12 +76,12 @@ test_that("DDM st0zero (z0_s503_e282): joint density matches golden", {
 
 test_that("RDM rdm_small (e195): pdf, cdf and survivor match golden", {
   golden <- read.csv(file.path(golden_dir, "rdm_rdm_small_e195_golden.csv"))
-  meta <- nle("nle_meta")("rdm_small")
-  ptr <- nle("nle_get")("rdm_small")
+  reg <- register_nn_model("rdm_small")()$nn
+  ptr <- nle("nn_ptr")(reg)
   d <- c(lp = 0, cdf = 0, sf = 0)
   for (pid in unique(golden$param_id)) {
     g <- golden[golden$param_id == pid, ]
-    Theta <- matrix(as.numeric(g[1L, meta$context_names]), nrow(g), 5, byrow = TRUE)
+    Theta <- matrix(as.numeric(g[1L, reg$context_names]), nrow(g), 5, byrow = TRUE)
     ev <- nle("flow_eval_trials_cpp")(ptr, Theta, g$rt)
     d["lp"] <- max(d["lp"], abs(ev$log_pdf - g$log_pdf))
     d["cdf"] <- max(d["cdf"], abs(ev$cdf - g$cdf))
@@ -92,12 +92,12 @@ test_that("RDM rdm_small (e195): pdf, cdf and survivor match golden", {
 
 # --- trial-wise evaluation --------------------------------------------------
 test_that("trial-wise evaluation: caching and out-of-box rows", {
-  meta <- nle("nle_meta")("ddm_cap256w_c4")
-  ptr <- nle("nle_get")("ddm_cap256w_c4")
+  reg <- register_nn_model("ddm_cap256w_c4")()$nn
+  ptr <- nle("nn_ptr")(reg)
   golden <- read.csv(file.path(golden_dir, "ddm_cap256w_golden.csv"))
-  ctx <- meta$context_names
+  ctx <- reg$context_names
   g1 <- golden[golden$param_id == 1, ]; g2 <- golden[golden$param_id == 2, ]
-  mid <- (meta$bounds_natural$lower + meta$bounds_natural$upper) / 2
+  mid <- (reg$card$bounds_natural$lower + reg$card$bounds_natural$upper) / 2
   th_bad <- as.numeric(g1[1L, ctx]); th_bad[1] <- 7          # v above the box
   rows <- function(g) matrix(as.numeric(g[1L, ctx]), nrow(g), length(ctx), byrow = TRUE)
   Theta <- rbind(rows(g1), matrix(th_bad, 3, length(ctx), byrow = TRUE), rows(g2))
@@ -116,8 +116,7 @@ test_that("C++ evaluator agrees with the R port over 40 random thetas (1e-10)", 
   set.seed(42)
   check <- function(name, ddm) {
     fl <- artefact_member(name)
-    ptr <- nle("nle_get")(name)
-    meta <- nle("nle_meta")(name)
+    ptr <- nle("nn_ptr")(register_nn_model(name)()$nn)
     lo <- fl$bounds_sampled$lower; hi <- fl$bounds_sampled$upper
     ctx <- fl$context_names
     if (!ddm) { lo <- lo; hi <- hi }
@@ -196,7 +195,7 @@ test_that("distinct-row batching equals row-by-row evaluation (interleaved, out-
       for (o in c("pdf", "cdf", "log_pdf", "p_R"))
         expect_equal(e3[[o]], tv[[o]], tolerance = 1e-12, label = paste(name, "ensemble", o))
     } else {
-      ptr <- nle("nle_get")(name)
+      ptr <- nle("nn_ptr")(register_nn_model(name)()$nn)
       tv <- nle("flow_eval_trials_cpp")(ptr, Th, rt)
       rw <- lapply(1:700, function(t) nle("flow_eval_cpp")(ptr, Th[t, ], rt[t]))
       for (o in c("pdf", "cdf", "log_pdf", "log_sf"))
@@ -253,7 +252,7 @@ test_that("an un-sampled parameter the artefact cannot represent is refused", {
   expect_error(m$Ttransform(pars, NULL), "'st0'")
   expect_silent(DDMnn("ddm_st0zero")$Ttransform(pars, NULL))
   # a missing context column is an error, never a silent reorder
-  expect_error(nle("nle_theta")(pars[, c("v", "a")], nle("nle_meta")("ddm_cap256w_c4")),
+  expect_error(nle("nn_context")(pars[, c("v", "a")], register_nn_model("ddm_cap256w_c4")()$nn),
                "needs parameter")
 })
 
