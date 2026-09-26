@@ -168,10 +168,10 @@ const MlpLik* nle_mlp_handle(SEXP ptr) {
 int nle_mlp_n_ctx(const MlpLik* m) { return m->n_ctx; }
 
 void nle_mlp_native(const MlpLik* m, const double* th, int n, const int* tf,
-                    const double* tn, const int* R, double* log_pdf) {
+                    const double* tfc, const double* tn, const int* R, double* log_pdf) {
   std::vector<double> Th((size_t)n * m->n_ctx);
   for (int j = 0; j < m->n_ctx; ++j)
     for (int t = 0; t < n; ++t)
-      Th[t + (size_t)j * n] = nle::to_net_scale(th[t + (size_t)j * n], tf[j]);
+      Th[t + (size_t)j * n] = nle::to_net_scale(th[t + (size_t)j * n], tf[j], tfc[j]);
   mlp_lik_core(*m, Th.data(), n, tn, R, log_pdf);
 }

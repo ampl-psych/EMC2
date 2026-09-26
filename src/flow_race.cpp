@@ -217,10 +217,10 @@ const FlowModel* nle_flow_handle(SEXP ptr) {
 int nle_flow_n_ctx(const FlowModel* f) { return f->n_ctx; }
 
 void nle_flow_native(const FlowModel* f, const double* th, int m, const int* tf,
-                     const double* tn, const unsigned char* want,
+                     const double* tfc, const double* tn, const unsigned char* want,
                      double* log_pdf, double* log_sf) {
   std::vector<double> Theta_u;
-  const nle::RowIndex ix = nle::index_net_rows(th, m, f->n_ctx, tf, Theta_u);
+  const nle::RowIndex ix = nle::index_net_rows(th, m, f->n_ctx, tf, tfc, Theta_u);
   flow_eval_core(*f, Theta_u.data(), ix.U(), ix.uid.data(), tn, m,
                  RaceOut{nullptr, nullptr, log_pdf, log_sf, want});
 }

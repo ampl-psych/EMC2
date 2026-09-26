@@ -40,7 +40,8 @@ struct NnSpec {
   const FlowModel* flow = nullptr;
   int nc = 0;                              // network inputs
   std::vector<int> col;                    // ParamTable column per input
-  std::vector<int> tf;                     // 0 identity, 1 log, 2 probit
+  std::vector<int> tf;                     // 0 identity, 1 log, 2 probit, 3 zerobox
+  std::vector<double> tfc;                 // zerobox constant per input (NaN otherwise)
   int pre_col = -1;                        // parameter subtracted from rt
   int n_rows = 0, n_trials = 0, n_acc = 1;
   const double* rt = nullptr;
@@ -109,6 +110,9 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   else        { s.ddm = nle_ddm_handle(ptr);   s.nc = nle_ddm_n_ctx(s.ddm); }
   CharacterVector pars = nn["pars"];
   IntegerVector codes = nn["transform_codes"];
+  NumericVector zc = nn.containsElementNamed("zerobox_c") ? NumericVector(nn["zerobox_c"])
+                                                           : NumericVector(codes.size(), NA_REAL);
+  if (zc.size() != codes.size()) stop(what + "zerobox_c needs one entry per input");
   if (pars.size() != s.nc || codes.size() != s.nc)
     stop(what + "the registration names " + std::to_string((int)pars.size()) +
          " inputs; the evaluator takes " + std::to_string(s.nc));
@@ -116,9 +120,12 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
     const std::string p = as<std::string>(pars[j]);
     auto it = pt.name_to_base_idx.find(p);
     if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply input '" + p + "'");
-    if (codes[j] < 0 || codes[j] > 2) stop(what + "unknown transform code for input '" + p + "'");
+    if (codes[j] < 0 || codes[j] > 3) stop(what + "unknown transform code for input '" + p + "'");
+    if (codes[j] == 3 && !(zc[j] > 0.0 && std::isfinite(zc[j])))
+      stop(what + "zerobox input '" + p + "' has no positive constant");
     s.col.push_back(it->second);
     s.tf.push_back(codes[j]);
+    s.tfc.push_back(codes[j] == 3 ? zc[j] : NAN);
   }
   const std::string pre = as<std::string>(nn["pre"]);
   if (!pre.empty()) {
@@ -215,8 +222,8 @@ inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
     w.Rr.resize(m);
     for (int i = 0; i < m; ++i) w.Rr[i] = s.R[w.rows[i]];
     if (m > 0) {
-      if (s.mlp_kind) nle_mlp_native(s.mlp, w.th.data(), m, s.tf.data(), w.tn.data(), w.Rr.data(), w.lp.data());
-      else nle_ddm_native(s.ddm, w.th.data(), m, s.tf.data(), w.tn.data(), w.Rr.data(), w.lp.data());
+      if (s.mlp_kind) nle_mlp_native(s.mlp, w.th.data(), m, s.tf.data(), s.tfc.data(), w.tn.data(), w.Rr.data(), w.lp.data());
+      else nle_ddm_native(s.ddm, w.th.data(), m, s.tf.data(), s.tfc.data(), w.tn.data(), w.Rr.data(), w.lp.data());
     }
     std::fill(ll_trial, ll_trial + s.n_trials, R_NegInf);
     for (int i = 0; i < m; ++i) ll_trial[w.rows[i]] = w.lp[i];
@@ -226,7 +233,7 @@ inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
   w.lsf.resize(m);
   w.want.resize(m);
   for (int i = 0; i < m; ++i) w.want[i] = s.winner[w.rows[i]] ? 1 : 2;
-  if (m > 0) nle_flow_native(s.flow, w.th.data(), m, s.tf.data(), w.tn.data(), w.want.data(),
+  if (m > 0) nle_flow_native(s.flow, w.th.data(), m, s.tf.data(), s.tfc.data(), w.tn.data(), w.want.data(),
                              w.lp.data(), w.lsf.data());
   // not evaluated: a winner has no density, a loser has not finished
   w.ll_row.resize(s.n_rows);

@@ -358,7 +358,9 @@ nn_box_table <- function(des, reg, mu, sdv, k) {
     cell <- if (ncol(labs)) apply(labs, 1, function(r) paste(names(labs), r, sep = "=", collapse = ",")) else ""
     rows[[p]] <- unique(data.frame(parameter = p, cell = cell, prior_lower = lo, prior_upper = hi,
                                    box_lower = reg$lower[[p]], box_upper = reg$upper[[p]],
-                                   inside = lo > reg$lower[[p]] & hi < reg$upper[[p]],
+                                   # a zerobox input's region is closed at 0 (exact zeros)
+                                   inside = (if (p %in% reg$zerobox) lo >= reg$lower[[p]] else lo > reg$lower[[p]]) &
+                                     hi < reg$upper[[p]],
                                    stringsAsFactors = FALSE))
   }
   out <- do.call(rbind, rows)

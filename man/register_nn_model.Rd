@@ -27,7 +27,7 @@ inputs; a name the card also uses must sit at the card's position (a
 permutation is refused).}
 
 \item{transforms}{The scale of each input (\code{"identity"}, \code{"log"},
-\code{"probit"}), in the network's order or named. Default: the card's
+\code{"probit"}, \code{"zerobox"}), in the network's order or named. Default: the card's
 \code{context_transforms}; if both are given they must agree.}
 
 \item{kind}{\code{"flow_joint"}, \code{"flow_race"}, \code{"regression_joint"} or
@@ -88,18 +88,37 @@ refusals come from the card. Parameter vectors outside the box are rejected
 
 \strong{Model card.} The fields read are \code{context_names} (the network's
 parameter inputs in order), \code{context_transforms} (per name: \code{"identity"},
-\code{"log"} or \code{"probit"}, the scale the network was trained on),
+\code{"log"}, \code{"probit"} or \code{"zerobox"}, the scale the network was trained on),
 \code{bounds_natural} and/or \code{bounds_sampled} (the training box, \code{lower} and
 \code{upper}; natural scale in the order of \code{names(context_transforms)}, sampled
 scale in \code{context_names} order; if both are present they must agree), the
 weights (\code{flow_mlp} + \code{classifier_mlp} + \code{spline} + \code{scaler} for
 \code{"flow_joint"}, \code{mlp} + \code{spline} + \code{scaler} for \code{"flow_race"}, \code{mlp} for
 \code{"regression_joint"} and \code{"mlp_joint"}), and optionally \code{model}, \code{kind}, \code{ll_floor_log},
-\code{context_encoding}. A name in \code{context_transforms} that is not in
+\code{context_encoding}, \code{zerobox_c}. A name in \code{context_transforms} that is not in
 \code{context_names} was fixed when the network was trained; its value must be
 given in \code{exceptions} unless the card implies it (\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
 (\code{members}, \code{"flow_joint"} only); \code{.json} cards need the \pkg{jsonlite}
 package.
+
+\strong{Zero-box inputs.} An input with transform \code{"zerobox"} enters the
+network as \code{asinh(x / c)}, \code{c} > 0 from the card's \code{zerobox_c} (a named list,
+one constant per zero-box input; a zero-box input without one, or a constant
+on any other input, is refused). The network is trained at, and exact at,
+\code{x = 0}: on EMC2's sampled scale the parameter keeps the twin's transform
+(for \link{DDM}: \code{log} for \code{sv} and \code{st0}, \code{probit} for \code{SZ}; \code{"exp"} when you
+give \code{p_types}), so \code{-Inf} is an exact zero, and the network value is built
+from the natural value (\code{asinh(0 / c) = 0}). The training region is closed at
+0 for these inputs; the bounds are the twin's (e.g. \link{DDM}'s floor of 0.01
+for \code{sv} and \code{SZ}) with exactly 0 admitted as a bound exception, so a
+default or constant of 0 is accepted and values between 0 and the floor are
+rejected as the analytic model rejects them. A zero-box DDM card
+(\code{context_encoding = "zerobox"}) needs the twin's defaults \code{sv = SZ = st0 = -Inf} (exactly zero, as in \link{DDM}). \strong{Support rule:} for such a card, when
+\code{st0} is exactly 0 the density and the defective CDF are 0 (log density
+\code{-Inf}) for \code{rt <= t0}, whatever the flow would give; for \code{st0 > 0} the flow
+models the smear itself. The rule is applied by the evaluator on every path
+(one parameter vector, trial-wise parameters, ensembles, the compiled
+likelihood); \code{min_ll} flooring applies after it.
 
 \strong{Kinds.}
 \itemize{

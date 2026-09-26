@@ -47,6 +47,10 @@ struct DdmModel {
   bool triple = false;
   std::vector<double> clf_scaler_mean, clf_scaler_scale;
   std::vector<double> lower, upper;       // bounding box (sampled scale)
+  // zerobox cards: the exact support rule when st0 == 0 (network value 0):
+  // density and CDF are 0 for rt <= t0. Columns of st0 and t0 (-1: no rule),
+  // and t0's input scale (0 identity, 1 log) to recover t0 from the network value.
+  int j_st0 = -1, j_t0 = -1, t0_code = 1;
   nle::Mlp flow;                          // input dim n_ctx + 1 (R appended)
   nle::Mlp clf;                           // input dim n_ctx, output 1 logit
 };
@@ -203,6 +207,24 @@ static void ddm_eval_core(const std::vector<const DdmModel*>& mem,
       out.log_pdf[t] = mx + std::log(s) - log_k;
     }
   }
+
+  // Exact support boundary when st0 = 0 (zerobox cards): the density is zero
+  // below t0. A spline over log rt cannot give -Inf itself, so it is imposed
+  // here, for single, trial-wise and ensemble evaluation alike, and only when
+  // st0 is exactly 0 (for st0 > 0 the flow models the smear). As the NLE
+  // port's ddm_eval(): log_pdf -Inf, pdf and defective CDF 0, p_R unchanged.
+  if (m0.j_st0 >= 0) {
+    for (int t = 0; t < n; ++t) {
+      if (trial_f[t] < 0) continue;
+      const double* th = Theta_u + (size_t)uid[t] * nc;
+      if (th[m0.j_st0] != 0.0) continue;
+      const double t0 = m0.t0_code == 1 ? std::exp(th[m0.j_t0]) : th[m0.j_t0];
+      if (rt[t] <= t0) {
+        out.pdf[t] = 0.0; out.log_pdf[t] = R_NegInf;
+        if (want_cdf) out.cdf[t] = 0.0;
+      }
+    }
+  }
 }
 
 // Trial-wise entry point shared by the single-model and ensemble exports.
@@ -256,6 +278,25 @@ static void load_ddm_from_list(List fl, DdmModel& m) {
     if ((int)m.clf_scaler_mean.size() != m.n_ctx)
       stop("ddm_build: classifier_scaler length != n_params.");
   }
+  if (fl.containsElementNamed("context_encoding") &&
+      as<std::string>(fl["context_encoding"]) == "zerobox" &&
+      fl.containsElementNamed("context_names")) {
+    CharacterVector cn = fl["context_names"];
+    for (int j = 0; j < cn.size(); ++j) {
+      if (std::string(cn[j]) == "st0") m.j_st0 = j;
+      if (std::string(cn[j]) == "t0") m.j_t0 = j;
+    }
+    if (m.j_st0 >= 0 && m.j_t0 >= 0) {
+      std::string t0_tf = "identity";
+      if (fl.containsElementNamed("context_transforms")) {
+        List ct = fl["context_transforms"];
+        if (ct.containsElementNamed("t0")) t0_tf = as<std::string>(ct["t0"]);
+      }
+      if (t0_tf == "log") m.t0_code = 1;
+      else if (t0_tf == "identity") m.t0_code = 0;
+      else stop("ddm_build: a zerobox card's t0 must be on the identity or log scale.");
+    } else m.j_st0 = -1;
+  }
   nle::load_mlp(fl["classifier_mlp"], m.clf, "ddm_build");
   if (m.flow.n_in() != m.n_ctx + 1)
     stop("ddm_build: flow input dim must be n_params + 1 (response).");
@@ -290,7 +331,8 @@ SEXP ddm_build_ensemble(List fls) {
       load_ddm_from_list(fls[k], e->members[k]);
       if (e->members[k].n_ctx != e->members[0].n_ctx ||
           e->members[k].lower != e->members[0].lower ||
-          e->members[k].upper != e->members[0].upper)
+          e->members[k].upper != e->members[0].upper ||
+          e->members[k].j_st0 != e->members[0].j_st0)
         stop("ddm_build_ensemble: members disagree on context dim or bounds.");
     }
   } catch (...) { delete e; throw; }
@@ -362,11 +404,11 @@ const DdmEnsemble* nle_ddm_handle(SEXP ptr) {
 int nle_ddm_n_ctx(const DdmEnsemble* e) { return e->members[0].n_ctx; }
 
 void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf,
-                    const double* tn, const int* R, double* log_pdf) {
+                    const double* tfc, const double* tn, const int* R, double* log_pdf) {
   std::vector<const DdmModel*> mem;
   for (const DdmModel& d : e->members) mem.push_back(&d);
   std::vector<double> Theta_u, pdf(m), p_R(m);
-  const nle::RowIndex ix = nle::index_net_rows(th, m, e->members[0].n_ctx, tf, Theta_u);
+  const nle::RowIndex ix = nle::index_net_rows(th, m, e->members[0].n_ctx, tf, tfc, Theta_u);
   ddm_eval_core(mem, Theta_u.data(), ix.U(), ix.uid.data(), tn, R, m,
                 DdmOut{pdf.data(), nullptr, log_pdf, p_R.data()});
 }

@@ -67,7 +67,18 @@ ddm_load <- function(path) {
 }
 
 ddm_in_box <- function(fl, theta) {
-  all(theta >= fl$bounds_sampled$lower & theta <= fl$bounds_sampled$upper)
+  if (identical(fl$context_encoding, "zerobox")) theta <- .emc2_to_zerobox(fl, theta)
+  b <- fl$bounds_sampled
+  if (length(theta) != length(b$lower)) {
+    # dectime records the FULL bounds (7) while the flow context is 6; the
+    # recursive call passes the 6-vector, so drop t0 from the bounds too
+    j <- match("t0", fl$full_context_names)
+    if (!is.na(j) && length(theta) == length(b$lower) - 1L) {
+      b <- list(lower = b$lower[-j], upper = b$upper[-j])
+    }
+  }
+  # NaN (a negative natural value fed to log/probit) is outside, not an error
+  isTRUE(all(theta >= b$lower & theta <= b$upper))
 }
 
 # Amortizable conditioning: one parameter vector -> spline knots for BOTH
@@ -77,6 +88,18 @@ ddm_in_box <- function(fl, theta) {
 # emc2_to_triple() in flow/scripts/export_flow_ddm.py. SZ0 and SZ1 are
 # non-negative by construction because sw <= 2*min(w, 1-w) always holds; the
 # pmax only guards float cancellation.
+# zerobox: sv, SZ, st0 conditioned on asinh(x / c). theta arrives on EMC2's
+# sampled scale with -Inf at an exact zero; exp(-Inf) = 0 and pnorm(-Inf) = 0,
+# so zeros map to exactly 0 with no special case. Constants come from the
+# export (fl$zerobox_c), never assumed.
+.emc2_to_zerobox <- function(fl, theta) {
+  cn <- fl$context_names; th <- theta
+  for (p in names(fl$zerobox_c)) { j <- match(p, cn); if (is.na(j)) next
+    nat <- if (p == "SZ") pnorm(theta[j]) else exp(theta[j])
+    th[j] <- asinh(nat / fl$zerobox_c[[p]]) }
+  th
+}
+
 .emc2_to_triple <- function(theta) {
   a  <- exp(theta[2L])
   w  <- pnorm(theta[5L])
@@ -97,7 +120,9 @@ ddm_in_box <- function(fl, theta) {
 # two heads use different vectors AND different scalers.
 ddm_condition <- function(fl, theta) {
   triple <- identical(fl$context_encoding, "triple")
-  theta_flow <- if (triple) .emc2_to_triple(theta) else theta
+  zerobox <- identical(fl$context_encoding, "zerobox")
+  theta_flow <- if (triple) .emc2_to_triple(theta) else
+                if (zerobox) .emc2_to_zerobox(fl, theta) else theta
   ctx_std <- (theta_flow - fl$scaler$mean) / fl$scaler$scale
   clf_std <- if (triple)
     (theta - fl$classifier_scaler$mean) / fl$classifier_scaler$scale else ctx_std
@@ -118,6 +143,25 @@ ddm_condition <- function(fl, theta) {
 ddm_eval <- function(fl, theta, rt, R) {
   n <- length(rt)
   R <- rep_len(as.integer(R), n)
+  # Decision-time flows model d = rt - t0 and are NOT conditioned on t0. The
+  # port's public interface stays the full EMC2 vector, so t0 is stripped out
+  # here and used to shift rt. d(rt - t0)/drt = 1, so the Jacobian is one and
+  # log_pdf needs no correction. rt at or below t0 is outside the support.
+  if (identical(fl$context_encoding, "dectime")) {
+    j <- match("t0", fl$full_context_names)
+    stopifnot(!is.na(j), length(theta) == length(fl$full_context_names))
+    t0n <- exp(theta[j])
+    d <- rt - t0n
+    out <- ddm_eval(structure(modifyList(fl, list(context_encoding = "emc2")),
+                              class = class(fl)),
+                    theta[-j], pmax(d, .Machine$double.xmin), R)
+    bad <- !is.finite(d) | d <= 0
+    if (any(bad)) {
+      out$pdf[bad] <- 0; out$cdf[bad] <- 0
+      out$log_pdf[bad] <- -Inf; out$z[bad] <- NA_real_
+    }
+    return(out)
+  }
   if (!ddm_in_box(fl, theta)) {
     return(list(pdf = numeric(n), cdf = numeric(n),
                 log_pdf = rep(-Inf, n), p_R = rep(NA_real_, n),
@@ -137,8 +181,17 @@ ddm_eval <- function(fl, theta, rt, R) {
   }
   log_p_R <- cond$log_p_R[R]
   log_pdf <- dnorm(z, log = TRUE) + logdet - u + log_p_R
+  # Exact support boundary when st0 = 0: the true density is zero below t0. A
+  # spline over log rt cannot produce -Inf itself, so the evaluator does. It is
+  # a property of the model, costs nothing, and (Phase 32b) never binds at the
+  # likelihood maximum -- insurance, not a correction.
+  hard <- rep(FALSE, n)
+  if (identical(fl$context_encoding, "zerobox")) {
+    js <- match("st0", fl$context_names); jt <- match("t0", fl$context_names)
+    if (!is.na(js) && !is.na(jt) && is.infinite(theta[js]) && theta[js] < 0) {
+      hard <- rt <= exp(theta[jt]); log_pdf[hard] <- -Inf } }
   list(pdf = exp(log_pdf),
-       cdf = pnorm(z) * exp(log_p_R),   # defective CDF
+       cdf = ifelse(hard, 0, pnorm(z) * exp(log_p_R)),   # defective CDF; 0 below t0 when st0 = 0
        log_pdf = log_pdf,
        p_R = exp(log_p_R),
        z = z, in_box = TRUE)

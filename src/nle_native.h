@@ -24,24 +24,25 @@ int nle_flow_n_ctx(const FlowModel* f);
 int nle_mlp_n_ctx(const MlpLik* m);
 
 // th: m x n_ctx natural-scale network inputs (column-major, the network's
-// order); tf: per input 0 identity, 1 log, 2 probit; tn: the network's time
+// order); tf: per input 0 identity, 1 log, 2 probit, 3 zerobox; tfc: per input
+// the zerobox constant c (asinh(x / c); NaN for the other codes); tn: the network's time
 // (> 0). Distinct rows are conditioned once. Out-of-box rows: log pdf -Inf,
 // log survivor 0.
 
 // Joint DDM flow: log p(tn, R | theta), R in {1, 2}.
 void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf,
-                    const double* tn, const int* R, double* log_pdf);
+                    const double* tfc, const double* tn, const int* R, double* log_pdf);
 
 // Plain-MLP likelihood (mlp_lik.cpp; regression_joint and mlp_joint cards):
 // log p(tn, R | theta) per row, R in {1, 2}. Rows outside the training box
 // get the network's out-of-box value (-Inf, or the card's log floor).
 void nle_mlp_native(const MlpLik* m, const double* th, int n, const int* tf,
-                    const double* tn, const int* R, double* log_pdf);
+                    const double* tfc, const double* tn, const int* R, double* log_pdf);
 
 // Race flow: per row, want = 1 -> log pdf into log_pdf, want = 2 -> log
 // survivor into log_sf (the other output is left untouched).
 void nle_flow_native(const FlowModel* f, const double* th, int m, const int* tf,
-                     const double* tn, const unsigned char* want,
+                     const double* tfc, const double* tn, const unsigned char* want,
                      double* log_pdf, double* log_sf);
 
 #endif

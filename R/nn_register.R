@@ -4,7 +4,8 @@
 # card) into an ordinary EMC2 model function. Everything about the network's
 # interface is read from the card and checked when it is registered:
 #   context_names        the network's parameter inputs, in the network's order
-#   context_transforms   the scale each input was trained on (identity/log/probit),
+#   context_transforms   the scale each input was trained on (identity/log/probit/
+#                        zerobox; zerobox = asinh(x / c) with c from zerobox_c),
 #                        keyed by name; a name listed here but absent from
 #                        context_names was fixed when the network was trained
 #   bounds_natural       training box on the natural scale, in the order of
@@ -48,16 +49,43 @@ nle_manifest <- function() {
 
 nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint")
 nn_mlp_kinds <- c("regression_joint", "mlp_joint")
-nn_transform_codes <- c(identity = 0L, log = 1L, probit = 2L)
+nn_transform_codes <- c(identity = 0L, log = 1L, probit = 2L, zerobox = 3L)
 # card `model` field -> analytic twin (an EMC2 model function)
 nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA")
 # network inputs a regression net may take besides its parameter contexts
 nn_data_inputs <- c("rt", "log_rt", "R")
 
-nn_tf <- function(x, tf) switch(tf, identity = x, log = log(x), probit = stats::qnorm(x),
-                                stop("Unknown context transform '", tf, "'"))
-nn_tf_inv <- function(x, tf) switch(tf, identity = x, log = exp(x), probit = stats::pnorm(x),
-                                    stop("Unknown context transform '", tf, "'"))
+# Natural scale <-> network scale. `c`: the zerobox constant (zerobox_c) of the
+# input, NA for the other transforms. A zerobox input is exact at x = 0
+# (asinh(0 / c) = 0), so an exact zero needs no special case.
+nn_tf <- function(x, tf, c = NA_real_) switch(tf, identity = x, log = log(x), probit = stats::qnorm(x),
+                                              zerobox = asinh(x / c),
+                                              stop("Unknown context transform '", tf, "'"))
+nn_tf_inv <- function(x, tf, c = NA_real_) switch(tf, identity = x, log = exp(x), probit = stats::pnorm(x),
+                                                  zerobox = c * sinh(x),
+                                                  stop("Unknown context transform '", tf, "'"))
+
+# The zerobox constant of each input in `ctx` (NA where the transform is not
+# zerobox). A zerobox input without a constant, or a constant on an input that
+# is not zerobox, is refused.
+nn_zerobox_c <- function(m, ctx, tfs, what = "") {
+  zc <- m$zerobox_c
+  zc <- if (is.null(zc)) stats::setNames(numeric(0), character(0)) else unlist(zc)
+  zb <- ctx[tfs == "zerobox"]
+  miss <- setdiff(zb, names(zc))
+  if (length(miss))
+    stop(what, "input(s) ", paste(miss, collapse = ", "), " have the zerobox transform but the card's ",
+         "zerobox_c gives no constant for them")
+  extra <- setdiff(names(zc), zb)
+  if (length(extra))
+    stop(what, "zerobox_c gives a constant for ", paste(extra, collapse = ", "),
+         ", which the card does not mark \"zerobox\" in context_transforms")
+  if (length(zc) && !(is.numeric(zc) && all(is.finite(zc) & zc > 0)))
+    stop(what, "zerobox_c constants must be positive numbers")
+  out <- rep(NA_real_, length(ctx))
+  out[tfs == "zerobox"] <- zc[zb]
+  out
+}
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -140,7 +168,7 @@ nn_normalise_card <- function(raw) {
   members <- lapply(members, nn_fill_sampled_box)
   m1 <- members[[1]]
   for (m in members[-1])
-    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled"))
+    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c"))
       if (!identical(m[[f]], m1[[f]])) stop("Ensemble members disagree on ", f)
   list(members = members, top = if (!is.null(raw$members)) raw[names(raw) != "members"] else NULL,
        kind = kinds[1])
@@ -154,8 +182,9 @@ nn_fill_sampled_box <- function(m) {
       length(bn$lower) != length(tr) || !all(ctx %in% names(tr))) return(m)
   j <- match(ctx, names(tr))
   tfs <- vapply(ctx, function(p) as.character(tr[[p]]), "", USE.NAMES = FALSE)
-  m$bounds_sampled <- list(lower = unname(mapply(nn_tf, bn$lower[j], tfs)),
-                           upper = unname(mapply(nn_tf, bn$upper[j], tfs)))
+  zc <- nn_zerobox_c(m, ctx, tfs)
+  m$bounds_sampled <- list(lower = unname(mapply(nn_tf, bn$lower[j], tfs, zc)),
+                           upper = unname(mapply(nn_tf, bn$upper[j], tfs, zc)))
   m
 }
 
@@ -216,19 +245,39 @@ nn_ptr <- function(reg) {
 #'
 #' **Model card.** The fields read are `context_names` (the network's
 #' parameter inputs in order), `context_transforms` (per name: `"identity"`,
-#' `"log"` or `"probit"`, the scale the network was trained on),
+#' `"log"`, `"probit"` or `"zerobox"`, the scale the network was trained on),
 #' `bounds_natural` and/or `bounds_sampled` (the training box, `lower` and
 #' `upper`; natural scale in the order of `names(context_transforms)`, sampled
 #' scale in `context_names` order; if both are present they must agree), the
 #' weights (`flow_mlp` + `classifier_mlp` + `spline` + `scaler` for
 #' `"flow_joint"`, `mlp` + `spline` + `scaler` for `"flow_race"`, `mlp` for
 #' `"regression_joint"` and `"mlp_joint"`), and optionally `model`, `kind`, `ll_floor_log`,
-#' `context_encoding`. A name in `context_transforms` that is not in
+#' `context_encoding`, `zerobox_c`. A name in `context_transforms` that is not in
 #' `context_names` was fixed when the network was trained; its value must be
 #' given in `exceptions` unless the card implies it (`context_encoding =
 #' "st0zero"` implies `st0 = 0`). `.rds` bundles may hold an ensemble
 #' (`members`, `"flow_joint"` only); `.json` cards need the \pkg{jsonlite}
 #' package.
+#'
+#' **Zero-box inputs.** An input with transform `"zerobox"` enters the
+#' network as `asinh(x / c)`, `c` > 0 from the card's `zerobox_c` (a named list,
+#' one constant per zero-box input; a zero-box input without one, or a constant
+#' on any other input, is refused). The network is trained at, and exact at,
+#' `x = 0`: on EMC2's sampled scale the parameter keeps the twin's transform
+#' (for [DDM]: `log` for `sv` and `st0`, `probit` for `SZ`; `"exp"` when you
+#' give `p_types`), so `-Inf` is an exact zero, and the network value is built
+#' from the natural value (`asinh(0 / c) = 0`). The training region is closed at
+#' 0 for these inputs; the bounds are the twin's (e.g. [DDM]'s floor of 0.01
+#' for `sv` and `SZ`) with exactly 0 admitted as a bound exception, so a
+#' default or constant of 0 is accepted and values between 0 and the floor are
+#' rejected as the analytic model rejects them. A zero-box DDM card
+#' (`context_encoding = "zerobox"`) needs the twin's defaults `sv = SZ = st0 =
+#' -Inf` (exactly zero, as in [DDM]). **Support rule:** for such a card, when
+#' `st0` is exactly 0 the density and the defective CDF are 0 (log density
+#' `-Inf`) for `rt <= t0`, whatever the flow would give; for `st0 > 0` the flow
+#' models the smear itself. The rule is applied by the evaluator on every path
+#' (one parameter vector, trial-wise parameters, ensembles, the compiled
+#' likelihood); `min_ll` flooring applies after it.
 #'
 #' **Kinds.**
 #' * `"flow_joint"`: a spline flow for rt given parameters and response plus a
@@ -326,7 +375,7 @@ nn_ptr <- function(reg) {
 #'   inputs; a name the card also uses must sit at the card's position (a
 #'   permutation is refused).
 #' @param transforms The scale of each input (`"identity"`, `"log"`,
-#'   `"probit"`), in the network's order or named. Default: the card's
+#'   `"probit"`, `"zerobox"`), in the network's order or named. Default: the card's
 #'   `context_transforms`; if both are given they must agree.
 #' @param kind `"flow_joint"`, `"flow_race"`, `"regression_joint"` or
 #'   `"mlp_joint"`. Default:
@@ -443,7 +492,8 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     stop(what, "unsupported context transform(s) ", paste(setdiff(tfs, names(nn_transform_codes)), collapse = ", "))
 
   # --- training box -----------------------------------------------------------
-  box <- nn_box(m1, ctx, tr_card, tfs, what)
+  zc <- nn_zerobox_c(m1, ctx, tfs, what)
+  box <- nn_box(m1, ctx, tr_card, tfs, zc, what)
   if (!(kind %in% nn_mlp_kinds) && is.null(m1$bounds_sampled))   # read by the compiled evaluators
     stop(what, "a flow card must carry bounds_sampled (or bounds_natural with context_transforms)")
 
@@ -474,6 +524,16 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
                          " are not parameters of the model (", paste(names(pt), collapse = ", "), ")")
   tr_filled <- fill_transform(NULL, function() list(p_types = pt, transform = tl$transform))
   defaults <- nn_natural(pt, tr_filled)
+  zb <- pars[tfs == "zerobox"]
+  # A zero-box DDM network is exact at sv = SZ = st0 = 0, so an omitted
+  # parameter must mean exactly zero, as in the analytic DDM() (a positive
+  # default would simulate one model and evaluate another). Checked whatever
+  # supplies the defaults (DDM, a hand-written twin, or p_types).
+  if (identical(m1$context_encoding, "zerobox") && kind == "flow_joint") {
+    zp <- intersect(c("sv", "SZ", "st0"), names(pt))
+    if (!all(is.infinite(pt[zp]) & pt[zp] < 0))
+      stop(what, "a zero-box DDM network needs the defaults sv = SZ = st0 = -Inf (exactly zero)")
+  }
 
   # --- parameters that are not network inputs ------------------------------------
   dropped <- setdiff(names(tr_card), ctx)          # fixed when the network was trained
@@ -510,14 +570,24 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   oob <- if (kind == "mlp_joint") m1$ll_floor_log else -Inf
 
   # --- bounds -------------------------------------------------------------------------
+  twin_mm <- tl$bound$minmax
   minmax <- vapply(names(pt), function(p) {
-    if (p %in% pars) { j <- match(p, pars); c(box$lower[j], box$upper[j]) }
+    if (p %in% zb) {
+      # zerobox: the analytic model's floor, with exactly 0 admitted through a
+      # bound exception (below), capped at the training region's top
+      j <- match(p, pars)
+      if (!is.null(twin_mm) && p %in% colnames(twin_mm))
+        c(max(twin_mm[1, p], box$lower[j]), min(twin_mm[2, p], box$upper[j]))
+      else c(box$lower[j], box$upper[j])
+    }
+    else if (p %in% pars) { j <- match(p, pars); c(box$lower[j], box$upper[j]) }
     else if (p %in% names(fixed)) rep(fixed[[p]], 2)
     else if (!is.null(tl$bound$minmax) && p %in% colnames(tl$bound$minmax)) tl$bound$minmax[, p]
     else c(-Inf, Inf)
   }, numeric(2))
   lower <- stats::setNames(box$lower, pars); upper <- stats::setNames(box$upper, pars)
-  refuse_default <- pars[!(defaults[pars] > lower & defaults[pars] < upper)]
+  refuse_default <- pars[!nn_inside(pars, defaults[pars], lower, upper, zb)]
+  exception <- reg_exception(reg_fixed = fixed, zb = zb, tl = tl)
 
   card_meta <- m1[setdiff(names(m1), c("mlp", "flow_mlp", "classifier_mlp", "scaler",
                                         "classifier_scaler", "spline"))]
@@ -525,6 +595,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   reg <- list(
     kind = kind, label = label, artefact = res$artefact, path = res$path, sha256 = hit$sha256,
     pars = pars, context_names = ctx, transforms = tfs, transform_codes = unname(nn_transform_codes[tfs]),
+    zerobox_c = zc, zerobox = zb, exception = exception,
     lower = lower, upper = upper, lower_s = box$lower_s, upper_s = box$upper_s,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
@@ -541,6 +612,22 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
 
 # An EMC2 analytic model is kept by name (small, and resolved in the installed
 # package); a hand-written twin as the function itself.
+# Inside the training region: open at both ends, except that a zerobox input's
+# lower end (0, where the network is exact) is closed.
+nn_inside <- function(p, x, lower, upper, zb)
+  ifelse(p %in% zb, x >= lower[p], x > lower[p]) & x < upper[p]
+
+# Bound exceptions: fixed parameters admit exactly their value; a zerobox input
+# admits exactly 0 below the analytic model's floor (the twin's exception).
+reg_exception <- function(reg_fixed, zb, tl) {
+  ex <- reg_fixed
+  for (p in zb) {
+    te <- tl$bound$exception
+    ex[[p]] <- if (!is.null(te) && p %in% names(te)) te[[p]] else 0
+  }
+  if (is.null(ex)) stats::setNames(numeric(0), character(0)) else ex
+}
+
 nn_twin_ref <- function(twin) {
   if (is.null(twin)) return(NULL)
   for (nm in nn_twin_names)
@@ -557,13 +644,13 @@ nn_own_parameterisation <- function(p_types, pars, tfs, type, what) {
   miss <- setdiff(pars, names(p_types))
   if (length(miss)) stop(what, "p_types has no default for network input(s) ", paste(miss, collapse = ", "))
   func <- stats::setNames(rep("identity", length(p_types)), names(p_types))
-  func[pars] <- unname(c(identity = "identity", log = "exp", probit = "pnorm")[tfs])
+  func[pars] <- unname(c(identity = "identity", log = "exp", probit = "pnorm", zerobox = "exp")[tfs])
   list(type = type, p_types = p_types, transform = list(func = func))
 }
 
 # Training box: natural scale per input (network order), sampled scale per
 # input. Cross-checks the card's two boxes when both are present.
-nn_box <- function(m, ctx, tr_card, tfs, what) {
+nn_box <- function(m, ctx, tr_card, tfs, zc, what) {
   bn <- m$bounds_natural; bs <- m$bounds_sampled
   if (is.null(bn) && is.null(bs)) stop(what, "the card has no training box (bounds_natural / bounds_sampled)")
   k <- length(ctx)
@@ -572,14 +659,14 @@ nn_box <- function(m, ctx, tr_card, tfs, what) {
       stop(what, "bounds_natural needs one entry per context_transforms entry (", length(tr_card), ")")
     j <- match(ctx, names(tr_card))
     lo <- bn$lower[j]; hi <- bn$upper[j]
-    lo_s <- mapply(nn_tf, lo, tfs); hi_s <- mapply(nn_tf, hi, tfs)
+    lo_s <- mapply(nn_tf, lo, tfs, zc); hi_s <- mapply(nn_tf, hi, tfs, zc)
   }
   if (!is.null(bs)) {
     if (length(bs$lower) != k || length(bs$upper) != k)
       stop(what, "bounds_sampled needs one entry per network input (", k, ")")
     if (is.null(bn)) {
       lo_s <- bs$lower; hi_s <- bs$upper
-      lo <- mapply(nn_tf_inv, lo_s, tfs); hi <- mapply(nn_tf_inv, hi_s, tfs)
+      lo <- mapply(nn_tf_inv, lo_s, tfs, zc); hi <- mapply(nn_tf_inv, hi_s, tfs, zc)
     } else {
       agree <- function(a, b) (is.infinite(a) & a == b) | abs(a - b) <= 1e-8 * pmax(1, abs(b))
       bad <- which(!(agree(lo_s, bs$lower) & agree(hi_s, bs$upper)))
@@ -668,7 +755,7 @@ nn_model_list <- function(reg, tl, minmax) {
     c_name = if (!is.null(reg$native)) "NN",
     p_types = tl$p_types,
     transform = tl$transform,
-    bound = list(minmax = minmax, exception = reg$fixed),
+    bound = list(minmax = minmax, exception = reg$exception),
     # The network is fed natural-scale parameters as it was trained (e.g. the
     # DDM flows take raw SZ, not DDM's 2 * SZ * min(Z, 1 - Z)); only refuse
     # values it cannot represent.
@@ -723,6 +810,7 @@ nn_native_spec <- function(reg) {
   refuse <- reg$defaults[reg$refuse_default]
   list(kind = reg$kind, label = reg$label, pars = reg$pars,
        transform_codes = reg$transform_codes,
+       zerobox_c = reg$zerobox_c,
        pre = if (is.null(reg$pre)) "" else reg$pre,
        fixed = reg$fixed,
        fixed_msg = vapply(names(reg$fixed), nn_fixed_message, "", reg = reg, USE.NAMES = FALSE),
@@ -753,7 +841,8 @@ nn_context <- function(pars, reg) {
   if (length(miss)) stop("Neural likelihood '", reg$label, "' needs parameter(s) ",
                          paste(miss, collapse = ", "), " which the model does not supply")
   theta <- matrix(0, nrow(pars), length(reg$pars))
-  for (j in seq_along(reg$pars)) theta[, j] <- nn_tf(pars[, reg$pars[j]], reg$transforms[j])
+  zc <- if (is.null(reg$zerobox_c)) rep(NA_real_, length(reg$pars)) else reg$zerobox_c
+  for (j in seq_along(reg$pars)) theta[, j] <- nn_tf(pars[, reg$pars[j]], reg$transforms[j], zc[j])
   theta
 }
 
@@ -853,7 +942,7 @@ nn_prepare_design <- function(reg, formula, constants, Rlevels, joint) {
     if (p %in% names(nat) && !isTRUE(all.equal(nat[[p]], reg$fixed[[p]]))) stop(nn_fixed_message(p, reg))
   }
   for (p in intersect(names(nat), reg$pars))
-    if (!(nat[[p]] > reg$lower[[p]] && nat[[p]] < reg$upper[[p]])) {
+    if (!nn_inside(p, nat[[p]], reg$lower, reg$upper, reg$zerobox)) {
       if (isTRUE(all.equal(nat[[p]], reg$defaults[[p]]))) stop(nn_default_message(p, nat[[p]], reg))
       stop("Constant ", p, " = ", format(constants[[p]]), " (natural scale ", format(nat[[p]]),
            ") is outside neural likelihood '", reg$label, "''s training region [",
