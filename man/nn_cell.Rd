@@ -14,7 +14,8 @@ nn_cell(
   Rlevels = NULL,
   matchfun = NULL,
   control = NULL,
-  k = 4
+  k = 4,
+  functions = NULL
 )
 }
 \arguments{
@@ -39,6 +40,10 @@ checks that need a control then refuse).}
 
 \item{k}{Half-width of the prior, in sds, that must lie inside the
 training region.}
+
+\item{functions}{As in \code{\link[=design]{design()}}: functions of the augmented data that
+make factors for the formula (e.g. which accumulator is pulsed, for a
+\link{CRDM} network); passed to the network's design and the control's.}
 }
 \value{
 An \code{nn_cell}: a list with the model, the registration, the design

@@ -15,6 +15,20 @@
 #   cdf(rt) = pnorm(z)          (bijector is monotone increasing)
 #   sf(rt)  = pnorm(z, lower = FALSE)
 #
+# Cards converted from Malte Lueken's flows (flow/scripts/malte_to_card.py) add
+# three optional features; a card without them evaluates exactly as before:
+#   input_scaling  the network sees (log(x + eps) - loc) / scale, per input, on
+#                  the natural-scale context (no `scaler`)
+#   affine         the conditioner emits two more outputs [loc, raw_scale] after
+#                  the 3K+1 spline outputs; with scale = softplus(raw_scale + c)
+#                  + min_scale, log t = loc + scale * spline(z), so with
+#                  y = (log t - loc) / scale:
+#                    pdf(t) = dnorm(z) * |dg^{-1}/dy| / (scale * t),  z = g^{-1}(y)
+#                  (identity tails in the standardised coordinate y)
+#   pre = "t0"     the flow models decision time, so the argument of
+#                  flow_eval() is rt - t0 (t0 is not a context input)
+# Any number of hidden layers is supported (linear1, linear_mid*, ..., linear2).
+#
 # Bounding box: parameter vectors outside the training region (recorded in
 # the JSON, sampled scale) return pdf = 0 and cdf = 0 immediately
 # (log_pdf = -Inf, log_sf = 0, consistent with cdf = 0). Rejection sentinel,
@@ -30,7 +44,19 @@ flow_load <- function(path) {
            eps = as.numeric(n$eps)))
   stopifnot(fl$spline$num_splines == 1,
             fl$spline$output_transform == "exp",
-            fl$spline$base_distribution == "standard_normal")
+            fl$spline$base_distribution == "standard_normal",
+            fl$spline$boundary_slopes == "identity")
+  if (!is.null(fl$input_scaling)) {
+    fl$input_scaling <- lapply(fl$input_scaling, as.numeric)
+    stopifnot(all(lengths(fl$input_scaling) == length(fl$context_names)),
+              is.null(fl$scaler))
+  }
+  fl$affine <- isTRUE(fl$affine)
+  if (fl$affine) {
+    stopifnot(!is.null(fl$affine_scale$min_scale),
+              !is.null(fl$affine_scale$offset))
+    fl$affine_scale <- lapply(fl$affine_scale, as.numeric)
+  }
   fl
 }
 
@@ -61,7 +87,15 @@ flow_knots <- function(fl, theta) {
   K <- sp$num_bins
   range_size <- sp$range_max - sp$range_min
 
-  h <- sweep(sweep(theta, 2L, fl$scaler$mean, "-"), 2L, fl$scaler$scale, "/")
+  if (!is.null(fl$input_scaling)) {
+    isc <- fl$input_scaling
+    h <- sweep(sweep(log(sweep(theta, 2L, isc$eps, "+")), 2L, isc$loc, "-"),
+               2L, isc$scale, "/")
+  } else if (!is.null(fl$scaler)) {
+    h <- sweep(sweep(theta, 2L, fl$scaler$mean, "-"), 2L, fl$scaler$scale, "/")
+  } else {
+    h <- theta
+  }
   ctx_std <- h
   n_layers <- length(fl$mlp$layers)
   for (i in seq_len(n_layers - 1L)) {
@@ -86,6 +120,7 @@ flow_knots <- function(fl, theta) {
   offset <- log(exp(1 - sp$min_knot_slope) - 1)
   slopes <- .softplus(raw[, (2 * K + 1):(3 * K + 1), drop = FALSE] + offset) +
     sp$min_knot_slope
+  if (isTRUE(fl$affine)) stopifnot(ncol(raw) == 3L * K + 3L)
   slopes[, 1L] <- 1        # boundary_slopes = "identity"
   slopes[, K + 1L] <- 1
 
@@ -96,8 +131,14 @@ flow_knots <- function(fl, theta) {
                  sp$range_min + .row_cumsum(heights[, -K, drop = FALSE]),
                  sp$range_max)
 
-  list(x_pos = x_pos, y_pos = y_pos, slopes = slopes,
-       raw = raw, ctx_std = ctx_std, num_bins = K)
+  out <- list(x_pos = x_pos, y_pos = y_pos, slopes = slopes,
+              raw = raw, ctx_std = ctx_std, num_bins = K)
+  if (isTRUE(fl$affine)) {
+    out$loc <- raw[, 3L * K + 2L]
+    out$scale <- .softplus(raw[, 3L * K + 3L] + fl$affine_scale$offset) +
+      fl$affine_scale$min_scale
+  }
+  out
 }
 
 # Inverse spline + log|d inverse/dy| for one knot row, vectorized over y.
@@ -148,7 +189,8 @@ flow_knots <- function(fl, theta) {
 }
 
 in_box <- function(fl, theta) {
-  all(theta >= fl$bounds_sampled$lower & theta <= fl$bounds_sampled$upper)
+  b <- if (!is.null(fl$bounds_sampled)) fl$bounds_sampled else fl$bounds_natural
+  all(theta >= b$lower & theta <= b$upper)
 }
 
 # Main evaluator: one parameter vector (sampled scale), many rts.
@@ -162,7 +204,13 @@ flow_eval <- function(fl, theta, rt) {
   }
   kn <- flow_knots(fl, theta)
   u <- log(rt)
-  inv <- .rqs_inverse(u, kn$x_pos[1L, ], kn$y_pos[1L, ], kn$slopes[1L, ])
+  if (isTRUE(fl$affine)) {
+    y <- (u - kn$loc[1L]) / kn$scale[1L]
+    inv <- .rqs_inverse(y, kn$x_pos[1L, ], kn$y_pos[1L, ], kn$slopes[1L, ])
+    inv$logdet <- inv$logdet - log(kn$scale[1L])
+  } else {
+    inv <- .rqs_inverse(u, kn$x_pos[1L, ], kn$y_pos[1L, ], kn$slopes[1L, ])
+  }
   log_pdf <- dnorm(inv$x, log = TRUE) + inv$logdet - u
   list(pdf = exp(log_pdf),
        cdf = pnorm(inv$x),

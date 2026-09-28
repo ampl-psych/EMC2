@@ -24,6 +24,17 @@
 //                                     model_NN.h): natural-scale rows; log pdf
 //                                     for winners, log survivor for losers
 //
+// Optional card features (cards converted from Malte Lueken's flows; a card
+// without them evaluates exactly as before):
+//   input_scaling  the network sees (log(x + eps) - loc) / scale per input, in
+//                  place of the scaler; with neither it sees the inputs as
+//                  they are
+//   affine         two more conditioner outputs after the 3K + 1 spline
+//                  outputs, loc and raw_scale; with scale = softplus(raw_scale
+//                  + offset) + min_scale and y = (log t - loc) / scale the
+//                  spline is inverted at y (identity tails in y) and
+//                  log pdf = dnorm(z, log) + log|dz/dy| - log(scale) - log t
+//
 // Out-of-box parameters (training-region bounding box, sampled scale):
 // pdf = 0, cdf = 0 immediately (log_pdf = -Inf, log_sf = 0). Rejection
 // sentinel, not extrapolation.
@@ -32,12 +43,17 @@
 
 #include "nle_flow.h"
 #include "nle_native.h"
+#include "nle_wald.h"
 using namespace Rcpp;
 
 struct FlowModel {
   int n_ctx = 0;
   nle::Spline sp;
-  std::vector<double> scaler_mean, scaler_scale;
+  int input_mode = 0;                                  // 0 as is, 1 scaler, 2 input_scaling
+  std::vector<double> scaler_mean, scaler_scale;       // 1: (x - mean) / scale
+  std::vector<double> in_eps, in_loc, in_scale;        // 2: (log(x + eps) - loc) / scale
+  bool affine = false;                                 // affine stage after the spline
+  double aff_min_scale = 0, aff_offset = 0;
   std::vector<double> lower, upper;                    // bounding box (sampled scale)
   nle::Mlp mlp;
 };
@@ -84,18 +100,30 @@ static void flow_eval_core(const FlowModel& m, const double* Theta_u, int U,
     arma::mat X(nc, nb);
     for (int c = 0; c < nb; ++c) {
       const double* th = Theta_u + (size_t)inb[c0 + c] * nc;
-      for (int j = 0; j < nc; ++j) X(j, c) = (th[j] - m.scaler_mean[j]) / m.scaler_scale[j];
+      for (int j = 0; j < nc; ++j)
+        X(j, c) = m.input_mode == 1 ? (th[j] - m.scaler_mean[j]) / m.scaler_scale[j] :
+                  m.input_mode == 2 ? (std::log(th[j] + m.in_eps[j]) - m.in_loc[j]) / m.in_scale[j] : th[j];
     }
     const arma::mat raw = nle::mlp_forward_batch(m.mlp, X);
     kb.reset(K, nb);
     for (int c = 0; c < nb; ++c) nle::build_knots(m.sp, raw.colptr(c), kb, c);
     for (int c = 0; c < nb; ++c) {
       const int q = c0 + c;
+      double loc = 0.0, scale = 1.0, log_scale = 0.0;
+      if (m.affine) {
+        const double* r = raw.colptr(c);
+        loc = r[3 * K + 1];
+        scale = nle::softplus(r[3 * K + 2] + m.aff_offset) + m.aff_min_scale;
+        log_scale = std::log(scale);
+      }
       for (int gi = grp.start[q]; gi < grp.start[q + 1]; ++gi) {
         const int t = grp.order[gi];
         const double u = std::log(rt[t]);
         double z, logdet;
-        nle::rqs_inverse_one(kb.xc(c), kb.yc(c), kb.dc(c), K, u, z, logdet);
+        if (m.affine) {
+          nle::rqs_inverse_one(kb.xc(c), kb.yc(c), kb.dc(c), K, (u - loc) / scale, z, logdet);
+          logdet -= log_scale;
+        } else nle::rqs_inverse_one(kb.xc(c), kb.yc(c), kb.dc(c), K, u, z, logdet);
         if (want_d(t)) {
           const double lp = R::dnorm(z, 0.0, 1.0, 1) + logdet - u;
           if (out.log_pdf) out.log_pdf[t] = lp;
@@ -126,20 +154,43 @@ SEXP flow_build(List fl) {
   FlowModel* m = new FlowModel();
   try {
     nle::load_spline(fl["spline"], m->sp, "flow_build");
-    List scaler = fl["scaler"];
-    m->scaler_mean = as<std::vector<double>>(scaler["mean"]);
-    m->scaler_scale = as<std::vector<double>>(scaler["scale"]);
-    m->n_ctx = (int)m->scaler_mean.size();
+    nle::load_mlp(fl["mlp"], m->mlp, "flow_build");
+    m->n_ctx = m->mlp.n_in();
+    auto has = [&](const char* f) { return fl.containsElementNamed(f) && !Rf_isNull(fl[f]); };
+    if (has("scaler") && has("input_scaling"))
+      stop("flow_build: the card has both a scaler and input_scaling.");
+    if (has("scaler")) {
+      List scaler = fl["scaler"];
+      m->scaler_mean = as<std::vector<double>>(scaler["mean"]);
+      m->scaler_scale = as<std::vector<double>>(scaler["scale"]);
+      if ((int)m->scaler_mean.size() != m->n_ctx || (int)m->scaler_scale.size() != m->n_ctx)
+        stop("flow_build: the scaler needs one mean and scale per MLP input.");
+      m->input_mode = 1;
+    } else if (has("input_scaling")) {
+      List isc = fl["input_scaling"];
+      m->in_eps = as<std::vector<double>>(isc["eps"]);
+      m->in_loc = as<std::vector<double>>(isc["loc"]);
+      m->in_scale = as<std::vector<double>>(isc["scale"]);
+      if ((int)m->in_eps.size() != m->n_ctx || (int)m->in_loc.size() != m->n_ctx ||
+          (int)m->in_scale.size() != m->n_ctx)
+        stop("flow_build: input_scaling needs one eps, loc and scale per MLP input.");
+      m->input_mode = 2;
+    }
+    m->affine = has("affine") && as<bool>(fl["affine"]);
+    if (m->affine) {
+      if (!has("affine_scale")) stop("flow_build: an affine card needs affine_scale (min_scale, offset).");
+      List as_ = fl["affine_scale"];
+      m->aff_min_scale = as<double>(as_["min_scale"]);
+      m->aff_offset = as<double>(as_["offset"]);
+    }
+    if (!has("bounds_sampled")) stop("flow_build: the card has no bounds_sampled.");
     List bounds = fl["bounds_sampled"];
     m->lower = as<std::vector<double>>(bounds["lower"]);
     m->upper = as<std::vector<double>>(bounds["upper"]);
     if ((int)m->lower.size() != m->n_ctx || (int)m->upper.size() != m->n_ctx)
       stop("flow_build: bounds_sampled length != n_params.");
-    nle::load_mlp(fl["mlp"], m->mlp, "flow_build");
-    if (m->mlp.n_in() != m->n_ctx)
-      stop("flow_build: MLP input dim must be n_params.");
-    if (m->mlp.n_out() != 3 * m->sp.num_bins + 1)
-      stop("flow_build: MLP output dim must be 3 * num_bins + 1.");
+    if (m->mlp.n_out() != 3 * m->sp.num_bins + (m->affine ? 3 : 1))
+      stop("flow_build: MLP output dim must be 3 * num_bins + %d.", m->affine ? 3 : 1);
   } catch (...) { delete m; throw; }
   XPtr<FlowModel> ptr(m, true);
   ptr.attr("class") = "flow_model";
@@ -201,6 +252,21 @@ NumericMatrix nle_mlp_forward(List mlp, NumericMatrix X) {
   const arma::mat Xt = arma::mat(X.begin(), X.nrow(), X.ncol(), false, true).t();
   const arma::mat Y = nle::mlp_forward_batch(m, Xt);
   return wrap(arma::mat(Y.t()));
+}
+
+// The Wald rows of a hybrid neural likelihood (nle_wald.h), R path: density and
+// CDF at decision times t > 0, one parameter row per time.
+// [[Rcpp::export]]
+List nle_wald_cpp(NumericVector t, NumericVector v, NumericVector b, NumericVector s) {
+  const int n = t.size();
+  if (v.size() != n || b.size() != n || s.size() != n) stop("v, b and s need one value per t.");
+  NumericVector pdf(n), cdf(n);
+  for (int i = 0; i < n; ++i) {
+    if (!(t[i] > 0.0)) continue;
+    pdf[i] = std::exp(nle::wald_log_pdf(t[i], v[i], b[i], s[i]));
+    cdf[i] = nle::wald_cdf(t[i], v[i], b[i], s[i]);
+  }
+  return List::create(_["pdf"] = pdf, _["cdf"] = cdf);
 }
 
 // ---------------------------------------------------------------------------

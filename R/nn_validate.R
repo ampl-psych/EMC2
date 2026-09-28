@@ -77,6 +77,9 @@
 #'   checks that need a control then refuse).
 #' @param k Half-width of the prior, in sds, that must lie inside the
 #'   training region.
+#' @param functions As in [design()]: functions of the augmented data that
+#'   make factors for the formula (e.g. which accumulator is pulsed, for a
+#'   [CRDM] network); passed to the network's design and the control's.
 #' @return An `nn_cell`: a list with the model, the registration, the design
 #'   and prior for the network (`design`, `prior`) and for the control
 #'   (`control_design`, `control_prior`), the prior `mean` and `sd` per
@@ -89,7 +92,8 @@
 #' cell
 #' @export
 nn_cell <- function(model, mean = NULL, sd = NULL, constants = NULL, formula = NULL,
-                    factors = NULL, Rlevels = NULL, matchfun = NULL, control = NULL, k = 4) {
+                    factors = NULL, Rlevels = NULL, matchfun = NULL, control = NULL, k = 4,
+                    functions = NULL) {
   if (inherits(model, "nn_cell")) return(model)
   control_label <- if (is.null(control)) NULL else if (isFALSE(control)) "none" else
     paste(deparse(substitute(control)), collapse = "")
@@ -106,7 +110,8 @@ nn_cell <- function(model, mean = NULL, sd = NULL, constants = NULL, formula = N
       stats::as.formula(if (!joint && p == "v") "v ~ 0 + lR" else paste(p, "~ 1"), env = baseenv()))
   }
   des_args <- list(factors = c(list(subjects = 1), factors), Rlevels = Rlevels, formula = formula,
-                   constants = constants, matchfun = matchfun, report_p_vector = FALSE)
+                   constants = constants, matchfun = matchfun, functions = functions,
+                   report_p_vector = FALSE)
   des <- suppressMessages(do.call(design, c(des_args, list(model = mfun))))
   sp <- names(sampled_pars(des))
   map <- attr(sampled_pars(des, doMap = TRUE), "map")
@@ -147,7 +152,8 @@ nn_cell <- function(model, mean = NULL, sd = NULL, constants = NULL, formula = N
   structure(list(model = mfun, reg = reg, design = des, prior = pri, control = ctl,
                  control_design = des_ctl, control_prior = pri_ctl,
                  control_label = if (is.null(ctl)) "none" else control_label,
-                 mean = mean, sd = sd, k = k, box = box), class = "nn_cell")
+                 mean = mean, sd = sd, k = k, box = box, draw_map = nn_draw_map(des, reg, sd)),
+            class = "nn_cell")
 }
 
 #' @export
@@ -289,7 +295,9 @@ nn_to_natural <- function(x, func, lower, upper)
 #'
 #' For every network input and design cell, maps the prior's mean +- `k` sd
 #' (on the sampled scale, through the design matrices) to the natural scale
-#' and compares it with the network's training region. Parameter vectors
+#' and compares it with the network's training region. A value that combines
+#' several sampled parameters (an intercept plus an effect) has the sd of that
+#' combination under the independent priors. Parameter vectors
 #' outside the region are rejected by the network, so such a prior is
 #' silently truncated in a fit and breaks the calibration of an SBC: every
 #' replicate whose true parameters leave the region cannot be recovered.
@@ -352,14 +360,20 @@ nn_box_table <- function(des, reg, mu, sdv, k) {
     sd_c <- ifelse(cols %in% names(sdv), sdv[cols], 0)
     if (anyNA(mean_c)) stop("cannot map ", p, ": ", paste(cols[is.na(mean_c)], collapse = ", "),
                             " is neither sampled nor a constant")
-    centre <- drop(X %*% mean_c); half <- k * drop(abs(X) %*% sd_c)
+    # a constant of -Inf (an exact zero) does not reach the cells it is not part of
+    inf <- is.infinite(mean_c)
+    # the prior of a cell's value is normal with the sd of the linear
+    # combination (independent priors), so an effect is held to the same
+    # +-k sd as an intercept
+    centre <- drop(X[, !inf, drop = FALSE] %*% mean_c[!inf]); half <- k * sqrt(drop(X^2 %*% sd_c^2))
+    for (j in which(inf)) centre[X[, j] != 0] <- X[X[, j] != 0, j] * mean_c[j]
     lo <- nn_to_natural(centre - half, tr$func[[p]], tr$lower[[p]], tr$upper[[p]])
     hi <- nn_to_natural(centre + half, tr$func[[p]], tr$lower[[p]], tr$upper[[p]])
     cell <- if (ncol(labs)) apply(labs, 1, function(r) paste(names(labs), r, sep = "=", collapse = ",")) else ""
     rows[[p]] <- unique(data.frame(parameter = p, cell = cell, prior_lower = lo, prior_upper = hi,
                                    box_lower = reg$lower[[p]], box_upper = reg$upper[[p]],
-                                   # a zerobox input's region is closed at 0 (exact zeros)
-                                   inside = (if (p %in% reg$zerobox) lo >= reg$lower[[p]] else lo > reg$lower[[p]]) &
+                                   # a closed lower edge (zerobox, ...) admits exact zeros
+                                   inside = (if (p %in% nn_closed(reg)) lo >= reg$lower[[p]] else lo > reg$lower[[p]]) &
                                      hi < reg$upper[[p]],
                                    stringsAsFactors = FALSE))
   }
@@ -498,12 +512,36 @@ nn_particles_ok <- function(P, dadm, model)
     is.null(ok) || all(ok)
   }, TRUE)
 
-# Draws from the cell prior, truncated at +-k sd.
+# Rows: the value of each network input in each design cell as a linear
+# combination of the sampled parameters, scaled by their prior sds (so a row's
+# length is the prior sd of that value).
+nn_draw_map <- function(des, reg, sdv) {
+  map <- attr(sampled_pars(des, doMap = TRUE, add_da = TRUE), "map")
+  sp <- names(sdv)
+  rows <- lapply(intersect(reg$pars, names(map)), function(p) {
+    X <- nn_map_matrix(as.data.frame(map[[p]]))
+    L <- matrix(0, nrow(X), length(sp), dimnames = list(NULL, sp))
+    cols <- intersect(colnames(X), sp)
+    L[, cols] <- X[, cols, drop = FALSE]
+    unique(sweep(L, 2, sdv, "*"))
+  })
+  L <- do.call(rbind, rows)
+  L[rowSums(L != 0) > 1, , drop = FALSE]     # single parameters are truncated directly
+}
+
+# Draws from the cell prior, truncated at +-k sd: every sampled parameter, and
+# every value that combines several of them (an intercept plus an effect), so
+# the draws stay in the region nn_in_box() checked.
 nn_cell_draws <- function(cell, n) {
   sp <- names(cell$mean)
   out <- matrix(NA_real_, n, length(sp), dimnames = list(NULL, sp))
+  L <- cell$draw_map
+  lim <- if (length(L)) cell$k * sqrt(rowSums(L^2))
   for (i in seq_len(n)) {
-    repeat { z <- stats::rnorm(length(sp)); if (all(abs(z) <= cell$k)) break }
+    repeat {
+      z <- stats::rnorm(length(sp))
+      if (all(abs(z) <= cell$k) && (!length(L) || all(abs(drop(L %*% z)) <= lim))) break
+    }
     out[i, ] <- cell$mean + cell$sd * z
   }
   out

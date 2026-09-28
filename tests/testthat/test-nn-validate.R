@@ -57,9 +57,10 @@ test_that("nn_cell and nn_in_box refuse priors that leave the training region", 
   cell <- nn_cell(RDMnn, formula = list(v ~ lR, B ~ 1, t0 ~ 1, A ~ 1),
                   mean = c(rdm_mean, v_lRb = 0), sd = c(v = .1, v_lRb = .05, B = .1, t0 = .1, A = .1))
   expect_true(all(cell$box$inside))
-  # the effect enters the second accumulator's range: v + v_lRb +- 4 (sd_v + sd_eff)
+  # the effect enters the second accumulator's range: v + v_lRb +- 4 sd of the
+  # sum under the independent priors, sqrt(sd_v^2 + sd_eff^2)
   rb <- cell$box[cell$box$parameter == "v" & grepl("lR=b", cell$box$cell), ]
-  expect_equal(rb$prior_upper, exp(log(1.5) + 4 * .15), tolerance = 1e-12)
+  expect_equal(rb$prior_upper, exp(log(1.5) + 4 * sqrt(.1^2 + .05^2)), tolerance = 1e-12)
 
   des <- cell$design
   pri <- prior(des, type = "single", pmean = c(v = log(1.5), v_lRb = 0, B = 0, t0 = log(.2), A = log(.3)),

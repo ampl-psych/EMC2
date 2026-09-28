@@ -27,7 +27,9 @@ training region, and whether the former lies inside the latter.
 \description{
 For every network input and design cell, maps the prior's mean +- \code{k} sd
 (on the sampled scale, through the design matrices) to the natural scale
-and compares it with the network's training region. Parameter vectors
+and compares it with the network's training region. A value that combines
+several sampled parameters (an intercept plus an effect) has the sd of that
+combination under the independent priors. Parameter vectors
 outside the region are rejected by the network, so such a prior is
 silently truncated in a fit and breaks the calibration of an SBC: every
 replicate whose true parameters leave the region cannot be recovered.

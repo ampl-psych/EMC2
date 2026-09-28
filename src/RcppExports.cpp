@@ -20,6 +20,103 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// crdm_mean
+List crdm_mean(NumericVector t, double v, double amp, double tau);
+RcppExport SEXP _EMC2_crdm_mean(SEXP tSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_mean(t, v, amp, tau));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcrdm_acc
+NumericVector rcrdm_acc(int n, double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_rcrdm_acc(SEXP nSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcrdm_acc(n, v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// crdm_volterra_grid
+List crdm_volterra_grid(double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_crdm_volterra_grid(SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_volterra_grid(v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dcrdm_volterra
+List dcrdm_volterra(NumericVector t, double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_dcrdm_volterra(SEXP tSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(dcrdm_volterra(t, v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// crdm_dens_rows
+List crdm_dens_rows(NumericVector t, NumericMatrix P, double dt);
+RcppExport SEXP _EMC2_crdm_dens_rows(SEXP tSEXP, SEXP PSEXP, SEXP dtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type P(PSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_dens_rows(t, P, dt));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcrdm_rows
+NumericVector rcrdm_rows(NumericVector v, NumericVector amp, NumericVector tau, NumericVector s, NumericVector b, NumericVector hz, double dt);
+RcppExport SEXP _EMC2_rcrdm_rows(SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP hzSEXP, SEXP dtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type hz(hzSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcrdm_rows(v, amp, tau, s, b, hz, dt));
+    return rcpp_result_gen;
+END_RCPP
+}
 // EMC2_call_custom_trend
 Rcpp::NumericVector EMC2_call_custom_trend(Rcpp::NumericMatrix trend_pars, Rcpp::NumericMatrix input, SEXP funptrSEXP);
 RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
@@ -185,6 +282,20 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type mlp(mlpSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type X(XSEXP);
     rcpp_result_gen = Rcpp::wrap(nle_mlp_forward(mlp, X));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nle_wald_cpp
+List nle_wald_cpp(NumericVector t, NumericVector v, NumericVector b, NumericVector s);
+RcppExport SEXP _EMC2_nle_wald_cpp(SEXP tSEXP, SEXP vSEXP, SEXP bSEXP, SEXP sSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    rcpp_result_gen = Rcpp::wrap(nle_wald_cpp(t, v, b, s));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -775,6 +886,12 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_emc2_build_info", (DL_FUNC) &_EMC2_emc2_build_info, 0},
+    {"_EMC2_crdm_mean", (DL_FUNC) &_EMC2_crdm_mean, 4},
+    {"_EMC2_rcrdm_acc", (DL_FUNC) &_EMC2_rcrdm_acc, 8},
+    {"_EMC2_crdm_volterra_grid", (DL_FUNC) &_EMC2_crdm_volterra_grid, 7},
+    {"_EMC2_dcrdm_volterra", (DL_FUNC) &_EMC2_dcrdm_volterra, 8},
+    {"_EMC2_crdm_dens_rows", (DL_FUNC) &_EMC2_crdm_dens_rows, 3},
+    {"_EMC2_rcrdm_rows", (DL_FUNC) &_EMC2_rcrdm_rows, 7},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_ddm_build", (DL_FUNC) &_EMC2_ddm_build, 1},
@@ -788,6 +905,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_flow_eval_cpp", (DL_FUNC) &_EMC2_flow_eval_cpp, 3},
     {"_EMC2_flow_eval_trials_cpp", (DL_FUNC) &_EMC2_flow_eval_trials_cpp, 3},
     {"_EMC2_nle_mlp_forward", (DL_FUNC) &_EMC2_nle_mlp_forward, 2},
+    {"_EMC2_nle_wald_cpp", (DL_FUNC) &_EMC2_nle_wald_cpp, 4},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
     {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
     {"_EMC2_mlp_lik_valid", (DL_FUNC) &_EMC2_mlp_lik_valid, 1},

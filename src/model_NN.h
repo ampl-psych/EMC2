@@ -9,6 +9,9 @@
 //   flow_joint, regression_joint, mlp_joint: log p(rt - pre, R | theta) per trial
 //   flow_race:  log pdf for the winning accumulator, log survivor for the
 //               losers, summed per trial
+//   hybrid flow_race: a row whose hybrid parameter (e.g. the pulse height amp)
+//               is exactly 0 is the closed-form Wald (nle_wald.h) and never
+//               reaches the network
 // Bounds, expansion and clamping are the pipeline's, as for other models.
 // This reproduces the R path (dfun/pfun via log_likelihood_ddm/race), which
 // stays the reference; the one numerical difference is that the survivor is
@@ -24,6 +27,7 @@
 #include <vector>
 #include "ParamTable.h"
 #include "nle_native.h"
+#include "nle_wald.h"
 
 struct NnCheck {        // a run-time refusal (see nn_check_pars() in R)
   int col;
@@ -43,6 +47,9 @@ struct NnSpec {
   std::vector<int> tf;                     // 0 identity, 1 log, 2 probit, 3 zerobox
   std::vector<double> tfc;                 // zerobox constant per input (NaN otherwise)
   int pre_col = -1;                        // parameter subtracted from rt
+  int hyb_col = -1;                        // hybrid race: rows with this parameter == 0 are Wald
+  int wald_col[3] = {-1, -1, -1};          // the Wald's v, b, s
+  double wald_lower[3] = {0, 0, 0}, wald_upper[3] = {0, 0, 0};   // their training box (closed)
   int n_rows = 0, n_trials = 0, n_acc = 1;
   const double* rt = nullptr;
   Rcpp::NumericVector rt_keep;             // keeps rt alive
@@ -54,8 +61,8 @@ struct NnSpec {
 
 // Per-thread scratch, reused across particles.
 struct NnScratch {
-  std::vector<int> rows;
-  std::vector<double> th, tn, lp, lsf, ll_row;
+  std::vector<int> rows, wrows;
+  std::vector<double> th, tn, wtn, lp, lsf, ll_row;
   std::vector<int> Rr;
   std::vector<unsigned char> want;
 };
@@ -134,6 +141,24 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
     s.pre_col = it->second;
   }
 
+  const std::string hybrid = nn.containsElementNamed("hybrid") ? as<std::string>(nn["hybrid"]) : "";
+  if (!hybrid.empty()) {
+    if (!s.race) stop(what + "only a race flow can be a hybrid");
+    auto it = pt.name_to_base_idx.find(hybrid);
+    if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply hybrid parameter '" + hybrid + "'");
+    s.hyb_col = it->second;
+    CharacterVector wp = nn["wald_pars"];
+    NumericVector wl = nn["wald_lower"], wu = nn["wald_upper"];
+    if (wp.size() != 3 || wl.size() != 3 || wu.size() != 3) stop(what + "a hybrid needs the Wald's v, b and s");
+    for (int j = 0; j < 3; ++j) {
+      auto iw = pt.name_to_base_idx.find(as<std::string>(wp[j]));
+      if (iw == pt.name_to_base_idx.end())
+        stop(what + "the model does not supply Wald parameter '" + as<std::string>(wp[j]) + "'");
+      s.wald_col[j] = iw->second;
+      s.wald_lower[j] = wl[j]; s.wald_upper[j] = wu[j];
+    }
+  }
+
   // data
   s.rt_keep = data["rt"];
   s.rt = s.rt_keep.begin();
@@ -202,12 +227,15 @@ inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
   const double* pre = s.pre_col >= 0 ? pt.base.colptr(s.pre_col) : nullptr;
   // rows the network evaluates: time > 0 (else zero density / CDF, as the
   // R path's dfun/pfun) and, in a race, accumulators taking part
-  w.rows.clear(); w.tn.clear();
+  // (a hybrid's rows with the hybrid parameter exactly 0 go to the Wald)
+  const double* hyb = s.hyb_col >= 0 ? pt.base.colptr(s.hyb_col) : nullptr;
+  w.rows.clear(); w.tn.clear(); w.wrows.clear(); w.wtn.clear();
   for (int r = 0; r < s.n_rows; ++r) {
     if (!s.absent.empty() && s.absent[r]) continue;
     const double t = pre ? s.rt[r] - pre[r] : s.rt[r];
     if (!(t > 0.0)) continue;
-    w.rows.push_back(r); w.tn.push_back(t);
+    if (hyb && hyb[r] == 0.0) { w.wrows.push_back(r); w.wtn.push_back(t); }
+    else { w.rows.push_back(r); w.tn.push_back(t); }
   }
   const int m = (int)w.rows.size();
   w.th.resize((size_t)m * s.nc);
@@ -241,6 +269,21 @@ inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
   for (int i = 0; i < m; ++i) {
     const int r = w.rows[i];
     w.ll_row[r] = s.winner[r] ? w.lp[i] : w.lsf[i];
+  }
+  if (!w.wrows.empty()) {
+    const double* wv = pt.base.colptr(s.wald_col[0]);
+    const double* wb = pt.base.colptr(s.wald_col[1]);
+    const double* ws = pt.base.colptr(s.wald_col[2]);
+    for (size_t i = 0; i < w.wrows.size(); ++i) {
+      const int r = w.wrows[i];
+      const double p[3] = {wv[r], wb[r], ws[r]};
+      bool in = true;                         // outside the box: as the network's rows
+      for (int j = 0; j < 3; ++j)
+        if (std::isnan(p[j]) || p[j] < s.wald_lower[j] || p[j] > s.wald_upper[j]) in = false;
+      if (!in) continue;
+      w.ll_row[r] = s.winner[r] ? nle::wald_log_pdf(w.wtn[i], p[0], p[1], p[2])
+                                : std::log1p(-nle::wald_cdf(w.wtn[i], p[0], p[1], p[2]));
+    }
   }
   for (int t = 0; t < s.n_trials; ++t) {
     double ll = 0.0;

@@ -13,7 +13,8 @@ register_nn_model(
   exceptions = NULL,
   pre = NULL,
   twin = NULL,
-  p_types = NULL
+  p_types = NULL,
+  hybrid = NULL
 )
 }
 \arguments{
@@ -45,7 +46,9 @@ any other.}
 \item{pre}{\code{NULL}, the name of a parameter subtracted from rt before the
 network sees it (\code{"t0"} for a decision-time network), or a
 \verb{function(rt, pars)} returning the network's time; it must be a shift
-(no Jacobian is applied). Times <= 0 get zero density and CDF.}
+(no Jacobian is applied). Times <= 0 get zero density and CDF. Default:
+the card's \code{pre}, if it has one; an argument that differs from the card's
+is refused.}
 
 \item{twin}{The analytic twin: an EMC2 model function supplying
 \code{p_types}, \code{transform} and \code{rfun} (and \code{Ttransform}, applied before
@@ -57,12 +60,17 @@ analytic model, a hand-written model function (see Details), or use
 sampled scale for the model's parameters (see Details). Give either
 \code{twin} or \code{p_types}; with \code{p_types} no twin is used, even if the card
 names a model.}
+
+\item{hybrid}{For a race flow: the name of a network input (an EMC2
+parameter name, e.g. \code{"amp"}) such that a row where it is exactly 0 is
+scored by the closed-form Wald instead of the network (see Details).
+Default \code{NULL}: every row goes to the network.}
 }
 \value{
 A model function (like \link{DDM}) whose list carries, besides the usual
 elements, \code{nn}: the registration (\code{kind}, \code{sha256}, \code{pars} and
 \code{context_names} in the network's order, \code{transforms}, the training box,
-\code{fixed}, \code{pre}, \code{cdf}, \code{ll_floor}, the card's metadata and \code{twin}: the
+\code{fixed}, \code{pre}, \code{hybrid}, \code{cdf}, \code{ll_floor}, the card's metadata and \code{twin}: the
 name of an EMC2 analytic twin, a hand-written twin function, or \code{NULL}).
 }
 \description{
@@ -95,11 +103,53 @@ scale in \code{context_names} order; if both are present they must agree), the
 weights (\code{flow_mlp} + \code{classifier_mlp} + \code{spline} + \code{scaler} for
 \code{"flow_joint"}, \code{mlp} + \code{spline} + \code{scaler} for \code{"flow_race"}, \code{mlp} for
 \code{"regression_joint"} and \code{"mlp_joint"}), and optionally \code{model}, \code{kind}, \code{ll_floor_log},
-\code{context_encoding}, \code{zerobox_c}. A name in \code{context_transforms} that is not in
+\code{context_encoding}, \code{zerobox_c}, and for race flows \code{context_scale},
+\code{input_scaling}, \code{affine}, \code{affine_scale}, \code{pre} (below). A name in
+\code{context_transforms} that is not in
 \code{context_names} was fixed when the network was trained; its value must be
 given in \code{exceptions} unless the card implies it (\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
 (\code{members}, \code{"flow_joint"} only); \code{.json} cards need the \pkg{jsonlite}
 package.
+
+\strong{Natural-scale race flows.} A \code{"flow_race"} card may describe its inputs
+on the natural scale and carry further stages (the cards converted from
+Lüken's flows by the NLE project do):
+\itemize{
+\item \code{context_scale = "natural"} and no \code{context_transforms}: every input has
+transform \code{"identity"} and the training box is \code{bounds_natural}, in
+\code{context_names} order. On EMC2's sampled scale the parameters keep the
+twin's transforms (\code{log} for the \link{RDM}'s); the network is fed the natural
+values.
+\item \code{input_scaling} (\code{eps}, \code{loc}, \code{scale}, one per input): the network sees
+\code{(log(x + eps) - loc) / scale} in place of a \code{scaler}; a card with both is
+refused, and with neither the network sees the natural values as they are.
+\item \code{affine = TRUE} with \code{affine_scale} (\code{min_scale}, \code{offset}): the
+conditioner has two more outputs after the \verb{3K + 1} spline outputs (\code{K}
+bins), \code{loc} and \code{raw_scale}. With \code{scale = softplus(raw_scale + offset) + min_scale} the spline is inverted at \verb{y = (log t - loc) / scale}, \code{z} being
+its value there (identity tails in \code{y}), and \verb{log pdf = dnorm(z, log) + log|dz/dy| - log(scale) - log t}, \code{CDF = pnorm(z)}.
+\item \code{pre} (e.g. \code{"t0"}): the flow models the decision time \code{rt - t0}; it is the
+default of the argument \code{pre}, and an argument that contradicts the card
+is refused.
+\item An input whose training region starts at the twin's default, where the
+twin admits that value as a bound exception (the pulse height \code{amp} of
+\link{CRDM}: default and lower edge 0), has a region closed at that edge, so
+that the default means what it means in the twin; the other edges are
+open.
+\item A threshold input \code{b} registered as EMC2's \code{B} (\code{pars = c("v", "s", "B")})
+is exact only without start-point variability, so \code{A} must be fixed at 0
+(\code{exceptions = c(A = 0)}).
+}
+
+\strong{Hybrid race.} With \code{hybrid = "amp"} an accumulator whose natural-scale
+\code{amp} is exactly 0 (an unpulsed accumulator of the \link{CRDM}) is scored by the
+closed-form Wald of the \link{RDM} with its \code{v}, \code{B} and \code{s} (no start-point
+variability) at the decision time, and every other row by the network. The
+network never sees the unpulsed rows, so they carry no approximation error
+and cost no conditioner pass. The training box on \code{v}, \code{s} and \code{B} applies to
+the Wald rows as well, so that the same parameter vectors are rejected with
+and without \code{hybrid}. This holds on every path (\code{dfun}, \code{pfun}, the compiled
+likelihood). Without \code{hybrid} every row goes to the network, \code{amp = 0}
+included. See \link{CRDM} for the design that gives exact zeros.
 
 \strong{Zero-box inputs.} An input with transform \code{"zerobox"} enters the
 network as \code{asinh(x / c)}, \code{c} > 0 from the card's \code{zerobox_c} (a named list,
@@ -197,7 +247,9 @@ card's inputs; a card whose \code{bounds_sampled} disagrees with its transformed
 \code{bounds_natural} (e.g. permuted \code{context_names}); \code{transforms} that
 disagree with the card; a network input that is not a parameter of the
 twin; a twin parameter the network ignores (neither an input, nor consumed
-by \code{pre}, nor fixed by \code{exceptions}); a \code{pre} that is not a shift of rt.
+by \code{pre}, nor fixed by \code{exceptions}); a \code{pre} that is not a shift of rt or
+contradicts the card's; a card with both \code{scaler} and \code{input_scaling}; a
+\code{hybrid} that is not a network input.
 
 Loading a neural likelihood is not the same as being able to infer with it:
 check calibration and identifiability (parameter recovery, likelihood

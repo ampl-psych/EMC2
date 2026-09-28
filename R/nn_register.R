@@ -13,6 +13,11 @@
 #   bounds_sampled       the same box on the network's (sampled) scale, in
 #                        context_names order; the two must agree, which also
 #                        catches a card whose context_names were permuted
+#   context_scale        "natural" (with no context_transforms): every input
+#                        is on the natural scale (transform identity), and the
+#                        box is bounds_natural in context_names order
+#   input_scaling, affine, pre
+#                        race flows only: see nn_check_flow_race()
 # The parameter types, transforms, defaults and simulator are the analytic
 # twin's (the card's `model`: DDM, RDM, ...), so an un-sampled parameter means
 # exactly what it means in the analytic model (the defaults trap). A network
@@ -51,7 +56,7 @@ nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint")
 nn_mlp_kinds <- c("regression_joint", "mlp_joint")
 nn_transform_codes <- c(identity = 0L, log = 1L, probit = 2L, zerobox = 3L)
 # card `model` field -> analytic twin (an EMC2 model function)
-nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA")
+nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA", CRDM = "CRDM")
 # network inputs a regression net may take besides its parameter contexts
 nn_data_inputs <- c("rt", "log_rt", "R")
 
@@ -158,7 +163,7 @@ nn_normalise_card <- function(raw) {
   members <- if (!is.null(raw$members)) raw$members else list(raw)
   members <- lapply(members, function(m) {
     for (f in c("mlp", "flow_mlp", "classifier_mlp")) if (!is.null(m[[f]])) m[[f]] <- fix_mlp(m[[f]])
-    m
+    nn_natural_context(m)
   })
   kinds <- vapply(members, nn_infer_kind, "")
   if (length(unique(kinds)) != 1L) stop("Ensemble members hold different kinds of network")
@@ -168,10 +173,22 @@ nn_normalise_card <- function(raw) {
   members <- lapply(members, nn_fill_sampled_box)
   m1 <- members[[1]]
   for (m in members[-1])
-    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c"))
+    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c", "pre"))
       if (!identical(m[[f]], m1[[f]])) stop("Ensemble members disagree on ", f)
   list(members = members, top = if (!is.null(raw$members)) raw[names(raw) != "members"] else NULL,
        kind = kinds[1])
+}
+
+# A card whose inputs are on the natural scale (context_scale = "natural", no
+# context_transforms): every input has transform "identity". The parameters
+# keep the twin's transforms on EMC2's sampled scale; the network is fed the
+# natural values.
+nn_natural_context <- function(m) {
+  if (is.null(m$context_transforms) && identical(m$context_scale, "natural") && !is.null(m$context_names)) {
+    ctx <- as.character(m$context_names)
+    m$context_transforms <- as.list(stats::setNames(rep("identity", length(ctx)), ctx))
+  }
+  m
 }
 
 # bounds_sampled from bounds_natural when the card has only the latter (the
@@ -252,12 +269,54 @@ nn_ptr <- function(reg) {
 #' weights (`flow_mlp` + `classifier_mlp` + `spline` + `scaler` for
 #' `"flow_joint"`, `mlp` + `spline` + `scaler` for `"flow_race"`, `mlp` for
 #' `"regression_joint"` and `"mlp_joint"`), and optionally `model`, `kind`, `ll_floor_log`,
-#' `context_encoding`, `zerobox_c`. A name in `context_transforms` that is not in
+#' `context_encoding`, `zerobox_c`, and for race flows `context_scale`,
+#' `input_scaling`, `affine`, `affine_scale`, `pre` (below). A name in
+#' `context_transforms` that is not in
 #' `context_names` was fixed when the network was trained; its value must be
 #' given in `exceptions` unless the card implies it (`context_encoding =
 #' "st0zero"` implies `st0 = 0`). `.rds` bundles may hold an ensemble
 #' (`members`, `"flow_joint"` only); `.json` cards need the \pkg{jsonlite}
 #' package.
+#'
+#' **Natural-scale race flows.** A `"flow_race"` card may describe its inputs
+#' on the natural scale and carry further stages (the cards converted from
+#' Lüken's flows by the NLE project do):
+#' * `context_scale = "natural"` and no `context_transforms`: every input has
+#'   transform `"identity"` and the training box is `bounds_natural`, in
+#'   `context_names` order. On EMC2's sampled scale the parameters keep the
+#'   twin's transforms (`log` for the [RDM]'s); the network is fed the natural
+#'   values.
+#' * `input_scaling` (`eps`, `loc`, `scale`, one per input): the network sees
+#'   `(log(x + eps) - loc) / scale` in place of a `scaler`; a card with both is
+#'   refused, and with neither the network sees the natural values as they are.
+#' * `affine = TRUE` with `affine_scale` (`min_scale`, `offset`): the
+#'   conditioner has two more outputs after the `3K + 1` spline outputs (`K`
+#'   bins), `loc` and `raw_scale`. With `scale = softplus(raw_scale + offset) +
+#'   min_scale` the spline is inverted at `y = (log t - loc) / scale`, `z` being
+#'   its value there (identity tails in `y`), and `log pdf = dnorm(z, log) +
+#'   log|dz/dy| - log(scale) - log t`, `CDF = pnorm(z)`.
+#' * `pre` (e.g. `"t0"`): the flow models the decision time `rt - t0`; it is the
+#'   default of the argument `pre`, and an argument that contradicts the card
+#'   is refused.
+#' * An input whose training region starts at the twin's default, where the
+#'   twin admits that value as a bound exception (the pulse height `amp` of
+#'   [CRDM]: default and lower edge 0), has a region closed at that edge, so
+#'   that the default means what it means in the twin; the other edges are
+#'   open.
+#' * A threshold input `b` registered as EMC2's `B` (`pars = c("v", "s", "B")`)
+#'   is exact only without start-point variability, so `A` must be fixed at 0
+#'   (`exceptions = c(A = 0)`).
+#'
+#' **Hybrid race.** With `hybrid = "amp"` an accumulator whose natural-scale
+#' `amp` is exactly 0 (an unpulsed accumulator of the [CRDM]) is scored by the
+#' closed-form Wald of the [RDM] with its `v`, `B` and `s` (no start-point
+#' variability) at the decision time, and every other row by the network. The
+#' network never sees the unpulsed rows, so they carry no approximation error
+#' and cost no conditioner pass. The training box on `v`, `s` and `B` applies to
+#' the Wald rows as well, so that the same parameter vectors are rejected with
+#' and without `hybrid`. This holds on every path (`dfun`, `pfun`, the compiled
+#' likelihood). Without `hybrid` every row goes to the network, `amp = 0`
+#' included. See [CRDM] for the design that gives exact zeros.
 #'
 #' **Zero-box inputs.** An input with transform `"zerobox"` enters the
 #' network as `asinh(x / c)`, `c` > 0 from the card's `zerobox_c` (a named list,
@@ -352,7 +411,9 @@ nn_ptr <- function(reg) {
 #' `bounds_natural` (e.g. permuted `context_names`); `transforms` that
 #' disagree with the card; a network input that is not a parameter of the
 #' twin; a twin parameter the network ignores (neither an input, nor consumed
-#' by `pre`, nor fixed by `exceptions`); a `pre` that is not a shift of rt.
+#' by `pre`, nor fixed by `exceptions`); a `pre` that is not a shift of rt or
+#' contradicts the card's; a card with both `scaler` and `input_scaling`; a
+#' `hybrid` that is not a network input.
 #'
 #' Loading a neural likelihood is not the same as being able to infer with it:
 #' check calibration and identifiability (parameter recovery, likelihood
@@ -389,7 +450,9 @@ nn_ptr <- function(reg) {
 #' @param pre `NULL`, the name of a parameter subtracted from rt before the
 #'   network sees it (`"t0"` for a decision-time network), or a
 #'   `function(rt, pars)` returning the network's time; it must be a shift
-#'   (no Jacobian is applied). Times <= 0 get zero density and CDF.
+#'   (no Jacobian is applied). Times <= 0 get zero density and CDF. Default:
+#'   the card's `pre`, if it has one; an argument that differs from the card's
+#'   is refused.
 #' @param twin The analytic twin: an EMC2 model function supplying
 #'   `p_types`, `transform` and `rfun` (and `Ttransform`, applied before
 #'   `rfun`). Default: from the card's `model` field. For a network with no
@@ -399,11 +462,15 @@ nn_ptr <- function(reg) {
 #'   sampled scale for the model's parameters (see Details). Give either
 #'   `twin` or `p_types`; with `p_types` no twin is used, even if the card
 #'   names a model.
+#' @param hybrid For a race flow: the name of a network input (an EMC2
+#'   parameter name, e.g. `"amp"`) such that a row where it is exactly 0 is
+#'   scored by the closed-form Wald instead of the network (see Details).
+#'   Default `NULL`: every row goes to the network.
 #'
 #' @return A model function (like [DDM]) whose list carries, besides the usual
 #'   elements, `nn`: the registration (`kind`, `sha256`, `pars` and
 #'   `context_names` in the network's order, `transforms`, the training box,
-#'   `fixed`, `pre`, `cdf`, `ll_floor`, the card's metadata and `twin`: the
+#'   `fixed`, `pre`, `hybrid`, `cdf`, `ll_floor`, the card's metadata and `twin`: the
 #'   name of an EMC2 analytic twin, a hand-written twin function, or `NULL`).
 #' @seealso [nn_cell()] and the validation kit; [DDMnn()], [RDMnn()].
 #' @examples
@@ -435,12 +502,12 @@ nn_ptr <- function(reg) {
 #' @export
 register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
                               cdf = NULL, exceptions = NULL, pre = NULL, twin = NULL,
-                              p_types = NULL) {
+                              p_types = NULL, hybrid = NULL) {
   res <- nn_resolve(path)
   hit <- nn_card(res)
   card <- hit$card
   m1 <- card$members[[1]]
-  label <- if (!is.null(res$artefact)) res$artefact else basename(res$path)
+  label <- if (!is.null(res$artefact)) res$artefact else nn_label(res$path, m1)
   what <- paste0("Neural likelihood '", label, "': ")
   if (!is.null(kind)) {
     kind <- match.arg(kind, nn_kinds)
@@ -491,6 +558,8 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   if (!all(tfs %in% names(nn_transform_codes)))
     stop(what, "unsupported context transform(s) ", paste(setdiff(tfs, names(nn_transform_codes)), collapse = ", "))
 
+  if (kind == "flow_race") nn_check_flow_race(m1, k, what)
+
   # --- training box -----------------------------------------------------------
   zc <- nn_zerobox_c(m1, ctx, tfs, what)
   box <- nn_box(m1, ctx, tr_card, tfs, zc, what)
@@ -524,7 +593,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
                          " are not parameters of the model (", paste(names(pt), collapse = ", "), ")")
   tr_filled <- fill_transform(NULL, function() list(p_types = pt, transform = tl$transform))
   defaults <- nn_natural(pt, tr_filled)
-  zb <- pars[tfs == "zerobox"]
+  zb <- pars[tfs == "zerobox"]      # closed at 0; see `closed` below for the other closed edges
   # A zero-box DDM network is exact at sv = SZ = st0 = 0, so an omitted
   # parameter must mean exactly zero, as in the analytic DDM() (a positive
   # default would simulate one model and evaluate another). Checked whatever
@@ -552,6 +621,19 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
               "context_names); declare the value it was fixed at with exceptions = c(", p, " = <value>)")
   }
   if (is.null(fixed)) fixed <- stats::setNames(numeric(0), character(0))
+  # the network's threshold b is B + A: registered as B it needs A = 0 exactly
+  if (any(ctx == "b" & pars == "B") && "A" %in% setdiff(names(pt), names(fixed)[fixed == 0]))
+    stop(what, "the network's input 'b' (the threshold, B + A) is registered as 'B', which is exact ",
+         "only without start-point variability: fix it with exceptions = c(A = 0)")
+  if (!is.null(m1$pre)) {
+    card_pre <- m1$pre
+    if (!is.character(card_pre) || length(card_pre) != 1L)
+      stop(what, "the card's pre must name one parameter (e.g. \"t0\")")
+    if (is.null(pre)) pre <- card_pre
+    else if (!identical(pre, card_pre))
+      stop(what, "pre = ", if (is.character(pre)) paste0("\"", pre[1], "\"") else "<function>",
+           " contradicts the card, whose network models rt - ", card_pre, " (pre = \"", card_pre, "\")")
+  }
   pre_pars <- nn_check_pre(pre, pars, defaults, box, what)
   ignored <- setdiff(names(pt), c(pars, names(fixed), pre_pars))
   if (length(ignored))
@@ -569,12 +651,43 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   if (is_mlp) nn_check_regression(m1, ctx, kind, what)
   oob <- if (kind == "mlp_joint") m1$ll_floor_log else -Inf
 
+  # --- edges of the training region that are closed; the hybrid race ---------------
+  # zerobox inputs at 0; on a natural-scale card, an input whose region starts
+  # at the twin's default where the twin admits that value (a bound exception)
+  twin_ex <- tl$bound$exception
+  at_default <- vapply(seq_along(pars), function(j) {
+    p <- pars[j]
+    identical(m1$context_scale, "natural") && tfs[j] == "identity" && p %in% names(twin_ex) &&
+      isTRUE(defaults[[p]] == box$lower[j]) && twin_ex[[p]] == box$lower[j]
+  }, TRUE)
+  closed <- union(zb, pars[at_default])
+  wald <- NULL
+  if (!is.null(hybrid)) {
+    if (!is.character(hybrid) || length(hybrid) != 1L || is.na(hybrid))
+      stop(what, "hybrid must name one network input (e.g. \"amp\")")
+    if (kind != "flow_race") stop(what, "hybrid is for race flows; this is a ", kind, " network")
+    if (!(hybrid %in% pars))
+      stop(what, "hybrid = \"", hybrid, "\" is not an input of the network (", paste(pars, collapse = ", "), ")")
+    if (!(hybrid %in% closed) || box$lower[match(hybrid, pars)] != 0)
+      stop(what, "hybrid = \"", hybrid, "\" needs a training region that starts at 0, the parameter's ",
+           "default in the twin (where the accumulator is the twin's Wald)")
+    wp <- c(v = "v", b = "B", s = "s")
+    if (!all(wp %in% pars) || hybrid %in% wp)
+      stop(what, "a hybrid race scores the rows with ", hybrid, " = 0 by the Wald of v, B and s, ",
+           "which must be network inputs")
+    if ("A" %in% setdiff(names(pt), names(fixed)[fixed == 0]))
+      stop(what, "a hybrid race needs exceptions = c(A = 0): its Wald has no start-point variability")
+    j <- match(wp, pars)
+    wald <- list(pars = unname(wp), lower = box$lower[j], upper = box$upper[j])
+  }
+
   # --- bounds -------------------------------------------------------------------------
   twin_mm <- tl$bound$minmax
   minmax <- vapply(names(pt), function(p) {
-    if (p %in% zb) {
-      # zerobox: the analytic model's floor, with exactly 0 admitted through a
-      # bound exception (below), capped at the training region's top
+    if (p %in% closed) {
+      # closed edge (zerobox, ...): the analytic model's floor, with the edge
+      # itself admitted through a bound exception (below), capped at the
+      # training region's top
       j <- match(p, pars)
       if (!is.null(twin_mm) && p %in% colnames(twin_mm))
         c(max(twin_mm[1, p], box$lower[j]), min(twin_mm[2, p], box$upper[j]))
@@ -586,8 +699,8 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     else c(-Inf, Inf)
   }, numeric(2))
   lower <- stats::setNames(box$lower, pars); upper <- stats::setNames(box$upper, pars)
-  refuse_default <- pars[!nn_inside(pars, defaults[pars], lower, upper, zb)]
-  exception <- reg_exception(reg_fixed = fixed, zb = zb, tl = tl)
+  refuse_default <- pars[!nn_inside(pars, defaults[pars], lower, upper, closed)]
+  exception <- reg_exception(reg_fixed = fixed, zb = closed, tl = tl)
 
   card_meta <- m1[setdiff(names(m1), c("mlp", "flow_mlp", "classifier_mlp", "scaler",
                                         "classifier_scaler", "spline"))]
@@ -595,7 +708,8 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   reg <- list(
     kind = kind, label = label, artefact = res$artefact, path = res$path, sha256 = hit$sha256,
     pars = pars, context_names = ctx, transforms = tfs, transform_codes = unname(nn_transform_codes[tfs]),
-    zerobox_c = zc, zerobox = zb, exception = exception,
+    zerobox_c = zc, zerobox = zb, closed = closed, exception = exception,
+    hybrid = hybrid, wald = wald,
     lower = lower, upper = upper, lower_s = box$lower_s, upper_s = box$upper_s,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
@@ -610,15 +724,53 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   nn_model_function(nn_model_list(reg, tl, minmax))
 }
 
+# The label of a card file: its file name, or for a file called card.* (one
+# folder per network) the card's `model` field, else the folder's name.
+nn_label <- function(path, m) {
+  if (!identical(tools::file_path_sans_ext(basename(path)), "card")) return(basename(path))
+  if (is.character(m$model) && length(m$model) == 1L && nzchar(m$model)) m$model else basename(dirname(path))
+}
+
+# The optional stages of a race flow's card (src/flow_race.cpp evaluates them).
+nn_check_flow_race <- function(m, k, what) {
+  if (!is.null(m$scaler) && !is.null(m$input_scaling))
+    stop(what, "the card has both a scaler and input_scaling; a network has one input standardisation")
+  if (!is.null(m$input_scaling)) {
+    isc <- m$input_scaling
+    if (!all(c("eps", "loc", "scale") %in% names(isc)) ||
+        any(lengths(isc[c("eps", "loc", "scale")]) != k) || !is.numeric(unlist(isc[c("eps", "loc", "scale")])))
+      stop(what, "input_scaling needs eps, loc and scale, one number per network input (", k, ")")
+    if (any(unlist(isc$scale) == 0)) stop(what, "input_scaling has a zero scale")
+  }
+  if (!is.null(m$scaler) && (length(m$scaler$mean) != k || length(m$scaler$scale) != k))
+    stop(what, "the scaler needs one mean and scale per network input (", k, ")")
+  if (nrow(m$mlp$layers[[1]]$W) != k)
+    stop(what, "the network has ", nrow(m$mlp$layers[[1]]$W), " inputs; the card names ", k)
+  affine <- isTRUE(m$affine)
+  if (!is.null(m$affine) && !is.logical(m$affine)) stop(what, "the card's affine must be true or false")
+  if (affine && !(is.numeric(m$affine_scale$min_scale) && is.numeric(m$affine_scale$offset)))
+    stop(what, "an affine card needs affine_scale with min_scale and offset")
+  n_out <- ncol(m$mlp$layers[[length(m$mlp$layers)]]$W)
+  want <- 3L * m$spline$num_bins + if (affine) 3L else 1L
+  if (n_out != want)
+    stop(what, "the conditioner has ", n_out, " outputs; a", if (affine) "n affine" else "",
+         " spline of ", m$spline$num_bins, " bins needs ", want)
+  if (!is.null(m$spline$boundary_slopes) && !identical(m$spline$boundary_slopes, "identity"))
+    stop(what, "only boundary_slopes = \"identity\" is supported")
+  invisible(TRUE)
+}
+
 # An EMC2 analytic model is kept by name (small, and resolved in the installed
 # package); a hand-written twin as the function itself.
-# Inside the training region: open at both ends, except that a zerobox input's
-# lower end (0, where the network is exact) is closed.
+# Inside the training region: open at both ends, except that a closed lower
+# end (`zb`: a zerobox input's 0, where the network is exact; an edge at the
+# twin's default) is inside.
 nn_inside <- function(p, x, lower, upper, zb)
   ifelse(p %in% zb, x >= lower[p], x > lower[p]) & x < upper[p]
 
-# Bound exceptions: fixed parameters admit exactly their value; a zerobox input
-# admits exactly 0 below the analytic model's floor (the twin's exception).
+# Bound exceptions: fixed parameters admit exactly their value; an input with a
+# closed lower edge (`zb`) admits exactly that edge (0) below the analytic
+# model's floor (the twin's exception).
 reg_exception <- function(reg_fixed, zb, tl) {
   ex <- reg_fixed
   for (p in zb) {
@@ -812,6 +964,8 @@ nn_native_spec <- function(reg) {
        transform_codes = reg$transform_codes,
        zerobox_c = reg$zerobox_c,
        pre = if (is.null(reg$pre)) "" else reg$pre,
+       hybrid = if (is.null(reg$hybrid)) "" else reg$hybrid,
+       wald_pars = reg$wald$pars, wald_lower = reg$wald$lower, wald_upper = reg$wald$upper,
        fixed = reg$fixed,
        fixed_msg = vapply(names(reg$fixed), nn_fixed_message, "", reg = reg, USE.NAMES = FALSE),
        refuse = refuse,
@@ -872,8 +1026,22 @@ nn_eval_race <- function(reg, rt, pars, what) {
   use <- !is.na(tn) & tn > 0
   out <- numeric(length(rt))
   if (!any(use)) return(out)
-  if (!all(use)) { pars <- pars[use, , drop = FALSE]; tn <- tn[use] }
-  out[use] <- flow_eval_trials_cpp(nn_ptr(reg), nn_context(pars, reg), tn)[[what]]
+  if (!is.null(reg$hybrid)) {
+    # rows with the hybrid parameter exactly 0: the Wald, inside the box on its
+    # parameters (closed, as the evaluator's); they never reach the network
+    wd <- use & !is.na(pars[, reg$hybrid]) & pars[, reg$hybrid] == 0
+    if (any(wd)) {
+      wp <- pars[wd, reg$wald$pars, drop = FALSE]
+      inb <- rowSums(t(t(wp) >= reg$wald$lower & t(wp) <= reg$wald$upper)) == 3L
+      inb[is.na(inb)] <- FALSE
+      val <- numeric(sum(wd))
+      if (any(inb)) val[inb] <- nle_wald_cpp(tn[wd][inb], wp[inb, 1L], wp[inb, 2L], wp[inb, 3L])[[what]]
+      out[wd] <- val
+      use <- use & !wd
+      if (!any(use)) return(out)
+    }
+  }
+  out[use] <- flow_eval_trials_cpp(nn_ptr(reg), nn_context(pars[use, , drop = FALSE], reg), tn[use])[[what]]
   out
 }
 
@@ -890,6 +1058,10 @@ nn_default_message <- function(p, value, reg)
 nn_fixed_message <- function(p, reg)
   paste0("Parameter '", p, "' is fixed at ", format(reg$fixed[[p]]), " in neural likelihood '", reg$label,
          "' (the network was trained without it); it cannot be sampled or set to another value.")
+
+# Inputs whose training region is closed at its lower edge (registrations made
+# before `closed` existed carry only `zerobox`).
+nn_closed <- function(reg) if (is.null(reg$closed)) reg$zerobox else reg$closed
 
 # Run time (every likelihood evaluation): a backstop for what design() refuses.
 nn_check_pars <- function(pars, reg, dadm = NULL) {
@@ -942,7 +1114,7 @@ nn_prepare_design <- function(reg, formula, constants, Rlevels, joint) {
     if (p %in% names(nat) && !isTRUE(all.equal(nat[[p]], reg$fixed[[p]]))) stop(nn_fixed_message(p, reg))
   }
   for (p in intersect(names(nat), reg$pars))
-    if (!nn_inside(p, nat[[p]], reg$lower, reg$upper, reg$zerobox)) {
+    if (!nn_inside(p, nat[[p]], reg$lower, reg$upper, nn_closed(reg))) {
       if (isTRUE(all.equal(nat[[p]], reg$defaults[[p]]))) stop(nn_default_message(p, nat[[p]], reg))
       stop("Constant ", p, " = ", format(constants[[p]]), " (natural scale ", format(nat[[p]]),
            ") is outside neural likelihood '", reg$label, "''s training region [",

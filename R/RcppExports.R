@@ -5,6 +5,30 @@
     invisible(.Call(`_EMC2_emc2_build_info`))
 }
 
+crdm_mean <- function(t, v, amp, tau) {
+    .Call(`_EMC2_crdm_mean`, t, v, amp, tau)
+}
+
+rcrdm_acc <- function(n, v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_rcrdm_acc`, n, v, amp, tau, s, b, dt, t_max)
+}
+
+crdm_volterra_grid <- function(v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_crdm_volterra_grid`, v, amp, tau, s, b, dt, t_max)
+}
+
+dcrdm_volterra <- function(t, v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_dcrdm_volterra`, t, v, amp, tau, s, b, dt, t_max)
+}
+
+crdm_dens_rows <- function(t, P, dt) {
+    .Call(`_EMC2_crdm_dens_rows`, t, P, dt)
+}
+
+rcrdm_rows <- function(v, amp, tau, s, b, hz, dt) {
+    .Call(`_EMC2_rcrdm_rows`, v, amp, tau, s, b, hz, dt)
+}
+
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
     .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
 }
@@ -55,6 +79,10 @@ flow_eval_trials_cpp <- function(ptr_, theta, rt) {
 
 nle_mlp_forward <- function(mlp, X) {
     .Call(`_EMC2_nle_mlp_forward`, mlp, X)
+}
+
+nle_wald_cpp <- function(t, v, b, s) {
+    .Call(`_EMC2_nle_wald_cpp`, t, v, b, s)
 }
 
 calculate_subject_means <- function(group_designs, params) {
