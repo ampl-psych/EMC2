@@ -27,23 +27,44 @@ bool accumulatr_context_valid(SEXP context) {
   return TYPEOF(context) == EXTPTRSXP && R_ExternalPtrAddr(context) != nullptr;
 }
 
-struct AccumulatRBridgeRecipe {
+struct AccumulatRBridgePlan {
   struct Binding {
     int destination;
     int source;
     int length;
   };
 
-  Rcpp::NumericMatrix runtime;
+  SEXP parameter_names, defaults, sources, bounds;
   std::vector<Binding> bindings;
+  std::vector<BoundSpec> active_bounds;
+
+  bool matches(const Rcpp::List& bridge, const ParamTable& table,
+               const Rcpp::List& bound_definition) const {
+    if (defaults != static_cast<SEXP>(bridge["defaults"]) ||
+        sources != static_cast<SEXP>(bridge["source_names"]) ||
+        bounds != static_cast<SEXP>(bound_definition) ||
+        Rf_nrows(defaults) != table.base.nrow() ||
+        XLENGTH(parameter_names) != table.base_names.size()) return false;
+    for (R_xlen_t i = 0; i < XLENGTH(parameter_names); ++i) {
+      if (STRING_ELT(parameter_names, i) != STRING_ELT(table.base_names, i)) return false;
+    }
+    return true;
+  }
 };
 
-static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
+static const AccumulatRBridgePlan& accumulatr_bridge_plan(
     const Rcpp::List& bridge,
     const ParamTable& parameter_table,
-    std::vector<BoundSpec>& bounds) {
-  Rcpp::NumericMatrix runtime = Rcpp::clone(
-    Rcpp::NumericMatrix(bridge["defaults"]));
+    const Rcpp::List& bound_definition,
+    const std::vector<BoundSpec>& bounds) {
+  static SEXP cache_tag = Rf_install("AccumulatR_bridge_plan");
+  SEXP pointer = Rf_getAttrib(bridge, cache_tag);
+  if (pointer != R_NilValue && R_ExternalPtrAddr(pointer) != nullptr) {
+    const auto& plan = *Rcpp::XPtr<AccumulatRBridgePlan>(pointer);
+    if (plan.matches(bridge, parameter_table, bound_definition)) return plan;
+  }
+
+  Rcpp::NumericMatrix runtime = bridge["defaults"];
   Rcpp::CharacterMatrix sources = bridge["source_names"];
   if (sources.nrow() != runtime.nrow() ||
       sources.ncol() != runtime.ncol() ||
@@ -51,7 +72,7 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
     Rcpp::stop("AccumulatR bridge dimensions do not match the parameter table");
   }
 
-  std::vector<AccumulatRBridgeRecipe::Binding> bindings;
+  std::vector<AccumulatRBridgePlan::Binding> bindings;
   std::vector<unsigned char> used(parameter_table.base.size(), 0);
   bindings.reserve(runtime.length());
   for (int col = 0; col < runtime.ncol(); ++col) {
@@ -77,8 +98,7 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
       }
     }
   }
-  // Restrict bounds to parameter cells consumed by the runtime recipe, once
-  // per particle batch. Reuse the standard bounds evaluator below.
+  // Only parameter cells consumed by this model contribute to bounds.
   std::vector<BoundSpec> active_bounds;
   for (const auto& bound : bounds) {
     const int offset = runtime.nrow() * bound.col_idx;
@@ -92,18 +112,24 @@ static AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
       active_bounds.push_back(active);
     }
   }
-  bounds = std::move(active_bounds);
-  return {runtime, bindings};
+  Rcpp::List owners = Rcpp::List::create(parameter_table.base_names, runtime, sources, bound_definition);
+  Rcpp::XPtr<AccumulatRBridgePlan> plan(new AccumulatRBridgePlan{
+    parameter_table.base_names, runtime, sources, bound_definition,
+    std::move(bindings), std::move(active_bounds)}, true, R_NilValue, owners);
+  // Private derived metadata; serialization clears the pointer, not the recipe.
+  Rf_setAttrib(bridge, cache_tag, plan);
+  return *plan;
 }
 
 static void fill_accumulatr_runtime_parameters(
     const ParamTable& parameter_table,
-    AccumulatRBridgeRecipe& recipe) {
-  for (const auto& binding : recipe.bindings) {
+    const AccumulatRBridgePlan& plan,
+    Rcpp::NumericMatrix& runtime) {
+  for (const auto& binding : plan.bindings) {
     std::copy_n(
       parameter_table.base.begin() + binding.source,
       binding.length,
-      recipe.runtime.begin() + binding.destination);
+      runtime.begin() + binding.destination);
   }
 }
 
@@ -719,15 +745,16 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     }
     Rcpp::List likelihood_context(accumulatr_context);
     SEXP native_context = likelihood_context["native"];
-    AccumulatRBridgeRecipe recipe = make_accumulatr_bridge_recipe(
-      Rcpp::List(likelihood_context["bridge"]), ctx.param_table, bound_specs);
+    Rcpp::List bridge = likelihood_context["bridge"];
+    const auto& bridge_plan = accumulatr_bridge_plan(bridge, ctx.param_table, bounds, bound_specs);
+    Rcpp::NumericMatrix runtime = Rcpp::clone(Rcpp::NumericMatrix(bridge["defaults"]));
     Rcpp::IntegerVector trial_counts = likelihood_context["trial_counts"];
     const int accumulatr_trials = trial_counts.size();
     if (accumulatr_trials == 0 ||
-        recipe.runtime.nrow() % accumulatr_trials != 0) {
+        runtime.nrow() % accumulatr_trials != 0) {
       Rcpp::stop("AccumulatR parameter rows do not form complete trial blocks");
     }
-    const int rows_per_trial = recipe.runtime.nrow() / accumulatr_trials;
+    const int rows_per_trial = runtime.nrow() / accumulatr_trials;
     Rcpp::NumericVector trial_loglik(accumulatr_trials);
     Rcpp::LogicalVector trial_ok(accumulatr_trials);
     const auto evaluate_accumulatr = accumulatr::loglik_trials_ccallable();
@@ -740,14 +767,14 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       }
       run_pars_pipeline(ctx.param_table, designs, trend_runtime_ptr, cache);
       const bool all_valid =
-        c_do_bound_pt(ctx.param_table, bound_specs, is_ok);
-      fill_accumulatr_runtime_parameters(ctx.param_table, recipe);
+        c_do_bound_pt(ctx.param_table, bridge_plan.active_bounds, is_ok);
+      fill_accumulatr_runtime_parameters(ctx.param_table, bridge_plan, runtime);
       if (!all_valid) {
         prepare_accumulatr_trial_ok(is_ok, rows_per_trial, trial_ok);
       }
       evaluate_accumulatr(
         native_context,
-        recipe.runtime,
+        runtime,
         data,
         all_valid ? R_NilValue : static_cast<SEXP>(trial_ok),
         min_ll,
