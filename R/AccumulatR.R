@@ -187,7 +187,7 @@ AccumulatR_model <- function(model) {
   context <- new.env(parent = emptyenv())
   native_context <- function() {
     if (!accumulatr_context_valid(context$native)) {
-      context$native <- AccumulatR::make_context(model)$cpp$native
+      context$native <- AccumulatR::make_context(model)$cpp
     }
     context$native
   }
