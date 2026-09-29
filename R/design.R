@@ -146,7 +146,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     factors <- facs[names(facs)!="R"]
     # censoring/truncation columns (from make_missing) are not covariates: they
     # must not be imputed with random values in the minimal design
-    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt","LT","UT","LC","UC","missingness"))]
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt","LT","UT","LC","UC","missingness",
+                                         model_extra_responses(model)))]
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)
@@ -156,6 +157,15 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
   if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
     covariates <- unique(c(covariates, "SSD"))
+  }
+  # extra response columns (e.g. a rating RR) are data, not covariates
+  extra_resp <- model_extra_responses(model)
+  if (length(extra_resp) > 0) {
+    covariates <- covariates[!covariates %in% extra_resp]
+    if (length(covariates) == 0) covariates <- NULL
+    used <- intersect(extra_resp, unlist(lapply(formula, function(f) all.vars(f[[3]]))))
+    if (length(used) > 0)
+      stop("Response column(s) ", paste(used, collapse = ", "), " cannot be used as predictors")
   }
 
   if(!is.null(parameter_design)) {
@@ -441,9 +451,10 @@ design_model_custom_ll <- function(data, design, model){
 
 
 # SM: From Zach's branch
-compress_dadm <- function(da,designs,Fcov,Ffun)
+compress_dadm <- function(da,designs,Fcov,Ffun,Fresp=NULL)
   # out keeps only unique rows in terms of all parameters design matrices
-  # R, lR and rt (at given resolution) from full data set
+  # R, lR and rt (at given resolution) from full data set, plus any extra
+  # response columns (Fresp, e.g. a rating RR)
 {
   if("LT"%in%colnames(da)) LT=da$LT else{LT <- attr(da,"LT")}; if (is.null(LT)) LT <- 0
   if("UT"%in%colnames(da)) UT=da$UT else{UT <- attr(da,"UT")}; if (is.null(UT)) UT <- Inf
@@ -473,6 +484,9 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   }
   if (!is.null(Ffun))
     cells <- paste(cells, do.call(paste, c(unname(as.data.frame(da[, Ffun, drop = FALSE])), sep = "+")), sep = "+")
+  Fresp <- intersect(Fresp, names(da))
+  if (length(Fresp) > 0)
+    cells <- paste(cells, do.call(paste, c(unname(as.data.frame(da[, Fresp, drop = FALSE])), sep = "+")), sep = "+")
 
   if (nacc>1) {
     cells_mat <- matrix(cells, nrow = nacc)
@@ -795,7 +809,10 @@ design_model <- function(data,design,model=NULL,
   }
 
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
-  if(rt_check){rt_check_function(data)}
+  if(rt_check){
+    rt_check_function(data)
+    model_check_data(model_info, data)
+  }
   if (!add_acc) da <- data else
     da <- add_accumulators(data,design$matchfun,type=model_type(model_info),Fcovariates=design$Fcovariates)
   order_idx <- order(da$subjects)
@@ -894,7 +911,8 @@ design_model <- function(data,design,model=NULL,
   }
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
-    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions),
+                          Fresp=model_extra_responses(model_info))
     # Change expansion names
     # attr(dadm,"expand_all") <- attr(dadm,"expand")
     if(!is.null(dadm$lR)){

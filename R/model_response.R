@@ -50,3 +50,20 @@ model_prepare_dm <- function(model, p_name, form, da) {
   }
   model_list$prepare_dm(p_name = p_name, form = form, da = da)
 }
+
+# Response columns beyond R and rt that a model observes (e.g. a rating RR).
+# They are data, not covariates: never imputed, never predictors, always part
+# of the compression key, and returned by the model's rfun.
+model_extra_responses <- function(model) {
+  model_list <- .model_list(model)
+  out <- model_list$extra_responses
+  if (is.null(out)) character(0) else out
+}
+
+# Model-specific checks of real data, run by design_model() before the data are
+# augmented (not when data are being simulated).
+model_check_data <- function(model, data) {
+  model_list <- .model_list(model)
+  if (!is.null(model_list$check_data)) model_list$check_data(data)
+  invisible(TRUE)
+}
