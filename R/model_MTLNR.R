@@ -92,9 +92,11 @@ rMTLNR <- function(lR, pars, n_ratings = 3, ok = rep(TRUE, nrow(pars))) {
   data.frame(R = factor(levels(lR)[R], levels = levels(lR)), rt = rt, RR = RR)
 }
 
-# Summed log-likelihood over a (possibly compressed) dadm with two rows per
-# trial; rows of pars align with rows of dadm.
-log_likelihood_mtlnr <- function(pars, dadm, K, min_ll = log(1e-10)) {
+# Trial log-likelihoods over a (possibly compressed) dadm with two rows per
+# trial, expanded to the uncompressed trials and floored at min_ll; rows of
+# pars align with rows of dadm. The R reference for the C++ kernel
+# (src/model_mtlnr.h, c_name "MTLNR"); used when c_name is removed.
+trial_ll_mtlnr <- function(pars, dadm, K, min_ll = log(1e-10)) {
   ix <- mtlnr_rows(pars, dadm$winner)
   pw <- pars[ix$w, , drop = FALSE]
   pl <- pars[ix$l, , drop = FALSE]
@@ -102,13 +104,18 @@ log_likelihood_mtlnr <- function(pars, dadm, K, min_ll = log(1e-10)) {
   iv <- rating_interval(pl, RR, K)
   ll <- mtlnr_logdens(dadm$rt[ix$w] - pw[, "t0"], pw[, "m"], pw[, "s"], pl[, "m"], pl[, "s"],
                       pars[ix$first, "rho"], iv$lower, iv$upper)
+  # a parameter out of bounds on either accumulator row voids the trial (as
+  # the C++ likelihood's apply_bounds does)
   ok <- attr(pars, "ok")
-  if (!is.null(ok)) ll[!ok[ix$w]] <- min_ll
+  if (!is.null(ok)) ll[!(ok[ix$w] & ok[ix$l])] <- min_ll
   ll[is.na(ll)] <- min_ll
-  sum(pmax(min_ll, ll[attr(dadm, "expand")]))
+  pmax(min_ll, ll[attr(dadm, "expand")])
 }
 
-# Stage 1 refuses censoring, truncation and missing responses (the likelihood
+log_likelihood_mtlnr <- function(pars, dadm, K, min_ll = log(1e-10))
+  sum(trial_ll_mtlnr(pars, dadm, K, min_ll))
+
+# Refuses censoring, truncation and missing responses (the likelihood
 # is not yet defined for them).
 mtlnr_check_data <- function(data, K) {
   if (length(levels(data$R)) != 2) stop("MTLNR needs exactly two response levels")
@@ -135,7 +142,7 @@ mtlnr_check_data <- function(data, K) {
 #' | *s*   | log   | \[0, Inf\]    | log(1)   | SD of log finishing time |
 #' | *t0*  | log   | \[0, Inf\]    | log(0)   | Non-decision time |
 #' | *rho* | probit on (-1, 1) | \[-1, 1\] | 0 | Correlation of the log finishing times (trial level, must not depend on lR or lM) |
-#' | *c1*  | log   | \[0, Inf\]    | log(0.5) | First rating criterion, -log(d_{K-1}) |
+#' | *c1*  | log   | \[0, Inf\]    | log(0.5) | First rating criterion, -log of the largest threshold |
 #' | *ck*  | log   | \[0, Inf\]    | log(0.5) | Increment to the next criterion |
 #'
 #' The ratings are read from the losing accumulator's evidence at the decision,
@@ -156,6 +163,7 @@ MTLNR <- function(n_ratings = 3) {
   K <- rating_check_n(n_ratings)
   list(
     type = "RACE",
+    c_name = "MTLNR",
     n_ratings = K,
     extra_responses = "RR",
     p_types = c("m" = 1, "s" = log(1), "t0" = log(0), "rho" = 0, rating_p_types(K)),

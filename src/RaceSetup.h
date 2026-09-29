@@ -105,13 +105,16 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.fill_both                   = nullptr;
     s.fill_survivor               = ddm_survivor;
     s.fill_survivor_with_response = ddm_survivor_with_response;
-  } else { // LNR
+  } else if (type == "LNR") {
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.fill_both                   = dlnr_plnr_fast;
     s.fill_survivor               = lnr_survivor;
     s.fill_survivor_with_response = lnr_survivor_with_response;
+  } else {
+    // An unknown c_name used to fall silently into the LNR likelihood
+    Rcpp::stop("calc_ll: no C++ likelihood for model type '%s'", type.get_cstring());
   }
 
   return s;

@@ -203,7 +203,7 @@ test_that("likelihood: compression on and off agree with the direct density", {
                 d[rep(1:2, n), ])
   rt <- floor(dat$rt / res) * res
   direct <- sum(pmax(log(1e-10), EMC2:::dMTLNR(rt, as.integer(dat$R), dat$RR, pars, 3, log = TRUE)))
-  expect_equal(llc, direct, tolerance = 1e-10)
+  expect_equal(as.vector(llc), direct, tolerance = 1e-10)
 })
 
 test_that("mapped parameters report natural-scale thresholds", {
@@ -298,4 +298,110 @@ test_that("an MTLNR fit samples and predict() keeps RR", {
   expect_true(all(c("R", "rt", "RR") %in% names(pp)))
   expect_equal(nrow(pp), 2 * nrow(dat))
   expect_true(all(pp$RR %in% 1:3))
+})
+
+# ---- C++ kernel (src/model_mtlnr.h, c_name "MTLNR") ----
+
+mtlnr_r_model <- function(model) {
+  ml <- model()
+  ml$c_name <- NULL
+  function() ml
+}
+max_rel <- function(a, b) max(abs(a - b) / pmax(abs(b), 1e-300))
+with_omp <- function(expr, threads = 4) {
+  old <- options(emc.ll_backend = "multithreaded", emc.n_threads = threads)
+  on.exit(options(old))
+  expr
+}
+
+test_that("C++ likelihood equals the R reference (K = 1 .. 4, extreme parameters)", {
+  for (K in 1:4) {
+    crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
+    form <- c(list(m ~ lM, s ~ lM, t0 ~ 1, rho ~ 1),
+              lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
+    mod <- local({ k <- K; function() MTLNR(n_ratings = k) })
+    des <- design(factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+                  model = mod, matchfun = function(d) d$S == d$lR, formula = form,
+                  report_p_vector = FALSE)
+    p <- sampled_pars(des, doMap = FALSE)
+    p[] <- 0
+    p[c("m", "m_lMTRUE", "s", "s_lMTRUE", "t0", "rho")] <- c(-.5, -.6, log(.8), .1, log(.3), qnorm(.75))
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.5), .15)
+    set.seed(10 + K)
+    dat <- suppressWarnings(make_data(p, des, n_trials = 150))
+    set.seed(20 + K)
+    props <- rbind(p, mvtnorm::rmvnorm(40, p, diag(length(p)) * .2))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 6, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[, "rho"] <- qnorm((1 + c(.999, -.999, .99, -.9, .9999, 0)) / 2) # rho .999, -.999, ...
+    if (K > 1) {
+      ext[1:2, "c1"] <- log(8)        # rating K nearly certain, the others tiny
+      ext[3:4, "c1"] <- log(1e-4)     # rating K nearly impossible
+    }
+    ext[5, "s"] <- log(.05)           # sharply peaked
+    ext[6, "t0"] <- log(.01)          # t0 below its bound: every trial at min_ll
+    props <- rbind(props, ext)
+    for (compress in c(TRUE, FALSE)) {
+      dadm <- suppressWarnings(EMC2:::design_model(dat, des, compress = compress, verbose = FALSE))
+      llr <- EMC2:::calc_ll_manager(props, dadm, mtlnr_r_model(des$model))
+      llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+      expect_lt(max_rel(llc, llr), 1e-12)
+      # the R path has no return_trialwise: evaluate the R trial function per particle
+      twr <- apply(props, 1, function(pv)
+        EMC2:::trial_ll_mtlnr(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K))
+      twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+      expect_lt(max_rel(as.vector(twc), as.vector(twr)), 1e-12)
+      expect_equal(llc[nrow(props)], log(1e-10) * nrow(dat))
+      # OpenMP gives exactly the serial numbers
+      expect_identical(with_omp(EMC2:::calc_ll_manager(props, dadm, des$model)), llc)
+      expect_identical(with_omp(EMC2:::calc_ll_manager(props, dadm, des$model,
+                                                       return_trialwise = TRUE)), twc)
+    }
+  }
+})
+
+test_that("C++ likelihood refuses what it does not define; unknown c_names no longer fall into LNR", {
+  des <- mtlnr_design()
+  set.seed(11)
+  dat <- make_data(mtlnr_p, des, n_trials = 30)
+  dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+  pm <- t(as.matrix(mtlnr_p))
+  for (omp in c(FALSE, TRUE)) {
+    run <- function(d, model = des$model)
+      if (omp) with_omp(EMC2:::calc_ll_manager(pm, d, model)) else EMC2:::calc_ll_manager(pm, d, model)
+    bad <- dadm; bad$UT <- 5
+    expect_error(run(bad), "truncation")
+    bad <- dadm; bad$LT <- .1
+    expect_error(run(bad), "truncation")
+    bad <- dadm; bad$missingness <- 0L; bad$missingness[1:2] <- 2L
+    expect_error(run(bad), "censored")
+    bad <- dadm; bad$RR[1] <- 4
+    expect_error(run(bad), "RR must be an integer in 1 .. 3")
+    bad <- dadm; bad$RR <- NULL
+    expect_error(run(bad), "no rating column")
+    ml <- des$model(); ml$c_name <- "NOPE"
+    expect_error(run(dadm, function() ml), "no C\\+\\+ likelihood for model type 'NOPE'")
+  }
+  # truncation also stops at design time
+  dt <- dat; dt$UT <- 5
+  expect_error(EMC2:::design_model(dt, des, verbose = FALSE), "truncation")
+})
+
+test_that("same-seed fits are identical on the serial and OpenMP paths", {
+  des <- mtlnr_design()
+  set.seed(12)
+  dat <- make_data(mtlnr_p, des, n_trials = 100)
+  fit_once <- function() {
+    set.seed(13)
+    emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 2, verbose = FALSE))
+    emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 5), cores_for_chains = 1,
+                   cores_per_chain = 1, verbose = FALSE)
+    lapply(emc, function(ch) ch$samples)
+  }
+  s_serial <- fit_once()
+  s_omp <- with_omp(fit_once())
+  for (ch in 1:2) {
+    expect_identical(s_omp[[ch]]$alpha, s_serial[[ch]]$alpha)
+    expect_identical(s_omp[[ch]]$subj_ll, s_serial[[ch]]$subj_ll)
+  }
 })
