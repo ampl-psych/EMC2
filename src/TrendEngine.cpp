@@ -128,18 +128,22 @@ static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
       Rf_error("KernelSpec '%s': data has no column '%s'",
                ks.kernel_id.c_str(), cn);
     SEXP col = data[cn];
-    if (TYPEOF(col) != REALSXP && TYPEOF(col) != INTSXP)
-      Rf_error("KernelSpec '%s': covariate column '%s' must be numeric or integer",
+    if (TYPEOF(col) != REALSXP && TYPEOF(col) != INTSXP && TYPEOF(col) != LGLSXP)
+      Rf_error("KernelSpec '%s': covariate column '%s' must be numeric, integer, or logical",
                ks.kernel_id.c_str(), cn);
 
     double* dst = ks.kernel_input.colptr(i);
     if (TYPEOF(col) == REALSXP) {
       const double* src = REAL(col);
       std::copy(src, src + n_row, dst);
-    } else {
+    } else if (TYPEOF(col) == INTSXP) {
       const int* src = INTEGER(col);
       for (int j = 0; j < n_row; ++j)
         dst[j] = (src[j] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[j]);
+    } else {                                          // LGLSXP
+      const int* src = LOGICAL(col);                 // R logicals are stored as int
+      for (int j = 0; j < n_row; ++j)
+        dst[j] = (src[j] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[j]);
     }
     ks.covariate_indices.push_back(i);
   }
