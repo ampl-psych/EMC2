@@ -82,6 +82,7 @@ Simulating and fitting follow the same `design()` -> `make_data()` ->
 ```{r, results = "hide"}
 p_k2 <- sampled_pars(design_k2)
 p_k2[] <- c(m = -.4, m_lMTRUE = -.7, s = log(.8), t0 = log(.3), rho = qnorm(.7), c1 = log(.5))
+set.seed(20261001)
 dat_k2 <- make_data(parameters = p_k2, design = design_k2, n_trials = 500)
 ```
 
@@ -172,6 +173,7 @@ between the two finishing times.
 ### Simulate Data and Summarize by Choice and Rating
 
 ```{r, results = "hide"}
+set.seed(20260930)
 dat <- make_data(parameters = p_vector, design = design_mtlnr, n_trials = 1000)
 head(dat)
 ```
@@ -322,6 +324,7 @@ design_hier <- design(
 
 subj_sd <- c(m = .2, m_lMTRUE = .2, s = .15, t0 = .08, rho = .3,
              c1 = .2, c1_lRold = .2, c2 = .2, c2_lRold = .2)
+set.seed(20261002)
 subj_pars <- make_random_effects(design_hier, p_vector, n_subj = 15,
                                   covariances = diag(subj_sd[names(p_vector)]^2))
 dat_hier <- make_data(subj_pars, design_hier, n_trials = 300)
@@ -336,8 +339,13 @@ prior_hier <- prior(
 emc_hier <- make_emc(dat_hier, design_hier, prior_list = prior_hier, type = "standard")
 ```
 
+`make_emc()` uses 3 chains by default; a hierarchical fit's per-iteration cost also scales with
+the number of subjects, so it benefits from parallelizing *within* each chain across subjects too.
+The call below assumes 9 cores are available (`cores_for_chains = 3` chains x `cores_per_chain = 3`
+each); lower `cores_per_chain` (fitting will just take longer) if you have fewer.
+
 ```{r, eval = FALSE}
-emc_hier <- fit(emc_hier, cores_for_chains = 4, cores_per_chain = 1,
+emc_hier <- fit(emc_hier, cores_for_chains = 3, cores_per_chain = 3,
                 fileName = "data/rating-models-hier.RData")
 ```
 
