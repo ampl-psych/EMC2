@@ -8,7 +8,8 @@ rating_summary(
   input,
   factors = NULL,
   probs = c(0.1, 0.5, 0.9),
-  n_ratings = NULL
+  n_ratings = NULL,
+  dont_know = NULL
 )
 }
 \arguments{
@@ -20,6 +21,11 @@ rating_summary(
 \item{probs}{RT quantile probabilities.}
 
 \item{n_ratings}{Number of rating categories K (default: the largest RR).}
+
+\item{dont_know}{Whether rating 1 is one shared "don't know" response
+(coded \code{RR = 1} with \code{R} the first response level), folded into a single
+response \code{DK}. Default: taken from the model for an emc object, otherwise
+\code{FALSE}.}
 }
 \value{
 A data frame with columns for the cell, \code{postn} (if present), the

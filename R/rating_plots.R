@@ -1,7 +1,8 @@
 # Plotting helpers for choice + rating data (rating layer; nothing here is
 # model specific). The response is folded into one ordered factor running from
 # the highest rating of the first response level to the highest rating of the
-# second (rating_fold), e.g. NEW.3, NEW.2, NEW.1, OLD.1, OLD.2, OLD.3.
+# second (rating_fold), e.g. NEW.3, NEW.2, NEW.1, OLD.1, OLD.2, OLD.3, or with
+# a shared don't-know response NEW.3, NEW.2, DK, OLD.2, OLD.3.
 
 # Data frame from a data frame or an emc object; RR and R are required.
 rating_input <- function(x) {
@@ -10,6 +11,15 @@ rating_input <- function(x) {
     stop("need a data frame (or emc object) with columns R, rt and RR")
   if (!is.factor(x$R)) x$R <- factor(x$R)
   x
+}
+
+# Whether rating 1 is a shared don't-know response: as given, else from the
+# model of an emc object, else FALSE.
+rating_dont_know <- function(input, dont_know = NULL) {
+  if (!is.null(dont_know)) return(isTRUE(dont_know))
+  if (inherits(input, "emc"))
+    return(isTRUE(tryCatch(get_design(input)[[1]]$model()$dont_know, error = function(e) NULL)))
+  FALSE
 }
 
 rating_cells <- function(x, factors) {
@@ -29,6 +39,10 @@ rating_cells <- function(x, factors) {
 #' @param factors Character vector of design factors defining the cells.
 #' @param probs RT quantile probabilities.
 #' @param n_ratings Number of rating categories K (default: the largest RR).
+#' @param dont_know Whether rating 1 is one shared "don't know" response
+#'   (coded `RR = 1` with `R` the first response level), folded into a single
+#'   response `DK`. Default: taken from the model for an emc object, otherwise
+#'   `FALSE`.
 #' @return A data frame with columns for the cell, `postn` (if present), the
 #'   folded response `resp`, proportion `p` and one column per quantile.
 #' @examples
@@ -36,13 +50,15 @@ rating_cells <- function(x, factors) {
 #'                   rt = c(.5, .7, .6), RR = c(3, 1, 2))
 #' rating_summary(dat)
 #' @export
-rating_summary <- function(input, factors = NULL, probs = c(.1, .5, .9), n_ratings = NULL) {
+rating_summary <- function(input, factors = NULL, probs = c(.1, .5, .9), n_ratings = NULL,
+                           dont_know = NULL) {
+  dk <- rating_dont_know(input, dont_know)
   x <- rating_input(input)
   K <- if (is.null(n_ratings)) max(x$RR, na.rm = TRUE) else n_ratings
   if (is.null(x$subjects)) x$subjects <- factor(1)
   if (is.null(x$postn)) x$postn <- 1
   x <- x[!is.na(x$R) & !is.na(x$RR), ]
-  x$resp <- rating_fold(x$R, x$RR, K)
+  x$resp <- rating_fold(x$R, x$RR, K, dk)
   x$cell <- rating_cells(x, factors)
   qn <- paste0("q", round(100 * probs))
   one <- function(y) {
@@ -95,12 +111,13 @@ rating_draw <- function(xs, dat, pp, col_data, col_pred, band = c(.025, .975)) {
 #' plot_ratings(dat)
 #' @export
 plot_ratings <- function(input, post_predict = NULL, factors = NULL,
-                         probs = c(.1, .5, .9), n_ratings = NULL,
+                         probs = c(.1, .5, .9), n_ratings = NULL, dont_know = NULL,
                          col_data = "black", col_pred = "#0072B2", main = NULL, ...) {
+  dk <- rating_dont_know(input, dont_know)
   x <- rating_input(input)
   K <- if (is.null(n_ratings)) max(x$RR, na.rm = TRUE) else n_ratings
-  sd <- rating_summary(x, factors, probs, K)
-  sp <- if (!is.null(post_predict)) rating_summary(rating_input(post_predict), factors, probs, K)
+  sd <- rating_summary(x, factors, probs, K, dk)
+  sp <- if (!is.null(post_predict)) rating_summary(rating_input(post_predict), factors, probs, K, dk)
   qn <- paste0("q", round(100 * probs))
   cells <- levels(factor(sd$cell))
   labs <- levels(sd$resp)
@@ -149,14 +166,15 @@ plot_ratings <- function(input, post_predict = NULL, factors = NULL,
 #'                   rt = 1, RR = rep(c(3, 2, 1, 1, 2, 3), 2))
 #' zroc(dat, "S", "n")
 #' @export
-zroc <- function(input, signal_factor, noise, by = NULL, n_ratings = NULL) {
+zroc <- function(input, signal_factor, noise, by = NULL, n_ratings = NULL, dont_know = NULL) {
+  dk <- rating_dont_know(input, dont_know)
   x <- rating_input(input)
   K <- if (is.null(n_ratings)) max(x$RR, na.rm = TRUE) else n_ratings
   x <- x[!is.na(x$R) & !is.na(x$RR), ]
-  x$resp <- rating_fold(x$R, x$RR, K)
+  x$resp <- rating_fold(x$R, x$RR, K, dk)
   cum <- function(y) {
     p <- tabulate(as.integer(y$resp), nlevels(x$resp)) / nrow(y)
-    rev(cumsum(rev(p)))[-1]  # P(resp >= k), k = 2 .. 2K
+    rev(cumsum(rev(p)))[-1]  # P(resp >= k), k = 2 .. 2K (2K - 1 with don't know)
   }
   x$cell <- rating_cells(x, by)
   lev <- setdiff(levels(factor(x[[signal_factor]])), noise)
@@ -181,14 +199,15 @@ zroc <- function(input, signal_factor, noise, by = NULL, n_ratings = NULL) {
 #' @param ... Further arguments passed to `plot()`.
 #' @export
 plot_zroc <- function(input, signal_factor, noise, by = NULL, post_predict = NULL,
-                      n_ratings = NULL, col = NULL, ...) {
+                      n_ratings = NULL, dont_know = NULL, col = NULL, ...) {
+  dk <- rating_dont_know(input, dont_know)
   x <- rating_input(input)
-  zd <- zroc(x, signal_factor, noise, by, n_ratings)
+  zd <- zroc(x, signal_factor, noise, by, n_ratings, dk)
   zp <- NULL
   if (!is.null(post_predict)) {
     pp <- rating_input(post_predict)
     zp <- lapply(split(pp, pp$postn), zroc, signal_factor = signal_factor,
-                 noise = noise, by = by, n_ratings = n_ratings)
+                 noise = noise, by = by, n_ratings = n_ratings, dont_know = dk)
   }
   sig <- unique(zd$signal)
   if (is.null(col)) col <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")[seq_along(sig)]

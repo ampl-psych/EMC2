@@ -5,7 +5,14 @@
 \alias{plot_zroc}
 \title{z-transformed Receiver Operating Characteristics for Rating Data}
 \usage{
-zroc(input, signal_factor, noise, by = NULL, n_ratings = NULL)
+zroc(
+  input,
+  signal_factor,
+  noise,
+  by = NULL,
+  n_ratings = NULL,
+  dont_know = NULL
+)
 
 plot_zroc(
   input,
@@ -14,6 +21,7 @@ plot_zroc(
   by = NULL,
   post_predict = NULL,
   n_ratings = NULL,
+  dont_know = NULL,
   col = NULL,
   ...
 )
@@ -29,6 +37,11 @@ plot_zroc(
 \item{by}{Further factors: one ROC per cell.}
 
 \item{n_ratings}{Number of rating categories K (default: the largest RR).}
+
+\item{dont_know}{Whether rating 1 is one shared "don't know" response
+(coded \code{RR = 1} with \code{R} the first response level), folded into a single
+response \code{DK}. Default: taken from the model for an emc object, otherwise
+\code{FALSE}.}
 
 \item{post_predict}{Optional posterior predictives (from \code{predict()}): the
 zROC of each posterior draw is drawn as a thin line.}

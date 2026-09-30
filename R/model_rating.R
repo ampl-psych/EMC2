@@ -19,6 +19,12 @@
 # natural-scale thresholds d1 .. d{K-1} (d1 the smallest, the paper's and DMC's
 # numbering), so they can be reported with add_recalculated = TRUE.
 #
+# Don't know (dont_know = TRUE): the two lowest-rating responses (rating 1 of
+# either choice) are one shared response, so there are 2K - 1 responses. Such
+# trials are coded RR = 1 with R = the FIRST response level (a placeholder the
+# model ignores; R = NA is left to EMC2's censoring coding). The folded response
+# then has one level "DK" between the two choices.
+#
 # Nothing here depends on the process model that produces the evidence.
 
 # Number of ratings K: a single integer >= 1.
@@ -29,6 +35,15 @@ rating_check_n <- function(n_ratings) {
       n_ratings != round(n_ratings))
     stop("n_ratings must be an integer >= 1")
   as.integer(n_ratings)
+}
+
+# A shared don't-know response needs at least two ratings.
+rating_check_dont_know <- function(K, dont_know) {
+  if (!is.logical(dont_know) || length(dont_know) != 1L || is.na(dont_know))
+    stop("dont_know must be TRUE or FALSE")
+  if (dont_know && K < 2)
+    stop("dont_know = TRUE needs n_ratings >= 2 (rating 1 is the shared don't-know response)")
+  dont_know
 }
 
 # Sampled criterion p_types c1 .. c{K-1} (character(0) when K = 1).
@@ -98,29 +113,40 @@ rating_from_evidence <- function(E, d, K) {
 
 # Fold choice and rating into one ordered factor running from the highest
 # rating of the first response level to the highest rating of the second, e.g.
-# for K = 3: left.3, left.2, left.1, right.1, right.2, right.3.
-rating_fold <- function(R, RR, K) {
+# for K = 3: left.3, left.2, left.1, right.1, right.2, right.3. With dont_know
+# the two rating-1 responses are one level "DK": left.3, left.2, DK, right.2,
+# right.3.
+rating_fold <- function(R, RR, K, dont_know = FALSE) {
   if (!is.factor(R)) stop("R must be a factor")
   Rl <- levels(R)
   labs <- unlist(lapply(seq_along(Rl), function(i) {
     ks <- if (i == 1) K:1 else 1:K
     paste(Rl[i], ks, sep = ".")
   }))
-  factor(paste(as.character(R), RR, sep = "."), levels = labs, ordered = TRUE)
+  x <- paste(as.character(R), RR, sep = ".")
+  if (dont_know) {
+    dk <- paste(Rl, 1, sep = ".")
+    labs <- c(setdiff(labs[seq_len(K)], dk[1]), "DK", setdiff(labs[-seq_len(K)], dk))
+    x[!is.na(RR) & RR == 1] <- "DK"
+  }
+  factor(x, levels = labs, ordered = TRUE)
 }
 
+# Inverse of rating_fold: DK becomes R = the first response level, RR = 1.
 rating_unfold <- function(x) {
   s <- as.character(x)
+  isdk <- !is.na(s) & s == "DK"
+  lev <- unique(sub("\\.[^.]*$", "", setdiff(levels(x), "DK")))
+  s[isdk] <- paste(lev[1], 1, sep = ".")
   cut <- regexpr("\\.[^.]*$", s)
   R <- substr(s, 1, cut - 1)
   RR <- as.integer(substr(s, cut + 1, nchar(s)))
-  lev <- unique(sub("\\.[^.]*$", "", levels(x)))
   data.frame(R = factor(R, levels = lev), RR = RR)
 }
 
 # Data checks for the rating column (called from design_model through the
 # model's check_data hook).
-rating_check_data <- function(data, K) {
+rating_check_data <- function(data, K, dont_know = FALSE) {
   if (!"RR" %in% names(data)) stop("Rating models need a rating column RR in the data")
   RR <- data$RR
   if (is.factor(RR) || !is.numeric(RR))
@@ -131,6 +157,12 @@ rating_check_data <- function(data, K) {
   if (any(rr != round(rr))) stop("RR must be integer-valued")
   if (any(rr < 1 | rr > K))
     stop("RR must lie in 1 .. ", K, " (n_ratings = ", K, ")")
+  if (dont_know) {
+    dk <- obs & !is.na(RR) & RR == 1
+    if (any(as.character(data$R[dk]) != levels(data$R)[1]))
+      stop("don't-know trials (RR = 1) must be coded with R = the first response level (",
+           levels(data$R)[1], ")")
+  }
   unused <- setdiff(seq_len(K), rr)
   if (length(unused))
     warning("Rating(s) ", paste(unused, collapse = ", "), " never occur in the data")
