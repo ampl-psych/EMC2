@@ -969,6 +969,9 @@ design_model <- function(data,design,model=NULL,
 
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
+  # model switches for a compiled likelihood (e.g. MTLBA's rule); kept by
+  # dm_list, unlike the model attribute
+  attr(dadm,"c_options") <- model_info$c_options
   attr(dadm,"ok_trials") <- if (!is.null(data$rt)) is.finite(data$rt) else rep(TRUE, nrow(data))
   attr(dadm,"s_data") <- data$subjects
   if (memory_saver) {

@@ -189,6 +189,11 @@ test_that("log density keeps relative accuracy in the far tail", {
     ref <- ref_logf(t, .5, 1.5, v, .4)
     expect_lt(abs(ours - ref), 1e-8 * max(1, abs(ref)))
   }
+  # threshold just above A, small sv: the pnorm difference is ~1 while both dnorms
+  # are ~exp(-1000) (overflowed to +Inf before M2)
+  ours <- EMC2:::mtlba_logf(.257, .5, .5001, 1, .02)
+  expect_true(is.finite(ours))
+  expect_lt(abs(ours - ref_logf(.257, .5, .5001, 1, .02)), 1e-8)
 })
 
 test_that("non-finite parameters give -Inf, not an error", {
@@ -425,4 +430,123 @@ test_that("MTLBA fits sample and predict() keeps the don't-know coding", {
   gp <- get_pars(emc, map = TRUE, add_recalculated = TRUE, selection = "alpha",
                  return_mcmc = FALSE, merge_chains = TRUE)
   expect_equal(gp["d1_lRright", 1, ], exp(-gp["c1_lRright", 1, ]), tolerance = 1e-6)
+})
+
+# ---- C++ kernel (src/model_mtlba.h, c_name "MTLBA") ----
+
+mtlba_r_model <- function(model) {
+  ml <- model()
+  ml$c_name <- NULL
+  function() ml
+}
+# error relative to max(1, |reference|): trial log-likelihoods can be near 0
+mtlba_err <- function(a, b) max(abs(a - b) / pmax(abs(b), 1))
+mtlba_omp <- function(expr, threads = 4) {
+  old <- options(emc.ll_backend = "multithreaded", emc.n_threads = threads)
+  on.exit(options(old))
+  expr
+}
+
+test_that("C++ likelihood equals the R reference (K = 1 .. 4, BE/TC, don't know, extremes)", {
+  for (K in 1:4) for (rule in c("BE", "TC")) for (dk in c(FALSE, if (K > 1) TRUE)) {
+    crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
+    form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ lR),
+              lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
+    mod <- local({ k <- K; r <- rule; d <- dk
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
+    p <- sampled_pars(des, doMap = FALSE)
+    p[] <- 0
+    p[c("v", "v_lMTRUE", "sv", "sv_lMTRUE", "B", "B_lRright", "A", "t0", "t0_lRright")] <-
+      c(1, 1.5, 0, log(.7), log(1), .2, log(.5), log(.25), .1)
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+    set.seed(100 + 10 * K + dk)
+    dat <- make_data(p, des, n_trials = 120)
+    props <- rbind(p, mvtnorm::rmvnorm(30, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 10, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[1, "sv"] <- log(.02)              # sharply peaked drift: far tails everywhere
+    ext[2, "v"] <- -4                     # mean drift far below 0 (positive truncation)
+    ext[3, "v"] <- 12                     # very fast
+    ext[4, "A"] <- -Inf                   # A = 0 exactly (the bound's exception)
+    ext[5, "A"] <- log(1e-3)              # tiny A (not the A = 0 limit)
+    ext[6, "t0_lRright"] <- 1.5           # t0 above many rts on one accumulator
+    ext[7, "B"] <- 800                    # B overflows: non-finite, out of bounds
+    ext[8, "v"] <- NaN                    # non-finite drift
+    ext[9, "sv_lMTRUE"] <- -800           # sv underflows to 0: out of bounds
+    ext[10, "t0"] <- log(.01)             # t0 below its bound: every trial at min_ll
+    if (K > 1) {
+      ext[1, "c1"] <- log(8)              # highest rating nearly certain
+      ext[2, "c1"] <- log(1e-4)           # highest rating nearly impossible
+      ext[3, crit[K - 1]] <- 700          # a criterion near overflow: an empty band
+    }
+    props <- rbind(props, ext)
+    for (compress in c(TRUE, FALSE)) {
+      dadm <- EMC2:::design_model(dat, des, compress = compress, verbose = FALSE)
+      llr <- EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))
+      llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+      expect_lt(mtlba_err(llc, llr), 1e-12)
+      twr <- apply(props, 1, function(pv)
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+      twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+      expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-11)
+      n_ext <- nrow(props) - 0:3
+      expect_equal(as.vector(llc[n_ext]), rep(log(1e-10) * nrow(dat), 4))
+      expect_true(all(is.finite(llc)))
+      # OpenMP gives exactly the serial numbers
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model)), llc)
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model,
+                                                        return_trialwise = TRUE)), twc)
+    }
+  }
+})
+
+test_that("C++ likelihood refuses what it does not define", {
+  des <- mtlba_design(3, "TC")
+  set.seed(80)
+  dat <- make_data(mtlba_p(3), des, n_trials = 30)
+  dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+  pm <- t(as.matrix(mtlba_p(3)))
+  for (omp in c(FALSE, TRUE)) {
+    run <- function(d, model = des$model)
+      if (omp) mtlba_omp(EMC2:::calc_ll_manager(pm, d, model)) else EMC2:::calc_ll_manager(pm, d, model)
+    expect_true(is.finite(run(dadm)))
+    bad <- dadm; bad$UT <- 5
+    expect_error(run(bad), "truncation")
+    bad <- dadm; bad$LT <- .1
+    expect_error(run(bad), "truncation")
+    bad <- dadm; bad$missingness <- 0L; bad$missingness[1:2] <- 2L
+    expect_error(run(bad), "censored")
+    bad <- dadm; bad$RR[1] <- 4
+    expect_error(run(bad), "RR must be an integer in 1 .. 3")
+    bad <- dadm; bad$RR <- NULL
+    expect_error(run(bad), "no rating column")
+    bad <- dadm; bad$winner[1:2] <- TRUE
+    expect_error(run(bad), "exactly one winner")
+    bad <- dadm; attr(bad, "constants")[["rho"]] <- .3
+    expect_error(run(bad), "rho != 0")
+    bad <- dadm; attr(bad, "c_options") <- NULL
+    expect_error(run(bad), "no c_options attribute")
+  }
+})
+
+test_that("same-seed fits are identical on the serial and OpenMP paths", {
+  des <- mtlba_design(2, "TC", TRUE)
+  set.seed(81)
+  dat <- make_data(mtlba_p(2), des, n_trials = 100)
+  fit_once <- function() {
+    set.seed(82)
+    emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 2, verbose = FALSE))
+    emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 5), cores_for_chains = 1,
+                   cores_per_chain = 1, verbose = FALSE)
+    lapply(emc, function(ch) ch$samples)
+  }
+  s_serial <- fit_once()
+  s_omp <- mtlba_omp(fit_once())
+  for (ch in 1:2) {
+    expect_identical(s_omp[[ch]]$alpha, s_serial[[ch]]$alpha)
+    expect_identical(s_omp[[ch]]$subj_ll, s_serial[[ch]]$subj_ll)
+  }
 })

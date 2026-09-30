@@ -28,6 +28,7 @@
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
 #include "model_NN.h"        // neural likelihoods (type "NN"): registration-driven, thread-safe per particle
 #include "model_mtlnr.h"     // rating models: correlated multiple-threshold LNR, joint per-trial kernel
+#include "model_mtlba.h"     // rating models: multiple-threshold LBA (uncorrelated), joint per-trial kernel
 using namespace Rcpp;
 
 // =============================================================================
@@ -837,6 +838,24 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
     // -----------------------------------------------------------------------
+    // Rating models (MTLBA): as MTLNR; rule and don't know from the model
+    // attribute, no censoring/truncation (refused by make_mtlba_spec).
+    // -----------------------------------------------------------------------
+    } else if (type == "MTLBA") {
+      const MTLBASpec spec = make_mtlba_spec(data, ctx.param_table, n_lR);
+      for (int i = 0; i < n_particles; ++i) {
+        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
+        if (!mtlba_trial_ll(spec, ctx.param_table, min_ll, ll_buf.data()))
+          Rcpp::stop("MTLBA: correlated drift rates (rho != 0) are not implemented yet");
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
+        const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+        if (!return_trialwise) result(0, i) = sum;
+      }
+    // -----------------------------------------------------------------------
     // Discrete-Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
     // -----------------------------------------------------------------------
     } else {
@@ -1302,6 +1321,47 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
           result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
         }
       }
+
+      // -----------------------------------------------------------------------
+      // Rating models (MTLBA): as MTLNR; a non-zero rho is flagged inside the
+      // parallel region and refused after it
+      // -----------------------------------------------------------------------
+    } else if (type == "MTLBA") {
+      const MTLBASpec spec = make_mtlba_spec(data, ctx.param_table, n_lR);
+      int rho_bad = 0;
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_trial = ll_buf_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        if (!mtlba_trial_ll(spec, pt_local, min_ll, ll_trial.data())) {
+#pragma omp atomic write
+          rho_bad = 1;
+        }
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+        }
+      }
+      if (rho_bad) Rcpp::stop("MTLBA: correlated drift rates (rho != 0) are not implemented yet");
 
       // -----------------------------------------------------------------------
       // Choice-RT branch (DDM + race)

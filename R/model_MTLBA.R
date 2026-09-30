@@ -30,8 +30,10 @@
 #   band * Phi(v/sv) = S(lo) - S(hi) = H(hi) - H(lo),
 # and whichever route has the smaller leading term is used.
 #
-# This file is the R reference (no c_name); rho (correlated drift rates) is a
-# p_type fixed at 0 until the correlated likelihood exists.
+# The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports this
+# algorithm; the R functions here are its reference, used when c_name is
+# removed. rho (correlated drift rates) is a p_type fixed at 0 until the
+# correlated likelihood exists.
 
 # log G(z), G(z) = z * pnorm(z) + dnorm(z) = integral of pnorm up to z, accurate
 # in the lower tail: G(-x) = dnorm(x) * (1 - x R(x)), R the Mills ratio, with
@@ -54,7 +56,8 @@ mtlba_logG <- function(z) {
     if (any(!mid)) {
       xt <- x[!mid]
       tt <- xt
-      for (k in 120:2) tt <- xt + k / tt
+      # 40 terms: bit-identical to 120 for x in [5, 1e8] (25 already suffice at x = 5)
+      for (k in 40:2) tt <- xt + k / tt
       q <- 1 / tt
       lg[!mid] <- stats::dnorm(xt, log = TRUE) + log(q) - log(xt + q)
     }
@@ -116,7 +119,7 @@ mtlba_logband <- function(t, A, v, sv, lo_y, hi_y, lowest) {
 }
 
 # log positive-drift LBA density of reaching threshold bs at t (EMC2's dlba
-# formula, the two differences taken on a common scale).
+# formula, all terms taken on the scale of the largest).
 mtlba_logf <- function(t, A, bs, v, sv) {
   out <- rep(-Inf, length(t))
   lden <- pmax(stats::pnorm(v / sv, log.p = TRUE), log(1e-10))
@@ -132,8 +135,14 @@ mtlba_logf <- function(t, A, bs, v, sv) {
     czm <- cz - A[w] / (t[w] * sv[w])
     lp1 <- stats::dnorm(cz, log = TRUE)
     lp0 <- stats::dnorm(czm, log = TRUE)
-    M <- pmax(lp1, lp0)
-    dP <- exp(log_pnorm_interval(czm, cz) - M)  # pnorm(cz) - pnorm(czm)
+    # pnorm(cz) - pnorm(czm); NaN (e.g. sv = 0, out of bounds) stays NaN -> -Inf
+    lpi <- rep(NaN, length(cz))
+    okz <- !is.na(cz) & !is.na(czm)
+    lpi[okz] <- log_pnorm_interval(czm[okz], cz[okz])
+    # common scale = the largest of the three terms, so none overflows (the
+    # pnorm difference can be ~1 while both dnorms are ~exp(-1000))
+    M <- pmax(lp1, lp0, lpi)
+    dP <- exp(lpi - M)
     inner <- v[w] * dP + sv[w] * (exp(lp0 - M) - exp(lp1 - M))
     lo <- rep(-Inf, length(cz))
     pos <- !is.na(inner) & inner > 0
@@ -306,7 +315,8 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
 }
 
 # Trial log-likelihoods over a (possibly compressed) dadm with two rows per
-# trial, expanded to the uncompressed trials and floored at min_ll.
+# trial, expanded to the uncompressed trials and floored at min_ll. The R
+# reference for the C++ kernel (src/model_mtlba.h); used when c_name is removed.
 trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10)) {
   n <- nrow(pars) / 2
   first <- seq(1, 2 * n, by = 2)
@@ -410,6 +420,9 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE") {
   rule <- match.arg(rule, c("BE", "TC"))
   list(
     type = "RACE",
+    c_name = "MTLBA",
+    # read by the C++ likelihood through attr(dadm, "c_options")
+    c_options = c(n_ratings = K, dont_know = as.numeric(dont_know), TC = as.numeric(rule == "TC")),
     n_ratings = K,
     dont_know = dont_know,
     rule = rule,
