@@ -415,3 +415,31 @@ test_that("same-seed fits are identical on the serial and OpenMP paths", {
     expect_identical(s_omp[[ch]]$subj_ll, s_serial[[ch]]$subj_ll)
   }
 })
+
+test_that("MTLNR snapshots: chain init, simulated data, natural-scale mapping", {
+  des <- mtlnr_design()
+  set.seed(7)
+  dat <- make_data(mtlnr_p, des, n_trials = 20)
+  emc <- suppressMessages(make_emc(dat, des, type = "single", compress = FALSE, n_chains = 1))
+  RNGkind("L'Ecuyer-CMRG")
+  set.seed(123)
+  expect_snapshot(init_chains(emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  set.seed(123)
+  expect_snapshot(make_data(mtlnr_p, des, n_trials = 10))
+  expect_snapshot(mapped_pars(des, mtlnr_p))
+})
+
+test_that("rating_summary snapshot", {
+  des <- mtlnr_design()
+  set.seed(8)
+  dat <- make_data(mtlnr_p, des, n_trials = 200)
+  expect_snapshot(rating_summary(dat, factors = "S"))
+})
+
+test_that("plot_ratings and plot_zroc render without error", {
+  des <- mtlnr_design()
+  set.seed(9)
+  dat <- make_data(mtlnr_p, des, n_trials = 200)
+  vdiffr::expect_doppelganger("mtlnr-plot-ratings", function() plot_ratings(dat, factors = "S"))
+  vdiffr::expect_doppelganger("mtlnr-plot-zroc", function() plot_zroc(dat, "S", "left"))
+})

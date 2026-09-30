@@ -1,5 +1,10 @@
 # EMC2 (development)
 
+## New features (dev-rating)
+
+-   New model `MTLNR()`, the correlated multiple-threshold log-normal race of Reynolds, Kvam, Osth & Heathcote (2020), for choice and response-time data with an additional ordered confidence (or other) rating. `MTLNR(n_ratings = K)` sets the number of rating categories; ratings are read from the design's `RR` column (1 = lowest, `K` = highest) and reported on the natural threshold scale with `add_recalculated = TRUE`. See `vignette("rating-models")`.
+-   New rating-data helpers, shared across future rating models: `rating_summary()` and `plot_ratings()` (response proportions and RT quantiles by folded response), `zroc()` and `plot_zroc()` (z-transformed ROC).
+
 ## New features (dev-nle)
 
 -   `register_nn_model()` accepts two more kinds of neural likelihood, `"regression_joint"` (direct-regression MLPs) and `"mlp_joint"` (likelihood approximation networks such as HSSM's LANs). Both run in the compiled likelihood, like the flows, with the weights loaded once. `inst/scripts/onnx_to_card.py` converts an ONNX MLP (tanh hidden layers) into a model card; EMC2 does not depend on onnxruntime.

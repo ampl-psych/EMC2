@@ -1,0 +1,183 @@
+---
+title: "Rating Models"
+description: "Choice, response time and confidence ratings with the correlated multiple-threshold LNR"
+author: "Andrew Heathcote"
+output: rmarkdown::html_document
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{"Rating Models"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+set.seed(30)
+```
+
+## Introduction
+
+Rating tasks add a discrete confidence (or other ordered) rating to a choice
+response time task: on every trial the data contain not just a choice `R` and
+a response time `rt`, but also a rating `RR`, coded as an integer from 1
+(the lowest rating) to `K` (the highest).
+
+This vignette introduces the first rating model in *EMC2*, the correlated
+multiple-threshold log-normal race (MTLNR) of @reynolds2020correlated. The
+MTLNR extends the log-normal race (`?LNR`) to two *correlated* accumulators
+and reads the confidence rating off the losing accumulator: at the moment the
+winner finishes, the loser's state (as a proportion of its own threshold) is
+compared against `K - 1` further thresholds to give one of `K` ratings. This
+is a natural model for tasks such as old/new recognition memory with a
+confidence judgment, the running example below.
+
+The steps are:
+
+1. Specify a rating-task design and inspect the threshold mapping
+2. Simulate data and summarize it by choice and rating
+3. Define priors and fit the model
+4. Check the fit against the truth and the data (posterior predictives)
+5. A rating-specific diagnostic: the z-transformed ROC
+
+For the full parameterization see `?MTLNR`.
+
+## 1. Specify a Rating-Task Design
+
+We simulate a two-choice recognition-memory task: participants see a word
+that was either `new` or `old`, and respond `new` or `old` with a rating of
+their confidence on a 3-point scale (`RR` = 1 low, 3 high). `MTLNR()` is a
+factory: `MTLNR(n_ratings = 3)` (the default) builds the model for 3 ratings.
+
+As with the other race models (see `vignette("race-models")`), `matchfun`
+flags whether the accumulator's response label matches the true word type,
+giving the latent match factor `lM`; here it lets accuracy shift the mean log
+finishing time. The two confidence criteria `c1` and `c2` are mapped `~ lR`
+(one pair per response) since confidence thresholds belong to the *losing*
+accumulator and so can differ between "new" and "old" responses, capturing a
+response-specific bias in how confidence is reported.
+
+```{r}
+design_mtlnr <- design(
+  factors = list(subjects = 1, S = c("new", "old")),
+  Rlevels = c("new", "old"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ lR),
+  model = MTLNR
+)
+sampled_pars(design_mtlnr)
+```
+
+## 2. Rating Thresholds and Their Mapping
+
+The criteria `c1`, `c2` are sampled on a log scale that guarantees the
+underlying thresholds are ordered; `mapped_pars()` reports the natural-scale
+thresholds `d1 < d2` (as proportions of the losing accumulator's own
+threshold) alongside `rho`, mapped by response:
+
+```{r}
+p_vector <- sampled_pars(design_mtlnr)
+p_vector[] <- c(m = -.5, m_lMTRUE = -.6, s = log(.8), t0 = log(.3), rho = qnorm(.75),
+                c1 = log(.4), c1_lRold = .1, c2 = log(.6), c2_lRold = -.2)
+mapped_pars(design_mtlnr, p_vector)
+```
+
+`rho` (here mapped through a scaled probit to lie in (-1, 1), `?MTLNR`) is
+shared by both accumulators and is `r round(2 * pnorm(p_vector[["rho"]]) - 1, 2)`
+for these parameter values: a strong positive trial-to-trial correlation
+between the two finishing times.
+
+## 3. Simulate Data and Summarize by Choice and Rating
+
+```{r, results = "hide"}
+dat <- make_data(parameters = p_vector, design = design_mtlnr, n_trials = 1000)
+head(dat)
+```
+
+`rating_summary()` gives, for each folded response (choice crossed with
+rating), the response proportion and response-time quantiles:
+
+```{r}
+rating_summary(dat, factors = "S")
+```
+
+`plot_ratings()` plots the same information, response proportions on top and
+RT quantiles below, split by word type:
+
+```{r, fig.alt = "Response proportions and RT quantiles by confidence rating for new and old words"}
+plot_ratings(dat, factors = "S")
+```
+
+## 4. Set Priors and Fit
+
+```{r, results = "hide"}
+prior_mtlnr <- prior(
+  design = design_mtlnr, type = "single",
+  pmean = c(m = 0, m_lMTRUE = 0, s = log(.7), t0 = log(.25), rho = 0,
+            c1 = log(.5), c1_lRold = 0, c2 = log(.5), c2_lRold = 0),
+  psd = c(m = 1, m_lMTRUE = 1, s = .5, t0 = .4, rho = 1,
+          c1 = .5, c1_lRold = .5, c2 = .5, c2_lRold = .5)
+)
+```
+
+```{r, fig.alt = "Prior densities for the recognition-memory MTLNR example"}
+plot(prior_mtlnr, N = 1e3)
+```
+
+```{r, results = "hide"}
+emc <- make_emc(dat, design_mtlnr, prior_list = prior_mtlnr, type = "single")
+```
+
+```{r, eval = FALSE}
+emc <- fit(emc, cores_for_chains = 3, cores_per_chain = 1,
+           fileName = "data/rating-models.RData")
+```
+
+```{r, include = FALSE}
+load("data/rating-models.RData")
+```
+
+## 5. Check the Fit
+
+```{r}
+summary(emc)
+```
+
+```{r, fig.alt = "Posterior parameter densities against true values for the MTLNR example", fig.height = 9}
+plot_pars(emc, true_pars = p_vector, use_prior_lim = FALSE)
+```
+
+Posterior predictives can be summarized and plotted the same way as the data:
+
+```{r, results = "hide"}
+pp <- predict(emc)
+```
+
+```{r, fig.alt = "Posterior predictive response proportions and RT quantiles by confidence rating"}
+plot_ratings(dat, pp, factors = "S")
+```
+
+## 6. The z-Transformed ROC
+
+Recognition-memory confidence data are often summarized with a
+z-transformed ROC: the cumulative "old" response probability (from the most
+confident "old" response down to the most confident "new" response),
+z-transformed, plotted for `old` (signal) trials against `new` (noise)
+trials. `zroc()` computes it and `plot_zroc()` plots it, here with the
+posterior predictive as a thin line per draw:
+
+```{r, fig.alt = "z-transformed ROC for old versus new words, data and posterior predictive"}
+plot_zroc(dat, "S", "new", post_predict = pp)
+```
+
+A straight zROC with unit slope (as above) is the classic signature of
+equal-variance signal and noise distributions; here both accumulators share
+the same `s`, so the model produces exactly that pattern. Letting `s` vary
+with `lM` (an unequal-variance model) would tilt the slope away from 1.
+
+## Next Steps
+
+Other rating designs follow the same pattern: `n_ratings` in `MTLNR()` sets
+the number of confidence levels, and the rating layer (`RR`, `rating_summary()`,
+`plot_ratings()`, `zroc()`, `plot_zroc()`) is shared by the whole series of
+rating models, not just the MTLNR.
