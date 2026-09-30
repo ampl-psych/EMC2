@@ -171,7 +171,25 @@ do_map <- function(draws, map, by_subject, design,
   return(out)
 }
 
-# To fix, apply add_recalculated
+# A recalculated parameter (added by Ttransform) has no formula: find the
+# smallest set of candidate factors whose cells it is constant within (checked
+# on the first few draws), dropping factors greedily.
+recalculated_vars <- function(cur_pars, df, cand) {
+  chk <- cur_pars[, seq_len(min(5, ncol(cur_pars))), drop = FALSE]
+  vars <- cand
+  for (v in cand) {
+    rest <- setdiff(vars, v)
+    cells <- if (length(rest)) interaction(df[, rest, drop = FALSE], drop = TRUE) else
+      factor(rep(1, nrow(df)))
+    const <- all(vapply(split(seq_len(nrow(chk)), cells), function(ix) {
+      x <- chk[ix, , drop = FALSE]
+      all(abs(sweep(x, 2, x[1, ])) <= 1e-10 * (1 + max(abs(x))), na.rm = TRUE)
+    }, logical(1)))
+    if (const) vars <- rest
+  }
+  vars
+}
+
 mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials = NULL, data = NULL,
                              functions = NULL, add_recalculated = FALSE,
                              group_design = NULL, ...){
@@ -252,7 +270,12 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
       # First case, map = TRUE
       if(isTRUE(map[i]) || is.character(map[[i]])){
         if(isTRUE(map[i])){
-          vars <- all.vars(fmls[[par_names[i]]])
+          if(par_names[i] %in% fml_names){
+            vars <- all.vars(fmls[[par_names[i]]])
+          } else{ # recalculated parameter: the design factors it varies over
+            vars <- recalculated_vars(cur_pars, df[idx,, drop = FALSE],
+                                      intersect(unique(unlist(lapply(fmls, all.vars))), colnames(df)))
+          }
         } else{
           vars <- map[[i]]
           if(length(vars) == 1 && vars == "") vars <- character(0)

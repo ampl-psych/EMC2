@@ -298,6 +298,16 @@ test_that("an MTLNR fit samples and predict() keeps RR", {
   expect_true(all(c("R", "rt", "RR") %in% names(pp)))
   expect_equal(nrow(pp), 2 * nrow(dat))
   expect_true(all(pp$RR %in% 1:3))
+  # recalculated thresholds are reported by the factor they vary over (lR),
+  # not averaged over it
+  ci <- credint(emc, map = TRUE, add_recalculated = TRUE)[[1]]
+  expect_true(all(c("d1_lRleft", "d1_lRright", "d2_lRleft", "d2_lRright") %in% rownames(ci)))
+  expect_false(any(c("d1", "d2") %in% rownames(ci)))
+  gp <- get_pars(emc, map = TRUE, add_recalculated = TRUE, selection = "alpha",
+                 return_mcmc = FALSE, merge_chains = TRUE)
+  expect_equal(gp["d2_lRright", 1, ], exp(-gp["c1_lRright", 1, ]), tolerance = 1e-6)
+  expect_equal(gp["d1_lRleft", 1, ], exp(-(gp["c1_lRleft", 1, ] + gp["c2_lRleft", 1, ])),
+               tolerance = 1e-6)
 })
 
 # ---- C++ kernel (src/model_mtlnr.h, c_name "MTLNR") ----
