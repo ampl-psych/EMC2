@@ -1,5 +1,9 @@
 # EMC2 (development)
 
+## Sampler (dev-sampler)
+
+-   The particle step used in every stage put proposal components centred on the chain's current value into one importance-weighted batch, which is not a valid MCMC kernel: in 25-35 dimensions the draws followed the proposal rather than the posterior (SD 1.25-1.4x the Laplace SD in converged fits, stuck chains with 2000+ trials per subject; hierarchical fits affected too). `adapt` and `sample` now use an exact kernel (per iteration either an ensemble move around the current value or an importance-resampling step with the independent components), the local step size is adapted to a 3% "better-than-current" target with a windowed acceptance count, independence proposals are used at their estimated scale, and the `diag(.5)` fallback for an unusable chain covariance is gone. `preburn`/`burn` keep the old step as a search. `options(emc.sampler = "legacy")` restores the previous sampler for comparison. Calibration on a 48-cell grid, the MTLNR SBC and the Ratcliff-Starns Table 1 fits: `vignette("sampler-validity")`.
+
 ## New features (dev-rating)
 
 -   New model `MTLNR()`, the correlated multiple-threshold log-normal race of Reynolds, Kvam, Osth & Heathcote (2020), for choice and response-time data with an additional ordered confidence (or other) rating. `MTLNR(n_ratings = K)` sets the number of rating categories; ratings are read from the design's `RR` column (1 = lowest, `K` = highest) and reported on the natural threshold scale with `add_recalculated = TRUE`. See `vignette("rating-models")`.

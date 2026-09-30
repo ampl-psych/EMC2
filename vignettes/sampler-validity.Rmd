@@ -1,0 +1,254 @@
+---
+title: "Sampler Validity"
+description: "Why the particle step was biased in high dimensions, the exact kernel that replaces it in adapt/sample, and the evidence that it is calibrated"
+author: "Andrew Heathcote"
+output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{"Sampler Validity"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+set.seed(1)
+```
+
+This vignette is for whoever maintains the sampler. It documents a bias found on 2026-09-30 in the
+particle-MCMC step (`new_particle()` in `R/sampling.R`), how to reproduce it in a few seconds on a
+Gaussian toy and in a couple of minutes with an EMC2 fit, what was changed on the `dev-sampler`
+branch, and the calibration evidence for the change. The old sampler is still in the package:
+
+```{r, eval = FALSE}
+options(emc.sampler = "legacy")   # the pre-2026-09-30 step, tuning, floors and fallbacks
+options(emc.sampler = NULL)       # back to the current sampler
+```
+
+so every comparison below can be rerun with one switch.
+
+## 1. Symptoms
+
+Fitting a 29-35 parameter single-subject model to ~8000 trials (Ratcliff & Starns' recognition data
+with the correlated multiple-threshold LNR, `vignette("rating-models")`) gave chains that never
+left their start points (1-3% acceptance, Rhat up to 4), and where a fit did converge its posterior
+SDs were 1.4-1.7x the Laplace SDs at the mode. A plain 25-parameter LNR showed the same, so this
+was the sampler, not a likelihood. A grid of 48 cells (models with 9 / 25 / 29 / 35 parameters,
+500 / 2000 / 8000 trials per subject, one subject with `type = "single"` and 8 subjects with
+`type = "standard"`) then showed the pattern:
+
+- 9 parameters: fine at every N, both types.
+- 25-35 parameters, converged (Rhat 1.01): deviance excess `mean(D) - D(mode)` of 1.5-1.9 x k
+  instead of k, posterior SD / Laplace SD 1.25-1.4 (max 1.67), for `single`; 1.3-1.6 x k and
+  1.13-1.23 for `standard` at 8000 trials per subject.
+- 29-35 parameters with >= 2000 trials: stuck (move rate .01, Rhat 1.2-2, posterior means up to
+  18 posterior SDs from the truth).
+
+The diagnostics used throughout are: **excess/k** = (mean sample-stage deviance - deviance at the
+posterior mode) / number of parameters, which is 1 for a normal posterior; **SD ratio** = posterior
+SD / Laplace SD (numerical Hessian of log-likelihood + log-prior at the mode); the **move rate**
+(fraction of iterations whose value changed); Rhat; and z = (posterior mean - truth) / posterior SD
+on simulated data.
+
+## 2. The particle step as coded
+
+Each iteration, for each subject, `new_particle()` draws one batch of particles from a mixture of
+multivariate normals, keeps the chain's current value as particle 1, gives every particle the weight
+
+    w(z) = exp( loglik(z) + logprior(z) - log q(z) )
+
+with `q` the mixture density, and selects one particle in proportion to `w`. With `q` fixed this is
+iterated sampling-importance-resampling (i-SIR, a conditional-SMC step with one time point) and it
+leaves the posterior invariant. But the mixture is not fixed: in every stage some components are
+centred on the current value `subj_mu` (preburn: both; burn: 2 of 3; adapt: 1 of 3; sample: 1 of 4,
+the "random walk" `N(subj_mu, epsilon^2 chains_var)`), and `q` is evaluated at the current value
+itself -- at the *peak* of those components. The current value's weight is therefore deflated by a
+factor that depends on where the chain is, and the kernel is no longer posterior-invariant.
+
+Two-particle sketch: with one candidate `z ~ N(x, S)` the move probability is
+`pi(z) N(x|x,S) / (pi(z) N(x|x,S) + pi(x) N(z|x,S))`, and since `N(x|x,S) >= N(z|x,S)` this exceeds
+the Barker probability `pi(z)/(pi(z) + pi(x))` by more the further `z` is from `x`. Detailed balance
+fails, and the effect does not vanish with more particles when the importance weights are
+degenerate -- which is exactly the high-dimensional, concentrated-posterior case.
+
+## 3. Reproducing the bias on a Gaussian toy
+
+The function below is the sample-stage step with the same particle numbers (`50 sqrt(d)`), the
+same mixture weights (.05 prior, .3 random walk at the current value, .3 at a fixed mean, .35
+"efficient" proposal) and a target that is the likelihood `N(0, I_d)` times a `N(0, 100 I_d)`
+prior. `fix = TRUE` is the ensemble construction of section 4. Ten seconds per row.
+
+```{r}
+library(mvtnorm)
+step <- function(x, d, eps, n, fix = FALSE) {
+  z0 <- rep(0, d); I <- diag(d); P <- diag(100, d)
+  # component 2 is the random walk: centred on x (as coded) or on an auxiliary centre c ~ N(x, S)
+  S2 <- eps^2 * I
+  c2 <- if (fix) drop(rmvnorm(1, x, S2)) else x
+  Mus <- list(z0, c2, z0, z0); Ss <- list(P, S2, eps^2 * I, eps^2 * I); mix <- c(.05, .3, .3, .35)
+  pn <- pmax(1, rmultinom(1, n, mix))
+  props <- rbind(x, do.call(rbind, lapply(1:4, function(j) rmvnorm(pn[j], Mus[[j]], Ss[[j]]))))
+  lpost <- dmvnorm(props, z0, I, log = TRUE) + dmvnorm(props, z0, P, log = TRUE)
+  lq <- log(Reduce(`+`, lapply(1:4, function(j) mix[j] * dmvnorm(props, Mus[[j]], Ss[[j]]))))
+  extra <- if (fix) dmvnorm(props, c2, S2, log = TRUE) else 0   # target factor N(z | c, S) of the ensemble move
+  w <- exp(lpost + extra - lq - max(lpost + extra - lq))
+  props[sample(nrow(props), 1, prob = w), ]
+}
+toy <- function(d, eps, fix = FALSE, iters = 1500, n = round(50 * sqrt(d))) {
+  x <- rnorm(d); X <- matrix(NA, iters, d)
+  for (i in 1:(300 + iters)) { x <- step(x, d, eps, n, fix); if (i > 300) X[i - 300, ] <- x }
+  c(d = d, eps = eps, fix = fix, var_over_true = round(mean(apply(X, 2, var)) / (1 / (1 + 1/100)), 2))
+}
+rbind(toy(25, .6), toy(25, .3), toy(25, 2), toy(9, .6), toy(35, .6), toy(25, .6, fix = TRUE))
+```
+
+The chain "moves" every iteration but its variance is `eps^2`-ish, not the posterior's: narrower
+components pull it down, wider ones push it up, more so as `d` grows. (In a longer run of this toy,
+`rating-work/sampler/toy/`, the as-coded step gives 0.65 x the true variance at `eps = .6` -- the
+floor the sample-stage adaptation pinned epsilon at -- 0.20 at .3, 1.47 at 2, and 2.1 for the burn
+structure; the corrected step gives 0.98-1.02 everywhere.) At 9 parameters with well-scaled
+proposals the bias is a few per cent, which is why simulation-based calibration on small models
+passed and could not have caught it.
+
+Three further things made real fits *stick* rather than just spread:
+
+- `create_chain_proposals()` fell back to `chains_var = diag(.5)` when the covariance of the recent
+  draws was not positive definite (a chain with few distinct draws) -- for a posterior with SD ~.02
+  that is 35x too wide, so the chain cannot move, the next covariance is singular again, and the
+  fallback persists.
+- epsilon floors of .1 / .4 / .6 (preburn / burn-adapt / sample).
+- The acceptance-driven epsilon update was also applied to the independence components
+  (`chains_mu`, `eff`). For those, low acceptance means the proposal is too *narrow*, so shrinking
+  it drove them to the floor; stuck fits ended with epsilon .6/.6/.6 and 94% of the mixture on an
+  "efficient" proposal that accepted 0.05% of its particles.
+
+## 4. What changed (`dev-sampler`)
+
+**Kernel.** `preburn` and `burn`, whose draws are discarded, keep the old step: as a search it is a
+fast stochastic hill-climb (it follows the proposal), and a valid random-walk kernel cannot travel
+from prior-scale start points to a posterior with SD .02 in 35 dimensions in any reasonable time
+(two exact-everywhere variants burned in 10-20x slower). `adapt` and `sample`, whose draws build the
+proposals and the posterior, use an exact kernel: each iteration ONE of two kernels, chosen with the
+mixture weights.
+
+- *Local kernel* (the components centred on the current value): an ensemble move (Tjelmeland,
+  2004; Neal, 2011). Draw an auxiliary centre `c ~ N(x, S)`, draw the particles from `N(c, S)`, and
+  weight every particle -- the current value included -- by `pi(z) N(z | c, S) / q(z)` where `q` is
+  the (now state-independent, given `c`) proposal density. The step targets the extended
+  distribution `pi(x) N(c | x, S)`, whose `x`-marginal is `pi`, so it is exact.
+- *Global kernel* (prior, `N(chains_mu, chains_var)`, `N(eff_mu, eff_var)`): the i-SIR step as
+  before, valid because none of these depends on the current value.
+
+Putting both in one batch with the ensemble correction is also exact, but the local factor
+`N(z | c, S)` then penalises the global candidates; on the toy the mixture of kernels has 4-6x the
+effective sample size per iteration (`rating-work/sampler/toy/isir_toy3.R`).
+
+**Tuning.** The local step's epsilon is adapted so that 3% of its particles beat the current value
+(on the toy this is where ESS per iteration is maximal in 9, 25 and 35 dimensions; the old 25-30%
+targets give steps 3-5x too small for the exact kernel); the update step is normalised by the
+target and clipped to [-1, 1]; clamp [.01, 20] instead of the floors; acceptance counts restart
+every `step_size` iterations in every stage (cumulative counts let epsilon run away); independence
+components are used at the scale of their estimated covariance (epsilon 1); burn's `chains_var`
+epsilon, not its prior-variance one, is carried into adapt. `update_epsilon_scale()` uses the square
+root of the variance ratio (epsilon scales SDs). The `diag(.5)` fallback is replaced by the mean of
+the other subjects' covariances, else the chain's previous one, else 0.1 x the prior variance
+diagonal. `get_conditionals_single()` uses all (<= 750) adapt/sample draws rather than a random 250.
+
+Everything above is switched by `options(emc.sampler = "legacy")`, which restores the old kernel in
+every stage together with the old targets, floors, counts, fallback and 250-draw conditionals.
+
+## 5. Reproducing it in EMC2
+
+`vignettes/data/build_sampler_validity.R` simulates one subject (about 500 trials) from a
+25-parameter LNR (`m, s ~ 0 + NWS:WF:lM, t0 ~ 1`, parameter values from a real participant), fits
+it with both samplers using `fit()` defaults, and computes the Laplace SDs. Two minutes on three
+cores; the results are cached.
+
+```{r}
+load("data/sampler-validity.RData")
+tab <- t(sapply(summaries, function(s) c(
+  `excess/k` = round(s$excess / s$k, 2),
+  `SD/Laplace (median)` = round(median(s$pars$post_sd / s$pars$laplace_sd), 2),
+  `SD/Laplace (min)` = round(min(s$pars$post_sd / s$pars$laplace_sd), 2),
+  `SD/Laplace (max)` = round(max(s$pars$post_sd / s$pars$laplace_sd), 2),
+  `max |z|` = round(max(abs(s$pars$z)), 1), `move rate` = round(s$move_rate, 2),
+  `max Rhat` = round(s$max_rhat, 3), iterations = sum(s$iters))))
+tab
+```
+
+```{r, fig.width = 7, fig.height = 4}
+r <- sapply(summaries, function(s) s$pars$post_sd / s$pars$laplace_sd)
+plot(r[, "legacy"], type = "h", lwd = 6, col = "grey60", ylim = c(0, max(r) * 1.05), xaxt = "n",
+     xlab = "parameter", ylab = "posterior SD / Laplace SD", main = "25-parameter LNR, ~500 trials")
+points(seq_len(nrow(r)) + .25, r[, "current"], type = "h", lwd = 6, col = "#0072B2")
+abline(h = 1, lty = 2); axis(1, at = seq_len(nrow(r)), labels = FALSE)
+legend("topleft", c("legacy sampler", "current sampler"), fill = c("grey60", "#0072B2"), bty = "n")
+```
+
+The legacy sampler reports Rhat ~1 and a move rate of 1.00 and is wrong by a third in every SD; the
+current sampler's honest move rate is about .8. The per-stage tuning state (`epsilon`, `mix`,
+`n_particles`) is in `attr(emc[[1]]$samples, "pm_settings")`:
+
+```{r}
+sapply(summaries, function(s) round(s$epsilon, 2))
+```
+
+With the legacy sampler the independence components end at epsilon 1.5-1.6 (wider than the
+posterior, which is where the over-dispersion comes from: the chain follows them); with the current
+one they are fixed at 1 and only the local step is scaled (about .5 x `chains_var`).
+
+To go further -- more parameters, more trials, `type = "standard"` -- change the design and
+`n_trials` in the build script; the full grid, its runner and per-stage snapshots of the tuning
+state are in `rating-work/sampler/grid/` (outside the package).
+
+## 6. Evidence that the current sampler is calibrated
+
+**Grid** (`rating-work/sampler/REPORT.md`, sections 1 and 5; 3 chains, `fit()` defaults, 1000 sample
+iterations). Single subject, excess/k and median SD/Laplace, legacy -> current:
+
+| k | N = 500 | N = 2000 | N = 8000 |
+|---|---|---|---|
+| 9 | 1.00 / 1.04 -> 0.90 / 0.99 | 1.09 / 1.06 -> 0.95 / 0.99 | 1.09 / 1.06 -> 0.99 / 1.00 |
+| 25 | 1.68 / 1.34 -> 0.94 / 1.01 | 1.51 / 1.25 -> 0.97 / 0.99 | stuck -> 1.00 / 1.00 |
+| 29 | 1.92 / 1.39 -> 0.92 / 0.96 | stuck -> 0.98 / 0.97 | stuck -> 0.99 / 1.00 |
+| 35 | 1.92 / 1.38 -> 0.92 / 0.99 | stuck -> 0.92 / 0.92 | stuck -> 0.95 / 0.98 |
+
+("stuck" = burn never converged, sample-stage move rate .01.) Rhat <= 1.10 in every current-sampler
+cell, burn-in 100-300 iterations as before, and the 35-parameter x 8000-trial fit takes 22 minutes.
+Eight subjects with `type = "standard"`: every cell with >= 2000 trials per subject is calibrated
+(excess/k 0.91-1.02, SD ratio 0.89-0.99; legacy 1.27-1.64 and 1.09-1.23 at k >= 25). The
+8-subject x 500-trial cells with 25-35 parameters do not reach Rhat < 1.1 under `fit()` defaults
+with either sampler (see section 7).
+
+**Simulation-based calibration.** The MTLNR SBC (8 single-subject cells x 500 replicates, one
+15-subject cell x 100; `SBC-archive/2026-09-30_dev-sampler_MTLNR-sbc-regression`) rerun with the
+current sampler: no KS p below .01, Fisher's combined p over the 68 parameter x cell tests .15 (the
+legacy run: .051), 95% coverage .92-.98 centred on nominal (legacy ran high, .93-.98), |std_bias|
+<= .17, hierarchical mu / Sigma ranks uniform; 3.5 h instead of 5.8 h.
+
+**Real data.** The five Ratcliff-Starns models of `vignette("rating-models")`'s source paper
+(24-35 parameters x 11 subjects, ~7600 trials each) all converge in the standard 1000 sample
+iterations; EMC2's DIC ordering equals the paper's, EMC2 finds lower deviance minima than the
+paper's DE-MCMC fits did, and the parameter estimates correlate >= .98 with them.
+
+**Tests.** The suite passes (1409); the three snapshot tests in `test-fit.R` that pin specific
+draws were re-recorded, as any change to the sampler requires.
+
+## 7. What is still open
+
+With 8 subjects, 500 trials each and 25-35 parameters the hierarchical fits do not converge under
+`fit()` defaults (alpha Rhat 1.4-1.9), and a 4000-iteration run still sits at 1.2. The chains are in
+a "funnel": the group variance of loser-accumulator means that each subject's data barely identify
+(~8 losing trials) collapses, all subjects are pinned at the group mean, and the Gibbs step for the
+group level cannot get out. The legacy sampler reports Rhat 1.1 in two of these cells because its
+over-dispersed subject draws keep the group variance from collapsing -- a self-consistent but wrong
+equilibrium. This is a property of the group-level Gibbs step, not of the particle kernel, and is
+being worked on separately.
+
+## References
+
+Neal, R. M. (2011). MCMC using ensembles of states for problems with fast and slow variables such
+as Gaussian process regression. arXiv:1101.0387.
+
+Tjelmeland, H. (2004). Using all Metropolis-Hastings proposals to estimate mean values. Statistics
+No. 4/2004, Norwegian University of Science and Technology.
