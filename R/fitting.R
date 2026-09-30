@@ -841,6 +841,12 @@ make_emc <- function(data,design,model=NULL,
       }
     }
   }
+  # Propagate Ffunction output names discovered at runtime back into design
+  if (!is.null(attr(dadm_list[[i]], "design"))) {
+    design[[i]] <- attr(dadm_list[[i]], "design")
+    attr(dadm_list[[i]], "design") <- NULL # don't carry dead weight
+  }
+
   # Warn before fitting about parameters (or linear combinations) that are
   # unidentified across the (joint) model, so a fit that would later diverge on
   # an ill-conditioned group covariance fails fast with a clear message instead.

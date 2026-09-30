@@ -985,6 +985,7 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- if (!is.null(data$rt)) is.finite(data$rt) else rep(TRUE, nrow(data))
   attr(dadm,"s_data") <- data$subjects
+  attr(dadm,"design") <- design
   if (memory_saver) {
     if (!is.null(attr(dadm, "custom_ll"))) {
       warning("memory_saver not supported for custom likelihoods; ignored")
