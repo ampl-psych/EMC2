@@ -513,18 +513,20 @@ test_that("C++ likelihood refuses what it does not define", {
     run <- function(d, model = des$model)
       if (omp) mtlba_omp(EMC2:::calc_ll_manager(pm, d, model)) else EMC2:::calc_ll_manager(pm, d, model)
     expect_true(is.finite(run(dadm)))
-    bad <- dadm; bad$UT <- 5
-    expect_error(run(bad), "truncation")
-    bad <- dadm; bad$LT <- .1
-    expect_error(run(bad), "truncation")
-    bad <- dadm; bad$missingness <- 0L; bad$missingness[1:2] <- 2L
-    expect_error(run(bad), "censored")
+    bad <- dadm; bad$missingness <- NA_integer_; bad$missingness[1:2] <- 2L; bad$UC <- 2
+    expect_error(run(bad), "response retained")
+    bad$R[1:2] <- NA; bad$missingness[1:2] <- 4L
+    expect_error(run(bad), "missingness code 4")
+    bad$missingness[1:2] <- 1L
+    expect_error(run(bad), "no LC column")
+    bad <- dadm; bad$missingness <- NA_integer_; bad$R[1:2] <- NA
+    expect_error(run(bad), "not censored")
     bad <- dadm; bad$RR[1] <- 4
     expect_error(run(bad), "RR must be an integer in 1 .. 3")
     bad <- dadm; bad$RR <- NULL
     expect_error(run(bad), "no rating column")
     bad <- dadm; bad$winner[1:2] <- TRUE
-    expect_error(run(bad), "exactly one winner")
+    expect_error(run(bad), "missing response")
     bad <- dadm; attr(bad, "constants")[["rho"]] <- .3
     expect_error(run(bad), "rho != 0")
     bad <- dadm; attr(bad, "c_options") <- NULL
@@ -548,5 +550,247 @@ test_that("same-seed fits are identical on the serial and OpenMP paths", {
   for (ch in 1:2) {
     expect_identical(s_omp[[ch]]$alpha, s_serial[[ch]]$alpha)
     expect_identical(s_omp[[ch]]$subj_ll, s_serial[[ch]]$subj_ll)
+  }
+})
+
+# ---- censoring and truncation (Stage M2c) ----
+
+# natural-scale parameters of one trial (two rows) for the direct R functions
+mtlba_trial_pars <- function(K, t0 = c(.2, .2)) {
+  p <- cbind(v = c(1.2, .6), sv = c(.8, 1), A = c(.5, .4), b = c(1.4, 1.2), t0 = t0)
+  if (K > 1) {
+    d <- rbind(seq(.3, .8, length.out = K - 1), seq(.2, .7, length.out = K - 1))
+    colnames(d) <- paste0("d", seq_len(K - 1))
+    p <- cbind(p, d)
+  }
+  p
+}
+mtlba_bnd <- function(miss = NA_integer_, LT = 0, UT = Inf, LC = 0, UC = Inf)
+  list(miss = miss, LT = LT, UT = UT, LC = LC, UC = UC)
+
+test_that("censored + observed mass is 1 and the truncated density integrates to 1", {
+  LC <- .45; UC <- 1.6; LT <- .3; UT <- 2.5
+  for (rule in c("BE", "TC")) for (K in 1:4) for (dk in c(FALSE, if (K > 1) TRUE)) {
+    p <- mtlba_trial_pars(K)
+    rsp <- mtlba_responses(K, dk)
+    ll_miss <- function(rt, R, RR, bnd)
+      EMC2:::mtlba_logdens_missing(rt, R, RR, p, K, rule, dk, bnd)
+    dens <- function(rt, R, RR, bnd = mtlba_bnd())
+      vapply(rt, function(x) exp(ll_miss(x, R, RR, bnd)), numeric(1))
+    obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, rel.tol = 1e-11)$value, rsp[, "R"], rsp[, "RR"]))
+    cens <- function(m, bnd = mtlba_bnd(m, LC = LC, UC = UC)) exp(ll_miss(NA, NA, NA, bnd))
+    expect_equal(obs + cens(1L) + cens(2L), 1, tolerance = 1e-9)
+    expect_equal(cens(3L), cens(1L) + cens(2L), tolerance = 1e-12)
+    # truncated: observed density plus censored mass inside (LT, UT) is 1
+    tb <- mtlba_bnd(LT = LT, UT = UT)
+    tr <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LT, UT, R = R, RR = RR, bnd = tb, rel.tol = 1e-11)$value,
+      rsp[, "R"], rsp[, "RR"]))
+    expect_equal(tr, 1, tolerance = 1e-9)
+    tcb <- function(m) cens(m, mtlba_bnd(m, LT = LT, UT = UT, LC = LC, UC = UC))
+    tr_obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, bnd = tb, rel.tol = 1e-11)$value,
+      rsp[, "R"], rsp[, "RR"]))
+    expect_equal(tr_obs + tcb(1L) + tcb(2L), 1, tolerance = 1e-9)
+    # the stopping-time survivor is 1 - the integrated response density
+    y <- .7
+    st <- EMC2:::mtlba_logstop(y, p, EMC2:::mtlba_thresholds(p, K), 1, 2, K, rule)
+    below <- sum(mapply(function(R, RR)
+      stats::integrate(dens, .2, .2 + y, R = R, RR = RR, rel.tol = 1e-11)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(exp(st$P), below, tolerance = 1e-9)
+    expect_equal(exp(st$S), 1 - below, tolerance = 1e-9)
+  }
+})
+
+test_that("censoring window terms keep relative accuracy in the tails", {
+  # a lower cut far below the mass and an upper cut far above it: P ~ 1e-20 or
+  # less, where 1 - survivor would round to 0
+  for (rule in c("BE", "TC")) {
+    K <- 3
+    p <- mtlba_trial_pars(K)
+    lp <- EMC2:::mtlba_logdens_missing(NA, NA, NA, p, K, rule, FALSE, mtlba_bnd(1L, LC = .23))
+    expect_true(is.finite(lp) && lp < -30)
+    # (the LBA's upper tail is heavy unless a drift is well above 0)
+    pf <- p
+    pf[1, c("v", "sv")] <- c(3, .3)
+    lu <- EMC2:::mtlba_logdens_missing(NA, NA, NA, pf, K, rule, FALSE, mtlba_bnd(2L, UC = 40))
+    expect_true(is.finite(lu) && lu < -30)
+    # the same through an independent split: P(dt < y) as an integral of the
+    # response densities on the log scale
+    y <- .03
+    dens <- function(rt, R, RR)
+      vapply(rt, function(x) exp(EMC2:::mtlba_logdens(x, R, RR, p, K, rule, FALSE) - lp), numeric(1))
+    rsp <- mtlba_responses(K, FALSE)
+    I <- sum(mapply(function(R, RR) stats::integrate(dens, .2, .2 + y, R = R, RR = RR,
+                                                     rel.tol = 1e-11)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(I, 1, tolerance = 1e-8)
+  }
+})
+
+test_that("make_data with a censoring/truncation list round-trips (BE, TC, don't know)", {
+  for (rule in c("BE", "TC")) for (dk in c(FALSE, TRUE)) {
+    K <- if (dk) 2 else 3
+    des <- mtlba_design(K, rule, dk)
+    p <- mtlba_p(K)
+    set.seed(90 + dk)
+    LC <- .5; UC <- 1.3
+    dat <- make_data(p, des, n_trials = 2000, TC = list(LC = LC, UC = UC))
+    cl <- !is.na(dat$missingness) & dat$missingness == 1L
+    cu <- !is.na(dat$missingness) & dat$missingness == 2L
+    expect_true(any(cl) && any(cu))
+    expect_true(all(is.na(dat$R[cl | cu])) && all(is.na(dat$RR[cl | cu])) &&
+                  all(is.na(dat$rt[cl | cu])))
+    obs <- is.na(dat$missingness)
+    expect_true(all(dat$rt[obs] >= LC & dat$rt[obs] <= UC))
+    expect_true(all(dat$RR[obs] %in% seq_len(K)))
+    # censored counts agree with the model's window probabilities
+    du <- EMC2:::design_model(dat, des, compress = FALSE, verbose = FALSE, rt_resolution = 1e-9)
+    pm <- t(as.matrix(p))
+    for (m in 1:2) {
+      q <- du
+      q$missingness <- m
+      q$R[] <- NA
+      pr <- exp(as.vector(EMC2:::calc_ll_manager(pm, q, des$model, return_trialwise = TRUE)))
+      n_obs <- sum(dat$missingness == m, na.rm = TRUE)
+      expect_lt(abs(n_obs - sum(pr)) / sqrt(sum(pr * (1 - pr))), 4)
+    }
+    # the censored data go through make_emc and both likelihoods agree
+    emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 1, verbose = FALSE))
+    dadm <- emc[[1]]$data[[1]]
+    expect_true(any(!is.na(dadm$missingness)))
+    llc <- EMC2:::calc_ll_manager(pm, dadm, des$model)
+    llr <- EMC2:::calc_ll_manager(pm, dadm, mtlba_r_model(des$model))
+    expect_true(is.finite(llc))
+    expect_lt(mtlba_err(llc, llr), 1e-12)
+    # truncation: nothing outside the window survives
+    datt <- make_data(p, des, n_trials = 300, TC = list(LT = .45, UT = 1.5))
+    expect_true(all(datt$rt >= .45 & datt$rt <= 1.5))
+    dt <- EMC2:::design_model(datt, des, verbose = FALSE)
+    expect_equal(as.vector(EMC2:::calc_ll_manager(pm, dt, des$model)),
+                 EMC2:::calc_ll_manager(pm, dt, mtlba_r_model(des$model)), tolerance = 1e-12)
+  }
+})
+
+test_that("a don't-know data set with the DK paper's lower cut (.4 s) evaluates", {
+  # the DK paper (Experiment 2) dropped responses faster than .4 s: fitted here
+  # either as lower censoring or as lower truncation
+  des <- mtlba_design(2, "BE", TRUE, rlev = c("new", "old"))
+  p <- c(v = 1, v_lMTRUE = 1.2, B = log(1.2), A = log(.6), t0 = log(.2),
+         c1 = log(.5), c1_lRold = .1)
+  set.seed(95)
+  for (TC in list(list(LC = .4), list(LT = .4))) {
+    dat <- make_data(p, des, n_trials = 500, TC = TC)
+    expect_true(any(dat$RR == 1, na.rm = TRUE))
+    expect_true(all(dat$R[!is.na(dat$RR) & dat$RR == 1] == "new"))
+    dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+    pm <- t(as.matrix(p))
+    llc <- EMC2:::calc_ll_manager(pm, dadm, des$model)
+    expect_true(is.finite(llc))
+    expect_equal(as.vector(llc), EMC2:::calc_ll_manager(pm, dadm, mtlba_r_model(des$model)),
+                 tolerance = 1e-12)
+  }
+})
+
+test_that("C++ equals the R reference with censoring and truncation (OpenMP = serial)", {
+  for (K in 1:3) for (rule in c("BE", "TC")) for (dk in c(FALSE, if (K > 1) TRUE)) {
+    crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
+    form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1),
+              lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
+    mod <- local({ k <- K; r <- rule; d <- dk
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
+    p <- sampled_pars(des, doMap = FALSE)
+    p[] <- 0
+    p[c("v", "v_lMTRUE", "sv", "sv_lMTRUE", "B", "B_lRright", "A", "t0")] <-
+      c(1, 1.5, 0, log(.7), log(1), .2, log(.5), log(.25))
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+    set.seed(200 + 10 * K + dk)
+    # mixed: lower and upper censoring, an unknown-rt trial (both), truncation
+    dat <- make_data(p, des, n_trials = 150, TC = list(LT = .3, LC = .55, UC = 1.2, UT = 3))
+    dat$missingness[1:2] <- 3L; dat$R[1:2] <- NA; dat$RR[1:2] <- NA; dat$rt[1:2] <- NA
+    expect_true(all(c(1L, 2L, 3L) %in% dat$missingness))
+    props <- rbind(p, mvtnorm::rmvnorm(30, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 7, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[1, "sv"] <- log(.02)
+    ext[2, "v"] <- -4
+    ext[3, "v"] <- 12
+    ext[4, "A"] <- -Inf
+    ext[5, "t0"] <- log(.6)               # t0 above LT and LC: empty lower windows
+    ext[6, "B"] <- 800
+    ext[7, "v"] <- NaN
+    if (K > 1) ext[1, "c1"] <- log(8)
+    props <- rbind(props, ext)
+    for (compress in c(TRUE, FALSE)) {
+      dadm <- EMC2:::design_model(dat, des, compress = compress, verbose = FALSE)
+      llr <- EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))
+      llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+      expect_lt(mtlba_err(llc, llr), 1e-10)
+      twr <- apply(props, 1, function(pv)
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+      twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+      expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-10)
+      expect_true(all(is.finite(llc)))
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model)), llc)
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model,
+                                                        return_trialwise = TRUE)), twc)
+    }
+  }
+})
+
+test_that("censoring refusals: retained response, unequal t0, contamination", {
+  des <- mtlba_design(2, "BE")
+  p <- mtlba_p(2)
+  set.seed(97)
+  expect_error(make_emc(make_data(p, des, n_trials = 100, TC = list(LC = .5, LCresponse = TRUE)),
+                        des, type = "single", verbose = FALSE), "response retained")
+  # a missing response that is not censored
+  dc <- make_data(p, des, n_trials = 50)
+  dc$R[1] <- NA; dc$RR[1] <- NA
+  expect_error(EMC2:::design_model(dc, des, verbose = FALSE), "contamination")
+  # t0 by accumulator is fine without censoring but refused with it (R and C++)
+  dt0 <- suppressMessages(design(
+    factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+    model = function() MTLBA(n_ratings = 2), matchfun = function(d) d$S == d$lR,
+    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ lR, c1 ~ lR), report_p_vector = FALSE))
+  p0 <- c(p, t0_lRright = .1)
+  dat <- make_data(p0, dt0, n_trials = 50)
+  pm <- t(as.matrix(p0))
+  expect_true(is.finite(EMC2:::calc_ll_manager(pm, EMC2:::design_model(dat, dt0, verbose = FALSE),
+                                               dt0$model)))
+  datc <- make_data(p0, dt0, n_trials = 50, TC = list(UC = 1))
+  dadm <- EMC2:::design_model(datc, dt0, verbose = FALSE)
+  expect_error(EMC2:::calc_ll_manager(pm, dadm, dt0$model), "t0 equal")
+  expect_error(mtlba_omp(EMC2:::calc_ll_manager(pm, dadm, dt0$model)), "t0 equal")
+  expect_error(EMC2:::calc_ll_manager(pm, dadm, mtlba_r_model(dt0$model)), "t0 equal")
+})
+
+test_that("truncation normaliser cache: many distinct parameter rows (covariate)", {
+  # a trial-level covariate gives every trial its own parameters: more keys
+  # than the per-call cache holds, so eviction and misses are exercised
+  for (rule in c("BE", "TC")) {
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      covariates = "x", model = local({ r <- rule; function() MTLBA(n_ratings = 3, rule = r) }),
+      matchfun = function(d) d$S == d$lR,
+      formula = list(v ~ lM + x, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ lR, c2 ~ lR), report_p_vector = FALSE))
+    p <- c(v = 1, v_lMTRUE = 1.5, v_x = .3, B = log(1), A = log(.5), t0 = log(.25),
+           c1 = log(.6), c1_lRright = .15, c2 = log(.6), c2_lRright = .15)
+    set.seed(98)
+    dd <- data.frame(subjects = factor(1), S = factor(rep(c("left", "right"), 150)),
+                     x = round(stats::rnorm(300), 2), R = factor("left", levels = c("left", "right")),
+                     rt = 1, RR = 1)
+    dat <- make_data(p, des, data = dd, TC = list(LT = .35, LC = .5, UC = 1.3, UT = 2.5))
+    dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+    pm <- rbind(p, p + .05)
+    llc <- EMC2:::calc_ll_manager(pm, dadm, des$model, return_trialwise = TRUE)
+    llr <- apply(pm, 1, function(pv)
+      EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, 3, rule, FALSE))
+    expect_lt(mtlba_err(as.vector(llc), as.vector(llr)), 1e-10)
+    expect_identical(mtlba_omp(EMC2:::calc_ll_manager(pm, dadm, des$model, return_trialwise = TRUE)),
+                     llc)
   }
 })

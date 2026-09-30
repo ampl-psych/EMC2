@@ -65,8 +65,16 @@ With \code{dont_know = TRUE} the lowest rating of both choices is one shared
 trials \code{RR = 1} with \code{R} equal to the first response level; \code{simulate}
 and \code{make_data} write them that way.
 
-\code{t0} is taken from the accumulator that stops the race. Censoring and
-truncation are not yet supported.
+\code{t0} is taken from the accumulator that stops the race.
+
+Censoring and truncation use EMC2's usual coding (\code{\link[=make_missing]{make_missing()}}, or the
+\code{TC} argument of \code{\link[=make_data]{make_data()}}). A censored trial has \code{R = NA} and
+\code{RR = NA} (the response is not retained) and contributes the probability
+that the race stops in the censored window; truncated trials are divided by
+the probability of a response time between \code{LT} and \code{UT}. Both need \code{t0}
+to be the same for the two accumulators. Censoring with the response
+retained (\code{LCresponse}/\code{UCresponse = TRUE}) and missing responses that
+are not censored (contamination) are not supported.
 }
 \examples{
 # three ratings, balance of evidence

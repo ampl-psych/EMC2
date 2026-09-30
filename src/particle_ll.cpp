@@ -838,8 +838,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
     // -----------------------------------------------------------------------
-    // Rating models (MTLBA): as MTLNR; rule and don't know from the model
-    // attribute, no censoring/truncation (refused by make_mtlba_spec).
+    // Rating models (MTLBA): as MTLNR; rule and don't know from the model's
+    // c_options; censoring/truncation handled inside the kernel.
     // -----------------------------------------------------------------------
     } else if (type == "MTLBA") {
       const MTLBASpec spec = make_mtlba_spec(data, ctx.param_table, n_lR);
@@ -847,8 +847,8 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
         run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
         std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
-        if (!mtlba_trial_ll(spec, ctx.param_table, min_ll, ll_buf.data()))
-          Rcpp::stop("MTLBA: correlated drift rates (rho != 0) are not implemented yet");
+        const int code = mtlba_trial_ll(spec, ctx.param_table, min_ll, ll_buf.data());
+        if (code != MTLBA_OK) Rcpp::stop(mtlba_error_message(code));
         c_do_bound(ctx.param_table, bound_specs, is_ok);
         apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
         double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
@@ -1323,12 +1323,13 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       }
 
       // -----------------------------------------------------------------------
-      // Rating models (MTLBA): as MTLNR; a non-zero rho is flagged inside the
-      // parallel region and refused after it
+      // Rating models (MTLBA): as MTLNR; a non-zero rho or unequal t0 under
+      // censoring/truncation is flagged inside the parallel region and refused
+      // after it
       // -----------------------------------------------------------------------
     } else if (type == "MTLBA") {
       const MTLBASpec spec = make_mtlba_spec(data, ctx.param_table, n_lR);
-      int rho_bad = 0;
+      int mtlba_bad = MTLBA_OK;
 
 #pragma omp parallel for schedule(static) num_threads(n_threads_used)
       for (int i = 0; i < n_particles; ++i) {
@@ -1345,9 +1346,10 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
         pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
         run_pars_pipeline(pt_local, tr_local, cache);
         std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
-        if (!mtlba_trial_ll(spec, pt_local, min_ll, ll_trial.data())) {
+        const int code = mtlba_trial_ll(spec, pt_local, min_ll, ll_trial.data());
+        if (code != MTLBA_OK) {
 #pragma omp atomic write
-          rho_bad = 1;
+          mtlba_bad = code;
         }
 
         c_do_bound(pt_local, bound_specs, is_ok);
@@ -1361,7 +1363,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
           result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
         }
       }
-      if (rho_bad) Rcpp::stop("MTLBA: correlated drift rates (rho != 0) are not implemented yet");
+      if (mtlba_bad != MTLBA_OK) Rcpp::stop(mtlba_error_message(mtlba_bad));
 
       // -----------------------------------------------------------------------
       // Choice-RT branch (DDM + race)

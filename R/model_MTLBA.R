@@ -314,14 +314,164 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
   data.frame(R = factor(levels(lR)[R], levels = levels(lR)), rt = rt, RR = RR)
 }
 
+# log P(dt <= y) and log P(dt > y) for the stopping time of the race, y a
+# decision-time bound per trial (y <= 0: nothing has stopped; y = Inf: all
+# has). With n_a the number of thresholds accumulator a has crossed at y
+# (n_a = K: past b), F_a(n) = P(n_a <= n), Fc_a(n) = 1 - F_a(n), p_a(n) =
+# P(n_a = n), all given v_a > 0:
+#   BE: survivor = F_1(K-1) F_2(K-1), stopped = Fc_1(K-1) + F_1(K-1) Fc_2(K-1);
+#   TC: survivor = sum_{n1 < K} p_1(n1) F_2(K-1-n1),
+#       stopped  = Fc_1(K-1) + sum_{n1 < K} p_1(n1) Fc_2(K-1-n1);
+# every term is positive, so both are formed on the log scale without
+# cancellation. F_a is the lowest band up to T_{n+1} (mtlba_logband) and
+# Fc_a(n) = S(T_{n+1}) / Phi(v/sv) (thresholds above A: no negative-drift mass
+# above them). The response kernels summed over responses are the density of
+# this stopping time. i1, i2: rows of accumulators 1 and 2; Tm from
+# mtlba_thresholds.
+mtlba_logstop <- function(y, pars, Tm, i1, i2, K, rule) {
+  n <- length(y)
+  lP <- rep(-Inf, n)
+  lS <- rep(0, n)
+  inf <- !is.na(y) & y == Inf
+  lP[inf] <- 0
+  lS[inf] <- -Inf
+  bad <- is.na(y)
+  lP[bad] <- lS[bad] <- NaN
+  w <- !bad & !inf & y > 0
+  if (!any(w)) return(list(P = lP, S = lS))
+  acc <- function(i) {
+    i <- i[w]
+    t <- y[w]
+    A <- pars[i, "A"]; v <- pars[i, "v"]; sv <- pars[i, "sv"]
+    lden <- pmax(stats::pnorm(v / sv, log.p = TRUE), log(1e-10))
+    m <- length(t)
+    F <- Fc <- band <- matrix(-Inf, m, K)
+    for (nn in 0:(K - 1)) {
+      hi <- Tm[cbind(i, nn + 2L)]
+      F[, nn + 1] <- mtlba_logband(t, A, v, sv, rep(0, m), hi, rep(TRUE, m))
+      Fc[, nn + 1] <- mtlba_logHS(hi, t, A, v, sv)$S - lden
+      band[, nn + 1] <- if (nn == 0) F[, 1] else
+        mtlba_logband(t, A, v, sv, Tm[cbind(i, nn + 1L)], hi, rep(FALSE, m))
+    }
+    list(F = F, Fc = Fc, band = band)
+  }
+  a1 <- acc(i1)
+  a2 <- acc(i2)
+  if (rule == "BE") {
+    S <- a1$F[, K] + a2$F[, K]
+    P <- mtlba_lse(a1$Fc[, K], a1$F[, K] + a2$Fc[, K])
+  } else {
+    S <- a1$band[, 1] + a2$F[, K]
+    P <- mtlba_lse(a1$Fc[, K], a1$band[, 1] + a2$Fc[, K])
+    if (K > 1) for (n1 in 1:(K - 1)) {
+      S <- mtlba_lse(S, a1$band[, n1 + 1] + a2$F[, K - n1])
+      P <- mtlba_lse(P, a1$band[, n1 + 1] + a2$Fc[, K - n1])
+    }
+  }
+  lP[w] <- P
+  lS[w] <- S
+  list(P = lP, S = lS)
+}
+
+# log P(a < dt <= b) from the stop/survivor pairs at a and b (a <= b): the route
+# (survivors or stopped) with the smaller leading term.
+mtlba_logwindow <- function(la, lb) {
+  useS <- la$S < lb$P
+  useS[is.na(useS)] <- FALSE
+  out <- mtlba_ldiff(lb$P, la$P)
+  if (any(useS)) out[useS] <- mtlba_ldiff(la$S[useS], lb$S[useS])
+  out
+}
+
+# Censoring and truncation columns of a dadm, one value per trial (first row),
+# with EMC2's defaults for absent columns.
+mtlba_bounds <- function(dadm, first) {
+  col <- function(x, def) if (x %in% names(dadm)) as.numeric(dadm[[x]][first]) else
+    rep(def, length(first))
+  miss <- if ("missingness" %in% names(dadm)) as.integer(dadm$missingness[first]) else
+    rep(NA_integer_, length(first))
+  list(miss = miss, LT = col("LT", 0), UT = col("UT", Inf), LC = col("LC", 0), UC = col("UC", Inf))
+}
+
+# Refuses what the censoring/truncation terms do not (yet) define: missing
+# responses that are not censored (e.g. pContaminant), response-retained
+# censoring, and code 4 (silent accumulators).
+mtlba_check_missing <- function(R, rt, miss) {
+  cens <- !is.na(miss)
+  if (any(miss[cens] == 4L))
+    stop("MTLBA: missingness code 4 (silent accumulators) is not supported")
+  if (any(cens & !is.na(R)))
+    stop("MTLBA: censoring with the response retained (LCresponse/UCresponse = TRUE) is not ",
+         "supported; censored trials need R = NA (and RR = NA)")
+  if (any(!cens & (is.na(R) | !is.finite(rt))))
+    stop("MTLBA: missing responses or non-finite rts must be censored (make_missing() with LC/UC); ",
+         "contamination (pContaminant) is not supported")
+  invisible(TRUE)
+}
+
+# log likelihood per trial with censoring and truncation: observed trials the
+# kernel density, censored trials (response not retained) the probability of
+# stopping in the censored window(s), (1) (LT, LC], (2) (UC, UT], (3) both,
+# and every truncated trial divided by P(LT < rt < UT). The window terms need
+# one t0 per trial, so t0 must be equal for the two accumulators there.
+mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
+  n <- length(rt)
+  mtlba_check_missing(R, rt, bnd$miss)
+  cens <- !is.na(bnd$miss)
+  trunc <- (bnd$LT > 0 & is.finite(bnd$LT)) | is.finite(bnd$UT)
+  ld <- rep(-Inf, n)
+  if (any(!cens))
+    ld[!cens] <- mtlba_logdens(rt[!cens], R[!cens], RR[!cens],
+                               pars[rep(2 * which(!cens), each = 2) - c(1, 0), , drop = FALSE],
+                               K, rule, dont_know)
+  need <- cens | trunc
+  if (!any(need)) return(ld)
+  mtlba_check_rho(pars)
+  w <- which(need)
+  i1 <- 2 * w - 1
+  i2 <- 2 * w
+  t0 <- pars[i1, "t0"]
+  if (any(t0 != pars[i2, "t0"], na.rm = TRUE))
+    stop("MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not ",
+         "depend on lR or lM)")
+  Tm <- mtlba_thresholds(pars, K)
+  at <- function(x) mtlba_logstop(x - t0, pars, Tm, i1, i2, K, rule)
+  sLT <- at(bnd$LT[w])
+  sUT <- at(bnd$UT[w])
+  cw <- cens[w]
+  m <- bnd$miss[w]
+  if (any(cw)) {
+    lo <- m %in% c(1L, 3L)
+    up <- m %in% c(2L, 3L)
+    lc <- rep(-Inf, length(w))
+    if (any(lo)) {
+      sLC <- at(ifelse(lo, bnd$LC[w], 0))
+      lc[lo] <- mtlba_logwindow(sLT, sLC)[lo]
+    }
+    if (any(up)) {
+      sUC <- at(ifelse(up, bnd$UC[w], Inf))
+      lc[up] <- mtlba_lse(lc[up], mtlba_logwindow(sUC, sUT)[up])
+    }
+    ld[w[cw]] <- lc[cw]
+  }
+  tw <- trunc[w]
+  if (any(tw)) {
+    lZ <- mtlba_logwindow(sLT, sUT)[tw]
+    ld[w[tw]] <- ifelse(lZ == -Inf, -Inf, ld[w[tw]] - lZ)
+  }
+  ld[is.na(ld)] <- -Inf
+  ld
+}
+
 # Trial log-likelihoods over a (possibly compressed) dadm with two rows per
 # trial, expanded to the uncompressed trials and floored at min_ll. The R
 # reference for the C++ kernel (src/model_mtlba.h); used when c_name is removed.
 trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10)) {
   n <- nrow(pars) / 2
   first <- seq(1, 2 * n, by = 2)
-  ll <- mtlba_logdens(dadm$rt[first], as.integer(dadm$R[first]), dadm$RR[first], pars, K,
-                      rule, dont_know)
+  bnd <- mtlba_bounds(dadm, first)
+  ll <- mtlba_logdens_missing(dadm$rt[first], as.integer(dadm$R[first]), dadm$RR[first], pars,
+                              K, rule, dont_know, bnd)
   # a parameter out of bounds on either accumulator row voids the trial
   ok <- attr(pars, "ok")
   if (!is.null(ok)) ll[!(ok[first] & ok[first + 1])] <- min_ll
@@ -332,14 +482,14 @@ trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10)) 
 log_likelihood_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10))
   sum(trial_ll_mtlba(pars, dadm, K, rule, dont_know, min_ll))
 
-# Refuses censoring, truncation and missing responses (not yet defined).
+# Data checks: two response levels, the rating column, and censoring coded as
+# EMC2's make_missing() does with the response not retained.
 mtlba_check_data <- function(data, K, dont_know) {
   if (length(levels(data$R)) != 2) stop("MTLBA needs exactly two response levels")
-  if (any(is.na(data$R)) || any(!is.finite(data$rt)))
-    stop("MTLBA does not yet support missing responses or censored rts")
-  if (("LT" %in% names(data) && any(data$LT > 0, na.rm = TRUE)) ||
-      ("UT" %in% names(data) && any(is.finite(data$UT))))
-    stop("MTLBA does not yet support truncation")
+  miss <- if ("missingness" %in% names(data)) as.integer(data$missingness) else
+    rep(NA_integer_, nrow(data))
+  # RR on a censored trial is ignored (make_data() writes NA there)
+  mtlba_check_missing(data$R, data$rt, miss)
   rating_check_data(data, K, dont_know)
 }
 
@@ -399,8 +549,16 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...) {
 #' trials `RR = 1` with `R` equal to the first response level; `simulate`
 #' and `make_data` write them that way.
 #'
-#' `t0` is taken from the accumulator that stops the race. Censoring and
-#' truncation are not yet supported.
+#' `t0` is taken from the accumulator that stops the race.
+#'
+#' Censoring and truncation use EMC2's usual coding ([make_missing()], or the
+#' `TC` argument of [make_data()]). A censored trial has `R = NA` and
+#' `RR = NA` (the response is not retained) and contributes the probability
+#' that the race stops in the censored window; truncated trials are divided by
+#' the probability of a response time between `LT` and `UT`. Both need `t0`
+#' to be the same for the two accumulators. Censoring with the response
+#' retained (`LCresponse`/`UCresponse = TRUE`) and missing responses that
+#' are not censored (contamination) are not supported.
 #'
 #' @param n_ratings Number of rating categories K (>= 1; >= 2 with
 #'   `dont_know`). With K = 1 the model is the LBA.

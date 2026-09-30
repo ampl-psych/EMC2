@@ -543,6 +543,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                        pContaminant=TC$pContaminant,
                        no_truncate=TC$no_truncate,no_censor=TC$no_censor,
                        verbose=TC$verbose,rt_resolution=TC$rt_resolution,digits=TC$digits)
+  # a censored trial without its response has none of the model's extra
+  # responses either (e.g. a rating RR)
+  if (!is.null(data$missingness) && !is.null(model))
+    for (x in intersect(model_extra_responses(model), names(data)))
+      data[[x]][!is.na(data$missingness) & is.na(data$R)] <- NA
 
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){

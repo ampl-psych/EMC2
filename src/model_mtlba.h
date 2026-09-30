@@ -25,8 +25,16 @@
 // R::pnorm(log.p) (Rmath), not the package's Hart pnorm, which cancels there;
 // Rmath's pnorm/dnorm are pure arithmetic for a standard normal, so safe in
 // the OpenMP loop.
+//
+// Censoring and truncation (EMC2's make_missing coding: missingness 1/2/3,
+// LC/UC/LT/UT columns, read from each trial's first row): a censored trial
+// (response not retained, R = NA) is the log probability that the race stops
+// in its censored window(s); a truncated trial is divided by P(LT < rt < UT).
+// Both come from the stopping-time survivor (mtlba_logstop), which needs t0
+// equal for the two accumulators of such a trial.
 
 #include <Rcpp.h>
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -48,11 +56,20 @@ struct MTLBASpec {
   std::vector<int>    RR;      // per trial, 1 .. K
   std::vector<int>    R;       // per trial, choice 1 / 2 (accumulator level)
   std::vector<int>    row1;    // per trial, row of accumulator 1 (first lR level)
+  // censoring / truncation, per trial
+  std::vector<int>    miss;    // 0 observed, 1 lower, 2 upper, 3 both censored
+  std::vector<char>   trunc;   // LT > 0 or UT finite
+  std::vector<double> LT, UT, LC, UC;
+  bool any_missing = false;    // any censored or truncated trial
 };
+
+// Upper limit on the number of ratings (stack buffers in mtlba_logstop).
+constexpr int MTLBA_MAX_K = 32;
 
 // Data, model flags and column lookups, once per call (main thread). Refuses
 // what the likelihood does not (yet) define: other than two accumulators,
-// missing/censored responses and truncation.
+// censoring with the response retained, missingness code 4 and missing
+// responses that are not censored (contamination).
 inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& pt, int n_lR)
 {
   if (n_lR != 2) Rcpp::stop("MTLBA: needs exactly two accumulators per trial (found %d)", n_lR);
@@ -92,46 +109,60 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
   Rcpp::CharacterVector nm = data.names();
   auto has = [&](const char* x) { for (int i = 0; i < nm.size(); ++i) if (nm[i] == x) return true; return false; };
 
-  if (has("missingness")) {
-    Rcpp::IntegerVector ms = data["missingness"];
-    for (int i = 0; i < n; ++i)
-      if (!Rcpp::IntegerVector::is_na(ms[i]))
-        Rcpp::stop("MTLBA: missing or censored responses are not yet supported");
-  }
-  if (has("LT")) {
-    Rcpp::NumericVector lt = Rcpp::as<Rcpp::NumericVector>(data["LT"]);
-    for (int i = 0; i < n; ++i)
-      if (lt[i] > 0 && std::isfinite(lt[i])) Rcpp::stop("MTLBA: truncation is not yet supported");
-  }
-  if (has("UT")) {
-    Rcpp::NumericVector ut = Rcpp::as<Rcpp::NumericVector>(data["UT"]);
-    for (int i = 0; i < n; ++i)
-      if (std::isfinite(ut[i])) Rcpp::stop("MTLBA: truncation is not yet supported");
-  }
   if (!has("RR") && s.K > 1) Rcpp::stop("MTLBA: the data have no rating column RR");
+  if (s.K > MTLBA_MAX_K) Rcpp::stop("MTLBA: at most %d ratings", MTLBA_MAX_K);
 
+  auto num_col = [&](const char* x, double def) {
+    return has(x) ? Rcpp::as<Rcpp::NumericVector>(data[x]) : Rcpp::NumericVector(n, def);
+  };
   Rcpp::NumericVector rt = Rcpp::as<Rcpp::NumericVector>(data["rt"]);
   Rcpp::IntegerVector lR = data["lR"];
+  Rcpp::IntegerVector Rv = data["R"];
   Rcpp::LogicalVector win = data["winner"];
-  Rcpp::NumericVector rr = has("RR") ? Rcpp::as<Rcpp::NumericVector>(data["RR"])
-                                     : Rcpp::NumericVector(n, 1.0);
+  Rcpp::NumericVector rr = num_col("RR", 1.0);
+  Rcpp::IntegerVector ms = has("missingness") ? Rcpp::as<Rcpp::IntegerVector>(data["missingness"])
+                                              : Rcpp::IntegerVector(n, NA_INTEGER);
+  Rcpp::NumericVector lt = num_col("LT", 0.0), ut = num_col("UT", R_PosInf);
+  Rcpp::NumericVector lc = num_col("LC", 0.0), uc = num_col("UC", R_PosInf);
+  const bool has_LC = has("LC"), has_UC = has("UC");
   const int nt = n / 2;
   s.rt.resize(nt); s.RR.resize(nt); s.R.resize(nt); s.row1.resize(nt);
+  s.miss.resize(nt); s.trunc.resize(nt);
+  s.LT.resize(nt); s.UT.resize(nt); s.LC.resize(nt); s.UC.resize(nt);
   for (int t = 0; t < nt; ++t) {
     const int a = 2 * t, b = a + 1;
     if (!((lR[a] == 1 && lR[b] == 2) || (lR[a] == 2 && lR[b] == 1)))
       Rcpp::stop("MTLBA: trial %d does not have one row per accumulator", t + 1);
+    s.row1[t] = (lR[a] == 1) ? a : b;
+    s.LT[t] = lt[a]; s.UT[t] = ut[a]; s.LC[t] = lc[a]; s.UC[t] = uc[a];
+    s.trunc[t] = (lt[a] > 0 && std::isfinite(lt[a])) || std::isfinite(ut[a]);
+    const int m = ms[a];
+    if (m != NA_INTEGER) {
+      if (m < 1 || m > 3)
+        Rcpp::stop("MTLBA: missingness code %d is not supported (row %d)", m, a + 1);
+      if (Rv[a] != NA_INTEGER || Rv[b] != NA_INTEGER)
+        Rcpp::stop("MTLBA: censoring with the response retained (LCresponse/UCresponse = TRUE) is not supported; censored trials need R = NA");
+      if ((m == 1 || m == 3) && !has_LC)
+        Rcpp::stop("missingness contains lower-censored rows (1 or 3) but no LC column found in data");
+      if ((m == 2 || m == 3) && !has_UC)
+        Rcpp::stop("missingness contains upper-censored rows (2 or 3) but no UC column found in data");
+      s.miss[t] = m;
+      s.R[t] = 0; s.RR[t] = 0; s.rt[t] = NA_REAL;
+      continue;
+    }
+    s.miss[t] = 0;
     if (Rcpp::LogicalVector::is_na(win[a]) || Rcpp::LogicalVector::is_na(win[b]) ||
-        (bool)win[a] == (bool)win[b])
-      Rcpp::stop("MTLBA: trial %d needs exactly one winner row (missing response?)", t + 1);
+        (bool)win[a] == (bool)win[b] || Rv[a] == NA_INTEGER || Rv[b] == NA_INTEGER ||
+        !std::isfinite(rt[a]))
+      Rcpp::stop("MTLBA: trial %d has a missing response or rt that is not censored (contamination is not supported)", t + 1);
     const double v = rr[a];
     if (!(v >= 1 && v <= s.K && v == std::floor(v)))
       Rcpp::stop("MTLBA: RR must be an integer in 1 .. %d (row %d)", s.K, a + 1);
-    s.row1[t] = (lR[a] == 1) ? a : b;
     s.R[t]    = win[a] ? lR[a] : lR[b];
     s.RR[t]   = (int)v;
     s.rt[t]   = rt[a];
   }
+  for (int t = 0; t < nt; ++t) if (s.miss[t] || s.trunc[t]) { s.any_missing = true; break; }
   return s;
 }
 
@@ -278,11 +309,120 @@ inline void mtlba_lookup(int R, int RR, int K, bool TC, int& s, int& j, int& lo)
   lo = K - j;
 }
 
+// log P(dt <= y) (lP) and log P(dt > y) (lS) for the race's stopping time at
+// decision-time bound y; rows r1 / r2 = accumulators 1 / 2. As the R twin
+// mtlba_logstop: with n_a the thresholds crossed by accumulator a at y,
+// F_a(n) = P(n_a <= n), Fc_a(n) = 1 - F_a(n), p_a(n) = P(n_a = n) (v_a > 0),
+//   BE: S = F_1(K-1) F_2(K-1),   P = Fc_1(K-1) + F_1(K-1) Fc_2(K-1)
+//   TC: S = sum_{n1<K} p_1(n1) F_2(K-1-n1),
+//       P = Fc_1(K-1) + sum_{n1<K} p_1(n1) Fc_2(K-1-n1),
+// all terms positive (log-sum-exp). NaN for undefined parameters.
+inline void mtlba_logstop(const MTLBACols& p, int K, bool TC, double y, int r1, int r2,
+                          double& lP, double& lS)
+{
+  if (std::isnan(y)) { lP = lS = R_NaN; return; }
+  if (y == R_PosInf) { lP = 0.0; lS = R_NegInf; return; }
+  if (!(y > 0)) { lP = R_NegInf; lS = 0.0; return; }
+  double F[2][MTLBA_MAX_K], Fc[2][MTLBA_MAX_K], band[2][MTLBA_MAX_K];
+  const int rows[2] = {r1, r2};
+  for (int a = 0; a < 2; ++a) {
+    const int r = rows[a];
+    const double A = p.A[r], v = p.v[r], sv = p.sv[r];
+    if (!std::isfinite(v) || !std::isfinite(sv) || !std::isfinite(A) ||
+        !std::isfinite(p.B[r] + A)) { lP = lS = R_NaN; return; }
+    const double lden = mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10));
+    double lo_y = 0.0;
+    for (int nn = 0; nn < K; ++nn) {
+      const double hi = mtlba_threshold(p, K, r, nn + 1);
+      if (!std::isfinite(hi)) { lP = lS = R_NaN; return; }
+      F[a][nn]  = mtlba_logband(y, A, v, sv, 0.0, hi, true);
+      Fc[a][nn] = mtlba_logS(hi, y, A, v, sv) - lden;
+      band[a][nn] = (nn == 0) ? F[a][0] : mtlba_logband(y, A, v, sv, lo_y, hi, false);
+      lo_y = hi;
+    }
+  }
+  if (!TC) {
+    lS = F[0][K - 1] + F[1][K - 1];
+    lP = mtlba_lse(Fc[0][K - 1], F[0][K - 1] + Fc[1][K - 1]);
+  } else {
+    lS = band[0][0] + F[1][K - 1];
+    lP = mtlba_lse(Fc[0][K - 1], band[0][0] + Fc[1][K - 1]);
+    for (int n1 = 1; n1 < K; ++n1) {
+      lS = mtlba_lse(lS, band[0][n1] + F[1][K - 1 - n1]);
+      lP = mtlba_lse(lP, band[0][n1] + Fc[1][K - 1 - n1]);
+    }
+  }
+}
+
+// log P(a < dt <= b) from the (lP, lS) pairs at a and b: the route with the
+// smaller leading term.
+inline double mtlba_logwindow(double Pa, double Sa, double Pb, double Sb)
+{
+  if (Sa < Pb) return mtlba_ldiff(Sa, Sb);   // false for NaN
+  return mtlba_ldiff(Pb, Pa);
+}
+
+// The stopping-time terms at LT and UT depend only on the trial's parameter
+// rows and the two bounds, not on the rt, so trials of the same design cell
+// share them. A small cache, local to one likelihood call, keyed on the exact
+// values (v, sv, A, B, t0, criteria of both rows, LT, UT); NaN never matches.
+struct MTLBAStopCache {
+  static constexpr int MAX_ENTRIES = 64;
+  int n_key = 0, n = 0, next = 0;
+  std::vector<double> keys, vals;   // MAX_ENTRIES x n_key, MAX_ENTRIES x 4
+  std::vector<double> key;
+  void init(int K) {
+    n_key = 2 * (5 + K - 1) + 2;
+    keys.resize((size_t)MAX_ENTRIES * n_key);
+    vals.resize((size_t)MAX_ENTRIES * 4);
+    key.resize(n_key);
+  }
+  void get(const MTLBACols& p, int K, bool TC, int r1, int r2, double LT, double UT,
+           double& PLT, double& SLT, double& PUT, double& SUT) {
+    const double t0 = p.t0[r1];
+    int k = 0;
+    for (int r : {r1, r2}) {
+      key[k++] = p.v[r]; key[k++] = p.sv[r]; key[k++] = p.A[r]; key[k++] = p.B[r];
+      key[k++] = p.t0[r];
+      for (int c = 0; c < K - 1; ++c) key[k++] = p.c[c][r];
+    }
+    key[k++] = LT; key[k++] = UT;
+    for (int e = 0; e < n; ++e) {
+      const double* ke = keys.data() + (size_t)e * n_key;
+      int i = 0;
+      while (i < n_key && ke[i] == key[i]) ++i;
+      if (i == n_key) {
+        const double* v = vals.data() + (size_t)e * 4;
+        PLT = v[0]; SLT = v[1]; PUT = v[2]; SUT = v[3];
+        return;
+      }
+    }
+    mtlba_logstop(p, K, TC, LT - t0, r1, r2, PLT, SLT);
+    mtlba_logstop(p, K, TC, UT - t0, r1, r2, PUT, SUT);
+    const int e = (n < MAX_ENTRIES) ? n++ : next++ % MAX_ENTRIES;   // round-robin when full
+    std::copy(key.begin(), key.end(), keys.begin() + (size_t)e * n_key);
+    double* v = vals.data() + (size_t)e * 4;
+    v[0] = PLT; v[1] = SLT; v[2] = PUT; v[3] = SUT;
+  }
+};
+
+// Return codes of mtlba_trial_ll (the caller stops, outside any parallel region).
+enum { MTLBA_OK = 0, MTLBA_RHO = 1, MTLBA_T0 = 2 };
+inline const char* mtlba_error_message(int code)
+{
+  if (code == MTLBA_T0)
+    return "MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not depend on lR or lM)";
+  return "MTLBA: correlated drift rates (rho != 0) are not implemented yet";
+}
+
 // Trial log-likelihoods into ll_buf (indexed by trial), floored at min_ll.
-// Returns false if a non-zero rho is met (the caller stops, outside any
-// parallel region).
-inline bool mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_ll,
-                           double* __restrict__ ll_buf)
+// Observed trials: the response kernel; censored trials: the probability of
+// stopping in the censored window(s); truncated trials: minus log P(LT < rt < UT).
+// Returns MTLBA_RHO if a non-zero rho is met, MTLBA_T0 if a censored or
+// truncated trial has unequal t0 (the caller stops, outside any parallel
+// region).
+inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_ll,
+                          double* __restrict__ ll_buf)
 {
   MTLBACols p;
   p.v   = pt.base.colptr(s.col_v);
@@ -293,30 +433,60 @@ inline bool mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_
   p.rho = pt.base.colptr(s.col_rho);
   for (int col : s.col_c) p.c.push_back(pt.base.colptr(col));
   const int K = s.K;
-  bool rho_ok = true;
+  int code = MTLBA_OK;
+  MTLBAStopCache cache;
+  if (s.any_missing) cache.init(K);
 
   const int nt = (int)s.rt.size();
   for (int t = 0; t < nt; ++t) {
     const int r1 = s.row1[t];
     const int r2 = (r1 % 2 == 0) ? r1 + 1 : r1 - 1;
     if ((p.rho[r1] != 0 && !std::isnan(p.rho[r1])) || (p.rho[r2] != 0 && !std::isnan(p.rho[r2])))
-      rho_ok = false;
-    const int RR = s.RR[t];
-    int a, j, lo;
-    double ll;
-    if (s.DK && RR == 1) {
-      mtlba_lookup(1, 1, K, s.TC, a, j, lo);
-      const double l1 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
-      mtlba_lookup(2, 1, K, s.TC, a, j, lo);
-      const double l2 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
-      ll = mtlba_lse(l1, l2);
-    } else {
-      mtlba_lookup(s.R[t], RR, K, s.TC, a, j, lo);
-      ll = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
+      code = MTLBA_RHO;
+    const int miss = s.miss[t];
+    double ll = R_NegInf;
+    if (miss == 0) {
+      const int RR = s.RR[t];
+      int a, j, lo;
+      if (s.DK && RR == 1) {
+        mtlba_lookup(1, 1, K, s.TC, a, j, lo);
+        const double l1 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
+        mtlba_lookup(2, 1, K, s.TC, a, j, lo);
+        const double l2 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
+        ll = mtlba_lse(l1, l2);
+      } else {
+        mtlba_lookup(s.R[t], RR, K, s.TC, a, j, lo);
+        ll = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo);
+      }
+    }
+    if (miss != 0 || s.trunc[t]) {
+      const double t0 = p.t0[r1];
+      if (!std::isnan(t0) && !std::isnan(p.t0[r2]) && t0 != p.t0[r2]) {
+        if (code == MTLBA_OK) code = MTLBA_T0;
+        ll_buf[t] = min_ll;
+        continue;
+      }
+      double PLT, SLT, PUT, SUT;
+      cache.get(p, K, s.TC, r1, r2, s.LT[t], s.UT[t], PLT, SLT, PUT, SUT);
+      if (miss != 0) {
+        double P, S;
+        if (miss == 1 || miss == 3) {
+          mtlba_logstop(p, K, s.TC, s.LC[t] - t0, r1, r2, P, S);
+          ll = mtlba_logwindow(PLT, SLT, P, S);
+        }
+        if (miss == 2 || miss == 3) {
+          mtlba_logstop(p, K, s.TC, s.UC[t] - t0, r1, r2, P, S);
+          ll = mtlba_lse(ll, mtlba_logwindow(P, S, PUT, SUT));
+        }
+      }
+      if (s.trunc[t]) {
+        const double lZ = mtlba_logwindow(PLT, SLT, PUT, SUT);
+        ll = (lZ == R_NegInf) ? R_NegInf : ll - lZ;
+      }
     }
     ll_buf[t] = (ll > min_ll) ? ll : min_ll;   // NaN -> min_ll
   }
-  return rho_ok;
+  return code;
 }
 
 #endif // MODEL_MTLBA_H
