@@ -16,6 +16,15 @@ library(EMC2)
 set.seed(30)
 ```
 
+## Installation
+
+This vignette uses the `dev-rating` branch:
+
+```{r, eval = FALSE}
+# install.packages("remotes")
+remotes::install_github("ampl-psych/EMC2", ref = "dev-rating")
+```
+
 ## Introduction
 
 Rating tasks add a discrete confidence (or other ordered) rating to a choice
@@ -24,30 +33,103 @@ a response time `rt`, but also a rating `RR`, coded as an integer from 1
 (the lowest rating) to `K` (the highest).
 
 This vignette introduces the first rating model in *EMC2*, the correlated
-multiple-threshold log-normal race (MTLNR) of @reynolds2020correlated. The
-MTLNR extends the log-normal race (`?LNR`) to two *correlated* accumulators
-and reads the confidence rating off the losing accumulator: at the moment the
-winner finishes, the loser's state (as a proportion of its own threshold) is
-compared against `K - 1` further thresholds to give one of `K` ratings. This
-is a natural model for tasks such as old/new recognition memory with a
-confidence judgment, the running example below.
+multiple-threshold log-normal race (MTLNR). The MTLNR extends the log-normal
+race (`?LNR`) to two *correlated* accumulators and reads the confidence
+rating off the losing accumulator: at the moment the winner finishes, the
+loser's state (as a proportion of its own threshold) is compared against
+`K - 1` further thresholds to give one of `K` ratings. This is a natural
+model for tasks such as old/new recognition memory with a confidence
+judgment. For the full parameterization see `?MTLNR`.
 
-The steps are:
+> Reynolds, A., Kvam, P. D., Osth, A. F., & Heathcote, A. (2020). Correlated
+> racing evidence accumulator models. *Journal of Mathematical Psychology*,
+> *96*, Article 102331. https://doi.org/10.1016/j.jmp.2020.102331
 
-1. Specify a rating-task design and inspect the threshold mapping
-2. Simulate data and summarize it by choice and rating
-3. Define priors and fit the model
-4. Check the fit against the truth and the data (posterior predictives)
-5. A rating-specific diagnostic: the z-transformed ROC
+The steps below are:
 
-For the full parameterization see `?MTLNR`.
+1. A minimal single-subject example with two ratings
+2. A detailed single-subject example with three ratings: design, simulation,
+   fitting, predictive checks and the z-transformed ROC
+3. More than three ratings, and two current limitations
+4. A hierarchical (multi-subject) example, extending the three-rating design
 
-## 1. Specify a Rating-Task Design
+## 1. A Minimal Example: Two Ratings
+
+The smallest rating design has `K = 2`: a single confidence criterion `c1`
+per accumulator's losing evidence. We start with a single subject in a
+generic two-choice task (`left`/`right`) with one shared criterion (`c1 ~ 1`,
+not split by response), so the whole design has just six parameters.
+`MTLNR()` is a factory: `MTLNR(n_ratings = K)` builds the model for `K`
+ratings (`K = 3` is the default).
+
+```{r, results = "hide"}
+design_k2 <- design(
+  factors = list(subjects = 1, S = c("left", "right")),
+  Rlevels = c("left", "right"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1),
+  model = function() MTLNR(n_ratings = 2)
+)
+```
+
+```{r}
+sampled_pars(design_k2)
+```
+
+Simulating and fitting follow the same `design()` -> `make_data()` ->
+`prior()` -> `make_emc()` -> `fit()` steps as any other *EMC2* model:
+
+```{r, results = "hide"}
+p_k2 <- sampled_pars(design_k2)
+p_k2[] <- c(m = -.4, m_lMTRUE = -.7, s = log(.8), t0 = log(.3), rho = qnorm(.7), c1 = log(.5))
+dat_k2 <- make_data(parameters = p_k2, design = design_k2, n_trials = 500)
+```
+
+```{r}
+rating_summary(dat_k2)
+```
+
+```{r, results = "hide"}
+prior_k2 <- prior(
+  design = design_k2, type = "single",
+  pmean = c(m = 0, m_lMTRUE = 0, s = log(.7), t0 = log(.25), rho = 0, c1 = log(.5)),
+  psd = c(m = 1, m_lMTRUE = 1, s = .5, t0 = .4, rho = 1, c1 = .5)
+)
+emc_k2 <- make_emc(dat_k2, design_k2, prior_list = prior_k2, type = "single")
+```
+
+```{r, eval = FALSE}
+emc_k2 <- fit(emc_k2, cores_for_chains = 3, cores_per_chain = 1,
+              fileName = "data/rating-models-k2.RData")
+```
+
+```{r, include = FALSE}
+# Loads every object cached for this vignette (k2, k3 and hierarchical); the
+# later sections reload the same file after their own (also eval = FALSE)
+# fit() calls, since their live design()/make_data() code above overwrites
+# these names again for the narrative.
+load("data/rating-models.RData")
+```
+
+```{r}
+summary(emc_k2)
+```
+
+```{r, fig.alt = "Posterior parameter densities against true values for the two-rating example", fig.height = 7}
+plot_pars(emc_k2, true_pars = p_k2, use_prior_lim = FALSE)
+```
+
+The rest of this vignette works through a fuller example (a response-specific
+formula, a real-task narrative, predictive checks, and the zROC diagnostic);
+the steps are the same ones used above.
+
+## 2. A Detailed Example: Recognition Memory with Three Ratings
 
 We simulate a two-choice recognition-memory task: participants see a word
 that was either `new` or `old`, and respond `new` or `old` with a rating of
-their confidence on a 3-point scale (`RR` = 1 low, 3 high). `MTLNR()` is a
-factory: `MTLNR(n_ratings = 3)` (the default) builds the model for 3 ratings.
+their confidence on a 3-point scale (`RR` = 1 low, 3 high).
+
+### Specify the Design
 
 As with the other race models (see `vignette("race-models")`), `matchfun`
 flags whether the accumulator's response label matches the true word type,
@@ -68,7 +150,7 @@ design_mtlnr <- design(
 sampled_pars(design_mtlnr)
 ```
 
-## 2. Rating Thresholds and Their Mapping
+### Rating Thresholds and Their Mapping
 
 The criteria `c1`, `c2` are sampled on a log scale that guarantees the
 underlying thresholds are ordered; `mapped_pars()` reports the natural-scale
@@ -87,7 +169,7 @@ shared by both accumulators and is `r round(2 * pnorm(p_vector[["rho"]]) - 1, 2)
 for these parameter values: a strong positive trial-to-trial correlation
 between the two finishing times.
 
-## 3. Simulate Data and Summarize by Choice and Rating
+### Simulate Data and Summarize by Choice and Rating
 
 ```{r, results = "hide"}
 dat <- make_data(parameters = p_vector, design = design_mtlnr, n_trials = 1000)
@@ -108,7 +190,7 @@ RT quantiles below, split by word type:
 plot_ratings(dat, factors = "S")
 ```
 
-## 4. Set Priors and Fit
+### Set Priors and Fit
 
 ```{r, results = "hide"}
 prior_mtlnr <- prior(
@@ -137,7 +219,7 @@ emc <- fit(emc, cores_for_chains = 3, cores_per_chain = 1,
 load("data/rating-models.RData")
 ```
 
-## 5. Check the Fit
+### Check the Fit
 
 ```{r}
 summary(emc)
@@ -157,7 +239,7 @@ pp <- predict(emc)
 plot_ratings(dat, pp, factors = "S")
 ```
 
-## 6. The z-Transformed ROC
+### The z-Transformed ROC
 
 Recognition-memory confidence data are often summarized with a
 z-transformed ROC: the cumulative "old" response probability (from the most
@@ -174,6 +256,108 @@ A straight zROC with unit slope (as above) is the classic signature of
 equal-variance signal and noise distributions; here both accumulators share
 the same `s`, so the model produces exactly that pattern. Letting `s` vary
 with `lM` (an unequal-variance model) would tilt the slope away from 1.
+
+## 3. More Than Three Ratings, and Two Current Limitations
+
+**More ratings** are just a larger `n_ratings`: `MTLNR(n_ratings = K)` adds
+one more criterion `c{K-1}` for every additional rating, each of which can be
+mapped by any factor (here shared, `~ 1`, for brevity):
+
+```{r}
+design_k5 <- design(
+  factors = list(subjects = 1, S = c("left", "right")),
+  Rlevels = c("left", "right"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1, c2 ~ 1, c3 ~ 1, c4 ~ 1),
+  model = function() MTLNR(n_ratings = 5)
+)
+sampled_pars(design_k5)
+```
+
+**Limitation 1: the number of ratings must be the same for both responses.**
+There is currently no way to give, say, 3 confidence levels to "new"
+responses and 5 to "old" responses -- `n_ratings` must be a single integer,
+shared by both choices:
+
+```{r, error = TRUE}
+MTLNR(n_ratings = c(3, 2))
+```
+
+**Limitation 2: MTLNR supports exactly two choices.** The confidence rating
+is defined relative to the *losing* accumulator, and the correlation `rho` is
+between exactly two log-normal finishing times, so `design()` refuses more
+than two response levels:
+
+```{r, error = TRUE}
+design(factors = list(subjects = 1, S = c("a", "b", "c", "d")),
+       Rlevels = c("a", "b", "c", "d"),
+       matchfun = function(d) d$S == d$lR,
+       formula = list(m ~ lM, s ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1),
+       model = function() MTLNR(n_ratings = 2))
+```
+
+Both are scope limits of the current implementation, not the underlying
+model; extending to unequal rating counts and to more than two choices (which
+requires deciding which of the `> 1` losing accumulators' evidence defines
+confidence) is planned future work.
+
+## 4. A Hierarchical Example
+
+The single-subject examples above use `type = "single"`. A hierarchical fit
+estimates a group-level distribution over subjects along with each subject's
+own parameters, using exactly the same design, `make_data()` and `fit()`
+calls -- only the number of subjects, the prior, and `type` change. We extend
+the three-rating recognition-memory design of Section 2 to 15 subjects, using
+the same parameter values as the group means and adding modest between-subject
+variability with `make_random_effects()`:
+
+```{r, results = "hide"}
+design_hier <- design(
+  factors = list(subjects = 1:15, S = c("new", "old")),
+  Rlevels = c("new", "old"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ lR),
+  model = MTLNR
+)
+
+subj_sd <- c(m = .2, m_lMTRUE = .2, s = .15, t0 = .08, rho = .3,
+             c1 = .2, c1_lRold = .2, c2 = .2, c2_lRold = .2)
+subj_pars <- make_random_effects(design_hier, p_vector, n_subj = 15,
+                                  covariances = diag(subj_sd[names(p_vector)]^2))
+dat_hier <- make_data(subj_pars, design_hier, n_trials = 300)
+```
+
+```{r, results = "hide"}
+prior_hier <- prior(
+  design = design_hier, type = "standard", pmean = p_vector,
+  psd = c(m = .3, m_lMTRUE = .3, s = .25, t0 = .15, rho = .5,
+          c1 = .3, c1_lRold = .3, c2 = .3, c2_lRold = .3)
+)
+emc_hier <- make_emc(dat_hier, design_hier, prior_list = prior_hier, type = "standard")
+```
+
+```{r, eval = FALSE}
+emc_hier <- fit(emc_hier, cores_for_chains = 4, cores_per_chain = 1,
+                fileName = "data/rating-models-hier.RData")
+```
+
+```{r, include = FALSE}
+load("data/rating-models.RData")
+```
+
+`summary()` on a hierarchical fit reports the group-level (`mu`, `Sigma`)
+parameters by default:
+
+```{r}
+summary(emc_hier)
+```
+
+```{r, fig.alt = "Posterior group-level parameter densities against the group means for the hierarchical MTLNR example", fig.height = 9}
+plot_pars(emc_hier, true_pars = p_vector, use_prior_lim = FALSE)
+```
+
+Everything from Section 2 (`rating_summary()`, `plot_ratings()`, `predict()`,
+`zroc()`) works the same way on a hierarchical fit's data and predictives.
 
 ## Next Steps
 
