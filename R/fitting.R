@@ -239,6 +239,9 @@ tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileNam
       }
       return(x)
     })
+    # the scale move's step sizes: average over the tail from here on
+    sm <- attr(emc[[i]]$samples, "scale_move")
+    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_reset_tail(sm)
   }
   step_size <- 100
   sub_emc <- subset(emc, filter = chain_n(emc)[1,"adapt"] - 1, stage = "adapt")
@@ -265,6 +268,8 @@ tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileNam
       }
       return(x)
     })
+    sm <- attr(emc[[i]]$samples, "scale_move")
+    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_freeze(sm)
   }
   return(emc)
 }

@@ -273,6 +273,12 @@ run_stage <- function(pmwgs,
   # sample-stage kernel is fixed, so the local kernel keeps at least a quarter
   # of the iterations whatever the acceptance rates were while it was tuned.
   tune$min_local <- if(tune$exact && kernel == "sample" && pmwgs$type != "single") .25 else 0
+  # The interweaving scale move (scale_move_standard) runs after the group
+  # step in the stages named by scale_move_stages(); its step sizes adapt
+  # except in the sample stage
+  do_scale <- pmwgs$type == "standard" && kernel %in% scale_move_stages()
+  scale_settings <- attr(pmwgs$samples, "scale_move")
+  if(do_scale) scale_settings <- scale_move_init(scale_settings, pmwgs$par_names[!pmwgs$nuisance])
 
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
@@ -342,11 +348,19 @@ run_stage <- function(pmwgs,
       consec_cf <- 0L
       last_good_pars <- pars
     }
+    alpha_full <- matrix(pmwgs$samples$alpha[, , j-1], nrow = n_pars, ncol = pmwgs$n_subjects,
+                         dimnames = dimnames(pmwgs$samples$alpha)[1:2])
+    prev_ll <- pmwgs$samples$subj_ll[, j-1]
+    if(do_scale){
+      sm <- scale_move_standard(pmwgs, pars, alpha_full, prev_ll, scale_settings, tune$lik_prec,
+                                frozen = isTRUE(tune$frozen), n_cores = n_cores, r_cores = r_cores)
+      pars <- sm$pars; alpha_full <- sm$alpha; prev_ll <- sm$ll; scale_settings <- sm$settings
+    }
     pars_comb <- pars
     if(any(nuisance)){
       pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1, drop = FALSE], pmwgs$sampler_nuis$type)
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance, pars$subj_mu)
-      pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
+      pars_comb$alpha <- alpha_full
       pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                         group_level = pars_nuis,
                                                                         j = j,
@@ -356,7 +370,7 @@ run_stage <- function(pmwgs,
     }
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, pm_settings, eff_mu, eff_var,
-                                    chains_mu, chains_var, pmwgs$samples$subj_ll[,j-1],
+                                    chains_mu, chains_var, prev_ll,
                                     MoreArgs = list(pars_comb, pmwgs$model, kernel,
                                                     pmwgs$type,
                                                     tune),
@@ -381,6 +395,7 @@ run_stage <- function(pmwgs,
          call. = FALSE)
   })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
+  if(do_scale) attr(pmwgs$samples, "scale_move") <- scale_settings
   if (verboseProgress) close(pb)
   if (verbose && n_cf > 0) {
     message("  [on_singular] group covariance recovered on ", n_cf, " carried forward",

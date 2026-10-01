@@ -494,6 +494,7 @@ concat_emc <- function(emc1, emc2, step_size, stage){
     sampled_objects <- do.call(mapply, c(abind, lapply(sampled_objects, '[', keys)))
     sampled_objects$idx <- sum(sampled_objects$idx)
     attr(sampled_objects, "pm_settings") <- attr(emc2[[i]]$samples, "pm_settings")
+    attr(sampled_objects, "scale_move") <- attr(emc2[[i]]$samples, "scale_move")
     out_samples[[i]]$samples <- sampled_objects
     out_samples[[i]]$samples$last_theta_var_inv <- emc2[[i]]$samples$last_theta_var_inv
     if(any(out_samples[[1]]$nuisance)){
