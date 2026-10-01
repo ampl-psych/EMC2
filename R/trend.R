@@ -700,7 +700,6 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
 #' Check and update formula list for trend parameters
 #'
 #' @param trend An `emc2_trend` object created by [make_trend()].
-#' @param covariates Character vector of covariate column names in the data.
 #' @param model A model function, or NULL.
 #' @param formula List of formulas, or NULL.
 #' @param parameter_design A parameter_design list, or NULL.
@@ -732,16 +731,9 @@ check_trend <- function(trend, model = NULL,
   trend_pnames <- get_trend_pnames(trend)
 
   if (!is.null(formula)) {
-    pd_targets <- NULL
-    if (!is.null(parameter_design)) {
-      expand_over <- parameter_design$expand_over
-      pd_targets  <- if (!is.null(expand_over)) {
-        as.vector(outer(rownames(parameter_design$weights),
-                        expand_over, paste, sep = "."))
-      } else {
-        rownames(parameter_design$weights)
-      }
-    }
+    pd_targets <- if (!is.null(parameter_design)) {
+      vapply(parameter_design, function(f) deparse(f[[2]]), character(1))
+    } else NULL
 
     formula_lhs <- unlist(lapply(formula, function(x) all.vars(x)[1]))
     isin <- trend_pnames %in% formula_lhs
@@ -1593,8 +1585,10 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
-  cached_pd_pars <- if (!is.null(design$parameter_design)) rownames(design$parameter_design$weights) else character(0)
-
+  # cached_pd_pars <- if (!is.null(design$parameter_design)) {
+  #   vapply(design$parameter_design, function(f) deparse(f[[2]]), character(1))
+  # } else character(0)
+  #
   # design matrix cache -- every unique combination of ffactors (key) returns a design matrix. If not yet existent, auto-create
   make_designs_cached <- local({
     cache <- list()
@@ -1606,20 +1600,34 @@ make_data_unconditional <- function(data, pars, design, model,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
         )
-        pd_cached <- if (length(cached_pd_pars) > 0) {
-          expand_parameter_design(
-            list(weights = design$parameter_design$weights[cached_pd_pars, , drop = FALSE]),
-            dadm_slice, compress_dms = FALSE
-          )
-        } else list()
-
-        cache[[key]] <<- c(regular, pd_cached)
+        cache[[key]] <<- regular
       }
-
-      pd_names <- cached_pd_pars
-      cache[[key]][c(p_types, pd_names[pd_names %in% names(cache[[key]])])]
+      cache[[key]]
     }
   })
+
+  # make_designs_cached <- local({
+  #   cache <- list()
+  #   function(dadm_slice, key) {
+  #     if (is.null(cache[[key]])) {
+  #       regular <- lapply(
+  #         stats::setNames(p_types, p_types),
+  #         function(x) make_dm(design$Flist[[x]], da = dadm_slice,
+  #                             Fcovariates = design$Fcovariates,
+  #                             compress_dms = FALSE)
+  #       )
+  #       # pd_cached <- if (length(cached_pd_pars) > 0) {
+  #       #   parsed <- parse_parameter_design(design$parameter_design, regular)
+  #       #   expand_parameter_design(parsed, regular)
+  #       # } else list()
+  #       cache[[key]] <<- regular
+  #       # cache[[key]] <<- c(regular, pd_cached)
+  #       }
+  #
+  #     # pd_names <- cached_pd_pars
+  #     # cache[[key]][c(p_types, pd_names[pd_names %in% names(cache[[key]])])]
+  #   }
+  # })
 
   # Identify whether any trend has covariate coding
   trend        <- model_list$trend  # list(kernels = list(...), bases = list(...))

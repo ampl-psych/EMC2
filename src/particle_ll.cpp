@@ -112,18 +112,30 @@ PipelineCache make_pipeline_cache(
       else        cache.mask_map[i]     = true;
     }
   }
-
   // --- Constant-column flags ---
   // Start pessimistic
   std::fill(param_table.col_is_constant.begin(),
             param_table.col_is_constant.end(), false);
 
-  // Pass 1: direct design targets are non-constant
-  // (skip_self_intercept entries are intercept-only and stay constant)
+  // Pass 1: a parameter is constant only if ALL its design entries are constant
+  std::unordered_map<int, bool> all_constant_so_far;
+
   for (const DesignEntry& entry : param_table.design_plan) {
     if (!entry.valid) continue;
-    if (entry.dm_is_constant) param_table.col_is_constant[entry.out_idx] = true;
+    int idx = entry.out_idx;
+    if (all_constant_so_far.find(idx) == all_constant_so_far.end()) {
+      // First entry for this parameter: initialise to this entry's constancy
+      all_constant_so_far[idx] = entry.dm_is_constant;
+    } else {
+      // Subsequent entry: only constant if all so far were constant too
+      all_constant_so_far[idx] = all_constant_so_far[idx] && entry.dm_is_constant;
+    }
   }
+
+  for (auto& kv : all_constant_so_far) {
+    param_table.col_is_constant[kv.first] = kv.second;
+  }
+
 
   // Trend targets are non-constant
   if (trend_runtime_ptr) {
@@ -136,9 +148,9 @@ PipelineCache make_pipeline_cache(
 
   // Pass 2: reparam targets inherit non-constancy from their inputs
   for (int i = 0; i < n_designs; ++i) {
-    if (!cache.mask_reparam[i]) continue;
+    if (!cache.mask_reparam[i] && !cache.mask_premap_reparam[i]) continue;
     const DesignEntry& entry = param_table.design_plan[i];
-    if (!entry.valid || !entry.dm_is_constant) continue;
+    if (!entry.valid) continue;
 
     bool all_inputs_constant = true;
     for (int cidx : entry.coef_idx) {
@@ -147,8 +159,8 @@ PipelineCache make_pipeline_cache(
         break;
       }
     }
-    if (all_inputs_constant)
-      param_table.col_is_constant[entry.out_idx] = true;
+    // Always write the result, don't rely on Pass 1 value
+    param_table.col_is_constant[entry.out_idx] = all_inputs_constant;
   }
 
   return cache;

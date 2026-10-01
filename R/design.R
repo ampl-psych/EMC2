@@ -47,27 +47,31 @@
 #' if the conventional bound aren't desired.
 #' see `DDM()` for an example of such bounds. Bounds are used to set limits to
 #' the likelihood landscape that cannot reasonable be achieved with `transform`
-#' @param parameter_design A list specifying linear reparameterisations of model
-#'   parameters in terms of sampled parameters. It must contain:
+#' @param parameter_design A list of formulas specifying how model parameters
+#'   are derived from sampled parameters. Each formula has the form
+#'   \code{target ~ expression}, where \code{target} is a model parameter name
+#'   (or sub-parameter column name) and \code{expression} is an arithmetic
+#'   combination of sampled parameter names.
+#'
+#'   Three use cases are supported:
 #'   \describe{
-#'     \item{`weights`}{A named numeric matrix where each row defines one
-#'       reparameterised model parameter and each column is either a sampled
-#'       parameter name or the name of a function in `functions`. The row names
-#'       become the names of the reparameterised model parameters. The value in
-#'       each cell is the weight applied to that column's contribution.}
+#'     \item{Reparametrisation}{A model parameter is expressed as a linear
+#'       combination of new sampled parameters. The new source parameters must be
+#'       added explicitly to \code{formula} (e.g. \code{alphaMean ~ 1}).}
+#'     \item{Full linking}{All parameters of one parameter type are linked
+#'       to a parameters of another type (e.g. \code{lambda ~ alpha}).}
+#'     \item{Sub-parameter linking}{A single sub-parameter column is linked to
+#'       another (e.g. \code{B_lRd.lambda_errorFALSE ~ B_lRd.alpha_errorFALSE}).
+#'       This requires the formula to be the same for the involved parameter types}
 #'   }
 #'
-#'   Example — a static reparameterisation of `alphaPos` and `alphaNeg` into mean and difference
-#'   components:
+#'   Example — reparametrising \code{v.alphaPos} and \code{v.alphaNeg} into
+#'   mean and difference components (requires \code{alphaMean ~ 1} and
+#'   \code{alphaDiff ~ 1} in \code{formula}):
 #'   \preformatted{
 #'   parameter_design = list(
-#'     weights = matrix(
-#'       c(1,  0.5,
-#'         1, -0.5),
-#'       nrow = 2, byrow = TRUE,
-#'       dimnames = list(c("alphaPos", "alphaNeg"),
-#'                       c("alphaMean", "alphaDiff"))
-#'     )
+#'     v.alphaPos ~ alphaMean + 0.5*alphaDiff,
+#'     v.alphaNeg ~ alphaMean - 0.5*alphaDiff
 #'   )
 #'   }
 #' @param TC List of truncation/censoring arguments passed to \code{make_missing}
@@ -147,7 +151,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     # censoring/truncation columns (from make_missing) are not covariates: they
     # must not be imputed with random values in the minimal design
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt","LT","UT","LC","UC","missingness"))]
-    all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
+    # all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)
       # covariates <- covariates[covariates %in% all_preds]
@@ -182,7 +186,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
     # parameter_design output parameters don't need to be in formula
     if (!is.null(parameter_design)) {
-      pd_targets <- rownames(parameter_design$weights)
+      pd_targets <- vapply(parameter_design, function(f) deparse(f[[2]]), character(1))
       not_specified <- not_specified[!not_specified %in% pd_targets]
     }
     sampled_by_default <- intersect(not_specified, model_sampled_by_default(model()))
@@ -201,6 +205,17 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
+  # if (!is.null(parameter_design)) {
+  #   pd_sources <- unique(unlist(lapply(parameter_design, rhs_vars)))
+  #   pd_targets <- vapply(parameter_design, function(f) deparse(f[[2]]), character(1))
+    # virtual_srcs <- pd_sources[!pd_sources %in% c(
+    #   unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]]))),
+    #   names(model()$p_types)
+    # )]
+    # for (src in virtual_srcs) {
+    #   formula[[length(formula) + 1]] <- as.formula(paste0(src, " ~ 1"))
+    # }
+  # }
   prepared_design <- model_prepare_design(
     model(),
     formula = formula,
@@ -236,9 +251,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   # Check that all formula LHS terms are valid model p_types or parameter_design sources
   if (!is.null(formula) && !all(lhs_terms %in% names(model()$p_types))) {
     # Check that all formula LHS terms are valid model p_types or parameter_design sources
-    pd_sources <- if (!is.null(parameter_design)) {
-      unique(unlist(lapply(parameter_design, function(f) all.vars(f[[3]]))))
-    } else character(0)
+    pd_sources <- if(!is.null(parameter_design)) unique(unlist(lapply(parameter_design, rhs_vars))) else character(0)
 
     invalid_terms <- lhs_terms[!lhs_terms %in% c(names(model()$p_types), pd_sources)]
     if (length(invalid_terms) > 0) {
@@ -667,6 +680,12 @@ uses_accumulator <- function(f) {
   grepl("\\b(lR|lM)\\b", paste(deparse(body(f)), collapse = " "), perl = TRUE)
 }
 
+rhs_vars <- function(f) {
+  rhs_str <- deparse(f[[3]])
+  tokens  <- strsplit(rhs_str, "[+\\-*/()\\s]+", perl = TRUE)[[1]]
+  tokens  <- tokens[nzchar(tokens)]
+  tokens[is.na(suppressWarnings(as.numeric(tokens)))]
+}
 
 # Assess identifiability of a design from its mapped design matrices (the list
 # stored in attr(dadm, "designs")). Returns:
@@ -911,26 +930,30 @@ design_model <- function(data,design,model=NULL,
     SIMPLIFY = FALSE
   )
   names(out) <- names(design$Flist)
+
+  # Parameter design
+  pd_targets <- character(0)
+  pd_sources <- character(0)
   if (!is.null(design$parameter_design)) {
     parsed     <- parse_parameter_design(design$parameter_design, out)
     out        <- expand_parameter_design(parsed, out)
-    pd_targets <- rownames(parsed$weights)
+    pd_targets <- names(parsed$expanded)
+    pd_sources <- parsed$pd_sources
   }
+
+  # Compression
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=unique(Ffunction_names))
     # Change expansion names
-    # attr(dadm,"expand_all") <- attr(dadm,"expand")
     if(!is.null(dadm$lR)){
       attr(dadm,"expand") <- attr(dadm,"expand_winner")
       attr(dadm,"expand_winner") <- NULL
     }
-  }  else {
+  } else {
     dadm <- da
     attr(dadm,"designs") <- out
-    # attr(dadm,"reparam_designs") <- reparam_dms   # SM TO DO: RECREATE FUNCTIONALITY OF LINEAR MAPPING
     attr(dadm,"s_expand") <- da$subjects
-    # attr(dadm,"expand_all") <- 1:nrow(dadm)
     if(is.null(dadm$lR)){
       attr(dadm,"expand") <- seq_len(nrow(dadm))
     } else{
@@ -938,35 +961,21 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
-  p_names_raw <- unlist(lapply(out, function(x) {
-    ass <- attr(x, "assign")
-    dimnames(x)[[2]][!is.na(ass)]
-  }), use.names = FALSE)
-
-  # Duplicates are only allowed for parameter_design link targets (intentionally shared columns)
-  pd_links <- if (!is.null(design$parameter_design)) {
-    unique(unlist(lapply(design$parameter_design, function(f) deparse(f[[3]]))))
-  } else character(0)
-
+  # Parameter names and checking for duplicates
   all_p_names <- unlist(lapply(out, function(x) {
     ass <- attr(x, "assign")
     dimnames(x)[[2]][!is.na(ass)]
   }), use.names = FALSE)
 
-  bad_dups <- all_p_names[duplicated(all_p_names) & !all_p_names %in% pd_links]
-  if (length(bad_dups) > 0) {
-    stop("Duplicated parameter names in design matrices: ",
-         paste(bad_dups, collapse = ", "))
-  }
+  # parameter names originating from parameter design (pd) are allowed to be duplicate
+  bad_dups <- all_p_names[duplicated(all_p_names) & !all_p_names %in% pd_sources]
+  if(length(bad_dups) > 0) stop("Duplicated parameter names in design matrices: ", paste(bad_dups, collapse = ", "))
 
-  p_names <- unique(p_names_raw)
-
-  sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
-  if (!is.null(design$parameter_design)) {
-    sampled_p_names <- sampled_p_names[!sampled_p_names %in% pd_targets]
-  }
+  p_names <- unique(all_p_names)
+  sampled_p_names <- p_names[!p_names %in% c(names(design$constants), pd_targets)]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
+
 
   if (check_identifiability) {
     ident <- design_identifiability(out, sampled_p_names, design$constants)
@@ -1013,13 +1022,6 @@ design_model <- function(data,design,model=NULL,
 }
 
 
-
-# # Parse parameter_design: now only accepts weights matrix format
-# parse_parameter_design <- function(parameter_design) {
-#   if (!is.matrix(parameter_design$weights))
-#     stop("parameter_design must contain a 'weights' matrix")
-#   parameter_design
-# }
 
 parse_parameter_design <- function(parameter_design, out) {
   base_names <- names(out)
@@ -1115,30 +1117,12 @@ parse_parameter_design <- function(parameter_design, out) {
     }
   }
 
-  pd_sources <- unique(unlist(lapply(parameter_design, function(f) {
-    all.vars(f[[3]])
-  })))
-
-  list(expanded = expanded, pd_sources = pd_sources)
-
-  # # Build weights matrix: rows = targets, cols = all unique sources
-  # all_sources <- unique(unlist(lapply(expanded, names)))
-  # weights <- matrix(0,
-  #                   nrow = length(expanded),
-  #                   ncol = length(all_sources),
-  #                   dimnames = list(names(expanded), all_sources))
-  # for (target in names(expanded)) {
-  #   w <- expanded[[target]]
-  #   weights[target, names(w)] <- w
-  # }
-  #
-  # # Collect all source base names from parameter_design RHS
-  # # (virtual parameters that exist only to feed reparametrisation)
+  pd_sources <- unique(unlist(lapply(parameter_design, rhs_vars)))
   # pd_sources <- unique(unlist(lapply(parameter_design, function(f) {
   #   all.vars(f[[3]])
   # })))
-  #
-  # list(weights = weights, expanded = expanded, pd_sources = pd_sources)
+
+  list(expanded = expanded, pd_sources = pd_sources)
 }
 
 expand_parameter_design <- function(parsed, out) {
