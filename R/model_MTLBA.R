@@ -43,10 +43,14 @@
 # lives (mtlba_quad_rule, mtlba_logkernel_rho). rho is a trial-level parameter
 # (the same on both accumulator rows); trials with rho = 0 take the closed form.
 #
+# Confidence guessing (gp > 0; see the "confidence guessing" block below): a
+# triggering accumulator ends the race at its guess threshold gb = A + B * gB
+# with a random rating, so a response is a weighted sum of up to four kernels.
+#
 # The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports this
 # algorithm, including the correlated kernel with the default rule
-# mtlba_quad_rule() and the correlated stopping terms; the R functions here are
-# its reference, used when c_name is removed.
+# mtlba_quad_rule(), the correlated stopping terms and guessing; the R functions
+# here are its reference, used when c_name is removed.
 
 # log G(z), G(z) = z * pnorm(z) + dnorm(z) = integral of pnorm up to z, accurate
 # in the lower tail: G(-x) = dnorm(x) * (1 - x R(x)), R the Mills ratio, with
@@ -429,9 +433,11 @@ mtlba_thresholds <- function(pars, K) {
   out
 }
 
-# log kernel per trial for given lookup indices. rt per trial; pars two rows
-# per trial (accumulators in level order); Tm = mtlba_thresholds(pars, K).
-mtlba_logkernel <- function(rt, pars, Tm, s, j, lo, quad = mtlba_quad_rule()) {
+# log kernel per trial for explicit thresholds: accumulator s (1/2) reaches bs
+# at dt = rt - t0_s while the other accumulator's evidence lies in (lo_y, hi_y)
+# (lowest: no threshold below, lo_y ignored). rt per trial; pars two rows per
+# trial (accumulators in level order). An empty band (hi_y <= lo_y) gives -Inf.
+mtlba_logkernel_y <- function(rt, pars, s, bs, lo_y, hi_y, lowest, quad = mtlba_quad_rule()) {
   n <- length(rt)
   first <- seq(1, 2 * n, by = 2)
   si <- first + s - 1L
@@ -442,31 +448,38 @@ mtlba_logkernel <- function(rt, pars, Tm, s, j, lo, quad = mtlba_quad_rule()) {
   # non-finite parameters (e.g. an overflowing proposal) give -Inf, never an error
   fin <- function(i, cols) rowSums(!is.finite(pars[i, cols, drop = FALSE])) == 0
   ok <- !is.na(dt) & is.finite(dt) & dt > 0 & fin(si, c("v", "sv", "A", "b")) &
-    fin(oi, c("v", "sv", "A", "b")) & is.finite(Tm[cbind(si, j + 1L)]) &
-    is.finite(Tm[cbind(oi, lo + 2L)]) & (lo == 0L | is.finite(Tm[cbind(oi, lo + 1L)])) &
-    is.finite(rho) & abs(rho) < 1
+    fin(oi, c("v", "sv", "A", "b")) & is.finite(bs) & is.finite(hi_y) &
+    (lowest | (is.finite(lo_y) & hi_y > lo_y)) & is.finite(rho) & abs(rho) < 1
   ok[is.na(ok)] <- FALSE
   if (!any(ok)) return(out)
-  si <- si[ok]; oi <- oi[ok]; dt <- dt[ok]; j <- j[ok]; lo <- lo[ok]; rho <- rho[ok]
-  bs <- Tm[cbind(si, j + 1L)]
-  lowest <- lo == 0L
+  si <- si[ok]; oi <- oi[ok]; dt <- dt[ok]; rho <- rho[ok]
+  bs <- bs[ok]; lo_y <- lo_y[ok]; hi_y <- hi_y[ok]; lowest <- lowest[ok]
   res <- numeric(length(dt))
   u <- rho == 0
   if (any(u))
     res[u] <- mtlba_logf(dt[u], pars[si[u], "A"], bs[u], pars[si[u], "v"], pars[si[u], "sv"]) +
       mtlba_logband(dt[u], pars[oi[u], "A"], pars[oi[u], "v"], pars[oi[u], "sv"],
-                    Tm[cbind(oi[u], lo[u] + 1L)], Tm[cbind(oi[u], lo[u] + 2L)], lowest[u])
+                    lo_y[u], hi_y[u], lowest[u])
   if (any(!u)) {
     k <- which(!u)
     res[k] <- mtlba_logkernel_rho(dt[k], pars[si[k], "A"], bs[k], pars[si[k], "v"],
                                   pars[si[k], "sv"], pars[oi[k], "A"], pars[oi[k], "v"],
-                                  pars[oi[k], "sv"], Tm[cbind(oi[k], lo[k] + 1L)],
-                                  Tm[cbind(oi[k], lo[k] + 2L)], lowest[k], rho[k], quad) -
+                                  pars[oi[k], "sv"], lo_y[k], hi_y[k], lowest[k], rho[k], quad) -
       pmax(mtlba_logppos(pars[si[k], "v"], pars[si[k], "sv"], pars[oi[k], "v"],
                          pars[oi[k], "sv"], rho[k]), log(1e-10))
   }
   out[ok] <- res
   out
+}
+
+# log kernel per trial for given lookup indices (stopping accumulator s, its
+# threshold j, the other's band lo); Tm = mtlba_thresholds(pars, K).
+mtlba_logkernel <- function(rt, pars, Tm, s, j, lo, quad = mtlba_quad_rule()) {
+  first <- seq(1, 2 * length(rt), by = 2)
+  si <- first + s - 1L
+  oi <- first + 2L - s
+  mtlba_logkernel_y(rt, pars, s, Tm[cbind(si, j + 1L)], Tm[cbind(oi, lo + 1L)],
+                    Tm[cbind(oi, lo + 2L)], lo == 0L, quad)
 }
 
 # log(exp(a) + exp(b))
@@ -477,21 +490,144 @@ mtlba_lse <- function(a, b) {
   out
 }
 
+# ---- confidence guessing ----
+# Each accumulator has a guess threshold gb = A + B * gB (0 <= gB <= 1, so
+# A <= gb <= b). An accumulator that is TRIGGERING on a trial ends the race when
+# it reaches gb: it is then the choice and the rating is drawn at random,
+# rating k with probability pg_k prod_{i<k} (1 - pg_i) (k < K; the highest
+# rating takes the rest), the pg from the choice's row. Otherwise the race ends
+# by the evidence rule (BE or TC), read as usual.
+#   guess = "accumulator" (the manuscript's model, first-submission supplement
+#     section 1.3): the two accumulators trigger independently with
+#     probabilities gp_1, gp_2 (each from its own row). With g_a = gp_a, s the
+#     stopping accumulator of the evidence response at threshold T_s, o the
+#     other one and its band (lo, hi), w the choice of a guessed response:
+#       evidence part = cs * [(1 - g_o) k(T_s; lo, hi) + g_o k(T_s; lo, min(hi, gb_o))],
+#         cs = 1 - g_s (BE: a triggering accumulator never reaches b), TC:
+#         cs = 1 if T_s < gb_s (it stops by count below its guess threshold);
+#       guess part = g_w pg(RR) * [(1 - g_o) k(gb_w; 0, U) + g_o k(gb_w; 0, min(U, gb_o))],
+#         U = b_o (BE); TC: U = T_{o, K - n_w}, n_w the number of w's thresholds
+#         below gb_w (the count must still be below K when w reaches gb_w).
+#   guess = "trial" (BETE): the whole trial is a guess with probability gp
+#     (trial-level): then both accumulators race to their gb, under either rule;
+#       likelihood = (1 - gp) k(T_s; lo, hi) + gp pg(RR) k(gb_w; 0, gb_o).
+# k() is the kernel above (correlated when rho != 0, guesses included). Rows
+# with gp = 0 on both accumulators take the plain kernel.
+
+# Guessing quantities per parameter row, or NULL when no row guesses: g (trigger
+# probability), gb (guess threshold), lpg (log rating-guess probabilities,
+# columns = ratings 1 .. K). pars: natural-scale gp, gB, pg1 .. pg{K-1}
+# (absent: gB = .5, pg1 = 1, further pg = 0) besides A and b.
+mtlba_guess_pars <- function(pars, K, guess = "accumulator") {
+  if (!("gp" %in% colnames(pars))) return(NULL)
+  g <- pars[, "gp"]
+  if (guess == "trial") g <- rep(g[seq(1, length(g), by = 2)], each = 2)
+  if (!anyNA(g) && all(g == 0)) return(NULL)
+  n <- nrow(pars)
+  gB <- if ("gB" %in% colnames(pars)) pars[, "gB"] else rep(0.5, n)
+  lpg <- matrix(0, n, K)
+  if (K > 1) {
+    lrest <- rep(0, n)
+    for (k in 1:(K - 1)) {
+      nm <- paste0("pg", k)
+      pk <- if (nm %in% colnames(pars)) pars[, nm] else rep(as.numeric(k == 1), n)
+      lpg[, k] <- lrest + log(pk)
+      lrest <- lrest + log1p(-pk)
+    }
+    lpg[, K] <- lrest
+  }
+  list(g = g, gb = pars[, "A"] + (pars[, "b"] - pars[, "A"]) * gB, lpg = lpg)
+}
+
+# log(w1 exp(l1) + w2 exp(l2)) for weights w1, w2 >= 0
+mtlba_lmix <- function(w1, l1, w2, l2) {
+  a <- ifelse(w1 > 0, log(w1) + l1, -Inf)
+  b <- ifelse(w2 > 0, log(w2) + l2, -Inf)
+  a[is.na(a)] <- -Inf
+  b[is.na(b)] <- -Inf
+  mtlba_lse(a, b)
+}
+
+# log density per trial of the response (R, RR), no don't-know merging. G from
+# mtlba_guess_pars (NULL: no guessing).
+mtlba_logresp <- function(rt, R, RR, pars, Tm, K, rule, quad, G = NULL, guess = "accumulator") {
+  n <- length(rt)
+  lk <- mtlba_lookup(R, RR, K, rule)
+  ld <- mtlba_logkernel(rt, pars, Tm, lk$s, lk$j, lk$lo, quad)
+  if (is.null(G)) return(ld)
+  first <- seq(1, 2 * n, by = 2)
+  act <- which(is.na(G$g[first]) | is.na(G$g[first + 1]) | G$g[first] != 0 | G$g[first + 1] != 0)
+  if (!length(act)) return(ld)
+  # the guessing trials only
+  rows <- as.vector(rbind(2 * act - 1, 2 * act))
+  P <- pars[rows, , drop = FALSE]
+  TT <- Tm[rows, , drop = FALSE]
+  g <- G$g[rows]; gb <- G$gb[rows]; lpg <- G$lpg[rows, , drop = FALSE]
+  m <- length(act)
+  f1 <- seq(1, 2 * m, by = 2)
+  rtt <- rt[act]; Rw <- as.integer(R)[act]; RRw <- RR[act]
+  s <- lk$s[act]; j <- lk$j[act]; lo <- lk$lo[act]
+  si <- f1 + s - 1L; oi <- f1 + 2L - s
+  bs <- TT[cbind(si, j + 1L)]
+  lo_y <- TT[cbind(oi, lo + 1L)]; hi_y <- TT[cbind(oi, lo + 2L)]; lowest <- lo == 0L
+  kern <- function(s, bs, lo_y, hi_y, lowest, w = rep(TRUE, m)) {
+    out <- rep(-Inf, m)
+    w <- w & !is.na(w)
+    if (any(w)) out[w] <- mtlba_logkernel_y(rtt[w], P[rep(w, each = 2), , drop = FALSE], s[w], bs[w],
+                                            lo_y[w], hi_y[w], lowest[w], quad)
+    out
+  }
+  full <- ld[act]
+  wi <- f1 + Rw - 1L  # the choice's row: the accumulator that guesses
+  wo <- f1 + 2L - Rw
+  lpgc <- lpg[cbind(wi, RRw)]
+  low <- rep(TRUE, m)
+  zero <- rep(0, m)
+  if (guess == "trial") {
+    ev <- mtlba_lmix(1 - g[f1], full, zero, full)
+    gk <- kern(Rw, gb[wi], zero, gb[wo], low)
+    gu <- mtlba_lmix(g[f1], lpgc + gk, zero, gk)
+  } else {
+    cs <- 1 - g[si]
+    if (rule == "TC") cs <- ifelse(!is.na(bs) & bs < gb[si], 1, cs)
+    cap <- pmin(hi_y, gb[oi])
+    capped <- !is.na(cap) & cap < hi_y
+    tr <- full
+    tr[capped] <- kern(s, bs, lo_y, cap, lowest, capped & g[oi] > 0)[capped]
+    ev <- mtlba_lmix(cs * (1 - g[oi]), full, cs * g[oi], tr)
+    if (rule == "BE") U0 <- P[wo, "b"] else {
+      nw <- rowSums(TT[wi, -1, drop = FALSE] < gb[wi])
+      U0 <- TT[cbind(wo, K - nw + 1L)]
+    }
+    U1 <- pmin(U0, gb[wo])
+    capped <- !is.na(U1) & U1 < U0
+    gk0 <- kern(Rw, gb[wi], zero, U0, low, g[wi] > 0 & (g[wo] < 1 | !capped))
+    gk1 <- gk0
+    gk1[capped] <- kern(Rw, gb[wi], zero, U1, low, capped & g[wi] > 0 & g[wo] > 0)[capped]
+    gu <- lpgc + mtlba_lmix(g[wi] * (1 - g[wo]), gk0, g[wi] * g[wo], gk1)
+  }
+  out <- mtlba_lse(ev, gu)
+  out[is.na(out)] <- -Inf
+  ld[act] <- out
+  ld
+}
+
 # log likelihood per trial: rt, R (1/2), RR per trial, pars two rows per trial.
-mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad_rule()) {
+mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad_rule(),
+                          guess = "accumulator") {
   Tm <- mtlba_thresholds(pars, K)
+  G <- mtlba_guess_pars(pars, K, guess)
   R <- as.integer(R)
   dk <- if (dont_know) !is.na(RR) & RR == 1 else rep(FALSE, length(R))
   # a don't-know trial is the sum of the two rating-1 terms: R = 1 here, R = 2 below
   R[dk] <- 1L
-  lk <- mtlba_lookup(R, RR, K, rule)
-  ld <- mtlba_logkernel(rt, pars, Tm, lk$s, lk$j, lk$lo, quad)
+  ld <- mtlba_logresp(rt, R, RR, pars, Tm, K, rule, quad, G, guess)
   if (any(dk)) {
     w <- which(dk)
-    l2 <- mtlba_lookup(rep(2L, length(w)), rep(1, length(w)), K, rule)
     idx <- as.vector(rbind(2 * w - 1, 2 * w))
-    ld2 <- mtlba_logkernel(rt[w], pars[idx, , drop = FALSE], Tm[idx, , drop = FALSE],
-                           l2$s, l2$j, l2$lo, quad)
+    G2 <- if (is.null(G)) NULL else list(g = G$g[idx], gb = G$gb[idx], lpg = G$lpg[idx, , drop = FALSE])
+    ld2 <- mtlba_logresp(rt[w], rep(2L, length(w)), rep(1, length(w)), pars[idx, , drop = FALSE],
+                         Tm[idx, , drop = FALSE], K, rule, quad, G2, guess)
     ld[w] <- mtlba_lse(ld[w], ld2)
   }
   ld[is.na(ld)] <- -Inf
@@ -503,24 +639,29 @@ mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad
 # v, sv, A, b, t0 and natural-scale d1 .. d{K-1} (proportions of B = b - A
 # above A), and optionally rho (drift-rate correlation, read from the trial's
 # first row; 0 if absent). Don't-know trials: RR = 1 (R is ignored). quad: the
-# quadrature rule used where rho != 0.
+# quadrature rule used where rho != 0. Confidence guessing: natural-scale columns
+# gp, gB and pg1 .. pg{K-1} (see mtlba_guess_pars; no gp column or gp = 0: none).
 dMTLBA <- function(rt, R, RR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
-                   log = FALSE, quad = mtlba_quad_rule()) {
+                   log = FALSE, quad = mtlba_quad_rule(), guess = "accumulator") {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
+  guess <- match.arg(guess, c("accumulator", "trial"))
   rating_check_dont_know(K, dont_know)
-  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know, quad)
+  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know, quad, guess)
   if (log) ld else exp(ld)
 }
 
 # Simulate the MTLBA: lR the accumulator factor (two rows per trial), pars as
 # for dMTLBA. Returns R, rt and RR; don't-know responses are written as RR = 1
 # with R = the first level. Trials with rho != 0 draw their two drifts from the
-# bivariate normal truncated to both positive (mtlba_rdrift_rho).
+# bivariate normal truncated to both positive (mtlba_rdrift_rho). Confidence
+# guessing as for dMTLBA: triggering accumulators end the race at their guess
+# threshold with a random rating.
 rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
-                   ok = rep(TRUE, nrow(pars))) {
+                   ok = rep(TRUE, nrow(pars)), guess = "accumulator") {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
+  guess <- match.arg(guess, c("accumulator", "trial"))
   rating_check_dont_know(K, dont_know)
   if (length(levels(lR)) != 2) stop("MTLBA simulates two accumulators only")
   if (is.null(ok)) ok <- rep(TRUE, nrow(pars))
@@ -547,6 +688,26 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
   }
   t1 <- cross[[1]]$tau
   t2 <- cross[[2]]$tau
+  # confidence guessing: which accumulators trigger, and when they reach gb
+  G <- mtlba_guess_pars(pars, K, guess)
+  tg <- matrix(Inf, n, 2)
+  if (!is.null(G)) {
+    trig <- if (guess == "trial") rep(stats::runif(n) < G$g[first], 2) else
+      stats::runif(2 * n) < c(G$g[first], G$g[first + 1])
+    trig <- matrix(trig & !is.na(trig), n, 2)
+    for (a in 1:2) tg[trig[, a], a] <-
+        ((G$gb[first + a - 1] - cross[[a]]$start) / cross[[a]]$v)[trig[, a]]
+    if (guess == "trial") {
+      # a guess trial is a plain race to the guess thresholds
+      gt <- trig[, 1]
+      t1[gt, ] <- Inf
+      t2[gt, ] <- Inf
+    } else if (rule == "BE") {
+      # a triggering accumulator stops at gb, before it can reach b
+      t1[trig[, 1], K] <- Inf
+      t2[trig[, 2], K] <- Inf
+    }
+  }
   if (rule == "BE") {
     win1 <- t1[, K] < t2[, K]
     dt <- ifelse(win1, t1[, K], t2[, K])
@@ -570,6 +731,20 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
     R <- ifelse(p <= K, 1L, 2L)
     RR <- ifelse(p <= K, K - p + 1, p - K)
     dt <- stop_t
+  }
+  if (!is.null(G)) {
+    # guessed responses: a trigger reached before the evidence rule stops the race
+    tgm <- pmin(tg[, 1], tg[, 2])
+    gs <- which(!is.na(tgm) & !is.na(dt) & tgm < dt)
+    if (length(gs)) {
+      a <- ifelse(tg[gs, 1] <= tg[gs, 2], 1L, 2L)
+      cp <- t(apply(exp(G$lpg[first[gs] + a - 1, , drop = FALSE]), 1, cumsum))
+      if (K == 1) cp <- matrix(1, length(gs), 1)
+      RR[gs] <- pmin(K, 1 + rowSums(stats::runif(length(gs)) > cp))
+      R[gs] <- a
+      s[gs] <- a
+      dt[gs] <- tgm[gs]
+    }
   }
   if (dont_know) R[RR == 1] <- 1L
   rt <- pars[first + s - 1, "t0"] + dt
@@ -740,6 +915,39 @@ mtlba_logstop_any <- function(y, pars, Tm, i1, i2, K, rule) {
   list(P = lP, S = lS)
 }
 
+# mtlba_logstop_any with confidence guessing: the mixture over which
+# accumulators trigger. A triggering accumulator has stopped the race once its
+# evidence is past gb, so within a state the stopping time is the plain model's
+# with that accumulator's thresholds capped at gb (bands above gb are empty);
+# guess = "trial": the guess state is the BE race to the two guess thresholds,
+# under either rule. Both mixtures are sums of positive terms.
+mtlba_logstop_guess <- function(y, pars, Tm, i1, i2, K, rule, G = NULL, guess = "accumulator") {
+  if (is.null(G)) return(mtlba_logstop_any(y, pars, Tm, i1, i2, K, rule))
+  g1 <- G$g[i1]; g2 <- G$g[i2]
+  capT <- function(c1, c2) {
+    TT <- Tm
+    if (c1) TT[i1, -1] <- pmin(Tm[i1, -1, drop = FALSE], G$gb[i1])
+    if (c2) TT[i2, -1] <- pmin(Tm[i2, -1, drop = FALSE], G$gb[i2])
+    TT
+  }
+  states <- if (guess == "trial")
+    list(list(w = 1 - g1, c = c(FALSE, FALSE), rule = rule), list(w = g1, c = c(TRUE, TRUE), rule = "BE"))
+  else list(list(w = (1 - g1) * (1 - g2), c = c(FALSE, FALSE), rule = rule),
+            list(w = g1 * (1 - g2), c = c(TRUE, FALSE), rule = rule),
+            list(w = (1 - g1) * g2, c = c(FALSE, TRUE), rule = rule),
+            list(w = g1 * g2, c = c(TRUE, TRUE), rule = rule))
+  lP <- lS <- rep(-Inf, length(y))
+  for (st in states) {
+    w <- st$w
+    use <- is.na(w) | w > 0
+    if (!any(use)) next
+    o <- mtlba_logstop_any(y[use], pars, capT(st$c[1], st$c[2]), i1[use], i2[use], K, st$rule)
+    lP[use] <- mtlba_lse(lP[use], log(w[use]) + o$P)
+    lS[use] <- mtlba_lse(lS[use], log(w[use]) + o$S)
+  }
+  list(P = lP, S = lS)
+}
+
 # log P(a < dt <= b) from the stop/survivor pairs at a and b (a <= b): the route
 # (survivors or stopped) with the smaller leading term.
 mtlba_logwindow <- function(la, lb) {
@@ -781,7 +989,8 @@ mtlba_check_missing <- function(R, rt, miss) {
 # stopping in the censored window(s), (1) (LT, LC], (2) (UC, UT], (3) both,
 # and every truncated trial divided by P(LT < rt < UT). The window terms need
 # one t0 per trial, so t0 must be equal for the two accumulators there.
-mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
+mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd,
+                                  guess = "accumulator") {
   n <- length(rt)
   mtlba_check_missing(R, rt, bnd$miss)
   cens <- !is.na(bnd$miss)
@@ -790,7 +999,7 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
   if (any(!cens))
     ld[!cens] <- mtlba_logdens(rt[!cens], R[!cens], RR[!cens],
                                pars[rep(2 * which(!cens), each = 2) - c(1, 0), , drop = FALSE],
-                               K, rule, dont_know)
+                               K, rule, dont_know, guess = guess)
   need <- cens | trunc
   if (!any(need)) return(ld)
   w <- which(need)
@@ -801,7 +1010,8 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
     stop("MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not ",
          "depend on lR or lM)")
   Tm <- mtlba_thresholds(pars, K)
-  at <- function(x) mtlba_logstop_any(x - t0, pars, Tm, i1, i2, K, rule)
+  G <- mtlba_guess_pars(pars, K, guess)
+  at <- function(x) mtlba_logstop_guess(x - t0, pars, Tm, i1, i2, K, rule, G, guess)
   sLT <- at(bnd$LT[w])
   sUT <- at(bnd$UT[w])
   cw <- cens[w]
@@ -832,12 +1042,13 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
 # Trial log-likelihoods over a (possibly compressed) dadm with two rows per
 # trial, expanded to the uncompressed trials and floored at min_ll. The R
 # reference for the C++ kernel (src/model_mtlba.h); used when c_name is removed.
-trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10)) {
+trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10),
+                           guess = "accumulator") {
   n <- nrow(pars) / 2
   first <- seq(1, 2 * n, by = 2)
   bnd <- mtlba_bounds(dadm, first)
   ll <- mtlba_logdens_missing(dadm$rt[first], as.integer(dadm$R[first]), dadm$RR[first], pars,
-                              K, rule, dont_know, bnd)
+                              K, rule, dont_know, bnd, guess)
   # a parameter out of bounds on either accumulator row voids the trial
   ok <- attr(pars, "ok")
   if (!is.null(ok)) ll[!(ok[first] & ok[first + 1])] <- min_ll
@@ -845,8 +1056,9 @@ trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10)) 
   pmax(min_ll, ll[attr(dadm, "expand")])
 }
 
-log_likelihood_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10))
-  sum(trial_ll_mtlba(pars, dadm, K, rule, dont_know, min_ll))
+log_likelihood_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10),
+                                 guess = "accumulator")
+  sum(trial_ll_mtlba(pars, dadm, K, rule, dont_know, min_ll, guess))
 
 # Data checks: two response levels, the rating column, and censoring coded as
 # EMC2's make_missing() does with the response not retained.
@@ -861,8 +1073,9 @@ mtlba_check_data <- function(data, K, dont_know) {
 
 # prepare_design: the rating checks; rho is a trial-level parameter (it cannot
 # depend on lR or lM).
-mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
-  rating_prepare_design(n_choices = 2, trial_level = "rho")(formula, constants, Rlevels, ...)
+mtlba_prepare_design <- function(trial_level = "rho")
+  function(formula, constants, Rlevels = NULL, ...)
+    rating_prepare_design(n_choices = 2, trial_level = trial_level)(formula, constants, Rlevels, ...)
 
 #' The Multiple-Threshold Linear Ballistic Accumulator (Rating) Model
 #'
@@ -886,6 +1099,10 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
 #' | *rho* | probit on (-1, 1) | \[-1, 1\] | 0 | Correlation between the two drift rates |
 #' | *c1*  | log   | \[0, Inf\]    | log(0.5) | First rating criterion, -log of the largest threshold proportion |
 #' | *ck*  | log   | \[0, Inf\]    | log(0.5) | Increment to the next criterion |
+#' | *gp*  | probit | \[0, 1\]     | qnorm(0)   | Probability that an accumulator triggers confidence guessing |
+#' | *gB*  | probit | \[0, 1\]     | qnorm(0.5) | Guess threshold as a proportion of `B` above `A` |
+#' | *pg1* | probit | \[0, 1\]     | qnorm(1)   | Probability that a guess gives rating 1 (the lowest) |
+#' | *pgk* | probit | \[0, 1\]     | qnorm(0)   | Probability that a guess gives rating `k`, given it is not a lower rating |
 #'
 #' Confidence thresholds are `T_j = A + B * d_j` with proportions
 #' `d_{K-k} = exp(-(c1 + ... + ck))`, so `A < T_1 < ... < T_{K-1} < b`. The
@@ -919,6 +1136,33 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
 #' correlated model is slower than an uncorrelated one, by roughly the number
 #' of nodes per trial.
 #'
+#' Confidence guessing (off unless `gp` is given a formula or a non-zero
+#' constant): each accumulator has a guess threshold `A + B * gB`, between `A`
+#' and its choice threshold. An accumulator that is *triggering* on a trial
+#' ends the race when it reaches its guess threshold: it gives the choice,
+#' usually faster than an evidence-based response, and the rating is drawn at
+#' random, rating 1 with probability `pg1`, rating 2 with probability
+#' `(1 - pg1) * pg2`, and so on, the highest rating taking what is left (there
+#' are `n_ratings - 1` such parameters, read from the chosen accumulator; with
+#' `dont_know` a guessed rating 1 is the don't-know response). If no
+#' triggering accumulator reaches its guess threshold first, the race ends by
+#' the stopping rule as usual.
+#' * `guess = "accumulator"` (the default): the two accumulators trigger
+#'   independently, each with its own probability `gp`, so `gp ~ lR` (or
+#'   `~ lM`) gives different amounts of guessing for the two choices. Under
+#'   `rule = "BE"` a triggering accumulator never reaches its choice threshold;
+#'   under `rule = "TC"` its crossings of thresholds below the guess threshold
+#'   still count.
+#' * `guess = "trial"`: the whole trial is a guess with probability `gp`, a
+#'   trial-level parameter (not `~ lR` or `~ lM`). Both accumulators then race
+#'   to their guess thresholds, under either rule.
+#'
+#' The three kinds of guessing parameter inform each other: with `gp` near 0
+#' the data say nothing about `gB` and the `pg`, and with `gp` near 1 nothing
+#' about the confidence thresholds, so they need informative priors. A model
+#' with guessing costs up to four times the likelihood evaluations of the same
+#' model without it.
+#'
 #' Censoring and truncation use EMC2's usual coding ([make_missing()], or the
 #' `TC` argument of [make_data()]). A censored trial has `R = NA` and
 #' `RR = NA` (the response is not retained) and contributes the probability
@@ -933,30 +1177,45 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
 #' @param dont_know Logical: rating 1 is one shared "don't know" response.
 #' @param rule Stopping rule, `"BE"` (balance of evidence) or `"TC"` (threshold
 #'   count).
+#' @param guess How confidence guessing is triggered when `gp` is not zero:
+#'   `"accumulator"` (independently per accumulator) or `"trial"` (per trial).
 #' @return A model list with all the necessary functions for EMC2 to sample.
 #' @examples
 #' # three ratings, balance of evidence
 #' MTLBA3 <- function() MTLBA(n_ratings = 3)
 #' # two ratings plus don't know, threshold count
 #' MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
+#' # confidence guessing, more often on one accumulator than on the other
+#' design(factors = list(subjects = 1, S = c("left", "right")),
+#'        Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
+#'        model = MTLBA3,
+#'        formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ 1, c2 ~ 1,
+#'                       gp ~ lR, gB ~ 1, pg1 ~ 1, pg2 ~ 1))
 #' @export
-MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE") {
+MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator") {
   K <- rating_check_n(n_ratings)
   rating_check_dont_know(K, dont_know)
   rule <- match.arg(rule, c("BE", "TC"))
+  guess <- match.arg(guess, c("accumulator", "trial"))
+  pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
   list(
     type = "RACE",
     c_name = "MTLBA",
     # read by the C++ likelihood through attr(dadm, "c_options")
-    c_options = c(n_ratings = K, dont_know = as.numeric(dont_know), TC = as.numeric(rule == "TC")),
+    c_options = c(n_ratings = K, dont_know = as.numeric(dont_know), TC = as.numeric(rule == "TC"),
+                  guess_trial = as.numeric(guess == "trial")),
     n_ratings = K,
     dont_know = dont_know,
     rule = rule,
+    guess = guess,
     extra_responses = "RR",
+    # guessing is off by default: gp = 0, with gB = .5 and the lowest rating guessed
     p_types = c("v" = 1, "sv" = log(1), "B" = log(1), "A" = log(0), "t0" = log(0), "rho" = 0,
-                rating_p_types(K)),
+                rating_p_types(K), "gp" = stats::qnorm(0), "gB" = stats::qnorm(0.5),
+                stats::setNames(stats::qnorm(as.numeric(seq_along(pg) == 1)), pg)),
     transform = list(func = c(v = "identity", sv = "exp", B = "exp", A = "exp", t0 = "exp",
-                              rho = "pnorm", rating_transform(K)),
+                              rho = "pnorm", rating_transform(K), gp = "pnorm", gB = "pnorm",
+                              stats::setNames(rep("pnorm", length(pg)), pg)),
                      lower = c(rho = -1), upper = c(rho = 1)),
     bound = list(minmax = cbind(v = c(-Inf, Inf), sv = c(0, Inf), A = c(1e-4, Inf),
                                 B = c(0, Inf), t0 = c(0.05, Inf), rho = c(-1, 1),
@@ -969,11 +1228,11 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE") {
       if (!is.null(ok)) attr(pars, "ok") <- ok
       pars
     },
-    prepare_design = mtlba_prepare_design,
+    prepare_design = mtlba_prepare_design(c("rho", if (guess == "trial") "gp")),
     check_data = function(data) mtlba_check_data(data, K, dont_know),
     rfun = function(data = NULL, pars) rMTLBA(data$lR, pars, K, rule, dont_know,
-                                              ok = attr(pars, "ok")),
+                                              ok = attr(pars, "ok"), guess = guess),
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10))
-      log_likelihood_mtlba(pars, dadm, K, rule, dont_know, min_ll = min_ll)
+      log_likelihood_mtlba(pars, dadm, K, rule, dont_know, min_ll = min_ll, guess = guess)
   )
 }

@@ -4,7 +4,7 @@
 \alias{MTLBA}
 \title{The Multiple-Threshold Linear Ballistic Accumulator (Rating) Model}
 \usage{
-MTLBA(n_ratings = 3, dont_know = FALSE, rule = "BE")
+MTLBA(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator")
 }
 \arguments{
 \item{n_ratings}{Number of rating categories K (>= 1; >= 2 with
@@ -14,6 +14,9 @@ MTLBA(n_ratings = 3, dont_know = FALSE, rule = "BE")
 
 \item{rule}{Stopping rule, \code{"BE"} (balance of evidence) or \code{"TC"} (threshold
 count).}
+
+\item{guess}{How confidence guessing is triggered when \code{gp} is not zero:
+\code{"accumulator"} (independently per accumulator) or \code{"trial"} (per trial).}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample.
@@ -38,6 +41,10 @@ holding the rating, an integer from 1 (lowest) to \code{n_ratings} (highest).\ta
    \emph{rho} \tab probit on (-1, 1) \tab [-1, 1] \tab 0 \tab Correlation between the two drift rates \cr
    \emph{c1} \tab log \tab [0, Inf] \tab log(0.5) \tab First rating criterion, -log of the largest threshold proportion \cr
    \emph{ck} \tab log \tab [0, Inf] \tab log(0.5) \tab Increment to the next criterion \cr
+   \emph{gp} \tab probit \tab [0, 1] \tab qnorm(0) \tab Probability that an accumulator triggers confidence guessing \cr
+   \emph{gB} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab Guess threshold as a proportion of \code{B} above \code{A} \cr
+   \emph{pg1} \tab probit \tab [0, 1] \tab qnorm(1) \tab Probability that a guess gives rating 1 (the lowest) \cr
+   \emph{pgk} \tab probit \tab [0, 1] \tab qnorm(0) \tab Probability that a guess gives rating \code{k}, given it is not a lower rating \cr
 }
 
 
@@ -75,6 +82,35 @@ panel, the number of panels set by the width of the integrand), so a
 correlated model is slower than an uncorrelated one, by roughly the number
 of nodes per trial.
 
+Confidence guessing (off unless \code{gp} is given a formula or a non-zero
+constant): each accumulator has a guess threshold \code{A + B * gB}, between \code{A}
+and its choice threshold. An accumulator that is \emph{triggering} on a trial
+ends the race when it reaches its guess threshold: it gives the choice,
+usually faster than an evidence-based response, and the rating is drawn at
+random, rating 1 with probability \code{pg1}, rating 2 with probability
+\code{(1 - pg1) * pg2}, and so on, the highest rating taking what is left (there
+are \code{n_ratings - 1} such parameters, read from the chosen accumulator; with
+\code{dont_know} a guessed rating 1 is the don't-know response). If no
+triggering accumulator reaches its guess threshold first, the race ends by
+the stopping rule as usual.
+\itemize{
+\item \code{guess = "accumulator"} (the default): the two accumulators trigger
+independently, each with its own probability \code{gp}, so \code{gp ~ lR} (or
+\code{~ lM}) gives different amounts of guessing for the two choices. Under
+\code{rule = "BE"} a triggering accumulator never reaches its choice threshold;
+under \code{rule = "TC"} its crossings of thresholds below the guess threshold
+still count.
+\item \code{guess = "trial"}: the whole trial is a guess with probability \code{gp}, a
+trial-level parameter (not \code{~ lR} or \code{~ lM}). Both accumulators then race
+to their guess thresholds, under either rule.
+}
+
+The three kinds of guessing parameter inform each other: with \code{gp} near 0
+the data say nothing about \code{gB} and the \code{pg}, and with \code{gp} near 1 nothing
+about the confidence thresholds, so they need informative priors. A model
+with guessing costs up to four times the likelihood evaluations of the same
+model without it.
+
 Censoring and truncation use EMC2's usual coding (\code{\link[=make_missing]{make_missing()}}, or the
 \code{TC} argument of \code{\link[=make_data]{make_data()}}). A censored trial has \code{R = NA} and
 \code{RR = NA} (the response is not retained) and contributes the probability
@@ -89,4 +125,10 @@ are not censored (contamination) are not supported.
 MTLBA3 <- function() MTLBA(n_ratings = 3)
 # two ratings plus don't know, threshold count
 MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
+# confidence guessing, more often on one accumulator than on the other
+design(factors = list(subjects = 1, S = c("left", "right")),
+       Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
+       model = MTLBA3,
+       formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ 1, c2 ~ 1,
+                      gp ~ lR, gB ~ 1, pg1 ~ 1, pg2 ~ 1))
 }

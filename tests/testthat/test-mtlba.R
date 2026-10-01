@@ -1132,3 +1132,263 @@ test_that("band functions keep their digits when the start-point range is tiny",
   hi <- EMC2:::mtlba_logHS(z, rep(1, 5), a * (1 + 1e-9), rep(0, 5), rep(1, 5))
   expect_lt(max(abs(lo$H - hi$H), abs(lo$S - hi$S)), 1e-9)
 })
+
+# ---- confidence guessing (Stage M7) ----
+
+# add natural-scale guessing columns to a two-rows-per-trial parameter matrix:
+# gp, gB per accumulator (length 2), pg a 2 x (K - 1) matrix or a vector for both
+mtlba_guess_cols <- function(p, K, gp, gB, pg = NULL) {
+  n <- nrow(p) / 2
+  p <- cbind(p, gp = rep_len(gp, 2 * n), gB = rep_len(gB, 2 * n))
+  if (K > 1) {
+    if (!is.matrix(pg)) pg <- matrix(pg[seq_len(K - 1)], 2, K - 1, byrow = TRUE)
+    pg <- pg[rep(1:2, n), , drop = FALSE]
+    colnames(pg) <- paste0("pg", seq_len(K - 1))
+    p <- cbind(p, pg)
+  }
+  p
+}
+# rating-guess probabilities of one accumulator from its pg (stick breaking)
+mtlba_pg <- function(pg, K) {
+  if (K == 1) return(1)
+  out <- numeric(K); rest <- 1
+  for (k in 1:(K - 1)) { out[k] <- rest * pg[k]; rest <- rest * (1 - pg[k]) }
+  out[K] <- rest
+  out
+}
+mtlba_gset <- function(K, rho = 0) {
+  st <- list(v = c(2.2, 1.1), sv = c(.8, 1.1), A = c(.6, .5), b = c(1.7, 1.5), t0 = .2,
+             d = if (K > 1) rbind(seq_len(K - 1) / K, (seq_len(K - 1) / K)^1.5) else NULL)
+  if (rho != 0) st$rho <- rho
+  st
+}
+mtlba_gf <- function(R, RR, K, rule, dk, st, guess, gp, gB, pg)
+  function(rt) EMC2:::dMTLBA(rt, rep(R, length(rt)), rep(RR, length(rt)),
+    mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho),
+                     K, gp, gB, pg), K, rule, dk, guess = guess)
+mtlba_gint <- function(f, t0, upper = Inf, mult = function(t) 1) {
+  brk <- t0 + c(0, .05, .1, .2, .35, .5, .8, 1.2, 2, 3.5, 6, 15, Inf)
+  brk <- unique(c(brk[brk < upper], upper))
+  sum(sapply(seq_len(length(brk) - 1), function(i)
+    stats::integrate(function(t) mult(t) * f(t), brk[i], brk[i + 1], subdivisions = 2000L,
+                     rel.tol = 1e-10, abs.tol = 0)$value))
+}
+
+test_that("guessing, trial mode: density matches BETE's mixture at the fixture grid (rho = 0)", {
+  g <- golden_mtlba("bete_guess_density.rds")
+  cells <- g$cells
+  ours <- numeric(nrow(cells))
+  key <- paste(cells$set, cells$K, cells$rule, cells$config, cells$dk, cells$R)
+  for (k in unique(key)) {
+    i <- which(key == k)
+    x <- cells[i[1], ]
+    st <- bete_set(g$sets[[x$set]], x$K)
+    cf <- g$configs[[x$config]]
+    rr <- bete_resp(x$R, x$K, x$dk)
+    ours[i] <- mtlba_gf(rr[1], rr[2], x$K, x$rule, x$dk, st, "trial", cf$gp, cf$gB, cf$pg)(cells$rt[i])
+  }
+  # BETE averages the two don't-know terms, MTLBA sums them
+  ref <- cells$dens * ifelse(cells$dk & cells$R == cells$K, 2, 1)
+  expect_true(all(is.finite(ours)) && all(ours >= 0))
+  expect_lt(max(abs(ours - ref)), 1e-13)
+  # relative parity in the body only: the references (BETE's density, DMC's 1 - plba) are
+  # accurate absolutely, not relatively, in the tail
+  body <- ref > 1e-5
+  expect_gt(sum(body), 4000)
+  expect_lt(max(abs(ours[body] / ref[body] - 1)), 1e-9)
+  # guessing changes the density (the fixture is not the no-guess one)
+  expect_gt(max(abs(ref - cells$std * ifelse(cells$dk & cells$R == cells$K, 2, 1))), .1)
+})
+
+test_that("guessing, accumulator mode: BE density is the supplement's mixture of LBA terms", {
+  # independent pieces: ref_logf (stopping density) and ref_logband (band probability)
+  K <- 3
+  st <- mtlba_gset(K)
+  gp <- c(.35, .15); gB <- c(.45, .7); pg <- rbind(c(.5, .3), c(.2, .6))
+  Tm <- rbind(c(0, st$A[1] + (st$b[1] - st$A[1]) * st$d[1, ], st$b[1]),
+              c(0, st$A[2] + (st$b[2] - st$A[2]) * st$d[2, ], st$b[2]))
+  gb <- st$A + (st$b - st$A) * gB
+  band <- function(a, t, lo, hi) if (hi <= lo) 0 else
+    exp(ref_logband(t, st$A[a], st$v[a], st$sv[a], lo, hi))
+  f <- function(a, t, thr) exp(ref_logf(t, st$A[a], thr, st$v[a], st$sv[a]))
+  for (R in 1:2) for (RR in 1:K) for (rt in c(.35, .6, 1.1, 2.4)) {
+    w <- R; l <- 3 - R; t <- rt - st$t0
+    lo <- Tm[l, K - RR + 1]; hi <- Tm[l, K - RR + 2]
+    evid <- (1 - gp[w]) * f(w, t, st$b[w]) *
+      ((1 - gp[l]) * band(l, t, lo, hi) + gp[l] * band(l, t, lo, min(hi, gb[l])))
+    guess <- gp[w] * mtlba_pg(pg[w, ], K)[RR] * f(w, t, gb[w]) *
+      ((1 - gp[l]) * band(l, t, 0, st$b[l]) + gp[l] * band(l, t, 0, gb[l]))
+    ours <- mtlba_gf(R, RR, K, "BE", FALSE, st, "accumulator", gp, gB, pg)(rt)
+    expect_equal(ours, evid + guess, tolerance = 1e-9)
+  }
+})
+
+test_that("guessing: densities integrate to 1 and reduce to the plain model", {
+  for (K in 1:3) for (rule in c("BE", "TC")) for (guess in c("accumulator", "trial"))
+    for (dk in c(FALSE, if (K > 1) TRUE)) for (rho in c(0, if (K == 2) -.6)) {
+    st <- mtlba_gset(K, rho)
+    gp <- if (guess == "trial") c(.3, .3) else c(.35, .15)
+    gB <- c(.45, .7); pg <- rbind(c(.5, .3), c(.2, .6))[, seq_len(K - 1), drop = FALSE]
+    rsp <- mtlba_responses(K, dk)
+    mass <- sum(mapply(function(R, RR)
+      mtlba_gint(mtlba_gf(R, RR, K, rule, dk, st, guess, gp, gB, pg), st$t0), rsp[, "R"], rsp[, "RR"]))
+    expect_equal(mass, 1, tolerance = 1e-8)
+    # gp = 0: the model without guessing, whatever gB and pg
+    rt <- c(.3, .5, .9, 1.7)
+    for (i in seq_len(nrow(rsp)))
+      expect_identical(mtlba_gf(rsp[i, 1], rsp[i, 2], K, rule, dk, st, guess, 0, gB, pg)(rt),
+                       mtlba_f(rsp[i, 1], rsp[i, 2], K, rule, dk, st)(rt))
+  }
+  # BE: always triggering on both accumulators is the trial mixture with gp = 1
+  st <- mtlba_gset(3)
+  for (R in 1:2) for (RR in 1:3)
+    expect_equal(mtlba_gf(R, RR, 3, "BE", FALSE, st, "accumulator", 1, c(.45, .7), c(.5, .3))(c(.4, .8)),
+                 mtlba_gf(R, RR, 3, "BE", FALSE, st, "trial", 1, c(.45, .7), c(.5, .3))(c(.4, .8)),
+                 tolerance = 1e-13)
+})
+
+test_that("guessing: rMTLBA agrees with the density (both modes, BE/TC, don't know, rho)", {
+  set.seed(707)
+  n <- 6e4
+  z <- NULL; dm <- NULL
+  for (K in 2:3) for (rule in c("BE", "TC")) for (guess in c("accumulator", "trial"))
+    for (dk in c(FALSE, TRUE)) for (rho in c(0, if (K == 2) .5)) {
+    st <- mtlba_gset(K, rho)
+    gp <- if (guess == "trial") c(.3, .3) else c(.35, .15)
+    gB <- c(.45, .7); pg <- rbind(c(.5, .3), c(.2, .6))[, seq_len(K - 1), drop = FALSE]
+    rsp <- mtlba_responses(K, dk)
+    f <- function(i) mtlba_gf(rsp[i, 1], rsp[i, 2], K, rule, dk, st, guess, gp, gB, pg)
+    pr <- sapply(seq_len(nrow(rsp)), function(i) mtlba_gint(f(i), st$t0))
+    # probability of responding before 0.6 s: sensitive to the fast guesses
+    pf <- sapply(seq_len(nrow(rsp)), function(i) mtlba_gint(f(i), st$t0, upper = .6))
+    sim <- EMC2:::rMTLBA(factor(rep(1:2, n)),
+      mtlba_guess_cols(mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, gp, gB, pg),
+      K, rule, dk, guess = guess)
+    is_r <- function(i) as.integer(sim$R) == rsp[i, 1] & sim$RR == rsp[i, 2]
+    obs <- sapply(seq_len(nrow(rsp)), function(i) mean(is_r(i)))
+    obf <- sapply(seq_len(nrow(rsp)), function(i) mean(is_r(i) & sim$rt < .6))
+    z <- c(z, (obs - pr) / sqrt(pr * (1 - pr) / n), (obf - pf) / sqrt(pf * (1 - pf) / n))
+    dm <- c(dm, max(abs(obs - pr), abs(obf - pf)))
+  }
+  expect_lt(max(abs(z)), 4.2)
+  expect_lt(abs(stats::sd(z) - 1), .2)
+  expect_lt(max(dm), .008)
+})
+
+test_that("guessing with censoring and truncation: censored + observed mass is 1", {
+  LC <- .4; UC <- 1.6; LT <- .28; UT <- 2.5
+  for (rule in c("BE", "TC")) for (guess in c("accumulator", "trial")) for (K in 1:3)
+    for (dk in c(FALSE, if (K > 1) TRUE)) for (rho in c(0, if (K == 2 && !dk) -.5)) {
+    p <- mtlba_guess_cols(mtlba_trial_pars(K), K, if (guess == "trial") .3 else c(.35, .15),
+                          c(.45, .7), rbind(c(.5, .3), c(.2, .6))[, seq_len(K - 1), drop = FALSE])
+    if (rho != 0) p <- cbind(p, rho = rho)
+    rsp <- mtlba_responses(K, dk)
+    ll_miss <- function(rt, R, RR, bnd)
+      EMC2:::mtlba_logdens_missing(rt, R, RR, p, K, rule, dk, bnd, guess)
+    dens <- function(rt, R, RR, bnd = mtlba_bnd())
+      vapply(rt, function(x) exp(ll_miss(x, R, RR, bnd)), numeric(1))
+    obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    cens <- function(m, bnd = mtlba_bnd(m, LC = LC, UC = UC)) exp(ll_miss(NA, NA, NA, bnd))
+    expect_equal(obs + cens(1L) + cens(2L), 1, tolerance = 1e-8)
+    tb <- mtlba_bnd(LT = LT, UT = UT)
+    tcb <- function(m) cens(m, mtlba_bnd(m, LT = LT, UT = UT, LC = LC, UC = UC))
+    tr_obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, bnd = tb, rel.tol = 1e-10)$value,
+      rsp[, "R"], rsp[, "RR"]))
+    expect_equal(tr_obs + tcb(1L) + tcb(2L), 1, tolerance = 1e-8)
+  }
+})
+
+mtlba_gdesign <- function(K, rule, dk, guess, corr = FALSE) {
+  crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
+  pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
+  form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1, gB ~ lR,
+                 if (guess == "trial") gp ~ 1 else gp ~ lR),
+            if (corr) list(rho ~ 1),
+            lapply(c(crit, pg), function(cn) stats::as.formula(paste(cn, "~ lR"))))
+  mod <- local({ k <- K; r <- rule; d <- dk; g <- guess
+    function() MTLBA(n_ratings = k, dont_know = d, rule = r, guess = g) })
+  des <- suppressMessages(design(
+    factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+    model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
+  p <- sampled_pars(des, doMap = FALSE)
+  p[] <- 0
+  p[c("v", "v_lMTRUE", "sv", "sv_lMTRUE", "B", "B_lRright", "A", "t0")] <-
+    c(1, 1.5, 0, log(.7), log(1), .2, log(.5), log(.25))
+  p[c("gB", "gB_lRright", "gp")] <- c(qnorm(.5), .3, qnorm(.25))
+  if (guess == "accumulator") p["gp_lRright"] <- -.4
+  if (corr) p["rho"] <- qnorm((1 - .5) / 2)
+  for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+  for (cn in pg) p[c(cn, paste0(cn, "_lRright"))] <- c(qnorm(.45), .3)
+  list(design = des, p = p)
+}
+
+test_that("guessing: C++ likelihood equals the R reference (BE/TC, don't know, rho, censoring, extremes)", {
+  for (K in 1:3) for (rule in c("BE", "TC")) for (dk in c(FALSE, if (K > 1) TRUE))
+    for (guess in c("accumulator", "trial")) for (corr in c(FALSE, K == 2)) {
+    gd <- mtlba_gdesign(K, rule, dk, guess, corr)
+    des <- gd$design; p <- gd$p
+    set.seed(700 + 10 * K + dk)
+    dat <- make_data(p, des, n_trials = if (corr) 40 else 100)
+    props <- rbind(p, mvtnorm::rmvnorm(if (corr) 4 else 12, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 9, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[1, "gp"] <- -Inf                  # gp = 0 (on accumulator 1 when gp ~ lR)
+    ext[2, "gp"] <- Inf                   # always triggering
+    ext[3, "gB"] <- Inf                   # guess threshold at b
+    ext[4, "gB"] <- -Inf                  # guess threshold at A
+    ext[5, "gp"] <- NaN
+    ext[6, "A"] <- -Inf                   # A = 0
+    ext[7, "sv"] <- log(.02)
+    if (K > 1) { ext[8, "pg1"] <- Inf; ext[9, "pg1"] <- -Inf }
+    props <- rbind(props, ext)
+    for (cens in c(FALSE, TRUE)) {
+      d <- if (cens) make_missing(dat, LC = .45, UC = 1.6, LT = .3, UT = 4) else dat
+      dadm <- EMC2:::design_model(d, des, compress = TRUE, verbose = FALSE, rt_resolution = 1e-6)
+      llr <- EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))
+      llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+      expect_lt(mtlba_err(llc, llr), 1e-12)
+      twr <- apply(props, 1, function(pv)
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk,
+                              guess = guess))
+      twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+      expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-11)
+      expect_true(all(is.finite(llc)))
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model), 2), llc)
+    }
+  }
+})
+
+test_that("guessing: defaults, design checks and simulation through EMC2", {
+  # off by default: gp, gB and the pg are constants, the sampled parameters are unchanged
+  des <- mtlba_design(3)
+  expect_false(any(grepl("^(gp|gB|pg)", names(sampled_pars(des, doMap = FALSE)))))
+  mp <- mapped_pars(des, mtlba_p(3))
+  expect_equal(unique(mp$gp), 0)
+  expect_equal(unique(mp$pg1), 1)
+  expect_equal(unique(mp$pg2), 0)
+  expect_error(MTLBA(3, guess = "XX"))
+  # the trial-level trigger cannot depend on the accumulator; the per-accumulator one can
+  mk <- function(guess, f) suppressMessages(design(
+    factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
+    model = local({ g <- guess; function() MTLBA(2, guess = g) }),
+    formula = list(v ~ 1, f), report_p_vector = FALSE))
+  expect_error(mk("trial", gp ~ lR), "trial-level")
+  expect_no_error(mk("accumulator", gp ~ lR))
+  # simulated guesses are faster and their ratings follow pg
+  gd <- mtlba_gdesign(3, "BE", FALSE, "accumulator")
+  p <- gd$p
+  p[c("gp", "gp_lRright", "gB", "gB_lRright")] <- c(qnorm(.999), 0, qnorm(.2), 0)
+  p[c("pg1", "pg1_lRright", "pg2", "pg2_lRright")] <- c(qnorm(.2), 0, qnorm(.5), 0)
+  set.seed(71)
+  dg <- make_data(p, gd$design, n_trials = 4000)
+  p0 <- p; p0["gp"] <- -Inf
+  d0 <- make_data(p0, gd$design, n_trials = 4000)
+  expect_lt(mean(dg$rt), mean(d0$rt))
+  # (absolute bound, about 5 SE: the RNG kind in force depends on the tests run before)
+  expect_lt(max(abs(as.vector(table(factor(dg$RR, 1:3))) / nrow(dg) - c(.2, .4, .4))), .03)
+  dadm <- EMC2:::design_model(dg, gd$design, verbose = FALSE, rt_resolution = 1e-6)
+  expect_gt(EMC2:::calc_ll_manager(t(p), dadm, gd$design$model),
+            EMC2:::calc_ll_manager(t(p0), dadm, gd$design$model) + 1000)
+})

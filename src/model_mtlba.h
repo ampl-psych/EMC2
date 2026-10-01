@@ -44,6 +44,15 @@
 // distinct parameter row and bound (mtlba_stop_rho1, the R reference rule:
 // half-width 12 sds, one panel per feature width, at most 1024 panels per
 // piece), cached per likelihood call. Trials with rho = 0 take the closed forms.
+//
+// Confidence guessing (parameters gp, gB, pg1 .. pg{K-1}; see the R twin's
+// "confidence guessing" block): an accumulator that is triggering ends the race
+// at its guess threshold gb = A + B gB with a random rating. The accumulators
+// trigger independently with their own gp (the default), or the whole trial is
+// a guess with one gp (c_options guess_trial, BETE's mixture). A response is
+// then a weighted sum of up to four kernels, the censoring/truncation terms a
+// mixture over the trigger states with a triggering accumulator's thresholds
+// capped at gb. Rows with gp = 0 take the plain kernel.
 
 #include <Rcpp.h>
 #include <algorithm>
@@ -63,7 +72,11 @@ struct MTLBASpec {
   int  col_A   = -1;
   int  col_t0  = -1;
   int  col_rho = -1;
+  int  col_gp  = -1;       // confidence guessing: -1 if the model has none
+  int  col_gB  = -1;
+  bool guess_trial = false;    // one trigger per trial (else per accumulator)
   std::vector<int>    col_c;   // c1 .. c{K-1}
+  std::vector<int>    col_pg;  // pg1 .. pg{K-1}
   std::vector<double> rt;      // per trial
   std::vector<int>    RR;      // per trial, 1 .. K
   std::vector<int>    R;       // per trial, choice 1 / 2 (accumulator level)
@@ -98,6 +111,20 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     s.col_c.push_back(it->second);
   }
   s.K = (int)s.col_c.size() + 1;
+  // confidence guessing (absent in models built before it existed: no guessing)
+  auto find_col = [&](const std::string& x) {
+    auto it = pt.name_to_base_idx.find(x);
+    return it == pt.name_to_base_idx.end() ? -1 : (int)it->second;
+  };
+  s.col_gp = find_col("gp");
+  s.col_gB = find_col("gB");
+  for (int k = 1; k < s.K; ++k) {
+    const int c = find_col("pg" + std::to_string(k));
+    if (c < 0) break;
+    s.col_pg.push_back(c);
+  }
+  if (s.col_gp >= 0 && (s.col_gB < 0 || (int)s.col_pg.size() != s.K - 1))
+    Rcpp::stop("MTLBA: guessing needs gp, gB and pg1 .. pg%d", s.K - 1);
 
   // rule and don't know: the model's c_options, stored on the data by design_model()
   SEXP opt = data.attr("c_options");
@@ -111,6 +138,7 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     return 0.0;
   };
   s.TC = opt_val("TC") != 0;
+  for (int i = 0; i < on.size(); ++i) if (on[i] == "guess_trial") s.guess_trial = o[i] != 0;
   s.DK = opt_val("dont_know") != 0;
   if ((int)opt_val("n_ratings") != s.K)
     Rcpp::stop("MTLBA: the model has %d ratings but the parameters give %d",
@@ -565,7 +593,8 @@ inline void mtlba_stop_rho1(double y, double A1, double v1, double s1, const dou
 // Per-trial column pointers
 struct MTLBACols {
   const double *v, *sv, *B, *A, *t0, *rho;
-  std::vector<const double*> c;
+  const double *gp = nullptr, *gB = nullptr;   // confidence guessing (null: none)
+  std::vector<const double*> c, pg;
 };
 
 // Threshold j (1 .. K; K = b) of the accumulator in row r.
@@ -598,29 +627,39 @@ struct MTLBAPposCache {
   }
 };
 
-// log kernel: accumulator in row rs stops at its threshold j while the one in
-// row ro lies in band lo; rho the trial's drift-rate correlation (0: closed
-// form). -Inf for undefined values (non-finite parameters, dt <= 0, rho not
-// inside (-1, 1)).
-inline double mtlba_logkernel(const MTLBACols& p, int K, double rt, int rs, int ro, int j, int lo,
-                              double rho, MTLBAPposCache& ppos)
+// log kernel for explicit thresholds: the accumulator in row rs reaches Ts at
+// rt - t0_s while the evidence of the one in row ro lies in (ly, hi) (lowest: no
+// threshold below); rho the trial's drift-rate correlation (0: closed form).
+// -Inf for undefined values (non-finite parameters, dt <= 0, an empty band, rho
+// not inside (-1, 1)).
+inline double mtlba_logkernel_y(const MTLBACols& p, double rt, int rs, int ro, double Ts,
+                                double ly, double hi, bool lowest, double rho,
+                                MTLBAPposCache& ppos)
 {
   const double dt = rt - p.t0[rs];
   if (!(std::isfinite(dt) && dt > 0)) return R_NegInf;
   for (int r : {rs, ro})
     if (!std::isfinite(p.v[r]) || !std::isfinite(p.sv[r]) || !std::isfinite(p.A[r]) ||
         !std::isfinite(p.B[r] + p.A[r])) return R_NegInf;
-  const double Ts = mtlba_threshold(p, K, rs, j);
-  const double hi = mtlba_threshold(p, K, ro, lo + 1);
-  const double ly = (lo == 0) ? 0.0 : mtlba_threshold(p, K, ro, lo);
-  if (!std::isfinite(Ts) || !std::isfinite(hi) || !std::isfinite(ly)) return R_NegInf;
+  if (!std::isfinite(Ts) || !std::isfinite(hi)) return R_NegInf;
+  if (!lowest && !(std::isfinite(ly) && hi > ly)) return R_NegInf;
   if (!(std::fabs(rho) < 1)) return R_NegInf;   // NaN too
   if (rho == 0)
     return mtlba_logf(dt, p.A[rs], Ts, p.v[rs], p.sv[rs]) +
-           mtlba_logband(dt, p.A[ro], p.v[ro], p.sv[ro], ly, hi, lo == 0);
+           mtlba_logband(dt, p.A[ro], p.v[ro], p.sv[ro], ly, hi, lowest);
   return mtlba_logkernel_rho(dt, p.A[rs], Ts, p.v[rs], p.sv[rs], p.A[ro], p.v[ro], p.sv[ro],
-                             ly, hi, lo == 0, rho) -
+                             ly, hi, lowest, rho) -
          ppos.get(p.v[rs], p.sv[rs], p.v[ro], p.sv[ro], rho);
+}
+
+// log kernel: accumulator in row rs stops at its threshold j while the one in
+// row ro lies in band lo.
+inline double mtlba_logkernel(const MTLBACols& p, int K, double rt, int rs, int ro, int j, int lo,
+                              double rho, MTLBAPposCache& ppos)
+{
+  return mtlba_logkernel_y(p, rt, rs, ro, mtlba_threshold(p, K, rs, j),
+                           (lo == 0) ? 0.0 : mtlba_threshold(p, K, ro, lo),
+                           mtlba_threshold(p, K, ro, lo + 1), lo == 0, rho, ppos);
 }
 
 // Response lookup -> (stopping accumulator 1/2, threshold j, other's band lo).
@@ -636,22 +675,104 @@ inline void mtlba_lookup(int R, int RR, int K, bool TC, int& s, int& j, int& lo)
   lo = K - j;
 }
 
-// log P(dt <= y) (lP) and log P(dt > y) (lS) for the race's stopping time at
-// decision-time bound y; rows r1 / r2 = accumulators 1 / 2. As the R twin
-// mtlba_logstop: with n_a the thresholds crossed by accumulator a at y,
-// F_a(n) = P(n_a <= n), Fc_a(n) = 1 - F_a(n), p_a(n) = P(n_a = n) (v_a > 0),
+// ---- confidence guessing ----
+
+// Guess threshold of the accumulator in row r: gb = A + (b - A) gB.
+inline double mtlba_gb(const MTLBACols& p, int r)
+{
+  const double A = p.A[r];
+  return A + ((p.B[r] + A) - A) * p.gB[r];
+}
+
+// log probability that a guess gives rating c: pg_c prod_{k<c} (1 - pg_k), the
+// highest rating taking the rest.
+inline double mtlba_lpg(const MTLBACols& p, int K, int r, int c)
+{
+  double l = 0.0;
+  for (int k = 1; k < c; ++k) l += std::log1p(-p.pg[k - 1][r]);
+  if (c < K) l += std::log(p.pg[c - 1][r]);
+  return l;
+}
+
+// log(w1 exp(l1) + w2 exp(l2)) for weights >= 0 (a zero or NaN weight drops its term)
+inline double mtlba_lmix(double w1, double l1, double w2, double l2)
+{
+  double a = (w1 > 0) ? std::log(w1) + l1 : R_NegInf;
+  double b = (w2 > 0) ? std::log(w2) + l2 : R_NegInf;
+  if (std::isnan(a)) a = R_NegInf;
+  if (std::isnan(b)) b = R_NegInf;
+  return mtlba_lse(a, b);
+}
+
+// log density of the response (R, RR) at rt, no don't-know merging; rows r1 / r2
+// = accumulators 1 / 2. As the R twin mtlba_logresp.
+inline double mtlba_logresp(const MTLBACols& p, int K, bool TC, bool gtrial, double rt,
+                            int R, int RR, int r1, int r2, double rho, MTLBAPposCache& ppos)
+{
+  int a, j, lo;
+  mtlba_lookup(R, RR, K, TC, a, j, lo);
+  const int rs = (a == 1) ? r1 : r2, ro = (a == 1) ? r2 : r1;
+  const double full = mtlba_logkernel(p, K, rt, rs, ro, j, lo, rho, ppos);
+  if (!p.gp) return full;
+  const double g1 = p.gp[r1], g2 = gtrial ? g1 : p.gp[r2];
+  if (g1 == 0 && g2 == 0) return full;
+  const int rw = (R == 1) ? r1 : r2, rv = (R == 1) ? r2 : r1;   // the choice guesses
+  const double gb_w = mtlba_gb(p, rw), gb_v = mtlba_gb(p, rv);
+  const double lpgc = mtlba_lpg(p, K, rw, RR);
+  double ev, gu;
+  if (gtrial) {
+    ev = mtlba_lmix(1.0 - g1, full, 0.0, 0.0);
+    gu = mtlba_lmix(g1, lpgc + mtlba_logkernel_y(p, rt, rw, rv, gb_w, 0.0, gb_v, true, rho, ppos),
+                    0.0, 0.0);
+  } else {
+    const double gs = (a == 1) ? g1 : g2, go = (a == 1) ? g2 : g1;
+    const double gw = (R == 1) ? g1 : g2, gv = (R == 1) ? g2 : g1;
+    const double Ts = mtlba_threshold(p, K, rs, j);
+    const double hi = mtlba_threshold(p, K, ro, lo + 1);
+    const double ly = (lo == 0) ? 0.0 : mtlba_threshold(p, K, ro, lo);
+    double cs = 1.0 - gs;
+    if (TC && Ts < mtlba_gb(p, rs)) cs = 1.0;
+    const double cap = mtlba_pmin(hi, mtlba_gb(p, ro));
+    double tr = full;
+    if (cap < hi)
+      tr = (go > 0) ? mtlba_logkernel_y(p, rt, rs, ro, Ts, ly, cap, lo == 0, rho, ppos) : R_NegInf;
+    ev = mtlba_lmix(cs * (1.0 - go), full, cs * go, tr);
+    double U0;
+    if (!TC) U0 = p.B[rv] + p.A[rv];
+    else {
+      int nw = 0;
+      for (int jj = 1; jj <= K; ++jj) if (mtlba_threshold(p, K, rw, jj) < gb_w) ++nw;
+      U0 = mtlba_threshold(p, K, rv, K - nw);
+    }
+    const double U1 = mtlba_pmin(U0, gb_v);
+    const bool capped = U1 < U0;
+    const double gk0 = (gw > 0 && (gv < 1 || !capped)) ?
+      mtlba_logkernel_y(p, rt, rw, rv, gb_w, 0.0, U0, true, rho, ppos) : R_NegInf;
+    double gk1 = gk0;
+    if (capped)
+      gk1 = (gw > 0 && gv > 0) ? mtlba_logkernel_y(p, rt, rw, rv, gb_w, 0.0, U1, true, rho, ppos)
+                               : R_NegInf;
+    gu = lpgc + mtlba_lmix(gw * (1.0 - gv), gk0, gw * gv, gk1);
+  }
+  const double out = mtlba_lse(ev, gu);
+  return std::isnan(out) ? R_NegInf : out;
+}
+
+// log P(dt <= y) (lP) and log P(dt > y) (lS) for the race's stopping time at a
+// finite decision-time bound y > 0, rho = 0; rows r1 / r2 = accumulators 1 / 2
+// with thresholds T1, T2 (1 .. K). As the R twin mtlba_logstop: with n_a the
+// thresholds crossed by accumulator a at y, F_a(n) = P(n_a <= n), Fc_a(n) =
+// 1 - F_a(n), p_a(n) = P(n_a = n) (v_a > 0),
 //   BE: S = F_1(K-1) F_2(K-1),   P = Fc_1(K-1) + F_1(K-1) Fc_2(K-1)
 //   TC: S = sum_{n1<K} p_1(n1) F_2(K-1-n1),
 //       P = Fc_1(K-1) + sum_{n1<K} p_1(n1) Fc_2(K-1-n1),
 // all terms positive (log-sum-exp). NaN for undefined parameters.
 inline void mtlba_logstop(const MTLBACols& p, int K, bool TC, double y, int r1, int r2,
-                          double& lP, double& lS)
+                          const double* T1, const double* T2, double& lP, double& lS)
 {
-  if (std::isnan(y)) { lP = lS = R_NaN; return; }
-  if (y == R_PosInf) { lP = 0.0; lS = R_NegInf; return; }
-  if (!(y > 0)) { lP = R_NegInf; lS = 0.0; return; }
   double F[2][MTLBA_MAX_K], Fc[2][MTLBA_MAX_K], band[2][MTLBA_MAX_K];
   const int rows[2] = {r1, r2};
+  const double* Ts[2] = {T1, T2};
   for (int a = 0; a < 2; ++a) {
     const int r = rows[a];
     const double A = p.A[r], v = p.v[r], sv = p.sv[r];
@@ -660,7 +781,7 @@ inline void mtlba_logstop(const MTLBACols& p, int K, bool TC, double y, int r1, 
     const double lden = mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10));
     double lo_y = 0.0;
     for (int nn = 0; nn < K; ++nn) {
-      const double hi = mtlba_threshold(p, K, r, nn + 1);
+      const double hi = Ts[a][nn];
       if (!std::isfinite(hi)) { lP = lS = R_NaN; return; }
       F[a][nn]  = mtlba_logband(y, A, v, sv, 0.0, hi, true);
       Fc[a][nn] = mtlba_logS(hi, y, A, v, sv) - lden;
@@ -681,6 +802,54 @@ inline void mtlba_logstop(const MTLBACols& p, int K, bool TC, double y, int r1, 
   }
 }
 
+// Stopping-time terms at decision-time bound y for any rho and with confidence
+// guessing, as the R twins mtlba_logstop_any / mtlba_logstop_guess: rho = 0 the
+// closed form, otherwise mtlba_stop_rho1; with guessing the mixture over the
+// trigger states, a triggering accumulator's thresholds capped at its gb (the
+// trial-level guess state is the BE race to the two guess thresholds). x, w:
+// work space of the correlated integral.
+inline void mtlba_stop_mix(const MTLBACols& p, int K, bool TC, bool gtrial, double y,
+                           int r1, int r2, double rho, double& lP, double& lS,
+                           std::vector<double>& x, std::vector<double>& w)
+{
+  if (std::isnan(y)) { lP = lS = R_NaN; return; }
+  if (y == R_PosInf) { lP = 0.0; lS = R_NegInf; return; }
+  if (!(y > 0)) { lP = R_NegInf; lS = 0.0; return; }
+  double T[2][MTLBA_MAX_K], C[2][MTLBA_MAX_K];
+  const int rows[2] = {r1, r2};
+  for (int a = 0; a < 2; ++a)
+    for (int j = 1; j <= K; ++j) T[a][j - 1] = mtlba_threshold(p, K, rows[a], j);
+  auto state = [&](const double* T1, const double* T2, bool tc, double& P, double& S) {
+    if (rho == 0) mtlba_logstop(p, K, tc, y, r1, r2, T1, T2, P, S);
+    else mtlba_stop_rho1(y, p.A[r1], p.v[r1], p.sv[r1], T1, p.A[r2], p.v[r2], p.sv[r2], T2,
+                         rho, K, tc, P, S, x, w);   // NaN rho: NaN
+  };
+  const double g1 = p.gp ? p.gp[r1] : 0.0;
+  const double g2 = p.gp ? (gtrial ? g1 : p.gp[r2]) : 0.0;
+  if (g1 == 0 && g2 == 0) { state(T[0], T[1], TC, lP, lS); return; }
+  for (int a = 0; a < 2; ++a) {
+    const double gb = mtlba_gb(p, rows[a]);
+    for (int j = 0; j < K; ++j) C[a][j] = mtlba_pmin(T[a][j], gb);
+  }
+  lP = lS = R_NegInf;
+  auto add = [&](double wt, bool c1, bool c2, bool tc) {
+    if (!(std::isnan(wt) || wt > 0)) return;
+    double P, S;
+    state(c1 ? C[0] : T[0], c2 ? C[1] : T[1], tc, P, S);
+    lP = mtlba_lse(lP, std::log(wt) + P);
+    lS = mtlba_lse(lS, std::log(wt) + S);
+  };
+  if (gtrial) {
+    add(1.0 - g1, false, false, TC);
+    add(g1, true, true, false);
+  } else {
+    add((1.0 - g1) * (1.0 - g2), false, false, TC);
+    add(g1 * (1.0 - g2), true, false, TC);
+    add((1.0 - g1) * g2, false, true, TC);
+    add(g1 * g2, true, true, TC);
+  }
+}
+
 // log P(a < dt <= b) from the (lP, lS) pairs at a and b: the route with the
 // smaller leading term.
 inline double mtlba_logwindow(double Pa, double Sa, double Pb, double Sb)
@@ -689,66 +858,24 @@ inline double mtlba_logwindow(double Pa, double Sa, double Pb, double Sb)
   return mtlba_ldiff(Pb, Pa);
 }
 
-// The stopping-time terms at LT and UT depend only on the trial's parameter
-// rows and the two bounds, not on the rt, so trials of the same design cell
-// share them. A small cache, local to one likelihood call, keyed on the exact
-// values (v, sv, A, B, t0, criteria of both rows, LT, UT); NaN never matches.
+// The stopping-time terms depend only on the trial's parameter rows and the
+// bound, not on the rt, so trials of the same design cell share them. A small
+// cache, local to one likelihood call, keyed on the exact values (the bound y,
+// rho, then v, sv, A, B, gp, gB and the criteria of both rows); NaN never
+// matches. The correlated terms are one integral per trigger state, so the
+// cache is what makes them affordable.
 struct MTLBAStopCache {
-  static constexpr int MAX_ENTRIES = 64;
-  int n_key = 0, n = 0, next = 0;
-  std::vector<double> keys, vals;   // MAX_ENTRIES x n_key, MAX_ENTRIES x 4
-  std::vector<double> key;
-  void init(int K) {
-    n_key = 2 * (5 + K - 1) + 2;
-    keys.resize((size_t)MAX_ENTRIES * n_key);
-    vals.resize((size_t)MAX_ENTRIES * 4);
-    key.resize(n_key);
-  }
-  void get(const MTLBACols& p, int K, bool TC, int r1, int r2, double LT, double UT,
-           double& PLT, double& SLT, double& PUT, double& SUT) {
-    const double t0 = p.t0[r1];
-    int k = 0;
-    for (int r : {r1, r2}) {
-      key[k++] = p.v[r]; key[k++] = p.sv[r]; key[k++] = p.A[r]; key[k++] = p.B[r];
-      key[k++] = p.t0[r];
-      for (int c = 0; c < K - 1; ++c) key[k++] = p.c[c][r];
-    }
-    key[k++] = LT; key[k++] = UT;
-    for (int e = 0; e < n; ++e) {
-      const double* ke = keys.data() + (size_t)e * n_key;
-      int i = 0;
-      while (i < n_key && ke[i] == key[i]) ++i;
-      if (i == n_key) {
-        const double* v = vals.data() + (size_t)e * 4;
-        PLT = v[0]; SLT = v[1]; PUT = v[2]; SUT = v[3];
-        return;
-      }
-    }
-    mtlba_logstop(p, K, TC, LT - t0, r1, r2, PLT, SLT);
-    mtlba_logstop(p, K, TC, UT - t0, r1, r2, PUT, SUT);
-    const int e = (n < MAX_ENTRIES) ? n++ : next++ % MAX_ENTRIES;   // round-robin when full
-    std::copy(key.begin(), key.end(), keys.begin() + (size_t)e * n_key);
-    double* v = vals.data() + (size_t)e * 4;
-    v[0] = PLT; v[1] = SLT; v[2] = PUT; v[3] = SUT;
-  }
-};
-
-// Correlated stopping-time terms (rho != 0): log P(dt <= y) and log P(dt > y)
-// at one bound y, as the R twin mtlba_logstop_any. The integral depends only on
-// the parameter rows and y, so it is cached per likelihood call, keyed on the
-// exact values (y, rho, then v, sv, A, B and the criteria of both rows).
-struct MTLBAStopRhoCache {
-  static constexpr int MAX_ENTRIES = 64;
+  static constexpr int MAX_ENTRIES = 128;
   int n_key = 0, n = 0, next = 0;
   std::vector<double> keys, vals;   // MAX_ENTRIES x n_key, MAX_ENTRIES x 2
   std::vector<double> key, x, w;
   void init(int K) {
-    n_key = 2 + 2 * (4 + K - 1);
+    n_key = 2 + 2 * (6 + K - 1);
     keys.resize((size_t)MAX_ENTRIES * n_key);
     vals.resize((size_t)MAX_ENTRIES * 2);
     key.resize(n_key);
   }
-  void get(const MTLBACols& p, int K, bool TC, double y, int r1, int r2, double rho,
+  void get(const MTLBACols& p, int K, bool TC, bool gtrial, double y, int r1, int r2, double rho,
            double& lP, double& lS) {
     if (std::isnan(y)) { lP = lS = R_NaN; return; }
     if (y == R_PosInf) { lP = 0.0; lS = R_NegInf; return; }
@@ -758,6 +885,7 @@ struct MTLBAStopRhoCache {
     key[k++] = y; key[k++] = rho;
     for (int r : {r1, r2}) {
       key[k++] = p.v[r]; key[k++] = p.sv[r]; key[k++] = p.A[r]; key[k++] = p.B[r];
+      key[k++] = p.gp ? p.gp[r] : 0.0; key[k++] = p.gp ? p.gB[r] : 0.0;
       for (int c = 0; c < K - 1; ++c) key[k++] = p.c[c][r];
     }
     for (int e = 0; e < n; ++e) {
@@ -766,13 +894,7 @@ struct MTLBAStopRhoCache {
       while (i < n_key && ke[i] == key[i]) ++i;
       if (i == n_key) { lP = vals[2 * e]; lS = vals[2 * e + 1]; return; }
     }
-    double T1[MTLBA_MAX_K], T2[MTLBA_MAX_K];
-    for (int j = 1; j <= K; ++j) {
-      T1[j - 1] = mtlba_threshold(p, K, r1, j);
-      T2[j - 1] = mtlba_threshold(p, K, r2, j);
-    }
-    mtlba_stop_rho1(y, p.A[r1], p.v[r1], p.sv[r1], T1, p.A[r2], p.v[r2], p.sv[r2], T2,
-                    rho, K, TC, lP, lS, x, w);
+    mtlba_stop_mix(p, K, TC, gtrial, y, r1, r2, rho, lP, lS, x, w);
     const int e = (n < MAX_ENTRIES) ? n++ : next++ % MAX_ENTRIES;   // round-robin when full
     std::copy(key.begin(), key.end(), keys.begin() + (size_t)e * n_key);
     vals[2 * e] = lP; vals[2 * e + 1] = lS;
@@ -788,11 +910,12 @@ inline const char* mtlba_error_message(int code)
 }
 
 // Trial log-likelihoods into ll_buf (indexed by trial), floored at min_ll.
-// Observed trials: the response kernel; censored trials: the probability of
-// stopping in the censored window(s); truncated trials: minus log P(LT < rt < UT).
-// rho is read from accumulator 1's row (a trial-level parameter). Returns
-// MTLBA_T0 if a censored or truncated trial has unequal t0 (the caller stops,
-// outside any parallel region).
+// Observed trials: the response density (kernel, with guessing a mixture of
+// kernels); censored trials: the probability of stopping in the censored
+// window(s); truncated trials: minus log P(LT < rt < UT). rho is read from
+// accumulator 1's row (a trial-level parameter). Returns MTLBA_T0 if a censored
+// or truncated trial has unequal t0 (the caller stops, outside any parallel
+// region).
 inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_ll,
                           double* __restrict__ ll_buf)
 {
@@ -804,12 +927,16 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
   p.t0  = pt.base.colptr(s.col_t0);
   p.rho = pt.base.colptr(s.col_rho);
   for (int col : s.col_c) p.c.push_back(pt.base.colptr(col));
+  if (s.col_gp >= 0) {
+    p.gp = pt.base.colptr(s.col_gp);
+    p.gB = pt.base.colptr(s.col_gB);
+    for (int col : s.col_pg) p.pg.push_back(pt.base.colptr(col));
+  }
   const int K = s.K;
+  const bool gtrial = s.guess_trial;
   int code = MTLBA_OK;
   MTLBAStopCache cache;
-  MTLBAStopRhoCache rcache;
   MTLBAPposCache ppos;
-  if (s.any_missing) cache.init(K);
 
   const int nt = (int)s.rt.size();
   for (int t = 0; t < nt; ++t) {
@@ -820,17 +947,11 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
     double ll = R_NegInf;
     if (miss == 0) {
       const int RR = s.RR[t];
-      int a, j, lo;
-      if (s.DK && RR == 1) {
-        mtlba_lookup(1, 1, K, s.TC, a, j, lo);
-        const double l1 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo, rho, ppos);
-        mtlba_lookup(2, 1, K, s.TC, a, j, lo);
-        const double l2 = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo, rho, ppos);
-        ll = mtlba_lse(l1, l2);
-      } else {
-        mtlba_lookup(s.R[t], RR, K, s.TC, a, j, lo);
-        ll = mtlba_logkernel(p, K, s.rt[t], a == 1 ? r1 : r2, a == 1 ? r2 : r1, j, lo, rho, ppos);
-      }
+      if (s.DK && RR == 1)
+        ll = mtlba_lse(mtlba_logresp(p, K, s.TC, gtrial, s.rt[t], 1, 1, r1, r2, rho, ppos),
+                       mtlba_logresp(p, K, s.TC, gtrial, s.rt[t], 2, 1, r1, r2, rho, ppos));
+      else
+        ll = mtlba_logresp(p, K, s.TC, gtrial, s.rt[t], s.R[t], RR, r1, r2, rho, ppos);
     }
     if (miss != 0 || s.trunc[t]) {
       const double t0 = p.t0[r1];
@@ -839,18 +960,12 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
         ll_buf[t] = min_ll;
         continue;
       }
-      const bool corr = !(rho == 0);   // NaN: the correlated route, which returns NaN
       auto stop_at = [&](double y, double& P, double& S) {
-        if (corr) rcache.get(p, K, s.TC, y, r1, r2, rho, P, S);
-        else mtlba_logstop(p, K, s.TC, y, r1, r2, P, S);
+        cache.get(p, K, s.TC, gtrial, y, r1, r2, rho, P, S);
       };
       double PLT, SLT, PUT, SUT;
-      if (corr) {
-        stop_at(s.LT[t] - t0, PLT, SLT);
-        stop_at(s.UT[t] - t0, PUT, SUT);
-      } else {
-        cache.get(p, K, s.TC, r1, r2, s.LT[t], s.UT[t], PLT, SLT, PUT, SUT);
-      }
+      stop_at(s.LT[t] - t0, PLT, SLT);
+      stop_at(s.UT[t] - t0, PUT, SUT);
       if (miss != 0) {
         double P, S;
         if (miss == 1 || miss == 3) {
