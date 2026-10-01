@@ -8,10 +8,11 @@
 golden_mtlba <- function(f) readRDS(test_path("golden", "mtlba", f))
 
 # Two rows per trial: v, sv, A, b, t0 and threshold proportions d1 .. d{K-1}
-# (d: 2 x (K - 1) matrix, row = accumulator).
-mtlba_pars <- function(n, v, sv, A, b, t0, d = NULL) {
+# (d: 2 x (K - 1) matrix, row = accumulator); rho (one value) if given.
+mtlba_pars <- function(n, v, sv, A, b, t0, d = NULL, rho = NULL) {
   r <- function(x) rep_len(x, 2 * n)
   p <- cbind(v = r(v), sv = r(sv), A = r(A), b = r(b), t0 = r(t0))
+  if (!is.null(rho)) p <- cbind(p, rho = rho)
   if (!is.null(d) && ncol(d) > 0) {
     dd <- d[rep(1:2, n), , drop = FALSE]
     colnames(dd) <- paste0("d", seq_len(ncol(d)))
@@ -41,11 +42,11 @@ ref_logband <- function(t, A, v, sv, lo, hi) {
   log(I / A) + M - stats::pnorm(v / sv, log.p = TRUE)
 }
 
-# set list(v, sv, A, b, t0, d) -> density function of rt for one response
-mtlba_f <- function(R, RR, K, rule, dk, st)
+# set list(v, sv, A, b, t0, d[, rho]) -> density function of rt for one response
+mtlba_f <- function(R, RR, K, rule, dk, st, quad = EMC2:::mtlba_quad_rule())
   function(rt) EMC2:::dMTLBA(rt, rep(R, length(rt)), rep(RR, length(rt)),
-                             mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d),
-                             K, rule, dk)
+                             mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho),
+                             K, rule, dk, quad = quad)
 
 mtlba_prob <- function(R, RR, K, rule, dk, st, upper = Inf) {
   t0 <- min(st$t0)
@@ -378,7 +379,7 @@ test_that("design and data checks: don't-know coding, rho, K = 1 with don't know
   expect_error(EMC2:::design_model(bad, des, verbose = FALSE), "censored")
   expect_error(suppressMessages(
     design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = MTLBA,
-           formula = list(v ~ 1, rho ~ 1), report_p_vector = FALSE)), "not implemented")
+           formula = list(v ~ 1, rho ~ lR), report_p_vector = FALSE)), "trial-level")
   expect_error(mtlba_design(3, rlev = c("a", "b", "c")), "exactly 2 response levels")
   mp <- mapped_pars(mtlba_design(3), mtlba_p(3))
   expect_equal(unique(mp$rho), 0)
@@ -793,4 +794,229 @@ test_that("truncation normaliser cache: many distinct parameter rows (covariate)
     expect_identical(mtlba_omp(EMC2:::calc_ll_manager(pm, dadm, des$model, return_trialwise = TRUE)),
                      llc)
   }
+})
+
+# ---- correlated drift rates (rho != 0): R reference (Stage M4) ----
+
+test_that("bivariate normal upper orthant (Genz) matches mvtnorm", {
+  set.seed(90)
+  n <- 400
+  h <- rnorm(n, 0, 2.5); k <- rnorm(n, 0, 2.5)
+  r <- c(runif(n / 2, -1, 1), sample(c(-1, 1), n / 2, TRUE) * (1 - 10^-runif(n / 2, 1, 6)))
+  ours <- EMC2:::mtlba_bvu(h, k, r)
+  mv <- sapply(seq_len(n), function(i)
+    mvtnorm::pmvnorm(lower = c(h[i], k[i]), upper = c(Inf, Inf),
+                     corr = matrix(c(1, r[i], r[i], 1), 2))[1])
+  expect_lt(max(abs(ours - mv)), 1e-14)
+  expect_equal(EMC2:::mtlba_bvu(c(.3, -1), c(-.2, .4), c(0, 0)),
+               pnorm(-c(.3, -1)) * pnorm(-c(-.2, .4)), tolerance = 1e-15)
+  expect_true(all(is.nan(EMC2:::mtlba_bvu(c(0, 0, NA), c(0, 0, 0), c(1, -1, .2)))))
+  # Gauss-Legendre rule: exact for polynomials of degree 2n - 1
+  g <- EMC2:::mtlba_gl(16)
+  expect_equal(sum(g$w), 2, tolerance = 1e-15)
+  expect_equal(sum(g$w * g$x^30), 2 / 31, tolerance = 1e-14)
+})
+
+test_that("correlated density: quadrature = BETE closed form = brute-force 2-D (BE and TC)", {
+  g <- golden_mtlba("ref_density.rds")
+  cells <- g$cells[g$cells$rho != 0, ]
+  cells$id <- seq_len(nrow(cells))
+  ref <- def <- numeric(nrow(cells))
+  grp <- split(cells, list(cells$set, cells$K, cells$rule, cells$rho, cells$R), drop = TRUE)
+  for (x in grp) {
+    st <- bete_set(g$sets[[x$set[1]]], x$K[1])
+    st$rho <- x$rho[1]
+    rr <- bete_resp(x$R[1], x$K[1])
+    ref[x$id] <- mtlba_f(rr[1], rr[2], x$K[1], x$rule[1], FALSE, st,
+                         EMC2:::mtlba_quad_reference())(x$rt)
+    def[x$id] <- mtlba_f(rr[1], rr[2], x$K[1], x$rule[1], FALSE, st)(x$rt)
+  }
+  expect_true(all(is.finite(ref)) && all(ref >= 0))
+  # the three evaluations (reference quadrature rule)
+  expect_lt(max(abs(ref - cells$dens_2d)), 1e-13)
+  expect_lt(max(abs(ref - cells$dens_1d)), 1e-13)
+  expect_lt(max(abs(ref - cells$dens_bete)), 1e-13)
+  body <- cells$dens_2d > 1e-8
+  expect_gt(sum(body), 3500)
+  expect_lt(max(abs(ref[body] / cells$dens_2d[body] - 1)), 1e-10)
+  # the fit rule: within the 1e-6 log-likelihood target of the reference
+  expect_lt(max(abs(log(def[body]) - log(ref[body]))), 1e-6)
+  expect_lt(max(abs(def - ref)), 1e-9)
+})
+
+mtlba_rho_sets <- function() list(
+  list(v = c(2.2, 1.3), sv = c(.8, 1.1), A = c(.5, .7), b = c(1.4, 1.6), t0 = c(.2, .2),
+       d = rbind(c(.3, .7), c(.2, .5)), rho = -.8),
+  list(v = c(1.5, 1.8), sv = c(1.2, .9), A = c(.6, .3), b = c(1.2, 1.5), t0 = c(.25, .25),
+       d = rbind(c(.25, .6), c(.4, .8)), rho = .6))
+
+test_that("correlated density joins the closed form at rho = 0 and integrates to 1", {
+  rt <- .2 + c(.1, .2, .35, .6, 1, 2)
+  for (st in mtlba_rho_sets()) for (rule in c("BE", "TC")) {
+    s0 <- st; s0$rho <- 0
+    for (i in 1:6) {
+      rr <- mtlba_responses(3, FALSE)[i, ]
+      f0 <- mtlba_f(rr[1], rr[2], 3, rule, FALSE, s0)(rt)
+      fe <- sapply(c(-1e-4, 1e-4), function(e) {
+        s1 <- st; s1$rho <- e
+        mtlba_f(rr[1], rr[2], 3, rule, FALSE, s1)(rt)
+      })
+      # even part in rho is O(rho^2)
+      expect_lt(max(abs(rowMeans(fe) - f0)), 1e-6)
+    }
+    for (dk in c(FALSE, TRUE)) {
+      rsp <- mtlba_responses(3, dk)
+      tot <- sum(apply(rsp, 1, function(r) mtlba_prob(r[1], r[2], 3, rule, dk, st)))
+      expect_equal(tot, 1, tolerance = 1e-7)
+    }
+    # don't know = the sum of the two rating-1 kernels
+    expect_equal(mtlba_f(1, 1, 3, rule, TRUE, st)(rt),
+                 mtlba_f(1, 1, 3, rule, FALSE, st)(rt) + mtlba_f(2, 1, 3, rule, FALSE, st)(rt),
+                 tolerance = 1e-12)
+  }
+  # rho outside (-1, 1) or non-finite: -Inf, not an error
+  st <- mtlba_rho_sets()[[1]]
+  for (r in c(1, -1, NA, Inf)) {
+    st$rho <- r
+    expect_identical(suppressWarnings(mtlba_f(1, 2, 3, "BE", FALSE, st)(.6)), 0)
+  }
+  # A = 0 on the stopping accumulator: no integral left
+  st <- mtlba_rho_sets()[[2]]; st$A <- c(0, .3); s2 <- st; s2$A <- c(1e-9, .3)
+  expect_equal(mtlba_f(1, 2, 3, "BE", FALSE, st)(rt), mtlba_f(1, 2, 3, "BE", FALSE, s2)(rt),
+               tolerance = 1e-6)
+})
+
+test_that("correlated censoring and truncation: censored + observed mass is 1", {
+  LC <- .45; UC <- 1.6; LT <- .3; UT <- 2.5
+  for (rho in c(-.8, .6)) for (rule in c("BE", "TC")) for (K in c(1, 3)) for (dk in c(FALSE, if (K > 1) TRUE)) {
+    p <- cbind(mtlba_trial_pars(K), rho = rho)
+    rsp <- mtlba_responses(K, dk)
+    ll_miss <- function(rt, R, RR, bnd)
+      EMC2:::mtlba_logdens_missing(rt, R, RR, p, K, rule, dk, bnd)
+    dens <- function(rt, R, RR, bnd = mtlba_bnd()) {
+      n <- length(rt)
+      exp(EMC2:::mtlba_logdens_missing(rt, rep(R, n), rep(RR, n), p[rep(1:2, n), ], K, rule, dk,
+                                       lapply(bnd, rep_len, n)))
+    }
+    obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    cens <- function(m, bnd = mtlba_bnd(m, LC = LC, UC = UC)) exp(ll_miss(NA, NA, NA, bnd))
+    expect_equal(obs + cens(1L) + cens(2L), 1, tolerance = 1e-8)
+    expect_equal(cens(3L), cens(1L) + cens(2L), tolerance = 1e-12)
+    tb <- mtlba_bnd(LT = LT, UT = UT)
+    tr <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LT, UT, R = R, RR = RR, bnd = tb, rel.tol = 1e-10)$value,
+      rsp[, "R"], rsp[, "RR"]))
+    expect_equal(tr, 1, tolerance = 1e-8)
+    # stop terms: P + S = 1, and S = 1 - the integrated response density
+    Tm <- EMC2:::mtlba_thresholds(p, K)
+    st <- EMC2:::mtlba_logstop_any(c(.7, Inf, 0), p[rep(1:2, 3), ], Tm[rep(1:2, 3), ],
+                                   c(1, 3, 5), c(2, 4, 6), K, rule)
+    expect_equal(exp(st$P[1]) + exp(st$S[1]), 1, tolerance = 1e-12)
+    expect_identical(c(st$P[2:3], st$S[2:3]), c(0, -Inf, -Inf, 0))
+    below <- sum(mapply(function(R, RR)
+      stats::integrate(dens, .2, .9, R = R, RR = RR, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(exp(st$P[1]), below, tolerance = 1e-8)
+  }
+  # rho -> 0: the correlated stop terms join the closed form
+  for (rule in c("BE", "TC")) {
+    p <- mtlba_trial_pars(3)
+    Tm <- EMC2:::mtlba_thresholds(p, 3)
+    cf <- EMC2:::mtlba_logstop(.7, p, Tm, 1, 2, 3, rule)
+    q <- EMC2:::mtlba_stop_rho1(.7, p[1, "A"], p[1, "v"], p[1, "sv"], Tm[1, -1], p[2, "A"], p[2, "v"],
+                                p[2, "sv"], Tm[2, -1], 1e-9, 3, rule)
+    expect_equal(q, c(cf$P, cf$S), tolerance = 1e-7)
+  }
+})
+
+test_that("rMTLBA agrees with the correlated density (rho = -.8, -.4, .4, .8)", {
+  st <- list(v = c(2.2, 1.3), sv = c(.8, 1.1), A = c(.5, .7), b = c(1.4, 1.6), t0 = c(.2, .25),
+             d = rbind(c(.3, .7), c(.2, .5)))
+  n <- 1e5
+  qp <- c(.1, .3, .5, .7, .9)
+  lR <- factor(rep(c("a", "b"), n))
+  for (rho in c(-.8, -.4, .4, .8)) for (rule in c("BE", "TC")) {
+    dk <- rule == "TC" && rho > 0
+    st$rho <- rho
+    set.seed(round(100 + 10 * rho) + (rule == "TC"))
+    sim <- EMC2:::rMTLBA(lR, mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, rho), 3, rule, dk)
+    expect_true(all(sim$RR %in% 1:3) && !anyNA(sim$R) && all(is.finite(sim$rt)))
+    rsp <- mtlba_responses(3, dk)
+    for (i in seq_len(nrow(rsp))) {
+      sel <- sim$RR == rsp[i, 2] & (if (dk && rsp[i, 2] == 1) TRUE else as.integer(sim$R) == rsp[i, 1])
+      pe <- mtlba_prob(rsp[i, 1], rsp[i, 2], 3, rule, dk, st)
+      expect_lt(abs(mean(sel) - pe), 4.5 * sqrt(pe * (1 - pe) / n))
+      if (pe * n > 5000) {
+        Fq <- sapply(stats::quantile(sim$rt[sel], qp), function(u)
+          mtlba_prob(rsp[i, 1], rsp[i, 2], 3, rule, dk, st, upper = u)) / pe
+        expect_lt(max(abs(Fq - qp)), 4.5 * .5 / sqrt(pe * n))
+      }
+    }
+  }
+  # the drift sampler: both positive, the truncated bivariate normal's moments
+  set.seed(95)
+  m <- 2e5
+  dr <- EMC2:::mtlba_rdrift_rho(rep(.5, m), rep(1, m), rep(-.2, m), rep(1.5, m), rep(-.7, m))
+  expect_true(all(dr$v1 > 0 & dr$v2 > 0))
+  S <- matrix(c(1, -.7 * 1.5, -.7 * 1.5, 1.5^2), 2)
+  mom <- EMC2:::mtlba_bvu(-.5, .2 / 1.5, -.7)
+  e1 <- stats::integrate(function(x) x * dnorm(x, .5, 1) *
+                           pnorm((-.2 - .7 * 1.5 * (x - .5)) / (1.5 * sqrt(1 - .49))), 0, Inf)$value / mom
+  expect_lt(abs(mean(dr$v1) - e1), 4.5 * sd(dr$v1) / sqrt(m))
+})
+
+test_that("correlated model: design, simulation and the R likelihood through EMC2", {
+  for (rule in c("BE", "TC")) for (dk in c(FALSE, TRUE)) {
+    K <- if (dk) 2 else 3
+    crit <- paste0("c", seq_len(K - 1))
+    mod <- local({ k <- K; r <- rule; d <- dk
+      function() { m <- MTLBA(n_ratings = k, dont_know = d, rule = r); m$c_name <- NULL; m } })
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = mod, matchfun = function(d) d$S == d$lR,
+      formula = c(list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ S),
+                  lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR")))),
+      report_p_vector = FALSE))
+    p <- c(mtlba_p(K), rho = qnorm((1 - .6) / 2), rho_Sright = qnorm((1 + .3) / 2) - qnorm((1 - .6) / 2))
+    p <- p[names(sampled_pars(des))]
+    mp <- mapped_pars(des, p)
+    expect_equal(sort(unique(round(mp$rho, 10))), c(-.6, .3))
+    set.seed(96)
+    dat <- make_data(p, des, n_trials = 150)
+    expect_true(all(is.finite(dat$rt)) && all(dat$RR %in% seq_len(K)))
+    res <- .05
+    dc <- EMC2:::design_model(dat, des, compress = TRUE, verbose = FALSE, rt_resolution = res)
+    du <- EMC2:::design_model(dat, des, compress = FALSE, verbose = FALSE, rt_resolution = res)
+    pm <- t(as.matrix(p))
+    llc <- EMC2:::calc_ll_manager(pm, dc, des$model)
+    expect_equal(llc, EMC2:::calc_ll_manager(pm, du, des$model), tolerance = 1e-12)
+    # direct, natural-scale parameters by hand
+    n <- nrow(dat)
+    m1 <- dat$S == "left"
+    C <- matrix(sapply(seq_len(K - 1), function(k) exp(p[[paste0("c", k)]] + c(0, .15))), nrow = 2)
+    if (K > 2) for (k in 2:(K - 1)) C[, k] <- C[, k - 1] + C[, k]
+    pars <- mtlba_pars(n, 0, 1, .5, 1.5, .25, exp(-C[, rev(seq_len(K - 1)), drop = FALSE]))
+    pars[, "v"] <- as.vector(rbind(ifelse(m1, 2.5, 1), ifelse(m1, 1, 2.5)))
+    pars <- cbind(pars, rho = rep(ifelse(m1, -.6, .3), each = 2))
+    rt <- floor(dat$rt / res) * res
+    direct <- sum(pmax(log(1e-10), EMC2:::dMTLBA(rt, as.integer(dat$R), dat$RR, pars, K, rule, dk,
+                                                  log = TRUE)))
+    expect_equal(as.vector(llc), direct, tolerance = 1e-10)
+    # censoring and truncation evaluate, and differ from the uncorrelated value
+    cd <- make_data(p, des, n_trials = 150, TC = list(LC = .5, UC = 1.8, LT = .3, UT = 4))
+    dm <- EMC2:::design_model(cd, des, verbose = FALSE)
+    ll <- EMC2:::calc_ll_manager(pm, dm, des$model)
+    p0 <- p; p0[c("rho", "rho_Sright")] <- 0
+    expect_true(is.finite(ll) && abs(ll - EMC2:::calc_ll_manager(t(as.matrix(p0)), dm, des$model)) > 1e-3)
+  }
+  # the compiled likelihood does not have rho yet (Stage M5): it stops
+  des <- suppressMessages(design(
+    factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+    model = function() MTLBA(2), matchfun = function(d) d$S == d$lR,
+    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1), report_p_vector = FALSE))
+  p <- c(v = 1, v_lMTRUE = 1.5, B = 0, A = log(.5), t0 = log(.25), rho = .4, c1 = log(.6))
+  set.seed(97)
+  dat <- make_data(p, des, n_trials = 20)
+  dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+  expect_error(EMC2:::calc_ll_manager(t(as.matrix(p)), dadm, des$model), "rho != 0")
 })

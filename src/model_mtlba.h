@@ -412,7 +412,7 @@ inline const char* mtlba_error_message(int code)
 {
   if (code == MTLBA_T0)
     return "MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not depend on lR or lM)";
-  return "MTLBA: correlated drift rates (rho != 0) are not implemented yet";
+  return "MTLBA: correlated drift rates (rho != 0) are not in the compiled likelihood yet; remove c_name from the model to use the R likelihood";
 }
 
 // Trial log-likelihoods into ll_buf (indexed by trial), floored at min_ll.

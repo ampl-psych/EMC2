@@ -22,9 +22,9 @@ A model list with all the necessary functions for EMC2 to sample.
 Model file for the multiple-threshold LBA (MTLBA), a model of choice,
 response time and a rating (e.g. confidence). Two LBA accumulators race;
 each has, besides its choice threshold \code{b = A + B}, \code{n_ratings - 1}
-confidence thresholds between \code{A} and \code{b}. This version has independent
-drift rates (the correlation \code{rho} is fixed at 0), both truncated to be
-positive, so with one rating it is the standard \code{\link[=LBA]{LBA()}}.
+confidence thresholds between \code{A} and \code{b}. The two drift rates are normal,
+truncated to be both positive, and may be correlated (\code{rho}); with
+\code{rho = 0} (the default) and one rating the model is the standard \code{\link[=LBA]{LBA()}}.
 }
 \details{
 The data need a factor \code{R} with two levels, \code{rt}, and a numeric column \code{RR}
@@ -35,7 +35,7 @@ holding the rating, an integer from 1 (lowest) to \code{n_ratings} (highest).\ta
    \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab Choice threshold minus the maximum start point \cr
    \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab Maximum start point \cr
    \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab Non-decision time \cr
-   \emph{rho} \tab probit on (-1, 1) \tab [-1, 1] \tab 0 \tab Drift-rate correlation; fixed at 0 in this version \cr
+   \emph{rho} \tab probit on (-1, 1) \tab [-1, 1] \tab 0 \tab Correlation between the two drift rates \cr
    \emph{c1} \tab log \tab [0, Inf] \tab log(0.5) \tab First rating criterion, -log of the largest threshold proportion \cr
    \emph{ck} \tab log \tab [0, Inf] \tab log(0.5) \tab Increment to the next criterion \cr
 }
@@ -66,6 +66,14 @@ trials \code{RR = 1} with \code{R} equal to the first response level; \code{simu
 and \code{make_data} write them that way.
 
 \code{t0} is taken from the accumulator that stops the race.
+
+\code{rho} is a constant 0 unless it is given a formula. It is a trial-level
+parameter: it may depend on design factors but not on \code{lR} or \code{lM}. With
+\code{rho != 0} the likelihood is a one-dimensional integral over the stopping
+accumulator's start point, done by Gauss-Legendre quadrature. At present
+only the R likelihood has it: the compiled likelihood stops when it meets a
+non-zero \code{rho}, so a correlated model must be run with \code{c_name} removed
+from the model list (slow; for checking, not for large fits).
 
 Censoring and truncation use EMC2's usual coding (\code{\link[=make_missing]{make_missing()}}, or the
 \code{TC} argument of \code{\link[=make_data]{make_data()}}). A censored trial has \code{R = NA} and

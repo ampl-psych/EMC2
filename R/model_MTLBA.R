@@ -30,10 +30,23 @@
 #   band * Phi(v/sv) = S(lo) - S(hi) = H(hi) - H(lo),
 # and whichever route has the smaller leading term is used.
 #
-# The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports this
-# algorithm; the R functions here are its reference, used when c_name is
-# removed. rho (correlated drift rates) is a p_type fixed at 0 until the
-# correlated likelihood exists.
+# Correlated drift rates (rho != 0): the two drifts are bivariate normal with
+# correlation rho, truncated to both positive. Given the stopping accumulator's
+# drift x (its start point is then bs - x * dt) the other drift is normal with
+# mean v_o + rho * (sv_o / sv_s) * (x - v_s) and sd sv_o * sqrt(1 - rho^2), so
+#   kernel = 1 / (A_s * P(both > 0)) *
+#            integral over x in ((bs - A_s) / dt, bs / dt) of
+#              x * dnorm(x; v_s, sv_s) * P(band, v_o > 0 | x) dx,
+# a one-dimensional integral of an analytic integrand whose last factor is the
+# band function above at the conditional mean and sd, left unnormalised. It is
+# done by Gauss-Legendre quadrature on a window clipped to where the integrand
+# lives (mtlba_quad_rule, mtlba_logkernel_rho). rho is a trial-level parameter
+# (the same on both accumulator rows); trials with rho = 0 take the closed form.
+#
+# The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports the
+# uncorrelated algorithm and stops on rho != 0; the R functions here are its
+# reference and the only correlated likelihood so far, used when c_name is
+# removed.
 
 # log G(z), G(z) = z * pnorm(z) + dnorm(z) = integral of pnorm up to z, accurate
 # in the lower tail: G(-x) = dnorm(x) * (1 - x R(x)), R the Mills ratio, with
@@ -100,8 +113,9 @@ mtlba_logHS <- function(y, t, A, v, sv) {
 
 # log P(T_lo < e_o < T_hi | v_o > 0) at decision time t; lowest = lo is the
 # sentinel "no threshold below" (lo_y is then ignored). The denominator
-# pnorm(v/sv) is floored at 1e-10 as in EMC2's LBA.
-mtlba_logband <- function(t, A, v, sv, lo_y, hi_y, lowest) {
+# pnorm(v/sv) is floored at 1e-10 as in EMC2's LBA. normalise = FALSE leaves
+# the denominator out: log P(T_lo < e_o < T_hi, v_o > 0).
+mtlba_logband <- function(t, A, v, sv, lo_y, hi_y, lowest, normalise = TRUE) {
   zv <- v / sv
   hi <- mtlba_logHS(hi_y, t, A, v, sv)
   lo <- list(H = stats::pnorm(-zv, log.p = TRUE), S = stats::pnorm(zv, log.p = TRUE))
@@ -115,6 +129,7 @@ mtlba_logband <- function(t, A, v, sv, lo_y, hi_y, lowest) {
   useS[is.na(useS)] <- FALSE
   lb <- mtlba_ldiff(hi$H, lo$H)
   if (any(useS)) lb[useS] <- mtlba_ldiff(lo$S[useS], hi$S[useS])
+  if (!normalise) return(lb)
   lb - pmax(stats::pnorm(zv, log.p = TRUE), log(1e-10))
 }
 
@@ -152,6 +167,217 @@ mtlba_logf <- function(t, A, bs, v, sv) {
   out
 }
 
+# ---- correlated drift rates (rho != 0) ----
+
+# Gauss-Legendre nodes and weights on (-1, 1): Golub-Welsch eigenvalues polished
+# by Newton steps on the Legendre recurrence (nodes to ~1e-16). Cached per n.
+mtlba_gl_cache <- new.env(parent = emptyenv())
+mtlba_gl <- function(n) {
+  key <- as.character(n)
+  if (!is.null(mtlba_gl_cache[[key]])) return(mtlba_gl_cache[[key]])
+  if (n == 1) return(mtlba_gl_cache[[key]] <- list(x = 0, w = 2))
+  i <- seq_len(n - 1)
+  J <- matrix(0, n, n)
+  J[cbind(i, i + 1)] <- J[cbind(i + 1, i)] <- i / sqrt(4 * i^2 - 1)
+  x <- sort(eigen(J, symmetric = TRUE, only.values = TRUE)$values)
+  legendre <- function(x) {
+    p0 <- 1; p1 <- x
+    for (k in 2:n) {
+      p2 <- ((2 * k - 1) * x * p1 - (k - 1) * p0) / k
+      p0 <- p1; p1 <- p2
+    }
+    list(p = p1, dp = n * (x * p1 - p0) / (x^2 - 1))
+  }
+  for (it in 1:3) {
+    l <- legendre(x)
+    x <- x - l$p / l$dp
+  }
+  x <- (x - rev(x)) / 2  # exactly symmetric
+  mtlba_gl_cache[[key]] <- list(x = x, w = 2 / ((1 - x^2) * legendre(x)$dp^2))
+}
+
+# Quadrature rule of the correlated kernel:
+#   n      Gauss-Legendre nodes per panel;
+#   hw     half-width of the integration window in sds of the stopping drift
+#          (mtlba_quad_window);
+#   panels number of equal panels, or NULL for one panel per pw widths of the
+#          integrand's narrowest feature, sv_s * min(1, sqrt(1 - rho^2) / |rho|),
+#          at most maxp.
+# The default is the fit rule chosen in Stage M4 (rating-work/mtlba/stageM4/
+# ACCURACY.md); mtlba_quad_reference() is the high-accuracy rule the tests and
+# the accuracy map compare it with.
+mtlba_quad_rule <- function(n = 16, hw = 8, panels = NULL, pw = 4, maxp = 64L)
+  list(n = n, hw = hw, panels = panels, pw = pw, maxp = maxp)
+mtlba_quad_reference <- function() mtlba_quad_rule(n = 16, hw = 12, pw = 1, maxp = 1024L)
+
+# Integration window (a, b) of the stopping accumulator's drift x: its range
+# ((bs - A_s) / dt, bs / dt) clipped to where the integrand is not negligible.
+# The integrand is the joint (bivariate normal) density of x and the other
+# drift y, summed over the y the band allows, y in (yl, yh) with
+# yl = max(0, (T_lo - A_o) / dt), yh = T_hi / dt. Its mass in x sits between
+# the marginal mean v_s and m = v_s + rho (sv_s / sv_o) (y* - v_o), the mean of
+# x given the allowed y nearest to v_o (m = v_s when v_o is allowed; otherwise,
+# e.g. v_o < 0 under the both-positive truncation, x is dragged towards m).
+# The window keeps x within r of the interval (v_s, m), r^2 = d^2 +
+# (hw sv_s)^2, d the distance from that interval to the range (0 when they
+# overlap, giving +- hw sds), so the far tail keeps relative accuracy too.
+mtlba_quad_window <- function(dt, As, bs, vs, svs, Ao, vo, svo, lo_y, hi_y, lowest, rho, quad) {
+  lo_x <- (bs - As) / dt
+  hi_x <- bs / dt
+  yl <- ifelse(lowest, 0, pmax(0, (lo_y - Ao) / dt))
+  m <- vs + rho * svs / svo * (pmin(pmax(vo, yl), hi_y / dt) - vo)
+  c_lo <- pmin(vs, m)
+  c_hi <- pmax(vs, m)
+  d <- pmax(lo_x - c_hi, c_lo - hi_x, 0)
+  r <- sqrt(d^2 + (quad$hw * svs)^2)
+  list(a = pmax(lo_x, c_lo - r), b = pmin(hi_x, c_hi + r))
+}
+
+# log of the correlated kernel times P(both drifts > 0): per trial the stopping
+# accumulator (A_s, threshold bs, v_s, sv_s), the other accumulator (A_o, v_o,
+# sv_o) and its band (lo_y, hi_y, lowest), decision time dt and rho. The
+# integrand is formed on the log scale (band at the conditional mean and sd,
+# unnormalised) and summed by log-sum-exp. A_s = 0: no integral, x = bs / dt.
+mtlba_logkernel_rho <- function(dt, As, bs, vs, svs, Ao, vo, svo, lo_y, hi_y, lowest, rho,
+                                quad = mtlba_quad_rule()) {
+  n <- length(dt)
+  out <- rep(-Inf, n)
+  sc <- svo * sqrt(1 - rho^2)
+  # log integrand at X (rows = the trials i, columns = nodes)
+  lint <- function(i, X) {
+    ii <- rep(i, ncol(X))
+    x <- as.vector(X)
+    mc <- vo[ii] + rho[ii] * svo[ii] / svs[ii] * (x - vs[ii])
+    l <- log(x) + stats::dnorm(x, vs[ii], svs[ii], log = TRUE) +
+      mtlba_logband(dt[ii], Ao[ii], mc, sc[ii], lo_y[ii], hi_y[ii], lowest[ii], normalise = FALSE)
+    l[is.na(l)] <- -Inf
+    matrix(l, length(i), ncol(X))
+  }
+  small <- As <= 1e-10
+  if (any(small)) {
+    i <- which(small)
+    out[i] <- lint(i, matrix(bs[i] / dt[i], ncol = 1))[, 1] - log(dt[i])
+  }
+  if (any(!small)) {
+    win <- mtlba_quad_window(dt, As, bs, vs, svs, Ao, vo, svo, lo_y, hi_y, lowest, rho, quad)
+    width <- win$b - win$a
+    P <- if (is.null(quad$panels)) {
+      sig <- svs * pmin(1, sqrt(1 - rho^2) / abs(rho))
+      pmin(quad$maxp, pmax(1, ceiling(width / (quad$pw * sig))))
+    } else rep(as.integer(quad$panels), n)
+    P[small | is.na(P)] <- 0
+    g <- mtlba_gl(quad$n)
+    for (p in setdiff(unique(P), 0)) {
+      i <- which(P == p)
+      h <- width[i] / p
+      u <- as.vector(outer((g$x + 1) / 2, 0:(p - 1), "+"))
+      L <- lint(i, win$a[i] + outer(h, u))
+      L <- L + rep(log(rep(g$w, p) / 2), each = length(i))
+      M <- L[cbind(seq_along(i), max.col(L, ties.method = "first"))]
+      s <- M + log(rowSums(exp(L - M))) + log(h) - log(As[i])
+      s[is.na(s) | M == -Inf] <- -Inf
+      out[i] <- s
+    }
+  }
+  out
+}
+
+# P(Z1 > h, Z2 > k) for standard bivariate normal (Z1, Z2) with correlation r,
+# |r| < 1: Genz (2004, Statistics and Computing 14, 251-260) BVND, the
+# double-precision algorithm (Gauss-Legendre in asin(r) for |r| < .925, the
+# expansion about |r| = 1 above), absolute error ~1e-15.
+mtlba_bvu <- function(h, k, r) {
+  gl <- list(
+    list(w = c(0.1713244923791705, 0.3607615730481384, 0.4679139345726904),
+         x = c(-0.9324695142031522, -0.6612093864662647, -0.2386191860831970)),
+    list(w = c(0.04717533638651177, 0.1069393259953183, 0.1600783285433464,
+               0.2031674267230659, 0.2334925365383547, 0.2491470458134029),
+         x = c(-0.9815606342467191, -0.9041172563704750, -0.7699026741943050,
+               -0.5873179542866171, -0.3678314989981802, -0.1252334085114692)),
+    list(w = c(0.01761400713915212, 0.04060142980038694, 0.06267204833410906,
+               0.08327674157670475, 0.1019301198172404, 0.1181945319615184,
+               0.1316886384491766, 0.1420961093183821, 0.1491729864726037,
+               0.1527533871307259),
+         x = c(-0.9931285991850949, -0.9639719272779138, -0.9122344282513259,
+               -0.8391169718222188, -0.7463319064601508, -0.6360536807265150,
+               -0.5108670019508271, -0.3737060887154196, -0.2277858511416451,
+               -0.07652652113349733)))
+  n <- length(h)
+  out <- rep(NaN, n)
+  ok <- is.finite(h) & is.finite(k) & is.finite(r) & abs(r) < 1
+  grp <- ifelse(abs(r) < 0.3, 1L, ifelse(abs(r) < 0.75, 2L, 3L))
+  for (gi in 1:3) {
+    w <- rep(gl[[gi]]$w, 2)
+    x <- c(gl[[gi]]$x, -gl[[gi]]$x)
+    i <- which(ok & grp == gi & abs(r) < 0.925)
+    if (length(i)) {
+      hk <- h[i] * k[i]
+      hs <- (h[i]^2 + k[i]^2) / 2
+      asr <- asin(r[i])
+      sn <- sin(outer(asr, (x + 1) / 2))
+      out[i] <- as.vector(exp((sn * hk - hs) / (1 - sn^2)) %*% w) * asr / (4 * pi) +
+        stats::pnorm(-h[i]) * stats::pnorm(-k[i])
+    }
+    i <- which(ok & grp == gi & abs(r) >= 0.925)
+    if (length(i)) {
+      hh <- h[i]
+      neg <- r[i] < 0
+      kk <- ifelse(neg, -k[i], k[i])
+      hk <- hh * kk
+      as <- (1 - r[i]) * (1 + r[i])
+      a <- sqrt(as)
+      bs <- (hh - kk)^2
+      cc <- (4 - hk) / 8
+      d <- (12 - hk) / 16
+      asr <- -(bs / as + hk) / 2
+      bvn <- ifelse(asr > -100,
+                    a * exp(asr) * (1 - cc * (bs - as) * (1 - d * bs / 5) / 3 + cc * d * as^2 / 5), 0)
+      b <- sqrt(bs)
+      bvn <- bvn - ifelse(-hk < 100, exp(-hk / 2) * sqrt(2 * pi) * stats::pnorm(-b / a) * b *
+                            (1 - cc * bs * (1 - d * bs / 5) / 3), 0)
+      xs <- outer(a / 2, 1 + x)^2
+      rs <- sqrt(1 - xs)
+      asr <- -(bs / xs + hk) / 2
+      term <- exp(asr) * (exp(-hk * (1 - rs) / (2 * (1 + rs))) / rs - (1 + cc * xs * (1 + d * xs)))
+      term[asr <= -100] <- 0
+      bvn <- -(bvn + (a / 2) * as.vector(term %*% w)) / (2 * pi)
+      out[i] <- ifelse(neg, -bvn + ifelse(kk > hh, stats::pnorm(kk) - stats::pnorm(hh), 0),
+                       bvn + stats::pnorm(-pmax(hh, kk)))
+    }
+  }
+  out
+}
+
+# log P(both drifts > 0)
+mtlba_logppos <- function(v1, sv1, v2, sv2, rho)
+  log(pmax(mtlba_bvu(-v1 / sv1, -v2 / sv2, rho), 0))
+
+# Both-positive correlated drifts: accumulator 1 from its positive-truncated
+# marginal normal, accepted with probability proportional to
+# P(v2 > 0 | v1) = pnorm(mc / sc), then accumulator 2 from its positive-truncated
+# conditional normal.
+mtlba_rdrift_rho <- function(m1, s1, m2, s2, rho) {
+  n <- length(m1)
+  v1 <- v2 <- rep(NA_real_, n)
+  sc <- s2 * sqrt(1 - rho^2)
+  # log of the largest acceptance probability over v1 > 0 (v1 = 0 when rho < 0)
+  lM <- ifelse(rho > 0, 0, stats::pnorm((m2 - rho * s2 / s1 * m1) / sc, log.p = TRUE))
+  todo <- which(is.finite(m1 + s1 + m2 + sc + lM))
+  for (it in 1:2000) {
+    if (!length(todo)) break
+    x <- msm::rtnorm(length(todo), m1[todo], s1[todo], lower = 0)
+    mc <- m2[todo] + rho[todo] * s2[todo] / s1[todo] * (x - m1[todo])
+    acc <- log(stats::runif(length(todo))) + lM[todo] < stats::pnorm(mc / sc[todo], log.p = TRUE)
+    if (any(acc)) {
+      v1[todo[acc]] <- x[acc]
+      v2[todo[acc]] <- msm::rtnorm(sum(acc), mc[acc], sc[todo[acc]], lower = 0)
+    }
+    todo <- todo[!acc]
+  }
+  if (length(todo)) warning("MTLBA: ", length(todo), " correlated drift pairs could not be sampled")
+  list(v1 = v1, v2 = v2)
+}
+
 # Response lookup: (choice R in 1/2, rating RR, K, rule) -> stopping
 # accumulator s (1/2), its threshold j (1 .. K, K = b), and the other
 # accumulator's band lo (0 .. K - 1; the band is (T_lo, T_{lo+1})).
@@ -186,26 +412,41 @@ mtlba_thresholds <- function(pars, K) {
 
 # log kernel per trial for given lookup indices. rt per trial; pars two rows
 # per trial (accumulators in level order); Tm = mtlba_thresholds(pars, K).
-mtlba_logkernel <- function(rt, pars, Tm, s, j, lo) {
+mtlba_logkernel <- function(rt, pars, Tm, s, j, lo, quad = mtlba_quad_rule()) {
   n <- length(rt)
   first <- seq(1, 2 * n, by = 2)
   si <- first + s - 1L
   oi <- first + 2L - s
   dt <- rt - pars[si, "t0"]
+  rho <- if ("rho" %in% colnames(pars)) pars[first, "rho"] else rep(0, n)
   out <- rep(-Inf, n)
   # non-finite parameters (e.g. an overflowing proposal) give -Inf, never an error
   fin <- function(i, cols) rowSums(!is.finite(pars[i, cols, drop = FALSE])) == 0
   ok <- !is.na(dt) & is.finite(dt) & dt > 0 & fin(si, c("v", "sv", "A", "b")) &
     fin(oi, c("v", "sv", "A", "b")) & is.finite(Tm[cbind(si, j + 1L)]) &
-    is.finite(Tm[cbind(oi, lo + 2L)]) & (lo == 0L | is.finite(Tm[cbind(oi, lo + 1L)]))
+    is.finite(Tm[cbind(oi, lo + 2L)]) & (lo == 0L | is.finite(Tm[cbind(oi, lo + 1L)])) &
+    is.finite(rho) & abs(rho) < 1
   ok[is.na(ok)] <- FALSE
   if (!any(ok)) return(out)
-  si <- si[ok]; oi <- oi[ok]; dt <- dt[ok]; j <- j[ok]; lo <- lo[ok]
+  si <- si[ok]; oi <- oi[ok]; dt <- dt[ok]; j <- j[ok]; lo <- lo[ok]; rho <- rho[ok]
   bs <- Tm[cbind(si, j + 1L)]
   lowest <- lo == 0L
-  out[ok] <- mtlba_logf(dt, pars[si, "A"], bs, pars[si, "v"], pars[si, "sv"]) +
-    mtlba_logband(dt, pars[oi, "A"], pars[oi, "v"], pars[oi, "sv"],
-                  Tm[cbind(oi, lo + 1L)], Tm[cbind(oi, lo + 2L)], lowest)
+  res <- numeric(length(dt))
+  u <- rho == 0
+  if (any(u))
+    res[u] <- mtlba_logf(dt[u], pars[si[u], "A"], bs[u], pars[si[u], "v"], pars[si[u], "sv"]) +
+      mtlba_logband(dt[u], pars[oi[u], "A"], pars[oi[u], "v"], pars[oi[u], "sv"],
+                    Tm[cbind(oi[u], lo[u] + 1L)], Tm[cbind(oi[u], lo[u] + 2L)], lowest[u])
+  if (any(!u)) {
+    k <- which(!u)
+    res[k] <- mtlba_logkernel_rho(dt[k], pars[si[k], "A"], bs[k], pars[si[k], "v"],
+                                  pars[si[k], "sv"], pars[oi[k], "A"], pars[oi[k], "v"],
+                                  pars[oi[k], "sv"], Tm[cbind(oi[k], lo[k] + 1L)],
+                                  Tm[cbind(oi[k], lo[k] + 2L)], lowest[k], rho[k], quad) -
+      pmax(mtlba_logppos(pars[si[k], "v"], pars[si[k], "sv"], pars[oi[k], "v"],
+                         pars[oi[k], "sv"], rho[k]), log(1e-10))
+  }
+  out[ok] <- res
   out
 }
 
@@ -217,56 +458,52 @@ mtlba_lse <- function(a, b) {
   out
 }
 
-mtlba_check_rho <- function(pars) {
-  if ("rho" %in% colnames(pars) && any(pars[, "rho"] != 0, na.rm = TRUE))
-    stop("MTLBA: correlated drift rates (rho != 0) are not implemented yet")
-}
-
 # log likelihood per trial: rt, R (1/2), RR per trial, pars two rows per trial.
-mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know) {
-  mtlba_check_rho(pars)
+mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad_rule()) {
   Tm <- mtlba_thresholds(pars, K)
   R <- as.integer(R)
   dk <- if (dont_know) !is.na(RR) & RR == 1 else rep(FALSE, length(R))
   # a don't-know trial is the sum of the two rating-1 terms: R = 1 here, R = 2 below
   R[dk] <- 1L
   lk <- mtlba_lookup(R, RR, K, rule)
-  ld <- mtlba_logkernel(rt, pars, Tm, lk$s, lk$j, lk$lo)
+  ld <- mtlba_logkernel(rt, pars, Tm, lk$s, lk$j, lk$lo, quad)
   if (any(dk)) {
     w <- which(dk)
     l2 <- mtlba_lookup(rep(2L, length(w)), rep(1, length(w)), K, rule)
     idx <- as.vector(rbind(2 * w - 1, 2 * w))
     ld2 <- mtlba_logkernel(rt[w], pars[idx, , drop = FALSE], Tm[idx, , drop = FALSE],
-                           l2$s, l2$j, l2$lo)
+                           l2$s, l2$j, l2$lo, quad)
     ld[w] <- mtlba_lse(ld[w], ld2)
   }
   ld[is.na(ld)] <- -Inf
   ld
 }
 
-# Density of the uncorrelated MTLBA. rt, R (factor or integer 1/2) and RR (1 =
-# lowest) per trial; pars has two rows per trial (accumulators in level order)
-# with columns v, sv, A, b, t0 and natural-scale d1 .. d{K-1} (proportions of
-# B = b - A above A). Don't-know trials: RR = 1 (R is ignored).
+# Density of the MTLBA. rt, R (factor or integer 1/2) and RR (1 = lowest) per
+# trial; pars has two rows per trial (accumulators in level order) with columns
+# v, sv, A, b, t0 and natural-scale d1 .. d{K-1} (proportions of B = b - A
+# above A), and optionally rho (drift-rate correlation, read from the trial's
+# first row; 0 if absent). Don't-know trials: RR = 1 (R is ignored). quad: the
+# quadrature rule used where rho != 0.
 dMTLBA <- function(rt, R, RR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
-                   log = FALSE) {
+                   log = FALSE, quad = mtlba_quad_rule()) {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
   rating_check_dont_know(K, dont_know)
-  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know)
+  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know, quad)
   if (log) ld else exp(ld)
 }
 
-# Simulate the uncorrelated MTLBA: lR the accumulator factor (two rows per
-# trial), pars as for dMTLBA. Returns R, rt and RR; don't-know responses are
-# written as RR = 1 with R = the first level.
+# Simulate the MTLBA: lR the accumulator factor (two rows per trial), pars as
+# for dMTLBA. Returns R, rt and RR; don't-know responses are written as RR = 1
+# with R = the first level. Trials with rho != 0 draw their two drifts from the
+# bivariate normal truncated to both positive (mtlba_rdrift_rho).
 rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
                    ok = rep(TRUE, nrow(pars))) {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
   rating_check_dont_know(K, dont_know)
   if (length(levels(lR)) != 2) stop("MTLBA simulates two accumulators only")
-  mtlba_check_rho(pars)
   if (is.null(ok)) ok <- rep(TRUE, nrow(pars))
   n <- nrow(pars) / 2
   first <- seq(1, 2 * n, by = 2)
@@ -278,6 +515,17 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
     v <- msm::rtnorm(n, p[, "v"], p[, "sv"], lower = 0)
     list(tau = (Tm[first + a, -1, drop = FALSE] - start) / v, start = start, v = v)
   })
+  rho <- if ("rho" %in% colnames(pars)) pars[first, "rho"] else rep(0, n)
+  cr <- which(is.na(rho) | rho != 0)
+  if (length(cr)) {
+    vv <- mtlba_rdrift_rho(pars[first[cr], "v"], pars[first[cr], "sv"],
+                           pars[first[cr] + 1, "v"], pars[first[cr] + 1, "sv"], rho[cr])
+    for (a in 1:2) {
+      cross[[a]]$v[cr] <- vv[[a]]
+      cross[[a]]$tau[cr, ] <- (Tm[first[cr] + a - 1, -1, drop = FALSE] - cross[[a]]$start[cr]) /
+        vv[[a]]
+    }
+  }
   t1 <- cross[[1]]$tau
   t2 <- cross[[2]]$tau
   if (rule == "BE") {
@@ -373,6 +621,106 @@ mtlba_logstop <- function(y, pars, Tm, i1, i2, K, rule) {
   list(P = lP, S = lS)
 }
 
+# Correlated twin of mtlba_logstop for ONE parameter row and bound y (finite,
+# > 0): c(log P(dt <= y), log P(dt > y)). One integral over accumulator 1's
+# drift x > 0 (its marginal normal): given x, accumulator 1 has crossed n1
+# thresholds with probability w_n1(x) (its uniform start point: piecewise
+# linear in x, kinks at (T - A_1) / y and T / y for each threshold T), and
+# accumulator 2 has its conditional normal drift, so with low_2(m | x) =
+# P(v2 > 0, e_2 < T_{2,m} | x), up_2(m | x) = P(e_2 >= T_{2,m} | x) and
+# pos_2(x) = P(v2 > 0 | x) the integrands are
+#   BE: survivor w_{<K} low_2(K), stopped w_K pos_2 + w_{<K} up_2(K);
+#   TC: survivor sum_{n1 < K} w_n1 low_2(K - n1),
+#       stopped  w_K pos_2 + sum_{n1 < K} w_n1 up_2(K - n1),
+# all positive terms, divided by P(both > 0). Composite Gauss-Legendre between
+# the kinks, panels no wider than quad$pw of the narrowest feature. The range
+# is clipped to hw sds around the drift mean, so the terms are accurate
+# absolutely (~1e-14), not relatively, in the far tail.
+# T1, T2: thresholds 1 .. K (T_K = b) of the two accumulators.
+mtlba_stop_rho1 <- function(y, A1, v1, s1, T1, A2, v2, s2, T2, rho, K, rule,
+                            quad = mtlba_quad_reference()) {
+  if (!all(is.finite(c(y, A1, v1, s1, T1, A2, v2, s2, T2, rho))) || abs(rho) >= 1 ||
+      s1 <= 0 || s2 <= 0) return(c(NaN, NaN))
+  # window as mtlba_quad_window: v2 > 0 drags x towards m when v2's mean is negative
+  m <- v1 + rho * s1 / s2 * (max(v2, 0) - v2)
+  r <- sqrt(max(-max(v1, m), 0)^2 + (quad$hw * s1)^2)
+  a <- max(0, min(v1, m) - r)
+  b <- max(v1, m) + r
+  kinks <- c((T1 - A1) / y, T1 / y)
+  brk <- sort(unique(c(a, b, kinks[kinks > a & kinks < b])))
+  sig <- s1 * min(1, sqrt(1 - rho^2) / abs(rho))
+  g <- mtlba_gl(quad$n)
+  x <- w <- vector("list", length(brk) - 1)
+  for (i in seq_len(length(brk) - 1)) {
+    width <- brk[i + 1] - brk[i]
+    p <- min(quad$maxp, max(1, ceiling(width / (quad$pw * sig))))
+    h <- width / p
+    x[[i]] <- brk[i] + h * as.vector(outer((g$x + 1) / 2, 0:(p - 1), "+"))
+    w[[i]] <- h * rep(g$w, p) / 2
+  }
+  x <- unlist(x)
+  w <- unlist(w) * stats::dnorm(x, v1, s1)
+  nx <- length(x)
+  mc <- v2 + rho * s2 / s1 * (x - v1)
+  sc <- rep(s2 * sqrt(1 - rho^2), nx)
+  yy <- rep(y, nx)
+  AA <- rep(A2, nx)
+  # P(e_1 < T_{1,n} | x), n = 1 .. K
+  Fle <- sapply(1:K, function(n)
+    if (A1 <= 1e-10) as.numeric(T1[n] > x * y) else pmin(pmax((T1[n] - x * y) / A1, 0), 1))
+  low2 <- sapply(1:K, function(m)
+    exp(mtlba_logband(yy, AA, mc, sc, rep(0, nx), rep(T2[m], nx), rep(TRUE, nx), normalise = FALSE)))
+  up2 <- sapply(1:K, function(m) exp(mtlba_logHS(rep(T2[m], nx), yy, AA, mc, sc)$S))
+  dim(Fle) <- dim(low2) <- dim(up2) <- c(nx, K)
+  pos2 <- stats::pnorm(mc / sc)
+  if (rule == "BE") {
+    Sint <- Fle[, K] * low2[, K]
+    Pint <- (1 - Fle[, K]) * pos2 + Fle[, K] * up2[, K]
+  } else {
+    wn <- Fle - cbind(0, Fle[, -K, drop = FALSE])  # w_n1, n1 = 0 .. K - 1
+    Sint <- rowSums(wn * low2[, K:1, drop = FALSE])
+    Pint <- (1 - Fle[, K]) * pos2 + rowSums(wn * up2[, K:1, drop = FALSE])
+  }
+  log(c(sum(w * Pint), sum(w * Sint))) - mtlba_logppos(v1, s1, v2, s2, rho)
+}
+
+# mtlba_logstop for any rho: rows with rho = 0 take the closed form, the others
+# mtlba_stop_rho1, evaluated once per distinct (bound, parameter row).
+mtlba_logstop_any <- function(y, pars, Tm, i1, i2, K, rule) {
+  rho <- if ("rho" %in% colnames(pars)) pars[i1, "rho"] else rep(0, length(i1))
+  cr <- is.na(rho) | rho != 0
+  if (!any(cr)) return(mtlba_logstop(y, pars, Tm, i1, i2, K, rule))
+  n <- length(y)
+  lP <- rep(-Inf, n)
+  lS <- rep(0, n)
+  if (any(!cr)) {
+    o <- mtlba_logstop(y[!cr], pars, Tm, i1[!cr], i2[!cr], K, rule)
+    lP[!cr] <- o$P
+    lS[!cr] <- o$S
+  }
+  inf <- cr & !is.na(y) & y == Inf
+  lP[inf] <- 0
+  lS[inf] <- -Inf
+  bad <- cr & is.na(y)
+  lP[bad] <- lS[bad] <- NaN
+  w <- which(cr & !is.na(y) & y != Inf & y > 0)
+  if (!length(w)) return(list(P = lP, S = lS))
+  acc <- c("A", "v", "sv")
+  M <- cbind(y[w], pars[i1[w], acc, drop = FALSE], Tm[i1[w], -1, drop = FALSE],
+             pars[i2[w], acc, drop = FALSE], Tm[i2[w], -1, drop = FALSE], rho[w])
+  key <- do.call(paste, as.data.frame(M))
+  first <- !duplicated(key)
+  val <- vapply(which(first), function(r) {
+    m <- M[r, ]
+    mtlba_stop_rho1(m[1], m[2], m[3], m[4], m[4 + 1:K], m[5 + K], m[6 + K], m[7 + K],
+                    m[7 + K + 1:K], m[8 + 2 * K], K, rule)
+  }, numeric(2))
+  at <- match(key, key[first])
+  lP[w] <- val[1, at]
+  lS[w] <- val[2, at]
+  list(P = lP, S = lS)
+}
+
 # log P(a < dt <= b) from the stop/survivor pairs at a and b (a <= b): the route
 # (survivors or stopped) with the smaller leading term.
 mtlba_logwindow <- function(la, lb) {
@@ -426,7 +774,6 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
                                K, rule, dont_know)
   need <- cens | trunc
   if (!any(need)) return(ld)
-  mtlba_check_rho(pars)
   w <- which(need)
   i1 <- 2 * w - 1
   i2 <- 2 * w
@@ -435,7 +782,7 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd) {
     stop("MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not ",
          "depend on lR or lM)")
   Tm <- mtlba_thresholds(pars, K)
-  at <- function(x) mtlba_logstop(x - t0, pars, Tm, i1, i2, K, rule)
+  at <- function(x) mtlba_logstop_any(x - t0, pars, Tm, i1, i2, K, rule)
   sLT <- at(bnd$LT[w])
   sUT <- at(bnd$UT[w])
   cw <- cens[w]
@@ -493,25 +840,19 @@ mtlba_check_data <- function(data, K, dont_know) {
   rating_check_data(data, K, dont_know)
 }
 
-# prepare_design: the rating checks, and rho stays at 0 for now (design()
-# passes every p_type left out of the formula as `~ 1` with its default as a
-# constant, so rho must be a constant equal to 0).
-mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...) {
-  out <- rating_prepare_design(n_choices = 2, trial_level = "rho")(formula, constants,
-                                                                   Rlevels, ...)
-  if (is.null(constants) || !"rho" %in% names(constants) || constants[["rho"]] != 0)
-    stop("MTLBA: correlated drift rates (rho) are not implemented yet; leave rho out of the design")
-  out
-}
+# prepare_design: the rating checks; rho is a trial-level parameter (it cannot
+# depend on lR or lM).
+mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
+  rating_prepare_design(n_choices = 2, trial_level = "rho")(formula, constants, Rlevels, ...)
 
 #' The Multiple-Threshold Linear Ballistic Accumulator (Rating) Model
 #'
 #' Model file for the multiple-threshold LBA (MTLBA), a model of choice,
 #' response time and a rating (e.g. confidence). Two LBA accumulators race;
 #' each has, besides its choice threshold `b = A + B`, `n_ratings - 1`
-#' confidence thresholds between `A` and `b`. This version has independent
-#' drift rates (the correlation `rho` is fixed at 0), both truncated to be
-#' positive, so with one rating it is the standard [LBA()].
+#' confidence thresholds between `A` and `b`. The two drift rates are normal,
+#' truncated to be both positive, and may be correlated (`rho`); with
+#' `rho = 0` (the default) and one rating the model is the standard [LBA()].
 #'
 #' The data need a factor `R` with two levels, `rt`, and a numeric column `RR`
 #' holding the rating, an integer from 1 (lowest) to `n_ratings` (highest).
@@ -523,7 +864,7 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...) {
 #' | *B*   | log   | \[0, Inf\]    | log(1)   | Choice threshold minus the maximum start point |
 #' | *A*   | log   | \[0, Inf\]    | log(0)   | Maximum start point |
 #' | *t0*  | log   | \[0, Inf\]    | log(0)   | Non-decision time |
-#' | *rho* | probit on (-1, 1) | \[-1, 1\] | 0 | Drift-rate correlation; fixed at 0 in this version |
+#' | *rho* | probit on (-1, 1) | \[-1, 1\] | 0 | Correlation between the two drift rates |
 #' | *c1*  | log   | \[0, Inf\]    | log(0.5) | First rating criterion, -log of the largest threshold proportion |
 #' | *ck*  | log   | \[0, Inf\]    | log(0.5) | Increment to the next criterion |
 #'
@@ -550,6 +891,14 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...) {
 #' and `make_data` write them that way.
 #'
 #' `t0` is taken from the accumulator that stops the race.
+#'
+#' `rho` is a constant 0 unless it is given a formula. It is a trial-level
+#' parameter: it may depend on design factors but not on `lR` or `lM`. With
+#' `rho != 0` the likelihood is a one-dimensional integral over the stopping
+#' accumulator's start point, done by Gauss-Legendre quadrature. At present
+#' only the R likelihood has it: the compiled likelihood stops when it meets a
+#' non-zero `rho`, so a correlated model must be run with `c_name` removed
+#' from the model list (slow; for checking, not for large fits).
 #'
 #' Censoring and truncation use EMC2's usual coding ([make_missing()], or the
 #' `TC` argument of [make_data()]). A censored trial has `R = NA` and
