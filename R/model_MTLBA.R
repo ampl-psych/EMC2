@@ -43,10 +43,10 @@
 # lives (mtlba_quad_rule, mtlba_logkernel_rho). rho is a trial-level parameter
 # (the same on both accumulator rows); trials with rho = 0 take the closed form.
 #
-# The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports the
-# uncorrelated algorithm and stops on rho != 0; the R functions here are its
-# reference and the only correlated likelihood so far, used when c_name is
-# removed.
+# The compiled likelihood (src/model_mtlba.h, c_name "MTLBA") ports this
+# algorithm, including the correlated kernel with the default rule
+# mtlba_quad_rule() and the correlated stopping terms; the R functions here are
+# its reference, used when c_name is removed.
 
 # log G(z), G(z) = z * pnorm(z) + dnorm(z) = integral of pnorm up to z, accurate
 # in the lower tail: G(-x) = dnorm(x) * (1 - x R(x)), R the Mills ratio, with
@@ -90,7 +90,12 @@ mtlba_ldiff <- function(la, lb) {
 
 # log H(y) and log S(y) for evidence e = U(0, A) + v * t, v ~ N(v, sv)
 # untruncated, y >= A: H = mean of pnorm over the window [z0, z1],
-# z1 = (y - t v) / (t sv), z0 = z1 - A / (t sv); S likewise with pnorm(-u).
+# z1 = (y - t v) / (t sv), z0 = z1 - al, al = A / (t sv); S likewise with
+# pnorm(-u). In general the mean is the difference of G at the two ends over
+# al, which loses digits as al -> 0 (error ~ 2e-14 / al in the log). So a
+# narrow window, al * max(1, |z1|) < 0.1, takes the mean by 4-node
+# Gauss-Legendre instead: positive terms, error < 1e-13 there
+# (rating-work/mtlba/stageM5/smallA_probe.R).
 mtlba_logHS <- function(y, t, A, v, sv) {
   n <- length(y)
   z1 <- (y - t * v) / (t * sv)
@@ -107,6 +112,20 @@ mtlba_logHS <- function(y, t, A, v, sv) {
     zb <- za - al
     lH[w] <- mtlba_ldiff(mtlba_logG(za), mtlba_logG(zb)) - log(al)
     lS[w] <- mtlba_ldiff(mtlba_logG(-zb), mtlba_logG(-za)) - log(al)
+    nar <- which(al * pmax(1, abs(za)) < 0.1)
+    if (length(nar)) {
+      g <- mtlba_gl(4)
+      U <- zb[nar] + outer(al[nar], (g$x + 1) / 2)
+      lw <- rep(log(g$w / 2), each = length(nar))
+      lmean <- function(L) {
+        M <- L[cbind(seq_len(nrow(L)), max.col(L, ties.method = "first"))]
+        out <- M + log(rowSums(exp(L - M)))
+        out[M == -Inf] <- -Inf
+        out
+      }
+      lH[w][nar] <- lmean(stats::pnorm(U, log.p = TRUE) + lw)
+      lS[w][nar] <- lmean(stats::pnorm(U, lower.tail = FALSE, log.p = TRUE) + lw)
+    }
   }
   list(H = lH, S = lS)
 }
@@ -895,10 +914,10 @@ mtlba_prepare_design <- function(formula, constants, Rlevels = NULL, ...)
 #' `rho` is a constant 0 unless it is given a formula. It is a trial-level
 #' parameter: it may depend on design factors but not on `lR` or `lM`. With
 #' `rho != 0` the likelihood is a one-dimensional integral over the stopping
-#' accumulator's start point, done by Gauss-Legendre quadrature. At present
-#' only the R likelihood has it: the compiled likelihood stops when it meets a
-#' non-zero `rho`, so a correlated model must be run with `c_name` removed
-#' from the model list (slow; for checking, not for large fits).
+#' accumulator's start point, done by Gauss-Legendre quadrature (16 nodes per
+#' panel, the number of panels set by the width of the integrand), so a
+#' correlated model is slower than an uncorrelated one, by roughly the number
+#' of nodes per trial.
 #'
 #' Censoring and truncation use EMC2's usual coding ([make_missing()], or the
 #' `TC` argument of [make_data()]). A censored trial has `R = NA` and

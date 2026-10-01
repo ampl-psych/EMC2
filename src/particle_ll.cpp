@@ -28,7 +28,7 @@
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
 #include "model_NN.h"        // neural likelihoods (type "NN"): registration-driven, thread-safe per particle
 #include "model_mtlnr.h"     // rating models: correlated multiple-threshold LNR, joint per-trial kernel
-#include "model_mtlba.h"     // rating models: multiple-threshold LBA (uncorrelated), joint per-trial kernel
+#include "model_mtlba.h"     // rating models: multiple-threshold LBA, joint per-trial kernel
 using namespace Rcpp;
 
 // =============================================================================
@@ -1323,9 +1323,8 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       }
 
       // -----------------------------------------------------------------------
-      // Rating models (MTLBA): as MTLNR; a non-zero rho or unequal t0 under
-      // censoring/truncation is flagged inside the parallel region and refused
-      // after it
+      // Rating models (MTLBA): as MTLNR; unequal t0 under censoring/truncation
+      // is flagged inside the parallel region and refused after it
       // -----------------------------------------------------------------------
     } else if (type == "MTLBA") {
       const MTLBASpec spec = make_mtlba_spec(data, ctx.param_table, n_lR);

@@ -70,10 +70,10 @@ and \code{make_data} write them that way.
 \code{rho} is a constant 0 unless it is given a formula. It is a trial-level
 parameter: it may depend on design factors but not on \code{lR} or \code{lM}. With
 \code{rho != 0} the likelihood is a one-dimensional integral over the stopping
-accumulator's start point, done by Gauss-Legendre quadrature. At present
-only the R likelihood has it: the compiled likelihood stops when it meets a
-non-zero \code{rho}, so a correlated model must be run with \code{c_name} removed
-from the model list (slow; for checking, not for large fits).
+accumulator's start point, done by Gauss-Legendre quadrature (16 nodes per
+panel, the number of panels set by the width of the integrand), so a
+correlated model is slower than an uncorrelated one, by roughly the number
+of nodes per trial.
 
 Censoring and truncation use EMC2's usual coding (\code{\link[=make_missing]{make_missing()}}, or the
 \code{TC} argument of \code{\link[=make_data]{make_data()}}). A censored trial has \code{R = NA} and

@@ -1,5 +1,5 @@
-# MTLBA (multiple-threshold LBA, uncorrelated: rho = 0) and the rating layer's
-# don't-know response. Ground truth: golden/mtlba (Stage M0) -- the don't-know
+# MTLBA (multiple-threshold LBA, uncorrelated and correlated) and the rating
+# layer's don't-know response. Ground truth: golden/mtlba (Stage M0) -- the don't-know
 # paper's n1PDF.DK, BETE's n1PDF_MTR_1 and two independent integrations of the
 # kernel, plus 1e6-trial simulator summaries. Closed forms there are accurate
 # absolutely, not relatively, in the far tail (density < 1e-8), so parity is
@@ -528,8 +528,6 @@ test_that("C++ likelihood refuses what it does not define", {
     expect_error(run(bad), "no rating column")
     bad <- dadm; bad$winner[1:2] <- TRUE
     expect_error(run(bad), "missing response")
-    bad <- dadm; attr(bad, "constants")[["rho"]] <- .3
-    expect_error(run(bad), "rho != 0")
     bad <- dadm; attr(bad, "c_options") <- NULL
     expect_error(run(bad), "no c_options attribute")
   }
@@ -1009,14 +1007,128 @@ test_that("correlated model: design, simulation and the R likelihood through EMC
     p0 <- p; p0[c("rho", "rho_Sright")] <- 0
     expect_true(is.finite(ll) && abs(ll - EMC2:::calc_ll_manager(t(as.matrix(p0)), dm, des$model)) > 1e-3)
   }
-  # the compiled likelihood does not have rho yet (Stage M5): it stops
+})
+
+# ---- correlated drift rates in the C++ kernel (Stage M5) ----
+
+test_that("C++ correlated likelihood equals the R reference (K = 1 .. 3, BE/TC, don't know, censoring, extremes)", {
+  for (K in 1:3) for (rule in c("BE", "TC")) for (dk in c(FALSE, if (K > 1) TRUE)) {
+    crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
+    form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1, rho ~ S),
+              lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
+    mod <- local({ k <- K; r <- rule; d <- dk
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
+    p <- sampled_pars(des, doMap = FALSE)
+    p[] <- 0
+    p[c("v", "v_lMTRUE", "sv", "sv_lMTRUE", "B", "B_lRright", "A", "t0", "rho", "rho_Sright")] <-
+      c(1, 1.5, 0, log(.7), log(1), .2, log(.5), log(.25), qnorm(.2), qnorm(.8) - qnorm(.2))
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+    set.seed(200 + 10 * K + dk)
+    props <- rbind(p, mvtnorm::rmvnorm(12, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 15, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[1, "sv"] <- log(.02)                      # sharply peaked drifts: many panels
+    ext[2, "v"] <- -4                             # drift mean far below 0: the window is dragged
+    ext[3, "v"] <- 12
+    ext[4, "A"] <- -Inf                           # A = 0: no integral
+    ext[5, "A"] <- log(1e-3)
+    ext[6, "A"] <- log(1e-7)                      # narrow start-point window (4-node mean)
+    ext[7, "rho"] <- qnorm((1 + .999) / 2)        # rho near 1 (Genz's |r| > .925 branch)
+    ext[8, "rho"] <- qnorm((1 - .999) / 2)
+    ext[9, c("rho", "rho_Sright")] <- c(0, 1)     # rho = 0 on one stimulus: both routes in one call
+    ext[10, "rho"] <- 40                          # rho = 1 exactly
+    ext[11, "rho"] <- NaN
+    ext[12, "B"] <- 800
+    ext[13, "v"] <- NaN
+    ext[14, "sv_lMTRUE"] <- -800
+    ext[15, "t0"] <- log(.01)
+    if (K > 1) {
+      ext[1, "c1"] <- log(8)
+      ext[2, "c1"] <- log(1e-4)
+      ext[3, crit[K - 1]] <- 700
+    }
+    props <- rbind(props, ext)
+    for (cens in c(FALSE, TRUE)) {
+      set.seed(300 + 10 * K + dk + cens)
+      dat <- if (cens) make_data(p, des, n_trials = 50, TC = list(LC = .5, UC = 1.8, LT = .3, UT = 4)) else
+        make_data(p, des, n_trials = 50)
+      dadm <- EMC2:::design_model(dat, des, compress = !cens, verbose = FALSE)
+      llr <- EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))
+      llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+      expect_lt(mtlba_err(llc, llr), 1e-11)
+      twr <- apply(props, 1, function(pv)
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+      twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+      expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-10)
+      expect_true(all(is.finite(llc)))
+      # rho = 1, rho = NaN and the out-of-bounds particles: every trial at min_ll
+      expect_equal(as.vector(llc[nrow(props) - c(5:4, 3:0)]), rep(log(1e-10) * nrow(dat), 6))
+      # OpenMP gives exactly the serial numbers
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model)), llc)
+      expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model,
+                                                        return_trialwise = TRUE)), twc)
+    }
+  }
+})
+
+test_that("compiled correlated likelihood joins the uncorrelated one as rho -> 0", {
   des <- suppressMessages(design(
     factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
-    model = function() MTLBA(2), matchfun = function(d) d$S == d$lR,
-    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1), report_p_vector = FALSE))
-  p <- c(v = 1, v_lMTRUE = 1.5, B = 0, A = log(.5), t0 = log(.25), rho = .4, c1 = log(.6))
+    model = function() MTLBA(3, rule = "TC"), matchfun = function(d) d$S == d$lR,
+    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ 1), report_p_vector = FALSE))
+  p <- c(v = 1, v_lMTRUE = 1.5, B = 0, A = log(.5), t0 = log(.25), rho = 0, c1 = log(.6),
+         c1_lRright = .1, c2 = log(.4))
   set.seed(97)
-  dat <- make_data(p, des, n_trials = 20)
+  dat <- make_data(p, des, n_trials = 150, TC = list(LC = .5, UC = 1.8, LT = .3, UT = 4))
   dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
-  expect_error(EMC2:::calc_ll_manager(t(as.matrix(p)), dadm, des$model), "rho != 0")
+  ll <- function(r) { p[["rho"]] <- qnorm((1 + r) / 2); EMC2:::calc_ll_manager(t(as.matrix(p)), dadm, des$model) }
+  l0 <- ll(0)
+  # odd part in rho is linear, the even part O(rho^2): the mean of +-e is within e^2 of rho = 0
+  for (e in c(1e-3, 1e-5)) {
+    expect_lt(abs((ll(e) + ll(-e)) / 2 - l0), 200 * e^2 + 1e-9)
+    expect_gt(abs(ll(e) - ll(-e)), 0)
+  }
+  # same-seed fits: serial and OpenMP identical with rho sampled
+  fit_once <- function() {
+    set.seed(98)
+    emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 2, verbose = FALSE))
+    emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 4), cores_for_chains = 1,
+                   cores_per_chain = 1, verbose = FALSE)
+    lapply(emc, function(ch) ch$samples)
+  }
+  s_serial <- fit_once()
+  s_omp <- mtlba_omp(fit_once())
+  for (ch in 1:2) {
+    expect_identical(s_omp[[ch]]$alpha, s_serial[[ch]]$alpha)
+    expect_identical(s_omp[[ch]]$subj_ll, s_serial[[ch]]$subj_ll)
+  }
+})
+
+test_that("band functions keep their digits when the start-point range is tiny", {
+  # reference: the mean of pnorm over the window by a composite rule (positive terms)
+  ref <- function(z1, al, lower) {
+    g <- EMC2:::mtlba_gl(16)
+    u <- as.vector(outer((g$x + 1) / 2, 0:7, "+")) / 8
+    U <- z1 - al + outer(al, u)
+    L <- pnorm(U, lower.tail = lower, log.p = TRUE) + rep(log(rep(g$w, 8) / 16), each = length(z1))
+    M <- apply(L, 1, max)
+    M + log(rowSums(exp(L - M)))
+  }
+  set.seed(99)
+  n <- 4000
+  t <- runif(n, .1, 3); sv <- exp(runif(n, log(.02), log(3))); v <- runif(n, -4, 8)
+  A <- exp(runif(n, log(1e-8), log(.5))); y <- A + exp(runif(n, log(1e-4), log(4)))
+  al <- A / (t * sv); z1 <- (y - t * v) / (t * sv)
+  keep <- abs(z1) < 30 & al < 1
+  o <- EMC2:::mtlba_logHS(y, t, A, v, sv)
+  expect_lt(mtlba_err(o$H[keep], ref(z1, al, TRUE)[keep]), 1e-11)
+  expect_lt(mtlba_err(o$S[keep], ref(z1, al, FALSE)[keep]), 1e-11)
+  # continuous across the switch between the two routes
+  z <- c(-8, -1, 0, .5, 3); a <- .1 / pmax(1, abs(z))
+  lo <- EMC2:::mtlba_logHS(z, rep(1, 5), a * (1 - 1e-9), rep(0, 5), rep(1, 5))
+  hi <- EMC2:::mtlba_logHS(z, rep(1, 5), a * (1 + 1e-9), rep(0, 5), rep(1, 5))
+  expect_lt(max(abs(lo$H - hi$H), abs(lo$S - hi$S)), 1e-9)
 })
