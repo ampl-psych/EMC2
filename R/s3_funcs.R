@@ -1098,16 +1098,7 @@ credint <- function(x, ...){
 
   fns_all <- sapply(design$Ffunctions, function(x) attr(x, 'output_column_names'))
   fns_orig <- sapply(design$Ffunctions, function(x) attr(x, 'output_column_names_in_data'))
-  fns <- setdiff(fns_all, fns_orig)
-  # fns <- character(0)
-  # for (fn in names(design$Ffunctions)) {
-  #   output <- design$Ffunctions[[fn]](dat)
-  #   if (is.list(output)) {
-  #     fns <- c(fns, names(output))
-  #   } else {
-  #     fns <- c(fns, fn)
-  #   }
-  # }
+  fns <- setdiff(unlist(fns_all), unlist(fns_orig))
 
   # Filter out ssd functions by their source function name
   ssd_fns <- names(design$Ffunctions)[vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function")]
