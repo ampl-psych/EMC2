@@ -1784,7 +1784,8 @@ make_data_unconditional <- function(data, pars, design, model,
         pretransforms        = model_list$pre_transform,
         trend                = model_list$trend,
         return_kernel_matrix = FALSE,
-        return_all_pars      = TRUE
+        return_all_pars      = TRUE,
+        n_active_trials      = j * n_acc
       )[[1]]  # returns a list per particle
 
       if (tmp_return_trialwise && !is.null(model_list$trend)) {

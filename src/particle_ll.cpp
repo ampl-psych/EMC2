@@ -179,6 +179,7 @@ struct PipelineContext {
   std::unique_ptr<TrendRuntime>  trend_runtime;
   Rcpp::CharacterVector          keep_names;
   std::vector<int>               pm_col_to_base_idx;
+  int                            n_active_trials;
 };
 
 PipelineContext make_pipeline_context(
@@ -188,7 +189,8 @@ PipelineContext make_pipeline_context(
     const Rcpp::List& designs,
     const Rcpp::List& transforms,
     const Rcpp::List& pretransforms,
-    const Rcpp::Nullable<Rcpp::List>& trend)
+    const Rcpp::Nullable<Rcpp::List>& trend,
+    const int n_active_trials = -1)
 {
   PipelineContext ctx;
 
@@ -206,13 +208,15 @@ PipelineContext make_pipeline_context(
   Rcpp::NumericVector p_vector = ctx.particle_matrix(0, Rcpp::_);
   p_vector.attr("names") = colnames(ctx.particle_matrix);
   ctx.param_table = ParamTable::from_p_vector_and_designs(p_vector, designs, data.nrow());
+  if (n_active_trials > 0 && n_active_trials < data.nrow())
+    ctx.param_table.n_trials = n_active_trials;
 
   // 4. Transform specs
   ctx.transform_specs = make_transform_specs(ctx.param_table, transforms);
 
   // 5. Trend objects and keep_names
   if (!trend.isNull()) {
-    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data));
+    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data, n_active_trials));
     ctx.trend_runtime.reset(new TrendRuntime(*ctx.trend_plan));
     ctx.trend_runtime->bind_all_to_paramtable(ctx.param_table);
 
@@ -1316,7 +1320,8 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
                         Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                         bool return_kernel_matrix = false,
                         bool return_all_pars = false,
-                        IntegerVector kernel_output_codes = 1)
+                        IntegerVector kernel_output_codes = 1,
+                        int n_active_trials = -1)
 {
   if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
@@ -1328,7 +1333,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
 
   // Shared setup
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
-                                              designs, transforms, pretransforms, trend);
+                                              designs, transforms, pretransforms, trend, n_active_trials);
   TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
 
   // Pipeline cache (built once, reused across particles)
