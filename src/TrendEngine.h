@@ -29,7 +29,7 @@ inline TrendPhase parse_phase(const std::string& ph) {
 // =============================================================================
 // KernelSpec  —  mirrors emc2_kernel; pure C++ after construction
 // =============================================================================
-enum class AtMode { Filter, Push };
+// enum class AtMode { Filter, Push };
 
 struct KernelSpec {
   // identity
@@ -47,11 +47,8 @@ struct KernelSpec {
   // 'at' filter
   bool        has_at = false;
   std::string at;
-
-  // What to do with 'at'? Either filter (remove rows that are not the first level of the at factor)
-  // or 'push' -- don't filter, but only apply update to the next trial that corresponds to the first level of the at factor
-  AtMode               at_mode = AtMode::Filter;
-  std::vector<uint8_t> is_first_level_comp;  // length = comp_index.size()
+  std::vector<uint8_t> at_mask;
+  MatBool nan_mask;
 
   // finalised prefixed parameter names
   std::vector<std::string> pnames;
@@ -69,9 +66,6 @@ struct KernelSpec {
 
   // data-derived fields — plain C++ after construction
   Mat                      kernel_input;   // n_trials x (n_cov + n_par)
-  std::vector<bool>        first_level;    // length n_trials
-  std::vector<int>         expand_idx;     // length n_trials
-  std::vector<int>         comp_index;     // first-level row indices
 
   std::vector<int>         covariate_indices;
   std::vector<int>         par_input_indices;
@@ -80,8 +74,6 @@ struct KernelSpec {
     kernel_args = KernelArgs{};
     if (!q_reset_col.empty())
       kernel_args.q_reset = q_reset_col.data();
-    if (!is_first_level_comp.empty())
-      kernel_args.is_first_level_comp = is_first_level_comp.data();
     if (!belief_reset_col.empty())
       kernel_args.belief_reset = belief_reset_col.data();
   }
