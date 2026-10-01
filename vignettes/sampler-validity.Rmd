@@ -1,6 +1,6 @@
 ---
 title: "Sampler Validity"
-description: "Why the particle step was biased in high dimensions, the exact kernel that replaces it in adapt/sample, and the evidence that it is calibrated"
+description: "Why the particle step was biased in high dimensions, the exact and (in the sample stage) fixed kernel that replaces it, and the evidence that it is calibrated"
 author: "Andrew Heathcote"
 output: rmarkdown::html_document
 vignette: >
@@ -143,19 +143,74 @@ Putting both in one batch with the ensemble correction is also exact, but the lo
 `N(z | c, S)` then penalises the global candidates; on the toy the mixture of kernels has 4-6x the
 effective sample size per iteration (`rating-work/sampler/toy/isir_toy3.R`).
 
+**The sample stage runs one fixed kernel (corrected 2026-10-01).** The first version of this
+change (commit `002a5c6f`) stopped at the paragraph above, and an earlier version of this vignette
+called its adapt/sample kernel exact. That was true of each iteration and not of the stage. The
+sample stage kept re-choosing the kernel from the chain's own recent draws: `chains_var`,
+`chains_mu`, `eff_mu` and `eff_var` were re-estimated at every step from the last <= 250
+iterations, and epsilon and the mixing weights followed a window of acceptance counts. A chain
+whose kernel depends on its recent past is not a Markov chain with the posterior as its stationary
+distribution. Where the posterior's scale does not move under the adaptation the difference is
+negligible, which is why the single-subject grid and the SBC of section 6 passed. In a
+hierarchical funnel it is not. On a conjugate normal model with a known posterior
+(25 parameters x 20 subjects; `rating-work/sampler/hier/stageH1/REPORT.md`), chains started at the
+truth sank: for the weakly identified parameters the group SD had median 0.0036 against 0.159
+exact, with 94% of the draws in the funnel's neck against 26%. With the same kernel held fixed
+they did not sink.
+
+The sample-stage kernel is therefore built and tuned at the end of adapt and then left alone:
+
+- When adapt's stop criterion is met, the sample-stage proposals are made from the adapt draws and
+  stored in `emc[[1]]$sample_kernel`. Every step of the sample stage, and every later call that
+  adds samples, re-uses them.
+- One more step of 100 iterations is run with that kernel, labelled `adapt`, in which its local
+  epsilon, mixing weights and number of particles are adapted (`tune_sample_kernel()`). Epsilon is
+  then set to its average over that step.
+- In `sample` nothing adapts: `update_pm_settings()` is not called and `reset_pm_settings()`
+  leaves the settings alone.
+
+**Proposals that follow the group level (2026-10-01).** The same report found a second fault. The
+local proposal was `N(c, epsilon^2 chains_var)` with one global scale. When the group variance of
+some parameters collapses, the subjects' conditional posterior becomes 100x narrower in those
+coordinates only, no single epsilon fits, and the step stops moving (move rate <= 0.001 with
+epsilon on its floor of 0.01): 0 of 36 chain x parameter pairs left a collapsed start in 22000
+iterations, against all 36 with an exact draw. The subject step conditions on the group level
+`(mu, Sigma)`, so its proposals may depend on it. For every `type` with a group level they now do:
+
+- `create_lik_prec()` estimates each subject's likelihood precision `L` (minus the Hessian of the
+  log-likelihood) and the linear term of the same quadratic approximation, by central differences
+  at the mean of the subject's recent draws (`lik_precision()`; `p^2 + p + 1` likelihood
+  evaluations, with each parameter's step searched for so that the log-likelihood drops by about
+  1). Moments of the draws cannot give this: when adapt runs in the neck the draws show the prior,
+  not the likelihood.
+- The local kernel's covariance is `epsilon^2 (L + Sigma^-1)^-1` at the current `Sigma`, in place
+  of `epsilon^2 chains_var`. Epsilon is then a relative scale that no longer has to track the
+  group level, and the 0.01 floor is not relied on.
+- The global kernel's `N(chains_mu, chains_var)` component is replaced by the Gaussian
+  approximation of the subject's conditional posterior at the current group level,
+  `N((L + Sigma^-1)^-1 (l + Sigma^-1 mu), (L + Sigma^-1)^-1)` with `l` the linear term.
+- The local kernel keeps at least a quarter of the sample-stage iterations.
+
+`type = "single"` has no group level to follow and keeps `chains_var`.
+
 **Tuning.** The local step's epsilon is adapted so that 3% of its particles beat the current value
 (on the toy this is where ESS per iteration is maximal in 9, 25 and 35 dimensions; the old 25-30%
-targets give steps 3-5x too small for the exact kernel); the update step is normalised by the
-target and clipped to [-1, 1]; clamp [.01, 20] instead of the floors; acceptance counts restart
-every `step_size` iterations in every stage (cumulative counts let epsilon run away); independence
-components are used at the scale of their estimated covariance (epsilon 1); burn's `chains_var`
-epsilon, not its prior-variance one, is carried into adapt. `update_epsilon_scale()` uses the square
-root of the variance ratio (epsilon scales SDs). The `diag(.5)` fallback is replaced by the mean of
-the other subjects' covariances, else the chain's previous one, else 0.1 x the prior variance
-diagonal. `get_conditionals_single()` uses all (<= 750) adapt/sample draws rather than a random 250.
+targets give steps 3-5x too small for the exact kernel); clamp [.01, 20] instead of the floors;
+independence components are used at the scale of their estimated covariance (epsilon 1); burn's
+`chains_var` epsilon, not its prior-variance one, is carried into adapt. In the exact kernels
+epsilon is updated only in the iterations that used the local kernel, from that iteration's own
+rate, with gain 0.1 and the update normalised by the target and clipped to [-1, 3]. (Updating it
+every iteration from the rate accumulated over a window made it overshoot: over subjects it ended
+anywhere between 0.01 and 5, which did not matter while it kept moving and does once it is
+frozen.) preburn and burn keep the windowed counts, which restart every `step_size` iterations
+(cumulative counts let epsilon run away). `update_epsilon_scale()` uses the square root of the
+variance ratio (epsilon scales SDs). The `diag(.5)` fallback is replaced by the mean of the other
+subjects' covariances, else the chain's previous one, else 0.1 x the prior variance diagonal.
+`get_conditionals_single()` uses all (<= 750) adapt/sample draws rather than a random 250.
 
 Everything above is switched by `options(emc.sampler = "legacy")`, which restores the old kernel in
-every stage together with the old targets, floors, counts, fallback and 250-draw conditionals.
+every stage together with the old targets, floors, counts, fallback, 250-draw conditionals and the
+sample-stage adaptation.
 
 ## 5. Reproducing it in EMC2
 
@@ -193,9 +248,10 @@ current sampler's honest move rate is about .8. The per-stage tuning state (`eps
 sapply(summaries, function(s) round(s$epsilon, 2))
 ```
 
-With the legacy sampler the independence components end at epsilon 1.5-1.6 (wider than the
-posterior, which is where the over-dispersion comes from: the chain follows them); with the current
-one they are fixed at 1 and only the local step is scaled (about .5 x `chains_var`).
+With the legacy sampler the independence components end at an epsilon above 1 (1.2-1.6 from run
+to run; wider than the posterior, which is where the over-dispersion comes from: the chain follows
+them); with the current one they are fixed at 1 and only the local step is scaled (about
+.4-.5 x `chains_var`).
 
 To go further -- more parameters, more trials, `type = "standard"` -- change the design and
 `n_trials` in the build script; the full grid, its runner and per-stage snapshots of the tuning
@@ -231,19 +287,55 @@ legacy run: .051), 95% coverage .92-.98 centred on nominal (legacy ran high, .93
 iterations; EMC2's DIC ordering equals the paper's, EMC2 finds lower deviance minima than the
 paper's DE-MCMC fits did, and the parameter estimates correlate >= .98 with them.
 
-**Tests.** The suite passes (1409); the three snapshot tests in `test-fit.R` that pin specific
+**After the 2026-10-01 changes of section 4** (fixed sample-stage kernel, proposals that follow
+the group level; `rating-work/sampler/hier/stageH1b/REPORT.md`):
+
+- *Conjugate model with a known posterior* (25 parameters x 20 subjects, 12 of them weakly
+  identified, 20000 sample iterations x 6 chains from the truth and 6 from a collapsed start).
+  The posterior of the weakly identified group SDs is reproduced from both starts: medians
+  0.146-0.170 against 0.159 exact, share of draws in the funnel's neck 0.18-0.27 against 0.18-0.26,
+  subject-level posterior SDs 0.97-1.01 x exact. With the group level held fixed the subject step
+  alone is exact at the truth and in the collapsed state (SD ratio 1.00, about 2 iterations per
+  effective draw; before the change it did not move in the collapsed state).
+- *The grid's single-subject cells* (9, 25 and 35 parameters x 500 / 2000 / 8000 trials), rerun:
+  excess/k 0.90-1.00, median SD/Laplace 0.98-1.03, Rhat <= 1.09. The 25-parameter cells take
+  1.3-1.5x as long, because the number of particles is now set once, at the end of adapt.
+- *A hierarchical cell with no funnel* (25 parameters x 20 subjects x 2000 trials): Rhat 1.02,
+  excess/k 1.03, as before.
+
+**Tests.** The suite passes (1434); the three snapshot tests in `test-fit.R` that pin specific
 draws were re-recorded, as any change to the sampler requires.
 
 ## 7. What is still open
 
-With 8 subjects, 500 trials each and 25-35 parameters the hierarchical fits do not converge under
-`fit()` defaults (alpha Rhat 1.4-1.9), and a 4000-iteration run still sits at 1.2. The chains are in
-a "funnel": the group variance of loser-accumulator means that each subject's data barely identify
-(~8 losing trials) collapses, all subjects are pinned at the group mean, and the Gibbs step for the
-group level cannot get out. The legacy sampler reports Rhat 1.1 in two of these cells because its
-over-dispersed subject draws keep the group variance from collapsing -- a self-consistent but wrong
-equilibrium. This is a property of the group-level Gibbs step, not of the particle kernel, and is
-being worked on separately.
+An earlier version of this section said that the hierarchical fits which do not converge
+(few trials per weakly identified parameter: 8-40 subjects x 200-500 trials x 25-35 parameters,
+alpha Rhat 1.4-1.9 under `fit()` defaults) were stuck in a funnel because of the group-level Gibbs
+step, not the particle kernel. That was wrong. On a conjugate model with a known posterior
+(`rating-work/sampler/hier/stageH1/REPORT.md`) EMC2's group step with an exact draw of the subject
+parameters reproduces the exact posterior, and the failure was the particle step: the sample
+stage's continued adaptation made chains sink into the funnel's neck from healthy states, and
+the local proposal froze once they were there. Both are repaired (section 4). On that model
+`fit()` defaults used to stop at max tries with the weak parameters' group SDs at a third to two
+thirds of the exact median. They still stop at max tries (Rhat 1.3-2.4 after 1700-1900 sample
+iterations), but the draws now agree with the exact posterior (medians 0.15-0.18 against 0.16,
+neck shares 0.16-0.24 against 0.18-0.26): there are just few effective ones, as there are with an
+exact draw of the subject parameters (Rhat 1.3 under the same protocol).
+
+What remains is slow, not wrong:
+
+- The centred alternation "subjects given the group level, group level given the subjects" mixes
+  slowly in a funnel even with a perfect subject step: on the conjugate model one effective draw
+  of a weak parameter's log group SD takes about 500 iterations, and leaving a collapsed state
+  takes about 400. The repaired particle step takes about 1.3x as long as an exact draw to leave
+  it. So `fit()`'s 1000 sample iterations give few effective draws of those group SDs, and Rhat
+  for them can stay above 1.1 (the 25-parameter x 20-subject x 200-trial LNR cell stops at alpha
+  Rhat 1.16 and group-SD Rhat 1.5, where it was 1.64 and 2.15). An interweaving (non-centred)
+  scale move is the planned remedy.
+- `init()` starts every chain in the neck (subjects bunched at the group mean, group SD about
+  0.14 for every parameter), and `preburn`/`burn` keep the old search step.
+- Only `type = "standard"` has been checked against an exact reference. The other types with a
+  group level share the code path.
 
 ## References
 

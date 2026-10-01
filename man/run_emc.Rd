@@ -36,7 +36,7 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as
-specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+specified by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the stop_criteria.}
 

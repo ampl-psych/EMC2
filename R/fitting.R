@@ -53,7 +53,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' This fine-tunes the width of the search space to obtain the desired acceptance probability.
 #' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as
-#' specified by `stop_criteria` are checked and proposal distributions are updated. Defaults to 100.
+#' specified by `stop_criteria` are checked and, in the stages before `sample`, proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
 #' @param verboseProgress Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.
 #' @param fileName A string. If specified will autosave emc at this location on every iteration.
@@ -112,6 +112,8 @@ run_emc <- function(emc, stage, stop_criteria,
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
   while(!progress$done){
+    # More adapt draws: a sample-stage kernel built earlier is out of date
+    if(stage == "adapt") emc[[1]]$sample_kernel <- NULL
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
     if(trim){
@@ -197,20 +199,86 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
 
+  if(stage == "adapt" && !legacy_sampler() && is.null(emc[[1]]$sample_kernel) &&
+     get_last_stage(emc) == "adapt"){
+    emc <- tune_sample_kernel(emc, step_size = step_size, verbose = verbose, verboseProgress = verboseProgress,
+                              fileName = fileName, particle_factor = particle_factor, search_width = search_width,
+                              cores_per_chain = cores_per_chain, cores_for_chains = cores_for_chains,
+                              n_blocks = n_blocks, on_singular = on_singular, r_cores = r_cores)
+  }
+
   emc <- strip_duplicates(emc)
   class(emc) <- "emc"
   return(emc)
 }
 
+# The sample stage runs one fixed kernel, so that its draws are from a Markov
+# chain with the posterior as its stationary distribution: a kernel that keeps
+# being re-chosen from the chain's own recent draws (proposals re-estimated
+# every step, step size and mixing weights following a window of acceptance
+# counts) is not, and in a hierarchical funnel the difference is large
+# (rating-work/sampler/hier/stageH1/REPORT.md). The kernel is therefore built
+# and tuned here, at the end of adapt: the sample-stage proposals are made
+# from the adapt draws and stored (add_proposals), and one more step of adapt
+# is run with that kernel, in which its step size, mixing weights and number
+# of particles are adapted. Those draws are labelled adapt and not kept.
+tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileName, particle_factor,
+                               search_width, cores_per_chain, cores_for_chains, n_blocks,
+                               on_singular, r_cores){
+  if (verbose) message("Tuning the sample-stage kernel")
+  emc <- add_proposals(emc, "sample", cores_per_chain*cores_for_chains, n_blocks)
+  for(i in 1:length(emc)){
+    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
+    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
+      for(k in 1:length(x)){
+        x[[k]]$proposal_counts <- rep(0, length(x[[k]]$proposal_counts))
+        x[[k]]$acc_counts <- rep(0, length(x[[k]]$proposal_counts))
+        x[[k]]$iter <- 25
+        x[[k]]$local_uses <- x[[k]]$log_eps_sum <- x[[k]]$log_eps_n <- 0
+        x[[k]]$log_ess_sum <- x[[k]]$log_ess_n <- 0
+      }
+      return(x)
+    })
+  }
+  step_size <- 100
+  sub_emc <- subset(emc, filter = chain_n(emc)[1,"adapt"] - 1, stage = "adapt")
+  sub_emc <- auto_mclapply(sub_emc, run_stages, stage = "adapt", kernel = "sample", iter = step_size,
+                           verbose = verbose, verboseProgress = verboseProgress,
+                           particle_factor = particle_factor, search_width = search_width,
+                           n_cores = cores_per_chain, mc.cores = cores_for_chains,
+                           on_singular = on_singular, r_cores = r_cores)
+  check_chain_failures(sub_emc, "adapt", fileName)
+  class(sub_emc) <- "emc"
+  if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
+  emc <- concat_emc(emc, sub_emc, step_size, "adapt")
+  # Freeze the local step size at the average over the tail, and the number
+  # of particles where the average effective sample size meets its target
+  for(i in 1:length(emc)){
+    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
+    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
+      for(k in 1:length(x)){
+        if(isTRUE(x[[k]]$log_eps_n >= 10)) x[[k]]$epsilon[1] <- exp(x[[k]]$log_eps_sum / x[[k]]$log_eps_n)
+        if(isTRUE(x[[k]]$log_ess_n >= 10)){
+          n_particles <- round(x[[k]]$ess_target / exp(x[[k]]$log_ess_sum / x[[k]]$log_ess_n))
+          x[[k]]$n_particles <- max(25, min(x[[k]]$max_particles, n_particles))
+        }
+      }
+      return(x)
+    })
+  }
+  return(emc)
+}
+
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1)
+                       particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1,
+                       kernel = NULL)
 {
   particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
     sampler <- init(sampler, n_cores = n_cores, r_cores = r_cores)
   }
   if (iter == 0) return(sampler)
-  tune <- list(search_width = search_width)
+  tune <- list(search_width = search_width, kernel = kernel)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
                        n_cores = n_cores, tune = tune, verbose = verbose,
                        verboseProgress = verboseProgress, on_singular = on_singular, r_cores = r_cores)
@@ -218,6 +286,14 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 }
 
 add_proposals <- function(emc, stage, n_cores, n_blocks){
+  legacy <- legacy_sampler()
+  # The sample stage's proposals are built once and then re-used at every step
+  # and in every later call (see tune_sample_kernel); only the legacy sampler
+  # re-estimates them from the sample draws.
+  fixed <- stage == "sample" && !legacy
+  if(fixed && length(emc[[1]]$sample_kernel$chains) == length(emc)){
+    return(restore_sample_kernel(emc))
+  }
   if(stage != "preburn"){
     # if(!is.null(emc[[1]]$g_map_fixed)){
     #   emc <- create_chain_proposals_lm(emc)
@@ -238,6 +314,51 @@ add_proposals <- function(emc, stage, n_cores, n_blocks){
     # } else{    }
     emc <- create_eff_proposals(emc, n_cores)
   }
+  if(stage %in% c("adapt", "sample") && !legacy && emc[[1]]$type != "single"){
+    emc <- create_lik_prec(emc, n_cores)
+  }
+  if(fixed) emc <- store_sample_kernel(emc)
+  return(emc)
+}
+
+# The sample-stage kernel's proposals are kept in the first chain's entry,
+# which is the one strip_duplicates() preserves, so that they survive saving
+# and a later call that adds samples.
+sample_kernel_fields <- c("chains_var", "chains_mu", "eff_mu", "eff_var")
+
+store_sample_kernel <- function(emc){
+  emc[[1]]$sample_kernel <- list(
+    chains = lapply(emc, function(x) c(x[sample_kernel_fields], list(prop_var = attr(x, "prop_var")))),
+    lik_prec = emc[[1]]$lik_prec)
+  return(emc)
+}
+
+restore_sample_kernel <- function(emc){
+  kernel <- emc[[1]]$sample_kernel
+  for(i in 1:length(emc)){
+    for(nm in sample_kernel_fields) emc[[i]][[nm]] <- kernel$chains[[i]][[nm]]
+    attr(emc[[i]], "prop_var") <- kernel$chains[[i]]$prop_var
+    emc[[i]]$lik_prec <- kernel$lik_prec
+  }
+  return(emc)
+}
+
+# Likelihood precision of every subject for the local kernel (new_particle),
+# evaluated at the mean of the subject's recent draws (the window
+# create_chain_proposals uses). One estimate, shared by the chains.
+create_lik_prec <- function(emc, n_cores){
+  idx <- emc[[1]]$samples$idx
+  history_idx <- unique(pmax(1, round(idx - min(250, idx/1.5)):idx - 1))
+  alpha <- get_pars(emc, filter = history_idx, selection = "alpha",
+                    stage = c('preburn', 'burn', 'adapt', 'sample'),
+                    by_subject = T, merge_chains = T, return_mcmc = F,
+                    remove_dup = F, remove_constants = F)
+  lik_prec <- auto_mclapply(1:emc[[1]]$n_subjects, function(sub){
+    draws <- matrix(alpha[, sub, ], nrow = dim(alpha)[1], dimnames = list(dimnames(alpha)[[1]], NULL))
+    tryCatch(lik_precision(rowMeans(draws), apply(draws, 1, stats::sd), emc[[1]]$data[[sub]], emc[[1]]$model),
+             error = function(e) NULL)
+  }, mc.cores = n_cores)
+  for(i in 1:length(emc)) emc[[i]]$lik_prec <- lik_prec
   return(emc)
 }
 
@@ -576,7 +697,10 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
       if(!legacy_sampler()) prop_var_ratio <- sqrt(prop_var_ratio)
     }
-    if(stage != "sample"){
+    # Within adapt the hierarchical local kernel's epsilon is relative to
+    # the likelihood + group precision (new_particle), not to chains_var
+    lik_scaled <- stage == "adapt" && !legacy_sampler() && emc[[1]]$type != "single"
+    if(stage != "sample" && !lik_scaled){
       emc[[j]] <- update_epsilon_scale(emc[[j]], prop_var_ratio)
     }
     attr(emc[[j]], "prop_var") <- new_prop_var
@@ -594,6 +718,9 @@ reset_pm_settings <- function(emc, stage){
   # than the whole stage's history (the legacy sampler reset them only at a
   # new stage and in burn).
   if(legacy && !(new_stage || stage == "burn")) return(emc)
+  # The sample stage's kernel is fixed: it keeps the settings that the tail of
+  # adapt tuned for it (tune_sample_kernel)
+  if(!legacy && stage == "sample") return(emc)
   for(i in 1:length(emc)){
     pm_settings <- attr(emc[[i]]$samples, "pm_settings")
     if(is.null(pm_settings)) next   # first preburn step: nothing to reset yet
@@ -1070,6 +1197,7 @@ strip_duplicates <- function(emc, incl_props = TRUE) {
       emc[[i]]$eff_var <- NULL
       emc[[i]]$chains_cov <- NULL
       emc[[i]]$chains_mu <- NULL
+      emc[[i]]$lik_prec <- NULL
     }
   }
   return(emc)
