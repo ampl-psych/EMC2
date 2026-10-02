@@ -1260,6 +1260,83 @@ check_prop_performance <- function(prop_performance, stage){
   return(round(prop_performance))
 }
 
+# Fork safety of the OpenMP backend (options(emc.ll_backend = "multithreaded")).
+# With GNU libgomp (gcc on Linux) a process that has opened a parallel region
+# and then forks leaves its children unable to open one: they wait on the
+# parent's thread pool for ever. So a threaded likelihood in the R session
+# (compare(), a profile plot, a stage run with one core, ...) followed by a
+# fit with forked chains would hang. The LLVM/Intel runtime (libomp on macOS,
+# libiomp5) survives a fork and Windows does not fork: nothing is done there
+# (omp_state$hazard is FALSE).
+#  - The top-level process (the one the package was loaded in, omp_state$top_pid;
+#    a forked process inherits that value and has another pid) releases its
+#    pool after every threaded call (omp_release_pool, libgomp only), so
+#    whatever it forks later is safe. Forked processes (chains, subject
+#    workers) keep theirs: they do not fork after using it, and rebuilding it
+#    at every call would cost them.
+#  - A process that keeps a live pool (the release is not available or failed,
+#    or it is a forked process) records its pid in omp_state$pool_pid, which a
+#    fork copies. A process that finds a pid other than its own there was
+#    forked from a process with a live pool: it takes the serial likelihood.
+omp_state <- new.env(parent = emptyenv())
+
+# Can a fork after a parallel region hang with this OpenMP runtime? Not on
+# macOS or Windows, without OpenMP, or with the LLVM/Intel runtime; yes with
+# libgomp, and assumed so for a runtime that is not recognised.
+omp_fork_hazard <- function(runtime = omp_runtime(), sysname = Sys.info()[["sysname"]]){
+  if(.Platform$OS.type != "unix" || identical(sysname, "Darwin")) return(FALSE)
+  !(identical(runtime, "none") || grepl("iomp|libomp", basename(runtime)))
+}
+
+omp_state_init <- function(){
+  omp_state$hazard <- omp_fork_hazard()
+  omp_state$top_pid <- Sys.getpid()
+  omp_state$pool_pid <- NULL
+  omp_state$warned <- FALSE
+}
+
+omp_serial_advice <- paste0(
+  "To keep the threaded likelihood, start a fresh R session and set ",
+  "options(emc.ll_backend = \"multithreaded\", emc.n_threads = ) before anything else, ",
+  "so that no likelihood is evaluated in the session itself before the chains are forked.")
+
+# Can this process open an OpenMP parallel region? FALSE (with one warning) if
+# it was forked from a process with a live pool.
+omp_fork_ok <- function(){
+  if(!isTRUE(omp_state$hazard) || is.null(omp_state$pool_pid) || omp_state$pool_pid == Sys.getpid()) return(TRUE)
+  if(!isTRUE(omp_state$warned)){
+    omp_state$warned <- TRUE
+    warning("emc.ll_backend = \"multithreaded\": this process was forked from one that had already ",
+            "run a threaded likelihood and could not release its OpenMP thread pool, in which case ",
+            "a threaded likelihood here would hang. Using the serial likelihood instead. ",
+            omp_serial_advice, call. = FALSE)
+  }
+  FALSE
+}
+
+# After a threaded likelihood: release the pool (top-level process) or record
+# that this process has a live one.
+omp_after_threaded <- function(){
+  if(!isTRUE(omp_state$hazard)) return(invisible(NULL))
+  pid <- Sys.getpid()
+  if(identical(pid, omp_state$top_pid)){
+    if(omp_release_pool() == 0L){
+      omp_state$pool_pid <- NULL
+      return(invisible(NULL))
+    }
+    if(!isTRUE(omp_state$warned)){
+      omp_state$warned <- TRUE
+      warning("emc.ll_backend = \"multithreaded\": the OpenMP thread pool of this R session could not ",
+              "be released (no omp_pause_resource_all in this build, an OpenMP runtime that is not ",
+              "recognised, or the call failed). Processes forked from this session from now on ",
+              "(parallel chains, cores_per_chain > 1) will use the serial likelihood, because a ",
+              "threaded one could hang. ", omp_serial_advice, call. = FALSE)
+    }
+  }
+  omp_state$pool_pid <- pid
+  invisible(NULL)
+}
+
 calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 1, return_trialwise=FALSE){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, model, component)
@@ -1278,12 +1355,13 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       # neural likelihoods: the registration and the live evaluator
       nn <- if (identical(model$c_name, "NN")) nn_native_args(model$nn, attr(dadm, "constants"))
 
-      if (backend == "multithreaded") {
+      if (backend == "multithreaded" && omp_fork_ok()) {
         lls <- calc_ll_multithreaded(proposals, dadm, constants = constants, designs = designs,
                                      type = model$c_name, model$bound, model$transform,
                                      model$pre_transform, p_types = p_types,
                                      min_ll = log(1e-10), model$trend, n_threads = n_threads, return_trialwise=return_trialwise,
                                      nn = nn)
+        omp_after_threaded()
       } else {
         lls <- calc_ll(proposals, dadm, constants = constants, designs = designs,
                        type = model$c_name, model$bound, model$transform,

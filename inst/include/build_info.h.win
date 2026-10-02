@@ -8,6 +8,7 @@
 #define EMC2_ACCELERATE     ""
 #define EMC2_OMP_CXXFLAGS   "no autodetect possible"
 #define EMC2_OMP_LIBS       "no autodetect possible"
+#define EMC2_OMP_PAUSE      0
 
 
 #endif

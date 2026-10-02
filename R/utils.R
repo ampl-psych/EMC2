@@ -4,7 +4,11 @@
 #' was installed. Useful for debugging performance or numerical issues.
 #'
 #' @export
-emc2_build_info <- function() invisible(.emc2_build_info())
+emc2_build_info <- function(){
+  .emc2_build_info()
+  cat("  OMP runtime :", omp_runtime(), "\n")
+  invisible(NULL)
+}
 
 
 # From Zach's branch

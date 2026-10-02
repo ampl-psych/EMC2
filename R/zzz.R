@@ -9,4 +9,6 @@
   # BLAS call, so this must happen before any EMC2 computation.
   if (identical(Sys.info()[["sysname"]], "Darwin") && !nzchar(Sys.getenv("VECLIB_MAXIMUM_THREADS")))
     Sys.setenv(VECLIB_MAXIMUM_THREADS = "1")
+  # fork safety of the OpenMP likelihood backend (R/sampling.R, omp_state)
+  omp_state_init()
 }

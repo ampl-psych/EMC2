@@ -3,6 +3,11 @@
 #endif
 
 #include <Rcpp.h>
+#include "build_info.h"   // EMC2_OMP_PAUSE (configure)
+#if defined(_OPENMP) && (defined(__linux__) || defined(__APPLE__))
+#include <dlfcn.h>        // dladdr: which OpenMP runtime the entry points resolve to
+#define EMC2_OMP_DLADDR 1
+#endif
 #include <unordered_map>
 
 // Utilities first — no dependencies on model types
@@ -1478,6 +1483,47 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
   return result;
 }
 
+
+// The shared object the OpenMP entry points of this library resolve to
+// (e.g. ".../libgomp.so.1", ".../libiomp5.so", ".../libomp.dylib"): "none"
+// without OpenMP, "" if it cannot be told.
+// [[Rcpp::export(rng = false)]]
+std::string omp_runtime() {
+#ifndef _OPENMP
+  return "none";
+#elif defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (dladdr((void*) &omp_get_max_threads, &info) && info.dli_fname) return std::string(info.dli_fname);
+  return "";
+#else
+  return "";
+#endif
+}
+
+// Release the OpenMP runtime's thread pool (omp_pause_resource_all). With GNU
+// libgomp a process that has opened a parallel region and then forks leaves
+// its children waiting on the parent's pool for ever; after the release a
+// forked child opens its own. The next parallel region here rebuilds the pool
+// (about 0.1 ms at 4 threads, 0.5 ms at 16). Only done with libgomp: Intel's
+// libiomp5 (2021.10) survives a fork without it and crashes in the first
+// parallel region after a hard pause. Returns 0 on success, 1 if the runtime
+// refused, 2 if called inside a parallel region (nothing done), -1 if not
+// available: not libgomp, or no omp_pause_resource_all in this build
+// (configure sets EMC2_OMP_PAUSE).
+// [[Rcpp::export(rng = false)]]
+int omp_release_pool() {
+#if defined(_OPENMP) && defined(EMC2_OMP_PAUSE) && EMC2_OMP_PAUSE && defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (!dladdr((void*) &omp_pause_resource_all, &info) || !info.dli_fname) return -1;
+  const std::string path(info.dli_fname);
+  const std::string::size_type slash = path.find_last_of('/');
+  if (path.find("gomp", slash == std::string::npos ? 0 : slash) == std::string::npos) return -1;
+  if (omp_in_parallel()) return 2;
+  return omp_pause_resource_all(omp_pause_hard) == 0 ? 0 : 1;
+#else
+  return -1;
+#endif
+}
 
 // [[Rcpp::export]]
 void omp_diagnostics(int n_threads = -1) {

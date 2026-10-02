@@ -9,5 +9,6 @@
 #define EMC2_ACCELERATE     "@ACCELERATE_LIBS@"
 #define EMC2_OMP_CXXFLAGS   "@OMP_CXXFLAGS@"
 #define EMC2_OMP_LIBS       "@OMP_LIBS@"
+#define EMC2_OMP_PAUSE      @OMP_PAUSE@
 
 #endif

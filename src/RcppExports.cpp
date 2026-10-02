@@ -791,6 +791,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// omp_runtime
+std::string omp_runtime();
+RcppExport SEXP _EMC2_omp_runtime() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(omp_runtime());
+    return rcpp_result_gen;
+END_RCPP
+}
+// omp_release_pool
+int omp_release_pool();
+RcppExport SEXP _EMC2_omp_release_pool() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(omp_release_pool());
+    return rcpp_result_gen;
+END_RCPP
+}
 // omp_diagnostics
 void omp_diagnostics(int n_threads);
 RcppExport SEXP _EMC2_omp_diagnostics(SEXP n_threadsSEXP) {
@@ -935,6 +953,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 13},
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 14},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
+    {"_EMC2_omp_runtime", (DL_FUNC) &_EMC2_omp_runtime, 0},
+    {"_EMC2_omp_release_pool", (DL_FUNC) &_EMC2_omp_release_pool, 0},
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
     {"_EMC2_rSDM", (DL_FUNC) &_EMC2_rSDM, 4},
