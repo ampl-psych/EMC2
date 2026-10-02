@@ -835,9 +835,23 @@ conditional_proposal <- function(lik, prior_prec, group_mu){
 # roughly one likelihood standard deviation), which keeps the differences well
 # above numerical noise whatever the scale of the posterior the centre came
 # from -- in a collapsed group level the posterior scale says nothing about
-# the likelihood's. p^2 + p + 1 likelihood evaluations plus the step search.
-# Returns list(prec, lin): the positive semi-definite precision and the linear
-# term of the quadratic approximation of the log-likelihood,
+# the likelihood's. The search brackets the step (the largest step found too
+# small, the smallest found too large) and bisects in log scale once it has
+# both, because a multiplicative search alone bounces for ever between a
+# step on a flat stretch of the likelihood and one across a cliff: the DDM
+# returns min_ll per trial outside its bounds (sv, SZ < .01), forstmann's
+# subjects sit a log unit or two above that floor in sv / SZ, and the x10 /
+# x0.1 search landed on the floor side half the time and read the floor as
+# a curvature of 10^3-10^4 with a gradient to match (rating-work/sampler/
+# hier/stageH5/REPORT.md) -- a surrogate that narrowed the local proposal
+# of those parameters to ~0.01 and made every interweaving move on them fail
+# its exact check. A parameter whose step never settles (flat to one side, a
+# cliff within any usable step to the other) gets no likelihood precision
+# and no gradient, cross terms included: the surrogate is flat in it, which
+# the subject step (group precision alone) and the sweep (prior part and
+# exact check) both handle. p^2 + p + 1 likelihood evaluations plus the step
+# search. Returns list(prec, lin): the positive semi-definite precision and
+# the linear term of the quadratic approximation of the log-likelihood,
 # -1/2 x' prec x + lin' x; or NULL if the centre has no finite likelihood.
 lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_rounds = 8){
   p <- length(centre)
@@ -852,6 +866,11 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
   E <- diag(p)
   fp <- fm <- rep(NA_real_, p)
   todo <- rep(TRUE, p)
+  # bracket of the step: the largest h whose drop was too small and the
+  # smallest whose drop was too large (or not finite); once both exist the
+  # next h is their geometric mean, so the search settles instead of bouncing
+  # between a flat stretch and a cliff
+  lo <- rep(NA_real_, p); hi <- rep(NA_real_, p)
   for(r in seq_len(max_rounds)){
     k <- which(todo)
     D <- E[k, , drop = FALSE] * h[k]
@@ -861,10 +880,22 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
     ok <- is.finite(drop_k) & drop_k > target/3 & drop_k < target*3
     todo[k[ok]] <- FALSE
     if(!any(todo) || r == max_rounds) break
-    bad <- drop_k[!ok]
-    h[k[!ok]] <- h[k[!ok]] * ifelse(!is.finite(bad), .25,
-                                    ifelse(bad <= 0, 4, pmin(10, pmax(.1, sqrt(target/bad)))))
+    kb <- k[!ok]; bad <- drop_k[!ok]
+    small <- is.finite(bad) & bad <= target/3
+    lo[kb[small]] <- pmax(lo[kb[small]], h[kb[small]], na.rm = TRUE)
+    hi[kb[!small]] <- pmin(hi[kb[!small]], h[kb[!small]], na.rm = TRUE)
+    h_new <- h[kb] * ifelse(!is.finite(bad), .25,
+                            ifelse(bad <= 0, 4, pmin(10, pmax(.1, sqrt(target/bad)))))
+    both <- is.finite(lo[kb]) & is.finite(hi[kb])
+    h_new[both] <- sqrt(lo[kb[both]] * hi[kb[both]])
+    h[kb] <- h_new
   }
+  # A parameter whose step never settled has a likelihood that is flat to
+  # one side and falls off a cliff to the other within any usable step (a
+  # bound of the model, or a floor of the likelihood): central differences
+  # would read the cliff as a huge curvature and gradient. It gets no
+  # likelihood precision and no gradient, cross terms included.
+  cliff <- todo | !is.finite(fp) | !is.finite(fm)
   H <- diag((2*f0 - fp - fm)/h^2, p)
   if(p > 1){
     pairs <- utils::combn(p, 2)
@@ -879,6 +910,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
     H[t(pairs[2:1, , drop = FALSE])] <- off
   }
   H[!is.finite(H)] <- 0
+  H[cliff, ] <- 0; H[, cliff] <- 0
   # Nearest positive semi-definite matrix: directions in which the likelihood
   # is flat or convex at the centre get no likelihood precision
   eig <- eigen(H, symmetric = TRUE)
@@ -886,7 +918,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
   H <- (H + t(H))/2
   dimnames(H) <- list(names(centre), names(centre))
   grad <- (fp - fm)/(2*h)
-  grad[!is.finite(grad)] <- 0
+  grad[!is.finite(grad) | cliff] <- 0
   list(prec = H, lin = drop(H %*% centre) + grad)
 }
 

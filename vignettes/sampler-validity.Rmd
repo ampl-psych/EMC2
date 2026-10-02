@@ -376,10 +376,16 @@ no regression either. Two things did not survive contact with real data, and are
   oscillates between a step on the likelihood's flat stretch and one that straddles the DDM's
   floor at its bounds (`sv`, `SZ` < .01), ending on either side, and reads the floor as a
   curvature of 10^3-10^4 with a gradient to match. The same surrogate is the subject step's local
-  proposal, which is why `sv` already failed to converge there before the sweep existed. A
-  converging, cliff-aware step search is prototyped (forstmann `sv` Rhat 5.3 to 1.17 at `fit()`'s
-  maximum tries, chains mixing, in half the time) and awaits a decision, since it changes every
-  hierarchical fit's subject step.
+  proposal, which is why `sv` already failed to converge there before the sweep existed. The
+  search now brackets its step and bisects, and gives a parameter whose step never settles a flat
+  surrogate (`test-lik-precision.R`); on forstmann `SZ` converges (1.03 at 5000 draws) and `sv`
+  goes from 5.3 to 1.2-1.7 at `fit()`'s limit and 1.18 at 5000 draws with every chain crossing the
+  whole of its posterior, every other parameter below 1.01, in half the time. What is left on `sv`
+  is the random walk of its group mean across a two-log-unit plateau where the likelihood is
+  indifferent to `sv` (ending at the model's floor at `sv` = .01): about 200 iterations per
+  traverse, so Rhat < 1.1 needs of the order of 10^4 draws. That is the model and prior, not the
+  sampler. Where the likelihood is quadratic (the conjugate model) the change is a no-op; on the
+  `k25` funnel cells the surrogate is entry-for-entry identical.
 - On the Eisenberg Simon data (518 subjects, no funnel present -- mu/sigma Rhat both fine), the
   sweep makes subject-level (alpha) Rhat *worse* than the pre-sweep sampler (1.212 vs 1.098) at
   4x the cost, with the block-acceptance diagnostic below its target window -- the quadratic
@@ -404,10 +410,10 @@ interweaving sweep of section 7.
 What remains, as of this writing:
 
 - **The Eisenberg Simon regression found by section 7's regression testing is under active
-  investigation** (`stageH3/REPORT.md`), and **forstmann's `sv`/`SZ` still fail** for the reason
-  section 7 gives (a surrogate built across the likelihood's floor; the step-size runaway found
-  with it is fixed). The pending `lik_precision()` fix is a candidate for both, since the RDM has
-  bounded parameters as well.
+  investigation** (`stageH3/REPORT.md`). The forstmann runaway and the surrogate fault behind it
+  are fixed (section 7); whether the same fault is part of the Eisenberg regression is worth
+  checking first there, since the RDM has bounded parameters as well. forstmann's `sv` itself
+  stays slow (its group mean on a likelihood plateau), which no step-size change addresses.
 - **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
   than that on models that are not shaped like the `k25` reproducer, even where there is no
   funnel.
