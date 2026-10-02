@@ -918,9 +918,12 @@ has_trend_coding <- function(model) {
 }
 
 has_conditional_covariates <- function(design) {
-  # find define covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
-  # they can be lRfiltered or not
-  function_output_columns <- names(design$Ffunctions)
+  # find covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
+  # they can be lR filtered or not
+  function_output_columns <- unlist(lapply(names(design$Ffunctions), function(nm) {
+    stored <- attr(design$Ffunctions[[nm]], "output_column_names")
+    if (!is.null(stored)) stored else nm  # fall back to function name (scalar case)
+  }), use.names = FALSE)
   behavioral_covariates <- c('rt', 'R', function_output_columns)
 
   # find actual covariates, look for a match
