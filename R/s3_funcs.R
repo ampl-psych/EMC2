@@ -560,7 +560,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' This fine-tunes the width of the search space to obtain the desired acceptance probability.
 #' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as specified
-#' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
+#' by ``stop_criteria`` are checked and, in the stages before `sample`, proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
 #' @param fileName A string. If specified, will auto-save emc object at this location on every iteration.
 #' @param particle_factor An integer. ``particle_factor`` multiplied by the square
