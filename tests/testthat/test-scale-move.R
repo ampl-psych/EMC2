@@ -51,6 +51,10 @@ test_that("scale_move_log_prior matches the brute-force ratio", {
 toy_ll <- function(pars, dadm, ...) -sum(dadm$T * log1p((dadm$ybar - pars)^2))
 toy_pars <- c("a", "b")
 toy_T <- c(30, 3)
+# The data of this file are drawn with R's default generator whatever an
+# earlier test file left set (several switch to L'Ecuyer-CMRG for mclapply
+# and never switch back): the reference moments of (3) belong to one data set.
+RNGkind("Mersenne-Twister", "Inversion", "Rejection")
 set.seed(21)
 toy_dat <- do.call(rbind, lapply(1:2, function(s) data.frame(
   subjects = s, par = toy_pars, T = toy_T, ybar = c(.4, -.3) * (s - 1.5) * 2 + rnorm(2, 0, .2))))
@@ -58,7 +62,8 @@ toy_dat$subjects <- factor(toy_dat$subjects)
 toy_design <- design(model = toy_ll, custom_p_vector = toy_pars, report_p_vector = FALSE)
 toy_emc <- make_emc(toy_dat, toy_design, type = "standard", n_chains = 2, compress = FALSE)
 
-toy_run <- function(sampler, iter, use_move, seed) {
+toy_run <- function(sampler, iter, use_move, seed, surrogate = c("rough", "flat")) {
+  surrogate <- match.arg(surrogate)
   set.seed(seed)
   p <- 2; n <- 2; v <- sampler$prior$v; A <- sampler$prior$A
   m0 <- sampler$prior$theta_mu_mean; V0inv <- sampler$prior$theta_mu_invar
@@ -67,11 +72,15 @@ toy_run <- function(sampler, iter, use_move, seed) {
   ll <- function(s, x) as.numeric(EMC2:::calc_ll_manager(matrix(x, 1, dimnames = list(NULL, toy_pars)),
                                                          sampler$data[[s]], sampler$model))
   cur_ll <- sapply(1:n, function(s) ll(s, alpha[, s]))
-  # a deliberately rough surrogate: curvature from the Gaussian part at the
-  # likelihood's mode, which overstates the tails of this likelihood
+  # rough: a deliberately rough surrogate, curvature from the Gaussian part at
+  # the likelihood's mode, which overstates the tails of this likelihood;
+  # flat: no curvature or gradient at all (what the sweep sees for a parameter
+  # the subject likelihoods are flat in), so the inner ratio is the prior part
+  # alone and only the exact check knows the likelihood
   lik_prec <- lapply(1:n, function(s) {
     d <- sampler$data[[s]]
-    list(prec = diag(2 * d$T), lin = 2 * d$T * d$ybar)
+    if (surrogate == "flat") list(prec = diag(0, 2), lin = rep(0, 2))
+    else list(prec = diag(2 * d$T), lin = 2 * d$T * d$ybar)
   })
   settings <- EMC2:::scale_move_init(NULL, toy_pars)
   out <- matrix(NA_real_, iter, 9, dimnames = list(NULL, c("s11", "s22", "r12", "a11", "a22", "aux1", "aux2", "mu1", "mu2")))
@@ -112,6 +121,41 @@ test_that("the scale move leaves the posterior invariant on a 2-subject toy", {
   expect_gt(mv$settings$acc_out / mv$settings$n_out, .2)
   expect_true(all(mv$settings$step > 0) && all(mv$settings$loc > 0))
   expect_true(all(mv$settings$acc_loc > iter / 20))
+  ess <- function(x) coda::effectiveSize(coda::mcmc(x))
+  for (k in colnames(ref$draws)) {
+    lg <- k %in% c("s11", "s22", "aux1", "aux2")
+    x <- if (lg) log(mv$draws[, k]) else mv$draws[, k]
+    y <- if (lg) log(ref$draws[, k]) else ref$draws[, k]
+    z <- (mean(x) - mean(y)) / sqrt(var(x) / ess(x) + var(y) / ess(y))
+    expect_lt(abs(z), 4)
+    expect_lt(abs(log(sd(x) / sd(y))), .25)
+  }
+})
+
+# ---- (2b) a flat surrogate: the step size is capped by the exact check -----
+# With no curvature or gradient in the surrogate the inner acceptance is the
+# prior part alone, which accepts N(0, step^2) log-scale proposals at about
+# .3 at any large step once the group SD sits below the half-t scale, so a
+# step adapted on the surrogate's acceptance runs away (as it did, for a
+# related reason -- a surrogate wrong by orders of magnitude -- on
+# forstmann's DDM sv / SZ, stageH3 / stageH5) while the exact check rejects
+# nearly every block. Adapted on the realised acceptance (surrogate AND exact
+# check) the step settles where the exact likelihoods accept the rescaling,
+# and the posterior is still the right one.
+test_that("with a flat surrogate the step size is held by the exact check", {
+  skip_on_cran()
+  sampler <- toy_emc[[1]]
+  iter <- 12000
+  ref <- toy_run(sampler, iter, use_move = FALSE, seed = 1)
+  mv <- toy_run(sampler, iter, use_move = TRUE, seed = 4, surrogate = "flat")
+  st <- mv$settings
+  # the surrogate accepted far more than the exact check let through, and the
+  # steps stayed at the scale the exact conditional of a log SD has
+  expect_true(all(st$acc_in > 1.5 * st$acc_real))
+  expect_true(all(st$step < 2.5) && all(st$loc < 2.5))
+  # the realised acceptance over the run is near the Robbins-Monro target
+  expect_true(all(st$acc_real / st$n_in > .15 & st$acc_real / st$n_in < .5))
+  expect_true(all(st$acc_loc_real / st$n_in > .15 & st$acc_loc_real / st$n_in < .5))
   ess <- function(x) coda::effectiveSize(coda::mcmc(x))
   for (k in colnames(ref$draws)) {
     lg <- k %in% c("s11", "s22", "aux1", "aux2")
@@ -185,7 +229,10 @@ test_that("with the scale move the conjugate posterior is recovered and the funn
   expect_named(sm[[1]]$step, conj_pars)
   expect_gt(sm[[1]]$n_out, 100)
   # the surrogate is exact for a Gaussian likelihood, so every sweep is accepted
+  # and the realised acceptance the steps adapt on is the surrogate's
   expect_gt(sm[[1]]$acc_out / sm[[1]]$n_out, .98)
+  expect_identical(sm[[1]]$acc_real, sm[[1]]$acc_in)
+  expect_identical(sm[[1]]$acc_loc_real, sm[[1]]$acc_loc)
   # more sample iterations: the step sizes stay frozen
   emc2 <- fit(emc, cores_for_chains = 1, iter = 1600, verbose = FALSE, particle_factor = 20,
               step_size = 500, stop_criteria = list(sample = list(iter = 1600)))

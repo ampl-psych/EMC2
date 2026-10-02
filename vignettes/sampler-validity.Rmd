@@ -335,8 +335,18 @@ approximation) -- `B x n_subjects` extra single-row likelihood evaluations per i
 0.1 ms each. The scale step size (Robbins-Monro, target acceptance .3) and `B` itself (kept where
 the per-block acceptance is in [.35, .75]) adapt during `adapt`, are averaged over its tail the
 same way the particle kernel's own tuning is (section 4's rule: nothing adapts once draws are
-kept), and are frozen for `sample`. `options(emc.scale_move = FALSE)` turns the sweep off; the
-legacy sampler never runs it.
+kept), and are frozen for `sample`. The acceptance the step sizes adapt on is the *realised* one:
+a move counts only when the surrogate accepted it *and* its block then passed the exact check
+(`acc_real` in `attr(samples, "scale_move")`; `acc_in` still counts the surrogate's). Adapting on
+the surrogate's acceptance alone, as the first version did, tunes the step to the surrogate
+whatever its quality: on forstmann's DDM `sv`/`SZ` (below), where the surrogate was wrong by
+three orders of magnitude, its acceptance was a coin toss on the proposal's sign at any step, the
+step ran away to 6-11 log-SD units and the exact check rejected nearly every block. With the
+realised acceptance the exact check's rejections bound the step by what the exact likelihoods
+accept; a surrogate that is flat in a parameter gets the step the prior and the exact check agree
+on; where the surrogate is exact (a Gaussian likelihood) every block passes and nothing changes
+(`test-scale-move.R`, which also checks the flat-surrogate case). `options(emc.scale_move =
+FALSE)` turns the sweep off; the legacy sampler never runs it.
 
 **Validation** (`rating-work/sampler/hier/stageH2/REPORT.md`, conjugate cell `p25`, 25 parameters
 x 20 subjects). From both the truth and a collapsed start, group-SD quantiles (1-95%) equal the
@@ -356,10 +366,20 @@ barely); the SBC cell it does not even touch (`diagonal-gamma`, where `do_scale`
 no regression either. Two things did not survive contact with real data, and are open issues
 (section 8), not resolved by this vignette:
 
-- On forstmann (19-subject DDM), the scale move's step size runs away to 6-11 log-SD units on the
+- On forstmann (19-subject DDM), the scale move's step size ran away to 6-11 log-SD units on the
   weakly-identified `sv`/`SZ` parameters (every other parameter: 0.1-0.4) -- not a new failure
-  (the pre-sweep sampler already struggled there) but a worse one, because an unbounded
-  Robbins-Monro step size has nothing to stop it growing against a near-flat likelihood direction.
+  (the pre-sweep sampler already struggled there) but a worse one, because a step size adapted on
+  the surrogate's acceptance has nothing to stop it growing against a flat likelihood direction.
+  The runaway is fixed by adapting on the realised acceptance (above), but forstmann is not
+  (`rating-work/sampler/hier/stageH5/REPORT.md`): the step now shrinks instead, because the
+  surrogate for `sv`/`SZ` is wrong by three orders of magnitude. `lik_precision()`'s step search
+  oscillates between a step on the likelihood's flat stretch and one that straddles the DDM's
+  floor at its bounds (`sv`, `SZ` < .01), ending on either side, and reads the floor as a
+  curvature of 10^3-10^4 with a gradient to match. The same surrogate is the subject step's local
+  proposal, which is why `sv` already failed to converge there before the sweep existed. A
+  converging, cliff-aware step search is prototyped (forstmann `sv` Rhat 5.3 to 1.17 at `fit()`'s
+  maximum tries, chains mixing, in half the time) and awaits a decision, since it changes every
+  hierarchical fit's subject step.
 - On the Eisenberg Simon data (518 subjects, no funnel present -- mu/sigma Rhat both fine), the
   sweep makes subject-level (alpha) Rhat *worse* than the pre-sweep sampler (1.212 vs 1.098) at
   4x the cost, with the block-acceptance diagnostic below its target window -- the quadratic
@@ -383,10 +403,11 @@ interweaving sweep of section 7.
 
 What remains, as of this writing:
 
-- **Two issues found by section 7's regression testing are under active investigation**: the
-  forstmann step-size runaway and the Eisenberg Simon regression (both `stageH3/REPORT.md`).
-  Neither is resolved here; fixes, if any, are sequenced through the same file
-  (`R/variant_standard.R`) one at a time, step-size cap first.
+- **The Eisenberg Simon regression found by section 7's regression testing is under active
+  investigation** (`stageH3/REPORT.md`), and **forstmann's `sv`/`SZ` still fail** for the reason
+  section 7 gives (a surrogate built across the likelihood's floor; the step-size runaway found
+  with it is fixed). The pending `lik_precision()` fix is a candidate for both, since the RDM has
+  bounded parameters as well.
 - **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
   than that on models that are not shaped like the `k25` reproducer, even where there is no
   funnel.

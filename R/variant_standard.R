@@ -866,12 +866,33 @@ gibbs_step_standard <- function(sampler, alpha) {
 # time), the sweep is dealt into blocks of parameters, each accepted or
 # rejected on its own; the number of blocks adapts to the block acceptance.
 #
-# The step sizes are adapted (Robbins-Monro on the sweep's acceptance, target
-# scale_move_target) in adapt and in the tail of adapt that tunes the sample
-# kernel, where their log average is also recorded; tune_sample_kernel()
-# freezes them at that average and nothing adapts in the sample stage
-# (H1b's rule: no adaptation once draws are kept). State lives in
-# attr(samples, "scale_move") and travels with the chain (concat_emc).
+# The step sizes are adapted (Robbins-Monro, target scale_move_target) in
+# adapt and in the tail of adapt that tunes the sample kernel, where their
+# log average is also recorded; tune_sample_kernel() freezes them at that
+# average and nothing adapts in the sample stage (H1b's rule: no adaptation
+# once draws are kept). The acceptance they adapt on is the REALISED one: a
+# move counts as accepted when the surrogate accepted it AND its block then
+# passed the exact check. Adapting on the surrogate's acceptance alone
+# tunes the step to the surrogate, whatever its quality: where the
+# surrogate is wrong about a parameter its acceptance says nothing about
+# the exact move, so the step can settle anywhere -- it ran away to 6-11
+# log-SD units on forstmann's DDM sv and SZ (rating-work/sampler/hier/
+# stageH3/REPORT.md section 2a, stageH5/REPORT.md), where the surrogate's
+# gradient and curvature were wrong by three orders of magnitude (the
+# finite-difference step of lik_precision() straddled the likelihood's
+# floor at the model's bound), the inner acceptance was a coin toss on the
+# sign of the proposal at any step, and the exact check rejected nearly
+# every such block, leaving the group SD to the slow centred random walk.
+# With the realised acceptance the exact check's rejections shrink the
+# step until the rescaling is one the exact likelihoods accept, which is
+# the step a random walk on the exact conditional wants, and a surrogate
+# that is flat in a parameter (no curvature, no gradient: the inner ratio
+# is the prior part alone) gets the step the prior and the exact check
+# agree on. Where the surrogate is exact (a Gaussian likelihood) every
+# block passes and nothing changes. The same holds for the location step.
+# State lives in attr(samples, "scale_move") and travels with the chain
+# (concat_emc); acc_in / acc_loc count the surrogate's acceptances and
+# acc_real / acc_loc_real the realised ones.
 #
 # options(emc.scale_move = FALSE) turns the move off (A/B); a character
 # vector names the stages it runs in (default adapt and sample); the legacy
@@ -898,17 +919,22 @@ scale_move_log_prior <- function(delta, A_j, a_j){
 # (parameter scale); the *_sum / *_n fields average their logs over the tail
 # of adapt; blocks: the number of blocks the sweep is split into (win_*: the
 # block acceptance window that adapts it); acc_in / acc_loc / n_in count the
-# sweep's inner acceptances and acc_out / n_out the delayed-acceptance
-# step's (per block).
+# sweep's inner (surrogate) acceptances, acc_real / acc_loc_real the
+# realised ones (inner AND the block's exact check, what the step sizes
+# adapt on) and acc_out / n_out the delayed-acceptance step's (per block).
 scale_move_init <- function(settings, par_names){
   p <- length(par_names)
+  zero <- setNames(rep(0, p), par_names)
   if(is.null(settings)){
-    zero <- setNames(rep(0, p), par_names)
     settings <- list(step = zero + .5, log_step_sum = zero, log_step_n = zero,
                      loc = zero + .2, log_loc_sum = zero, log_loc_n = zero, uses = 0,
                      blocks = 1, win_acc = 0, win_n = 0,
-                     acc_in = zero, acc_loc = zero, n_in = zero, acc_out = 0, n_out = 0, iter = 0)
+                     acc_in = zero, acc_loc = zero, n_in = zero, acc_out = 0, n_out = 0, iter = 0,
+                     acc_real = zero, acc_loc_real = zero)
   }
+  # state saved before the realised counters existed
+  if(is.null(settings$acc_real)) settings$acc_real <- zero
+  if(is.null(settings$acc_loc_real)) settings$acc_loc_real <- zero
   settings
 }
 
@@ -965,7 +991,10 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   }
   pn <- rownames(alpha_full)
   alpha_new <- alpha_full
-  acc <- acc_loc <- rep(0, p)
+  # acc_sur / acc_sur_loc: accepted on the surrogate; acc / acc_loc: and the
+  # block then passed the exact check (the realised acceptance the step
+  # sizes adapt on)
+  acc <- acc_loc <- acc_sur <- acc_sur_loc <- rep(0, p)
   # The sweep, in B blocks: the parameters are dealt into B random blocks, each
   # block's scale and location moves run in random order on the surrogate,
   # and each block is then accepted or rejected against the exact likelihoods
@@ -1004,12 +1033,12 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
         for(s in which(has_lik)) G[, s] <- G[, s] - d[s] * lik_prec[[s]]$prec[, jj]
         surr <- surr + dsurr
         if(scale){
-          acc[j] <- 1
+          acc_sur[j] <- 1
           R[j, ] <- f * R[j, ]
           a[j] <- a[j] / f^2
           f_acc[j] <- f_acc[j] * f
         } else{
-          acc_loc[j] <- 1
+          acc_sur_loc[j] <- 1
           tmu[j] <- tmu[j] + e
           pr <- pr + e * P0[, j]
           mu_shift[j] <- mu_shift[j] + e
@@ -1031,6 +1060,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
       if(do_loc) pars$subj_mu <- pars$subj_mu + mu_shift
       alpha_full <- alpha_new
       prev_ll <- ll_new
+      acc[blk] <- acc_sur[blk]; acc_loc[blk] <- acc_sur_loc[blk]
     } else{
       R <- R0; a <- a0; G <- G0; alpha_new <- alpha0
       if(do_loc){ tmu <- tmu0; pr <- pr0 }
@@ -1041,8 +1071,10 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   pars$a_half <- a
   if(do_loc) pars$tmu <- tmu
   pars$alpha <- alpha_full[keep, , drop = FALSE]
-  settings$acc_in <- settings$acc_in + acc
-  settings$acc_loc <- settings$acc_loc + acc_loc
+  settings$acc_in <- settings$acc_in + acc_sur
+  settings$acc_loc <- settings$acc_loc + acc_sur_loc
+  settings$acc_real <- settings$acc_real + acc
+  settings$acc_loc_real <- settings$acc_loc_real + acc_loc
   settings$n_in <- settings$n_in + 1
   settings$iter <- settings$iter + 1
   if(!frozen){
