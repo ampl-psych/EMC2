@@ -306,7 +306,69 @@ the group level; `rating-work/sampler/hier/stageH1b/REPORT.md`):
 **Tests.** The suite passes (1434); the three snapshot tests in `test-fit.R` that pin specific
 draws were re-recorded, as any change to the sampler requires.
 
-## 7. What is still open
+## 7. The interweaving scale move (2026-10-02)
+
+Section 6 found what remained once the particle step itself was repaired: the centred alternation
+"subjects given the group level, group level given the subjects" mixes slowly in a funnel even
+with a perfect subject step. On the conjugate model of `rating-work/sampler/hier/stageH1/
+REPORT.md` one effective draw of a weak parameter's log group SD took about 500 iterations, and
+leaving a collapsed state took about 400; `fit()`'s 1000 sample iterations were not enough. The
+textbook remedy is interweaving / non-centred reparameterisation (Yu & Meng, 2011;
+Papaspiliopoulos, Roberts & Sk&ouml;ld, 2007): after the centred group step, move in a
+parameterisation where the group scale and the subjects' deviations are not conditionally
+dependent.
+
+`scale_move_standard()` (`R/variant_standard.R`; called from `run_stage()` in `R/sampling.R` after
+the group step, in `adapt` and `sample`, `type = "standard"` only -- `do_scale <- pmwgs$type ==
+"standard"`) does this per parameter `j`: a **scale move** proposes a log-scale change `delta`,
+`alpha'_sj = mu_j + f (alpha_sj - mu_j)` for every subject (`f = exp(delta)`), `Sigma'_jj` scaled
+by `f^2` and the Huang-Wand auxiliary variable `a_j` scaled by `1/f^2` (so the prior's own
+hierarchy moves with it), accepted against the prior/Jacobian ratio `delta - (e^{2 delta} - 1) /
+(A_j^2 a_j)` plus every subject's exact likelihood ratio; and, when there is no group-level design
+(`do_loc <- is.null(sampler$group_designs) && length(pars$tmu) == p`), a **location move**
+`mu'_j = mu_j + e`, `alpha'_sj = alpha_sj + e` for every subject, accepted the same way. Both run
+on H1b's quadratic likelihood surrogate (`lik_prec`, the finite-difference Hessian already built
+for the subject step) in `B` random parameter blocks of any size, each block's combined proposal
+accepted or rejected against the subjects' *exact* likelihoods in one more `calc_ll_manager` call
+per subject (delayed acceptance, so the move is exact whatever the surrogate's quality, not an
+approximation) -- `B x n_subjects` extra single-row likelihood evaluations per iteration, about
+0.1 ms each. The scale step size (Robbins-Monro, target acceptance .3) and `B` itself (kept where
+the per-block acceptance is in [.35, .75]) adapt during `adapt`, are averaged over its tail the
+same way the particle kernel's own tuning is (section 4's rule: nothing adapts once draws are
+kept), and are frozen for `sample`. `options(emc.scale_move = FALSE)` turns the sweep off; the
+legacy sampler never runs it.
+
+**Validation** (`rating-work/sampler/hier/stageH2/REPORT.md`, conjugate cell `p25`, 25 parameters
+x 20 subjects). From both the truth and a collapsed start, group-SD quantiles (1-95%) equal the
+exact reference to three decimals in every identifiability class, and the subject-level posterior
+SD ratio is 0.997-1.003. The autocorrelation time of a weak parameter's log group SD falls from
+about 500 (section 6) to 10-16, of its group mean to 4-5; median first escape from a collapsed
+start falls from about 400 (exact) / 497 (the repaired particle step alone, section 6) to 28.5.
+Under `fit()` defaults the reproducer (`k25_n20_N200`, which used to stop at max tries) converges
+in 3 of 3 runs at the first check (1000-1200 sample iterations, alpha Rhat 1.05-1.09), at a
+measured cost of 1.20x per sample iteration -- at the plan's own 20% budget line.
+
+**Regression testing** (`rating-work/sampler/hier/stageH3/REPORT.md`) reran the package's grid,
+an SBC cell and two real datasets under the sweep. It passes on simulated data with known truth:
+11 of the grid's 12 `standard` cells and all 4 of section 6's funnelling cells meet Rhat < 1.1
+(the twelfth, `m35_standard_500`, was already the grid's hardest cell pre-sweep and fails only
+barely); the SBC cell it does not even touch (`diagonal-gamma`, where `do_scale` is `FALSE`) shows
+no regression either. Two things did not survive contact with real data, and are open issues
+(section 8), not resolved by this vignette:
+
+- On forstmann (19-subject DDM), the scale move's step size runs away to 6-11 log-SD units on the
+  weakly-identified `sv`/`SZ` parameters (every other parameter: 0.1-0.4) -- not a new failure
+  (the pre-sweep sampler already struggled there) but a worse one, because an unbounded
+  Robbins-Monro step size has nothing to stop it growing against a near-flat likelihood direction.
+- On the Eisenberg Simon data (518 subjects, no funnel present -- mu/sigma Rhat both fine), the
+  sweep makes subject-level (alpha) Rhat *worse* than the pre-sweep sampler (1.212 vs 1.098) at
+  4x the cost, with the block-acceptance diagnostic below its target window -- the quadratic
+  surrogate the delayed-acceptance step relies on may fit this model/N poorly.
+- The sweep's own ~20% cost estimate, measured on the `k25` reproducer, does not generalise: every
+  one of the grid's 12 `standard` cells exceeds it (1.56x-11.57x per sample iteration), including
+  9-parameter cells that never funnel. It stays close to ~20% only on cells that actually funnel.
+
+## 8. What is still open
 
 An earlier version of this section said that the hierarchical fits which do not converge
 (few trials per weakly identified parameter: 8-40 subjects x 200-500 trials x 25-35 parameters,
@@ -315,32 +377,47 @@ step, not the particle kernel. That was wrong. On a conjugate model with a known
 (`rating-work/sampler/hier/stageH1/REPORT.md`) EMC2's group step with an exact draw of the subject
 parameters reproduces the exact posterior, and the failure was the particle step: the sample
 stage's continued adaptation made chains sink into the funnel's neck from healthy states, and
-the local proposal froze once they were there. Both are repaired (section 4). On that model
-`fit()` defaults used to stop at max tries with the weak parameters' group SDs at a third to two
-thirds of the exact median. They still stop at max tries (Rhat 1.3-2.4 after 1700-1900 sample
-iterations), but the draws now agree with the exact posterior (medians 0.15-0.18 against 0.16,
-neck shares 0.16-0.24 against 0.18-0.26): there are just few effective ones, as there are with an
-exact draw of the subject parameters (Rhat 1.3 under the same protocol).
+the local proposal froze once they were there (both repaired, section 4); what was left after
+that repair was the centred alternation's own slow mixing in the funnel, addressed by the
+interweaving sweep of section 7.
 
-What remains is slow, not wrong:
+What remains, as of this writing:
 
-- The centred alternation "subjects given the group level, group level given the subjects" mixes
-  slowly in a funnel even with a perfect subject step: on the conjugate model one effective draw
-  of a weak parameter's log group SD takes about 500 iterations, and leaving a collapsed state
-  takes about 400. The repaired particle step takes about 1.3x as long as an exact draw to leave
-  it. So `fit()`'s 1000 sample iterations give few effective draws of those group SDs, and Rhat
-  for them can stay above 1.1 (the 25-parameter x 20-subject x 200-trial LNR cell stops at alpha
-  Rhat 1.16 and group-SD Rhat 1.5, where it was 1.64 and 2.15). An interweaving (non-centred)
-  scale move is the planned remedy.
-- `init()` starts every chain in the neck (subjects bunched at the group mean, group SD about
-  0.14 for every parameter), and `preburn`/`burn` keep the old search step.
-- Only `type = "standard"` has been checked against an exact reference. The other types with a
-  group level share the code path.
+- **Two issues found by section 7's regression testing are under active investigation**: the
+  forstmann step-size runaway and the Eisenberg Simon regression (both `stageH3/REPORT.md`).
+  Neither is resolved here; fixes, if any, are sequenced through the same file
+  (`R/variant_standard.R`) one at a time, step-size cap first.
+- **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
+  than that on models that are not shaped like the `k25` reproducer, even where there is no
+  funnel.
+- **The location move only runs without a group-level design** (`do_loc`, section 7); with one,
+  only the scale move runs, so a funnel in the group means under a group design is not yet
+  addressed.
+- **The scale move is diagonal only** (`Sigma'_jj` scaled independently per parameter); a
+  full-`Sigma` version (correlated collapse) has not been needed by any reproducer so far but is
+  not implemented.
+- **Only `type = "standard"` runs the sweep** (`do_scale`); `diagonal` and `blocked` share enough
+  of the code path that they probably only need the call site enabled, but this is unconfirmed.
+  `factor`, `infnt_factor` and `SEM` are untested for the move; `diagonal-gamma` was incidentally
+  regression-tested clean on everything *except* the move itself, which never runs for it.
+- **No sweep in burn**; `init()` still starts every chain in the neck (subjects bunched at the
+  group mean, group SD about 0.14 for every parameter), and `preburn`/`burn` keep the old search
+  step.
+- **The exact reference is R-only** (`stageH1/exact_gibbs.R`); an independent second reference
+  (e.g. Stan/cmdstanr on the same conjugate model) remains a potential follow-up, not done.
+- **Dispersed starts** (as an alternative or supplement to fixing the mixing) have not been tried.
 
 ## References
 
 Neal, R. M. (2011). MCMC using ensembles of states for problems with fast and slow variables such
 as Gaussian process regression. arXiv:1101.0387.
 
+Papaspiliopoulos, O., Roberts, G. O., & Sk&ouml;ld, M. (2007). A general framework for the
+parametrization of hierarchical models. Statistical Science, 22(1), 59-73.
+
 Tjelmeland, H. (2004). Using all Metropolis-Hastings proposals to estimate mean values. Statistics
 No. 4/2004, Norwegian University of Science and Technology.
+
+Yu, Y., & Meng, X.-L. (2011). To center or not to center: That is not the question -- an
+ancillarity-sufficiency interweaving strategy (ASIS) for boosting MCMC efficiency. Journal of
+Computational and Graphical Statistics, 20(3), 531-570.
