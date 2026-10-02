@@ -691,11 +691,9 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
 #' @param trend An `emc2_trend` object created by [make_trend()].
 #' @param model A model function, or NULL.
 #' @param formula List of formulas, or NULL.
-#' @param parameter_design A parameter_design list, or NULL.
 #' @return Updated formula list with intercept formulas added for missing trend
 #'   parameters.
-check_trend <- function(trend, model = NULL,
-                        formula = NULL, parameter_design = NULL) {
+check_trend <- function(trend, model = NULL, formula = NULL) {
 
   # ---- non-premap bases must target existing model parameters ----
   # (premap bases may also target sampled parameters or design columns)
@@ -720,14 +718,8 @@ check_trend <- function(trend, model = NULL,
   trend_pnames <- get_trend_pnames(trend)
 
   if (!is.null(formula)) {
-    pd_targets <- if (!is.null(parameter_design)) {
-      vapply(parameter_design, function(f) deparse(f[[2]]), character(1))
-    } else NULL
-
     formula_lhs <- unlist(lapply(formula, function(x) all.vars(x)[1]))
     isin <- trend_pnames %in% formula_lhs
-    if (!is.null(pd_targets))
-      isin <- isin | (trend_pnames %in% pd_targets)
 
     if (any(!isin)) {
       formula <- c(formula,
