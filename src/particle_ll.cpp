@@ -112,18 +112,30 @@ PipelineCache make_pipeline_cache(
       else        cache.mask_map[i]     = true;
     }
   }
-
   // --- Constant-column flags ---
   // Start pessimistic
   std::fill(param_table.col_is_constant.begin(),
             param_table.col_is_constant.end(), false);
 
-  // Pass 1: direct design targets are non-constant
-  // (skip_self_intercept entries are intercept-only and stay constant)
+  // Pass 1: a parameter is constant only if ALL its design entries are constant
+  std::unordered_map<int, bool> all_constant_so_far;
+
   for (const DesignEntry& entry : param_table.design_plan) {
     if (!entry.valid) continue;
-    if (entry.dm_is_constant) param_table.col_is_constant[entry.out_idx] = true;
+    int idx = entry.out_idx;
+    if (all_constant_so_far.find(idx) == all_constant_so_far.end()) {
+      // First entry for this parameter: initialise to this entry's constancy
+      all_constant_so_far[idx] = entry.dm_is_constant;
+    } else {
+      // Subsequent entry: only constant if all so far were constant too
+      all_constant_so_far[idx] = all_constant_so_far[idx] && entry.dm_is_constant;
+    }
   }
+
+  for (auto& kv : all_constant_so_far) {
+    param_table.col_is_constant[kv.first] = kv.second;
+  }
+
 
   // Trend targets are non-constant
   if (trend_runtime_ptr) {
@@ -136,9 +148,9 @@ PipelineCache make_pipeline_cache(
 
   // Pass 2: reparam targets inherit non-constancy from their inputs
   for (int i = 0; i < n_designs; ++i) {
-    if (!cache.mask_reparam[i]) continue;
+    if (!cache.mask_reparam[i] && !cache.mask_premap_reparam[i]) continue;
     const DesignEntry& entry = param_table.design_plan[i];
-    if (!entry.valid || !entry.dm_is_constant) continue;
+    if (!entry.valid) continue;
 
     bool all_inputs_constant = true;
     for (int cidx : entry.coef_idx) {
@@ -147,8 +159,8 @@ PipelineCache make_pipeline_cache(
         break;
       }
     }
-    if (all_inputs_constant)
-      param_table.col_is_constant[entry.out_idx] = true;
+    // Always write the result, don't rely on Pass 1 value
+    param_table.col_is_constant[entry.out_idx] = all_inputs_constant;
   }
 
   return cache;
@@ -167,6 +179,7 @@ struct PipelineContext {
   std::unique_ptr<TrendRuntime>  trend_runtime;
   Rcpp::CharacterVector          keep_names;
   std::vector<int>               pm_col_to_base_idx;
+  int                            n_active_trials;
 };
 
 PipelineContext make_pipeline_context(
@@ -176,7 +189,8 @@ PipelineContext make_pipeline_context(
     const Rcpp::List& designs,
     const Rcpp::List& transforms,
     const Rcpp::List& pretransforms,
-    const Rcpp::Nullable<Rcpp::List>& trend)
+    const Rcpp::Nullable<Rcpp::List>& trend,
+    const int n_active_trials = -1)
 {
   PipelineContext ctx;
 
@@ -194,13 +208,15 @@ PipelineContext make_pipeline_context(
   Rcpp::NumericVector p_vector = ctx.particle_matrix(0, Rcpp::_);
   p_vector.attr("names") = colnames(ctx.particle_matrix);
   ctx.param_table = ParamTable::from_p_vector_and_designs(p_vector, designs, data.nrow());
+  if (n_active_trials > 0 && n_active_trials < data.nrow())
+    ctx.param_table.n_trials = n_active_trials;
 
   // 4. Transform specs
   ctx.transform_specs = make_transform_specs(ctx.param_table, transforms);
 
   // 5. Trend objects and keep_names
   if (!trend.isNull()) {
-    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data));
+    ctx.trend_plan.reset(new TrendPlan(Rcpp::List(trend.get()), data, n_active_trials));
     ctx.trend_runtime.reset(new TrendRuntime(*ctx.trend_plan));
     ctx.trend_runtime->bind_all_to_paramtable(ctx.param_table);
 
@@ -1304,7 +1320,8 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
                         Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                         bool return_kernel_matrix = false,
                         bool return_all_pars = false,
-                        IntegerVector kernel_output_codes = 1)
+                        IntegerVector kernel_output_codes = 1,
+                        int n_active_trials = -1)
 {
   if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
@@ -1316,7 +1333,7 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
 
   // Shared setup
   PipelineContext ctx = make_pipeline_context(particle_matrix, data, constants,
-                                              designs, transforms, pretransforms, trend);
+                                              designs, transforms, pretransforms, trend, n_active_trials);
   TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
 
   // Pipeline cache (built once, reused across particles)

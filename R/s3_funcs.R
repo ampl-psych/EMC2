@@ -1094,10 +1094,17 @@ credint <- function(x, ...){
 # re-derived, except stop-signal delays from make_ssd(): these are drawn at
 # random per trial (or by a staircase) and are part of the observed data.
 .rederivable_functions <- function(design) {
-  fn <- design$Ffunctions
-  if (is.null(fn)) return(character(0))
-  names(fn)[!vapply(fn, inherits, logical(1), "emc_ssd_function")]
+  if (is.null(design$Ffunctions)) return(character(0))
+
+  fns_all <- sapply(design$Ffunctions, function(x) attr(x, 'output_column_names'))
+  fns_orig <- sapply(design$Ffunctions, function(x) attr(x, 'output_column_names_in_data'))
+  fns <- setdiff(unlist(fns_all), unlist(fns_orig))
+
+  # Filter out ssd functions by their source function name
+  ssd_fns <- names(design$Ffunctions)[vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function")]
+  fns[!fns %in% ssd_fns]
 }
+
 
 #' @rdname get_data
 #' @export

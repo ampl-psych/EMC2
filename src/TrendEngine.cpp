@@ -47,10 +47,11 @@ static int list_int(const Rcpp::List& lst, const char* field, int def = 0) {
 // KernelSpec construction helpers — plain C++ after data extraction
 // =============================================================================
 
-static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data)
+static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
 {
-  const int n = data.nrows();
-  if (n <= 0) Rf_error("build_first_level: data has zero rows");
+  const int n_full = data.nrows();
+  if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
+  const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
 
   ks.first_level.assign(n, true);
 
@@ -60,7 +61,7 @@ static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data)
     SEXP at_col = data[ks.at.c_str()];
     if (!Rf_inherits(at_col, "factor"))
       Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
-    if (Rf_length(at_col) != n)
+    if (Rf_length(at_col) != n_full)
       Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
     const int* f = INTEGER(at_col);
     for (int i = 0; i < n; ++i)
@@ -128,18 +129,22 @@ static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
       Rf_error("KernelSpec '%s': data has no column '%s'",
                ks.kernel_id.c_str(), cn);
     SEXP col = data[cn];
-    if (TYPEOF(col) != REALSXP && TYPEOF(col) != INTSXP)
-      Rf_error("KernelSpec '%s': covariate column '%s' must be numeric or integer",
+    if (TYPEOF(col) != REALSXP && TYPEOF(col) != INTSXP && TYPEOF(col) != LGLSXP)
+      Rf_error("KernelSpec '%s': covariate column '%s' must be numeric, integer, or logical",
                ks.kernel_id.c_str(), cn);
 
     double* dst = ks.kernel_input.colptr(i);
     if (TYPEOF(col) == REALSXP) {
       const double* src = REAL(col);
       std::copy(src, src + n_row, dst);
-    } else {
+    } else if (TYPEOF(col) == INTSXP) {
       const int* src = INTEGER(col);
       for (int j = 0; j < n_row; ++j)
         dst[j] = (src[j] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[j]);
+    } else {                                          // LGLSXP
+      const int* src = LOGICAL(col);                 // R logicals are stored as int
+      for (int j = 0; j < n_row; ++j)
+        dst[j] = (src[j] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[j]);
     }
     ks.covariate_indices.push_back(i);
   }
@@ -251,7 +256,7 @@ static void build_covariate_coding(BaseSpec& bs,
 // TrendPlan constructor — Rcpp boundary
 // =============================================================================
 
-TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
+TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const int n_active_trials=-1)
 {
   // covariate_coding attribute on data
   Rcpp::List data_covcoding;
@@ -311,7 +316,7 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data)
 
     build_kernel_args(ks, k_lst, data);
     build_kernel_input(ks, data);
-    build_first_level(ks, data);
+    build_first_level(ks, data, n_active_trials);
 
     // populate param sets
     for (const auto& pn : ks.pnames) {

@@ -827,12 +827,21 @@ make_emc <- function(data,design,model=NULL,
                                      memory_saver = memory_saver,
                                      check_identifiability = TRUE)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
-    } else{
+
+      # Propagate Ffunction output names discovered at runtime back into design
+      if (!is.null(attr(dadm_list[[i]], "design")) && !is.null(design[[i]]$Ffunctions)) {
+        returned_design <- attr(dadm_list[[i]], "design")
+        for (fn in names(design[[i]]$Ffunctions)) {
+          attr(design[[i]]$Ffunctions[[fn]], "output_column_names") <-  attr(returned_design$Ffunctions[[fn]], "output_column_names")
+          attr(design[[i]]$Ffunctions[[fn]], "output_column_names_in_data") <- attr(returned_design$Ffunctions[[fn]], "output_column_names_in_data")
+        }
+        attr(dadm_list[[i]], "design") <- NULL
+      }
+    } else {
       if (memory_saver) {
         warning("memory_saver not supported for custom likelihoods; ignored")
       }
-      dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
-                                               design = design[[i]],model=model[[i]])
+      dadm_list[[i]] <- design_model_custom_ll(data = data[[i]], design = design[[i]],model=model[[i]])
       sampled_p_names <- attr(design[[i]],"sampled_p_names")
     }
     if(length(prior_list) == length(data)){
@@ -841,6 +850,7 @@ make_emc <- function(data,design,model=NULL,
       }
     }
   }
+
   # Warn before fitting about parameters (or linear combinations) that are
   # unidentified across the (joint) model, so a fit that would later diverge on
   # an ill-conditioned group covariance fails fast with a clear message instead.
