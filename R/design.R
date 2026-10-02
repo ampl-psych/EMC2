@@ -175,7 +175,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
            paste(target_pars[target_pars %in% lhs_terms], collapse = ", "))
   }
   if(!is.null(trend)) {
-    formula <- check_trend(trend, model, formula, parameter_design)
+    formula <- check_trend(trend, model, formula)
   }
 
   # Check if all parameters in the model are specified in the formula

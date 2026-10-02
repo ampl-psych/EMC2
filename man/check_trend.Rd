@@ -4,7 +4,7 @@
 \alias{check_trend}
 \title{Check and update formula list for trend parameters}
 \usage{
-check_trend(trend, model = NULL, formula = NULL, parameter_design = NULL)
+check_trend(trend, model = NULL, formula = NULL)
 }
 \arguments{
 \item{trend}{An \code{emc2_trend} object created by \code{\link[=make_trend]{make_trend()}}.}
@@ -12,8 +12,6 @@ check_trend(trend, model = NULL, formula = NULL, parameter_design = NULL)
 \item{model}{A model function, or NULL.}
 
 \item{formula}{List of formulas, or NULL.}
-
-\item{parameter_design}{A parameter_design list, or NULL.}
 }
 \value{
 Updated formula list with intercept formulas added for missing trend
