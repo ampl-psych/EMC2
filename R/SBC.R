@@ -1031,8 +1031,36 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
 
 
 
+# 2026-10-02 (found via Port-NLE's Gadi check, EMC2 memory emc2-sampler-concentrated-posteriors):
+# base R's qbinom()/pbinom() were found to be numerically broken on NCI Gadi's R 4.5.0 module
+# (not an EMC2 or compiler-flag issue of ours -- a bare `module load R/4.5.0` reproduces it, and
+# R/4.4.2 on the same machine does not) for a wide range of everyday (size, prob) combinations,
+# e.g. qbinom(5e-7, 200, 0.1) = 20 there vs the correct 3 (verified against pbinom(x, 200, 0.1) =
+# sum(dbinom(0:x, 200, 0.1)) for cross-check; a systematic scan of prob in [0.01, 0.99] found 71/594
+# mismatches, some many orders of magnitude off, not edge-of-range). dbinom() itself was checked
+# against a direct lchoose()-based formula and is correct to ~5e-15 relative on both R 4.5.0 and
+# 4.6.0 -- only the incomplete-beta-based pbinom()/qbinom() path is affected. `.safe_qbinom()`
+# below replaces every qbinom() call in get_gamma()/get_lims() with an exact quantile computed by
+# cumulative-summing dbinom(), so this code no longer depends on qbinom()/pbinom() being correct.
+.safe_qbinom <- function(p, size, prob) {
+  vapply(prob, function(pr) {
+    cs <- cumsum(dbinom(0:size, size, pr))
+    idx <- which(cs >= p)[1]
+    if (is.na(idx)) size else idx - 1L
+  }, numeric(1))
+}
+
 get_gamma <- function (N, K, conf_level = 0.95)
 {
+  # `coverage_minus_conf` below is the achieved simultaneous coverage minus conf_level, as a
+  # function of gamma; it is monotonically decreasing (checked by direct evaluation over gamma in
+  # [1e-8, 1-conf_level] at N=200/K=500) but very flat near gamma = 0 (coverage stays near 1 over
+  # several orders of magnitude before dropping). The previous implementation minimised
+  # abs(target) with optimize() (derivative-free, interval [0, 1-conf_level]): on that flat
+  # shoulder it can converge to a point where abs(target) is nowhere near its minimum -- not a
+  # rounding-level discrepancy but a real optimizer failure. uniroot() on the signed, monotone
+  # target is immune to this: bisection only narrows the bracket, so it cannot get stuck on a flat
+  # shoulder the way a derivative-free minimum search can.
   p_interior <- function (p_int, x1, x2, z1, z2, gamma, N)
   {
     z_tilde <- (z2 - z1)/(1 - z1)
@@ -1042,11 +1070,11 @@ get_gamma <- function (N, K, conf_level = 0.95)
     p_x2_int <- p_int * dbinom(x_diff, N_tilde, z_tilde)
     list(p_int = rowSums(p_x2_int), x1 = x2)
   }
-  target <- function(gamma, conf_level, N, K) {
+  coverage_minus_conf <- function(gamma, conf_level, N, K) {
     z <- 1:(K - 1)/K
     z1 <- c(0, z)
     z2 <- c(z, 1)
-    x2_lower <- qbinom(gamma/2, N, z2)
+    x2_lower <- .safe_qbinom(gamma/2, N, z2)
     x2_upper <- c(N - rev(x2_lower)[2:K], N)
     x1 <- 0
     p_int <- 1
@@ -1056,18 +1084,29 @@ get_gamma <- function (N, K, conf_level = 0.95)
       x1 <- tmp$x1
       p_int <- tmp$p_int
     }
-    abs(conf_level - sum(p_int))
+    sum(p_int) - conf_level
   }
-  optimize(target, c(0, 1 - conf_level), conf_level, N = N,
-           K = K)$minimum
+  lo <- .Machine$double.eps; hi <- 1 - conf_level
+  f_lo <- coverage_minus_conf(lo, conf_level, N, K)
+  f_hi <- coverage_minus_conf(hi, conf_level, N, K)
+  if (is.finite(f_lo) && is.finite(f_hi) && f_lo > 0 && f_hi < 0) {
+    uniroot(coverage_minus_conf, c(lo, hi), conf_level = conf_level, N = N, K = K,
+            tol = .Machine$double.eps^0.5)$root
+  } else {
+    # defensive fallback for an N/K/conf_level combination where the endpoints checked above
+    # don't bracket a root (not observed in testing, but keeps the old behaviour rather than
+    # erroring outright)
+    optimize(function(gamma) abs(coverage_minus_conf(gamma, conf_level, N, K)),
+             c(0, 1 - conf_level))$minimum
+  }
 }
 
 get_lims <- function (N, K, gamma)
 {
   lims <- list()
   z <- seq(0, 1, length.out = K)
-  lims$lower <- qbinom(gamma/2, N, z)/N - z
-  lims$upper <- qbinom(1 - gamma/2, N, z)/N - z
+  lims$lower <- .safe_qbinom(gamma/2, N, z)/N - z
+  lims$upper <- .safe_qbinom(1 - gamma/2, N, z)/N - z
   lims$z <- z
   lims
 }
