@@ -513,18 +513,27 @@ mtlba_lse <- function(a, b) {
 #       likelihood = (1 - gp) k(T_s; lo, hi) + gp pg(RR) k(gb_w; 0, gb_o).
 # k() is the kernel above (correlated when rho != 0, guesses included). Rows
 # with gp = 0 on both accumulators take the plain kernel.
+#
+# gb_constraint (the manuscript's supplement, equations 17 and 18, used there for
+# one data set): in the limit where an accumulator always triggers its choice
+# threshold b is never reached, so the data fix gb but not b. The constraint
+# moves the guess threshold towards b as triggering becomes frequent,
+#   gb = b - B (1 - gB) (1 - g^2) = A + B (gB + g^2 (1 - gB)),
+# g the accumulator's own gp ("own") or the larger of the two accumulators' gp
+# ("max", the supplement's rule); "none": gb = A + B gB.
 
 # Guessing quantities per parameter row, or NULL when no row guesses: g (trigger
 # probability), gb (guess threshold), lpg (log rating-guess probabilities,
 # columns = ratings 1 .. K). pars: natural-scale gp, gB, pg1 .. pg{K-1}
 # (absent: gB = .5, pg1 = 1, further pg = 0) besides A and b.
-mtlba_guess_pars <- function(pars, K, guess = "accumulator") {
+mtlba_guess_pars <- function(pars, K, guess = "accumulator", gb_constraint = "none") {
   if (!("gp" %in% colnames(pars))) return(NULL)
   g <- pars[, "gp"]
   if (guess == "trial") g <- rep(g[seq(1, length(g), by = 2)], each = 2)
   if (!anyNA(g) && all(g == 0)) return(NULL)
   n <- nrow(pars)
   gB <- if ("gB" %in% colnames(pars)) pars[, "gB"] else rep(0.5, n)
+  gB <- mtlba_gB_constrained(gB, g, gb_constraint)
   lpg <- matrix(0, n, K)
   if (K > 1) {
     lrest <- rep(0, n)
@@ -537,6 +546,19 @@ mtlba_guess_pars <- function(pars, K, guess = "accumulator") {
     lpg[, K] <- lrest
   }
   list(g = g, gb = pars[, "A"] + (pars[, "b"] - pars[, "A"]) * gB, lpg = lpg)
+}
+
+# Guess-threshold proportion under gb_constraint: gB + gc^2 (1 - gB), gc the
+# row's own trigger probability g ("own") or the larger of its trial's two
+# ("max"); g has two rows per trial.
+mtlba_gB_constrained <- function(gB, g, gb_constraint = "none") {
+  if (gb_constraint == "none") return(gB)
+  gc <- g
+  if (gb_constraint == "max") {
+    first <- seq(1, length(g), by = 2)
+    gc <- rep(pmax(g[first], g[first + 1]), each = 2)
+  }
+  gB + gc^2 * (1 - gB)
 }
 
 # log(w1 exp(l1) + w2 exp(l2)) for weights w1, w2 >= 0
@@ -614,9 +636,9 @@ mtlba_logresp <- function(rt, R, RR, pars, Tm, K, rule, quad, G = NULL, guess = 
 
 # log likelihood per trial: rt, R (1/2), RR per trial, pars two rows per trial.
 mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad_rule(),
-                          guess = "accumulator") {
+                          guess = "accumulator", gb_constraint = "none") {
   Tm <- mtlba_thresholds(pars, K)
-  G <- mtlba_guess_pars(pars, K, guess)
+  G <- mtlba_guess_pars(pars, K, guess, gb_constraint)
   R <- as.integer(R)
   dk <- if (dont_know) !is.na(RR) & RR == 1 else rep(FALSE, length(R))
   # a don't-know trial is the sum of the two rating-1 terms: R = 1 here, R = 2 below
@@ -642,12 +664,14 @@ mtlba_logdens <- function(rt, R, RR, pars, K, rule, dont_know, quad = mtlba_quad
 # quadrature rule used where rho != 0. Confidence guessing: natural-scale columns
 # gp, gB and pg1 .. pg{K-1} (see mtlba_guess_pars; no gp column or gp = 0: none).
 dMTLBA <- function(rt, R, RR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
-                   log = FALSE, quad = mtlba_quad_rule(), guess = "accumulator") {
+                   log = FALSE, quad = mtlba_quad_rule(), guess = "accumulator",
+                   gb_constraint = "none") {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
   guess <- match.arg(guess, c("accumulator", "trial"))
   rating_check_dont_know(K, dont_know)
-  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know, quad, guess)
+  gb_constraint <- match.arg(gb_constraint, c("none", "own", "max"))
+  ld <- mtlba_logdens(rt, R, RR, pars, K, rule, dont_know, quad, guess, gb_constraint)
   if (log) ld else exp(ld)
 }
 
@@ -658,7 +682,7 @@ dMTLBA <- function(rt, R, RR, pars, n_ratings = 3, rule = "BE", dont_know = FALS
 # guessing as for dMTLBA: triggering accumulators end the race at their guess
 # threshold with a random rating.
 rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
-                   ok = rep(TRUE, nrow(pars)), guess = "accumulator") {
+                   ok = rep(TRUE, nrow(pars)), guess = "accumulator", gb_constraint = "none") {
   K <- rating_check_n(n_ratings)
   rule <- match.arg(rule, c("BE", "TC"))
   guess <- match.arg(guess, c("accumulator", "trial"))
@@ -689,7 +713,7 @@ rMTLBA <- function(lR, pars, n_ratings = 3, rule = "BE", dont_know = FALSE,
   t1 <- cross[[1]]$tau
   t2 <- cross[[2]]$tau
   # confidence guessing: which accumulators trigger, and when they reach gb
-  G <- mtlba_guess_pars(pars, K, guess)
+  G <- mtlba_guess_pars(pars, K, guess, match.arg(gb_constraint, c("none", "own", "max")))
   tg <- matrix(Inf, n, 2)
   if (!is.null(G)) {
     trig <- if (guess == "trial") rep(stats::runif(n) < G$g[first], 2) else
@@ -990,7 +1014,7 @@ mtlba_check_missing <- function(R, rt, miss) {
 # and every truncated trial divided by P(LT < rt < UT). The window terms need
 # one t0 per trial, so t0 must be equal for the two accumulators there.
 mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd,
-                                  guess = "accumulator") {
+                                  guess = "accumulator", gb_constraint = "none") {
   n <- length(rt)
   mtlba_check_missing(R, rt, bnd$miss)
   cens <- !is.na(bnd$miss)
@@ -999,7 +1023,7 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd,
   if (any(!cens))
     ld[!cens] <- mtlba_logdens(rt[!cens], R[!cens], RR[!cens],
                                pars[rep(2 * which(!cens), each = 2) - c(1, 0), , drop = FALSE],
-                               K, rule, dont_know, guess = guess)
+                               K, rule, dont_know, guess = guess, gb_constraint = gb_constraint)
   need <- cens | trunc
   if (!any(need)) return(ld)
   w <- which(need)
@@ -1010,7 +1034,7 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd,
     stop("MTLBA: censoring and truncation need t0 equal for both accumulators (t0 must not ",
          "depend on lR or lM)")
   Tm <- mtlba_thresholds(pars, K)
-  G <- mtlba_guess_pars(pars, K, guess)
+  G <- mtlba_guess_pars(pars, K, guess, gb_constraint)
   at <- function(x) mtlba_logstop_guess(x - t0, pars, Tm, i1, i2, K, rule, G, guess)
   sLT <- at(bnd$LT[w])
   sUT <- at(bnd$UT[w])
@@ -1043,12 +1067,12 @@ mtlba_logdens_missing <- function(rt, R, RR, pars, K, rule, dont_know, bnd,
 # trial, expanded to the uncompressed trials and floored at min_ll. The R
 # reference for the C++ kernel (src/model_mtlba.h); used when c_name is removed.
 trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10),
-                           guess = "accumulator") {
+                           guess = "accumulator", gb_constraint = "none") {
   n <- nrow(pars) / 2
   first <- seq(1, 2 * n, by = 2)
   bnd <- mtlba_bounds(dadm, first)
   ll <- mtlba_logdens_missing(dadm$rt[first], as.integer(dadm$R[first]), dadm$RR[first], pars,
-                              K, rule, dont_know, bnd, guess)
+                              K, rule, dont_know, bnd, guess, gb_constraint)
   # a parameter out of bounds on either accumulator row voids the trial
   ok <- attr(pars, "ok")
   if (!is.null(ok)) ll[!(ok[first] & ok[first + 1])] <- min_ll
@@ -1057,8 +1081,8 @@ trial_ll_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10),
 }
 
 log_likelihood_mtlba <- function(pars, dadm, K, rule, dont_know, min_ll = log(1e-10),
-                                 guess = "accumulator")
-  sum(trial_ll_mtlba(pars, dadm, K, rule, dont_know, min_ll, guess))
+                                 guess = "accumulator", gb_constraint = "none")
+  sum(trial_ll_mtlba(pars, dadm, K, rule, dont_know, min_ll, guess, gb_constraint))
 
 # Data checks: two response levels, the rating column, and censoring coded as
 # EMC2's make_missing() does with the response not retained.
@@ -1157,6 +1181,21 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'   trial-level parameter (not `~ lR` or `~ lM`). Both accumulators then race
 #'   to their guess thresholds, under either rule.
 #'
+#' `gb_constraint` is the option the model's source paper used for one of its
+#' data sets: the guess threshold moves towards the choice threshold as
+#' triggering becomes frequent, `A + B * (gB + g^2 * (1 - gB))`, with `g` the
+#' accumulator's own `gp` (`"own"`) or the larger of the two accumulators'
+#' `gp` (`"max"`, the paper's rule). In the limit where an accumulator always
+#' triggers its choice threshold is never reached and `B` is then set by the
+#' guess threshold. The price is that frequent guessing at a low threshold
+#' cannot be represented (with `g = 0.5` the guess threshold is at least a
+#' quarter of the way from `A` to `b`, with `g = 0.9` at least 81%). The
+#' resulting proportion is reported as `gBc` with `add_recalculated = TRUE`.
+#' The default is no constraint. Whatever the setting, ratings are informative
+#' about confidence thresholds only on trials that end by the stopping rule: if
+#' one accumulator nearly always triggers, the other accumulator's confidence
+#' thresholds (read when the first one wins) are barely identified.
+#'
 #' The three kinds of guessing parameter inform each other: with `gp` near 0
 #' the data say nothing about `gB` and the `pg`, and with `gp` near 1 nothing
 #' about the confidence thresholds, so they need informative priors. A model
@@ -1179,6 +1218,10 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'   count).
 #' @param guess How confidence guessing is triggered when `gp` is not zero:
 #'   `"accumulator"` (independently per accumulator) or `"trial"` (per trial).
+#' @param gb_constraint `"none"` (the guess threshold is `A + B * gB`), or
+#'   `"own"` / `"max"`: the guess threshold moves towards the choice threshold
+#'   as the trigger probability (the accumulator's own, or the larger of the
+#'   two) approaches 1. See Details.
 #' @return A model list with all the necessary functions for EMC2 to sample.
 #' @examples
 #' # three ratings, balance of evidence
@@ -1192,22 +1235,26 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'        formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ 1, c2 ~ 1,
 #'                       gp ~ lR, gB ~ 1, pg1 ~ 1, pg2 ~ 1))
 #' @export
-MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator") {
+MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator",
+                  gb_constraint = "none") {
   K <- rating_check_n(n_ratings)
   rating_check_dont_know(K, dont_know)
   rule <- match.arg(rule, c("BE", "TC"))
   guess <- match.arg(guess, c("accumulator", "trial"))
+  gb_constraint <- match.arg(gb_constraint, c("none", "own", "max"))
   pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
   list(
     type = "RACE",
     c_name = "MTLBA",
     # read by the C++ likelihood through attr(dadm, "c_options")
     c_options = c(n_ratings = K, dont_know = as.numeric(dont_know), TC = as.numeric(rule == "TC"),
-                  guess_trial = as.numeric(guess == "trial")),
+                  guess_trial = as.numeric(guess == "trial"),
+                  gb_constraint = match(gb_constraint, c("none", "own", "max")) - 1),
     n_ratings = K,
     dont_know = dont_know,
     rule = rule,
     guess = guess,
+    gb_constraint = gb_constraint,
     extra_responses = "RR",
     # guessing is off by default: gp = 0, with gB = .5 and the lowest rating guessed
     p_types = c("v" = 1, "sv" = log(1), "B" = log(1), "A" = log(0), "t0" = log(0), "rho" = 0,
@@ -1225,14 +1272,24 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
       ok <- attr(pars, "ok")
       pars <- cbind(pars[, colnames(pars) != "b", drop = FALSE], b = pars[, "B"] + pars[, "A"])
       pars <- rating_add_thresholds(pars, K)
+      # the guess threshold as a proportion of B above A, after gb_constraint
+      # (rows come two per trial; anything else, e.g. a one-row summary, takes its own gp)
+      g <- pars[, "gp"]
+      paired <- nrow(pars) %% 2 == 0
+      if (guess == "trial" && paired) g <- rep(g[seq(1, length(g), by = 2)], each = 2)
+      pars <- cbind(pars[, colnames(pars) != "gBc", drop = FALSE],
+                    gBc = mtlba_gB_constrained(pars[, "gB"], g,
+                                               if (paired) gb_constraint else sub("max", "own", gb_constraint)))
       if (!is.null(ok)) attr(pars, "ok") <- ok
       pars
     },
     prepare_design = mtlba_prepare_design(c("rho", if (guess == "trial") "gp")),
     check_data = function(data) mtlba_check_data(data, K, dont_know),
     rfun = function(data = NULL, pars) rMTLBA(data$lR, pars, K, rule, dont_know,
-                                              ok = attr(pars, "ok"), guess = guess),
+                                              ok = attr(pars, "ok"), guess = guess,
+                                              gb_constraint = gb_constraint),
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10))
-      log_likelihood_mtlba(pars, dadm, K, rule, dont_know, min_ll = min_ll, guess = guess)
+      log_likelihood_mtlba(pars, dadm, K, rule, dont_know, min_ll = min_ll, guess = guess,
+                           gb_constraint = gb_constraint)
   )
 }

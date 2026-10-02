@@ -75,6 +75,7 @@ struct MTLBASpec {
   int  col_gp  = -1;       // confidence guessing: -1 if the model has none
   int  col_gB  = -1;
   bool guess_trial = false;    // one trigger per trial (else per accumulator)
+  int  gb_constraint = 0;      // guess threshold moves to b with gp: 0 none, 1 own gp, 2 max gp
   std::vector<int>    col_c;   // c1 .. c{K-1}
   std::vector<int>    col_pg;  // pg1 .. pg{K-1}
   std::vector<double> rt;      // per trial
@@ -138,7 +139,10 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     return 0.0;
   };
   s.TC = opt_val("TC") != 0;
-  for (int i = 0; i < on.size(); ++i) if (on[i] == "guess_trial") s.guess_trial = o[i] != 0;
+  for (int i = 0; i < on.size(); ++i) {
+    if (on[i] == "guess_trial") s.guess_trial = o[i] != 0;
+    if (on[i] == "gb_constraint") s.gb_constraint = (int)o[i];
+  }
   s.DK = opt_val("dont_know") != 0;
   if ((int)opt_val("n_ratings") != s.K)
     Rcpp::stop("MTLBA: the model has %d ratings but the parameters give %d",
@@ -594,6 +598,7 @@ inline void mtlba_stop_rho1(double y, double A1, double v1, double s1, const dou
 struct MTLBACols {
   const double *v, *sv, *B, *A, *t0, *rho;
   const double *gp = nullptr, *gB = nullptr;   // confidence guessing (null: none)
+  int gbc = 0;                                 // gb_constraint: 0 none, 1 own gp, 2 max gp
   std::vector<const double*> c, pg;
 };
 
@@ -677,11 +682,19 @@ inline void mtlba_lookup(int R, int RR, int K, bool TC, int& s, int& j, int& lo)
 
 // ---- confidence guessing ----
 
-// Guess threshold of the accumulator in row r: gb = A + (b - A) gB.
+// Guess threshold of the accumulator in row r: gb = A + (b - A) gB, or with
+// gb_constraint the proportion gB + g^2 (1 - gB), g the row's own gp or the
+// larger of its trial's two (the other accumulator is the adjacent row; with a
+// trial-level trigger the two rows hold the same gp).
 inline double mtlba_gb(const MTLBACols& p, int r)
 {
   const double A = p.A[r];
-  return A + ((p.B[r] + A) - A) * p.gB[r];
+  double gB = p.gB[r];
+  if (p.gbc) {
+    const double g = (p.gbc == 2) ? mtlba_pmax(p.gp[r], p.gp[r ^ 1]) : p.gp[r];
+    gB = gB + g * g * (1.0 - gB);
+  }
+  return A + ((p.B[r] + A) - A) * gB;
 }
 
 // log probability that a guess gives rating c: pg_c prod_{k<c} (1 - pg_k), the
@@ -931,6 +944,7 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
     p.gp = pt.base.colptr(s.col_gp);
     p.gB = pt.base.colptr(s.col_gB);
     for (int col : s.col_pg) p.pg.push_back(pt.base.colptr(col));
+    p.gbc = s.gb_constraint;
   }
   const int K = s.K;
   const bool gtrial = s.guess_trial;

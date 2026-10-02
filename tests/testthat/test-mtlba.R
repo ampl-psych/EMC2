@@ -1300,15 +1300,15 @@ test_that("guessing with censoring and truncation: censored + observed mass is 1
   }
 })
 
-mtlba_gdesign <- function(K, rule, dk, guess, corr = FALSE) {
+mtlba_gdesign <- function(K, rule, dk, guess, corr = FALSE, gbc = "none") {
   crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
   pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
   form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1, gB ~ lR,
                  if (guess == "trial") gp ~ 1 else gp ~ lR),
             if (corr) list(rho ~ 1),
             lapply(c(crit, pg), function(cn) stats::as.formula(paste(cn, "~ lR"))))
-  mod <- local({ k <- K; r <- rule; d <- dk; g <- guess
-    function() MTLBA(n_ratings = k, dont_know = d, rule = r, guess = g) })
+  mod <- local({ k <- K; r <- rule; d <- dk; g <- guess; cc <- gbc
+    function() MTLBA(n_ratings = k, dont_know = d, rule = r, guess = g, gb_constraint = cc) })
   des <- suppressMessages(design(
     factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
     model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
@@ -1391,4 +1391,52 @@ test_that("guessing: defaults, design checks and simulation through EMC2", {
   dadm <- EMC2:::design_model(dg, gd$design, verbose = FALSE, rt_resolution = 1e-6)
   expect_gt(EMC2:::calc_ll_manager(t(p), dadm, gd$design$model),
             EMC2:::calc_ll_manager(t(p0), dadm, gd$design$model) + 1000)
+})
+
+test_that("guessing: gb_constraint moves the guess threshold to b with the trigger probability", {
+  expect_error(MTLBA(3, gb_constraint = "XX"))
+  # the constrained model is the unconstrained one at the proportion gB + g^2 (1 - gB)
+  K <- 3
+  gp <- c(.6, .25); gB <- c(.3, .5); pg <- rbind(c(.5, .3), c(.2, .6))
+  for (rule in c("BE", "TC")) for (guess in c("accumulator", "trial")) for (rho in c(0, -.5)) {
+    st <- mtlba_gset(K, rho)
+    g <- if (guess == "trial") rep(gp[1], 2) else gp
+    for (gbc in c("own", "max")) {
+      gc <- if (gbc == "own") g else rep(max(g), 2)
+      rt <- c(.3, .45, .8, 1.5)
+      for (R in 1:2) for (RR in 1:K) {
+        p <- mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, g, gB, pg)
+        p0 <- mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, g,
+                               gB + gc^2 * (1 - gB), pg)
+        con <- EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess, gb_constraint = gbc)
+        expect_identical(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p0, K, rule, guess = guess))
+        expect_false(isTRUE(all.equal(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess))))
+      }
+    }
+  }
+  # through EMC2: C++ = R, simulation uses the constrained threshold, gBc is reported
+  for (gbc in c("own", "max")) for (rule in c("BE", "TC")) {
+    gd <- mtlba_gdesign(3, rule, FALSE, "accumulator")
+    des <- mtlba_gdesign(3, rule, FALSE, "accumulator", gbc = gbc)$design
+    p <- gd$p
+    p[c("gp", "gp_lRright", "gB", "gB_lRright")] <- c(qnorm(.6), -.8, qnorm(.3), .3)
+    set.seed(72)
+    dat <- make_data(p, des, n_trials = 150)
+    props <- rbind(p, mvtnorm::rmvnorm(8, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    for (cens in c(FALSE, TRUE)) {
+      d <- if (cens) make_missing(dat, LC = .45, UC = 1.6, LT = .3, UT = 4) else dat
+      dadm <- EMC2:::design_model(d, des, verbose = FALSE, rt_resolution = 1e-6)
+      expect_lt(mtlba_err(EMC2:::calc_ll_manager(props, dadm, des$model),
+                          EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))), 1e-12)
+    }
+    mp <- mapped_pars(des, p)
+    g <- if (gbc == "own") mp$gp else rep(max(mp$gp), nrow(mp))
+    expect_equal(mp$gBc, mp$gB + g^2 * (1 - mp$gB), tolerance = .01)   # mapped_pars rounds to 3 digits
+    # the data are more likely under the model that simulated them than without the constraint
+    dadm <- EMC2:::design_model(dat, des, verbose = FALSE, rt_resolution = 1e-6)
+    dadm0 <- EMC2:::design_model(dat, gd$design, verbose = FALSE, rt_resolution = 1e-6)
+    expect_gt(EMC2:::calc_ll_manager(t(p), dadm, des$model),
+              EMC2:::calc_ll_manager(t(p), dadm0, gd$design$model))
+  }
 })

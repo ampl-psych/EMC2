@@ -4,7 +4,13 @@
 \alias{MTLBA}
 \title{The Multiple-Threshold Linear Ballistic Accumulator (Rating) Model}
 \usage{
-MTLBA(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator")
+MTLBA(
+  n_ratings = 3,
+  dont_know = FALSE,
+  rule = "BE",
+  guess = "accumulator",
+  gb_constraint = "none"
+)
 }
 \arguments{
 \item{n_ratings}{Number of rating categories K (>= 1; >= 2 with
@@ -17,6 +23,11 @@ count).}
 
 \item{guess}{How confidence guessing is triggered when \code{gp} is not zero:
 \code{"accumulator"} (independently per accumulator) or \code{"trial"} (per trial).}
+
+\item{gb_constraint}{\code{"none"} (the guess threshold is \code{A + B * gB}), or
+\code{"own"} / \code{"max"}: the guess threshold moves towards the choice threshold
+as the trigger probability (the accumulator's own, or the larger of the
+two) approaches 1. See Details.}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample.
@@ -104,6 +115,21 @@ still count.
 trial-level parameter (not \code{~ lR} or \code{~ lM}). Both accumulators then race
 to their guess thresholds, under either rule.
 }
+
+\code{gb_constraint} is the option the model's source paper used for one of its
+data sets: the guess threshold moves towards the choice threshold as
+triggering becomes frequent, \code{A + B * (gB + g^2 * (1 - gB))}, with \code{g} the
+accumulator's own \code{gp} (\code{"own"}) or the larger of the two accumulators'
+\code{gp} (\code{"max"}, the paper's rule). In the limit where an accumulator always
+triggers its choice threshold is never reached and \code{B} is then set by the
+guess threshold. The price is that frequent guessing at a low threshold
+cannot be represented (with \code{g = 0.5} the guess threshold is at least a
+quarter of the way from \code{A} to \code{b}, with \code{g = 0.9} at least 81\%). The
+resulting proportion is reported as \code{gBc} with \code{add_recalculated = TRUE}.
+The default is no constraint. Whatever the setting, ratings are informative
+about confidence thresholds only on trials that end by the stopping rule: if
+one accumulator nearly always triggers, the other accumulator's confidence
+thresholds (read when the first one wins) are barely identified.
 
 The three kinds of guessing parameter inform each other: with \code{gp} near 0
 the data say nothing about \code{gB} and the \code{pg}, and with \code{gp} near 1 nothing
