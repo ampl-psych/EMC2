@@ -42,4 +42,44 @@ struct Mat {
   }
 };
 
+
+// Boolean version, use uint8_t to allow for raw pointer access (bool doesnt do that for some reason)
+struct MatBool {
+  int nrow = 0, ncol = 0;
+  std::vector<uint8_t> data;        // owning storage — empty when view
+  const uint8_t* view_ptr = nullptr; // non-owning — set when constructed as view
+
+  MatBool() = default;
+  MatBool(int r, int c, uint8_t fill = 1)
+    : nrow(r), ncol(c), data(r * c, fill), view_ptr(nullptr) {}
+
+  // Non-owning view into a single column of another MatBool.
+  // Lifetime: caller must ensure the source outlives this view.
+  static MatBool col_view(const MatBool& src, int col) {
+    MatBool v;
+    v.nrow     = src.nrow;
+    v.ncol     = 1;
+    v.view_ptr = src.colptr(col);
+    return v;
+  }
+
+  uint8_t*       colptr(int j)       { return (view_ptr ? const_cast<uint8_t*>(view_ptr) : data.data()) + j * nrow; }
+  const uint8_t* colptr(int j) const { return (view_ptr ? view_ptr : data.data()) + j * nrow; }
+
+  uint8_t&       operator()(int r, int c)       { return colptr(c)[r]; }
+  const uint8_t& operator()(int r, int c) const { return colptr(c)[r]; }
+
+  MatBool clone() const {
+    if (view_ptr) {
+      // materialise the view into an owned copy
+      MatBool m(nrow, ncol);
+      std::copy(view_ptr, view_ptr + nrow * ncol, m.data.data());
+      return m;
+    }
+    return *this;
+  }
+};
+
+
+
 #endif // mat_h

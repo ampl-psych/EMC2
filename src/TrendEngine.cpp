@@ -47,73 +47,140 @@ static int list_int(const Rcpp::List& lst, const char* field, int def = 0) {
 // KernelSpec construction helpers — plain C++ after data extraction
 // =============================================================================
 
-static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
+// =============================================================================
+// build_at_mask  —  replaces build_first_level()
+// at_mask[r] = 1 if trial r is the first level of the 'at' factor, else 0
+// If no 'at' specified, all entries are 1
+// =============================================================================
+
+static void build_at_mask(KernelSpec& ks,
+                          const Rcpp::DataFrame& data,
+                          const int n_active_trials)
 {
   const int n_full = data.nrows();
-  if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
-  const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
+  if (n_full <= 0) Rf_error("build_at_mask: data has zero rows");
+  const int n = (n_active_trials > 0 && n_active_trials < n_full)
+    ? n_active_trials : n_full;
 
-  ks.first_level.assign(n, true);
+  ks.at_mask.assign(n, 1);  // default: all trials active
 
   if (ks.has_at) {
     if (!data.containsElementNamed(ks.at.c_str()))
-      Rf_error("build_first_level: data has no column '%s'", ks.at.c_str());
+      Rf_error("build_at_mask: data has no column '%s'", ks.at.c_str());
     SEXP at_col = data[ks.at.c_str()];
     if (!Rf_inherits(at_col, "factor"))
-      Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
+      Rf_error("build_at_mask: 'at' column '%s' must be a factor", ks.at.c_str());
     if (Rf_length(at_col) != n_full)
-      Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
+      Rf_error("build_at_mask: 'at' column '%s' has wrong length", ks.at.c_str());
     const int* f = INTEGER(at_col);
-    for (int i = 0; i < n; ++i)
-      ks.first_level[i] = (f[i] == 1);
+    for (int r = 0; r < n; ++r)
+      ks.at_mask[r] = (f[r] == 1) ? 1 : 0;
   }
-
-  ks.expand_idx.assign(n, 0);
-  int count = 0;
-  for (int i = 0; i < n; ++i) {
-    if (ks.first_level[i]) ++count;
-    ks.expand_idx[i] = count;
-  }
-  if (count == 0)
-    Rf_error("build_first_level: no rows with first 'at' level found");
-  for (int i = 0; i < n; ++i)
-    if (ks.expand_idx[i] == 0)
-      Rf_error("build_first_level: rows before first 'at' level");
-
-  // Filter mode - only pass rows corresponding to the first level of the at factor (default)
-  if (ks.at_mode == AtMode::Filter) {
-    // comp_index = first-level rows only
-    ks.comp_index.clear();
-    ks.comp_index.reserve(count);
-    for (int i = 0; i < n; ++i)
-      if (ks.first_level[i]) ks.comp_index.push_back(i);
-
-    // is_first_level_comp: all true (trivially, every comp row is first-level)
-    ks.is_first_level_comp.assign(count, 1);
-
-  } else {
-    // push = pass all rows, but only apply update to *next* first-level of at
-    // push mode: comp_index = all rows
-    ks.comp_index.resize(n);
-    std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
-
-    // is_first_level_comp: compressed boolean, same length as comp_index
-    ks.is_first_level_comp.resize(n);
-    for (int i = 0; i < n; ++i)
-      ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
-  }
-  // ks.comp_index.clear();
-  // ks.comp_index.reserve(count);
-  // for (int i = 0; i < n; ++i)
-  //   if (ks.first_level[i]) ks.comp_index.push_back(i);
 }
 
-static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
+// =============================================================================
+// build_nan_mask  —  must run after build_kernel_input()
+// nan_mask(r, c) = 1 if kernel_input(r, c) is not NaN, else 0
+// Shape matches kernel_input: n_trials x n_cov_cols
+// Only covers covariate columns (par_input columns are excluded —
+// they are filled per-particle at runtime and checked separately if needed)
+// =============================================================================
+
+static void build_nan_mask(KernelSpec& ks, const int n_active_trials)
+{
+  const int n_full = ks.kernel_input.nrow;
+  const int n      = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;
+  const int ncov   = (int)ks.cov_names.size();
+
+  ks.nan_mask = MatBool(n, ncov, 0);  // default: all 0
+
+  for (int c = 0; c < ncov; ++c) {
+    const double* src = ks.kernel_input.colptr(c);
+    uint8_t*      dst = ks.nan_mask.colptr(c);
+
+    bool waiting_for_first = false;
+
+    for (int r = 0; r < n; ++r) {
+      if (ks.at_mask[r]) {
+        waiting_for_first = true;
+      }
+      if (waiting_for_first && !is_nan(src[r])) {
+        dst[r] = 1;
+        waiting_for_first = false;
+      }
+    }
+  }
+}
+
+// static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
+// {
+//   const int n_full = data.nrows();
+//   if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
+//   const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
+//
+//   ks.first_level.assign(n, true);
+//
+//   if (ks.has_at) {
+//     if (!data.containsElementNamed(ks.at.c_str()))
+//       Rf_error("build_first_level: data has no column '%s'", ks.at.c_str());
+//     SEXP at_col = data[ks.at.c_str()];
+//     if (!Rf_inherits(at_col, "factor"))
+//       Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
+//     if (Rf_length(at_col) != n_full)
+//       Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
+//     const int* f = INTEGER(at_col);
+//     for (int i = 0; i < n; ++i)
+//       ks.first_level[i] = (f[i] == 1);
+//   }
+//
+//   ks.expand_idx.assign(n, 0);
+//   int count = 0;
+//   for (int i = 0; i < n; ++i) {
+//     if (ks.first_level[i]) ++count;
+//     ks.expand_idx[i] = count;
+//   }
+//   if (count == 0)
+//     Rf_error("build_first_level: no rows with first 'at' level found");
+//   for (int i = 0; i < n; ++i)
+//     if (ks.expand_idx[i] == 0)
+//       Rf_error("build_first_level: rows before first 'at' level");
+//
+//   // Filter mode - only pass rows corresponding to the first level of the at factor (default)
+//   if (ks.at_mode == AtMode::Filter) {
+//     // comp_index = first-level rows only
+//     ks.comp_index.clear();
+//     ks.comp_index.reserve(count);
+//     for (int i = 0; i < n; ++i)
+//       if (ks.first_level[i]) ks.comp_index.push_back(i);
+//
+//     // is_first_level_comp: all true (trivially, every comp row is first-level)
+//     ks.is_first_level_comp.assign(count, 1);
+//
+//   } else {
+//     // push = pass all rows, but only apply update to *next* first-level of at
+//     // push mode: comp_index = all rows
+//     ks.comp_index.resize(n);
+//     std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
+//
+//     // is_first_level_comp: compressed boolean, same length as comp_index
+//     ks.is_first_level_comp.resize(n);
+//     for (int i = 0; i < n; ++i)
+//       ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
+//   }
+//   // ks.comp_index.clear();
+//   // ks.comp_index.reserve(count);
+//   // for (int i = 0; i < n; ++i)
+//   //   if (ks.first_level[i]) ks.comp_index.push_back(i);
+// }
+
+static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
 {
   const int n_cov = (int)ks.cov_names.size();
   const int n_par = (int)ks.par_input.size();
   const int n_col = n_cov + n_par;
-  const int n_row = data.nrows();
+  const int n_full = data.nrows();
+  const int n_row  = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;
+
 
   if (n_col == 0)
     Rf_error("KernelSpec '%s': needs at least one cov_name or par_input",
@@ -152,6 +219,16 @@ static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
   for (int i = 0; i < n_par; ++i)
     ks.par_input_indices.push_back(n_cov + i);
   // par_input columns remain zero-initialised; filled per-particle at runtime
+
+  if (n_active_trials > 0 && n_active_trials < n_row) {
+    // rebuild with capped rows
+    Mat capped(n_active_trials, n_col);
+    for (int c = 0; c < n_col; ++c)
+      std::copy(ks.kernel_input.colptr(c),
+                ks.kernel_input.colptr(c) + n_active_trials,
+                capped.colptr(c));
+    ks.kernel_input = std::move(capped);
+  }
 }
 
 static void build_kernel_args(KernelSpec& ks,
@@ -291,18 +368,6 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const
       ks.has_at = true;
       ks.at     = list_str(k_lst, "at");
     }
-    // at_mode: "filter" (default) or "push"
-    {
-      std::string mode_str = list_str(k_lst, "at_mode");  // "" if absent
-      if (mode_str.empty() || mode_str == "filter") {
-        ks.at_mode = AtMode::Filter;
-      } else if (mode_str == "push") {
-        ks.at_mode = AtMode::Push;
-      } else {
-        Rf_error("KernelSpec '%s': unknown at_mode '%s' (must be 'filter' or 'push')",
-                 ks.kernel_id.c_str(), mode_str.c_str());
-      }
-    }
 
     if (ks.kernel_type == KernelType::Custom) {
       if (!k_lst.containsElementNamed("kernel_pointer"))
@@ -315,8 +380,11 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const
     }
 
     build_kernel_args(ks, k_lst, data);
-    build_kernel_input(ks, data);
-    build_first_level(ks, data, n_active_trials);
+    build_kernel_input(ks, data, n_active_trials);
+    build_at_mask(ks, data, n_active_trials);  // independent, but consistent to keep together
+    build_nan_mask(ks, n_active_trials);       // after kernel_input and at_mask
+
+    // build_first_level(ks, data, n_active_trials);
 
     // populate param sets
     for (const auto& pn : ks.pnames) {
@@ -547,12 +615,7 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
     auto& kptr = k_rt.kernel_ptrs[0];
     kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-              k_rt.kernel_input, ks.comp_index);
-    if (ks.has_at && ks.at_mode == AtMode::Filter) {
-      // only expand in filter mode; push mode output is already full-length
-      kptr->set_expand_idx(ks.expand_idx);
-      kptr->do_expand(ks.expand_idx);
-    }
+              k_rt.kernel_input, ks.at_mask, ks.nan_mask);
   } else {
     // overwrite par_input slot buffers in-place — no allocation
     for (int j = 0; j < (int)k_rt.par_input_slot_indices.size(); ++j) {
@@ -563,18 +626,22 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
       std::copy(src, src + n, dst);
     }
 
+    const int n_cov_slots = (int)ks.covariate_indices.size();
+
     // run each slot kernel against its pre-allocated buffer
     for (int s = 0; s < k_rt.n_slots(); ++s) {
       auto& kptr = k_rt.kernel_ptrs[s];
       kptr->reset();
+
+      // covariate slots get a zero-copy view of their nan column;
+      // par_input slots get an all-valid mask (no covariate to check)
+      MatBool slot_nm = (s < n_cov_slots)
+        ? MatBool::col_view(ks.nan_mask, s)
+          : MatBool(k_rt.slot_inputs[s].nrow, 1, 1);
+
       kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-                k_rt.slot_inputs[s], ks.comp_index);
-      // only expand in filter mode; push mode output is already full-length
-      if (ks.has_at && ks.at_mode == AtMode::Filter) {
-        kptr->set_expand_idx(ks.expand_idx);
-        kptr->do_expand(ks.expand_idx);
+                k_rt.slot_inputs[s], ks.at_mask, slot_nm);
       }
-    }
   }
 }
 
