@@ -468,11 +468,14 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
   if (!incremental_mutable) Rcpp::stop("TrendPlan::patch_data_rows called on an immutable TrendPlan");
 
   const int n_full = data.nrows();
-  if (row_start < 0 || row_end <= row_start || row_end > n_full)
-    Rcpp::stop("TrendPlan::patch_data_rows: invalid row range [%d, %d) for data with %d rows",
-               row_start, row_end, n_full);
+  // if (row_start < 0 || row_end <= row_start || row_end > n_full)
+  //   Rcpp::stop("TrendPlan::patch_data_rows: invalid row range [%d, %d) for data with %d rows",
+  //              row_start, row_end, n_full);
 
   const int T = row_end - row_start;
+  if (data.nrows() != T) {
+    Rcpp::stop("TrendPlan::patch_data_rows: data has %d rows; expected %d for patch range [%d, %d)", data.nrows(),T,row_start,row_end);
+  }
 
   // covariate_coding attribute
   Rcpp::List data_covcoding;
@@ -499,15 +502,13 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
       double* dst = ks.kernel_input.colptr(c) + row_start;
 
       if (TYPEOF(col) == REALSXP) {
-        std::copy(REAL(col) + row_start, REAL(col) + row_end, dst);
+        std::copy(REAL(col), REAL(col) + T, dst);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* src = INTEGER(col) + row_start;
-        for (int r = 0; r < T; ++r)
-          dst[r] = (src[r] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[r]);
+        const int* src = INTEGER(col);
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[r]);
       } else if (TYPEOF(col) == LGLSXP) {
-        const int* src = LOGICAL(col) + row_start;
-        for (int r = 0; r < T; ++r)
-          dst[r] = (src[r] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[r]);
+        const int* src = LOGICAL(col);
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[r]);
       } else {
         Rcpp::stop("patch_data_rows: covariate '%s' must be numeric, integer, or logical", cn);
       }
@@ -521,9 +522,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
       if (!Rf_inherits(at_col, "factor"))
         Rcpp::stop("patch_data_rows: 'at' column '%s' must be a factor", ks.at.c_str());
       const int* f = INTEGER(at_col);
-      for (int r = row_start; r < row_end; ++r)
-        ks.at_mask[r] = (f[r] == 1) ? 1 : 0;
-    }
+      for (int r = 0; r < T; ++r) {
+        ks.at_mask[row_start + r] = (f[r] == 1) ? 1 : 0;
+        }
+      }
 
     // 1c. q_reset_col
     if (!ks.q_reset_col_name.empty()) {
@@ -532,10 +534,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    ks.q_reset_col_name.c_str());
       SEXP col = data[ks.q_reset_col_name.c_str()];
       if (TYPEOF(col) == LGLSXP) {
-        const int* p = LOGICAL(col) + row_start;
+        const int* p = LOGICAL(col);
         std::copy(p, p + T, ks.q_reset_col.data() + row_start);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* p = INTEGER(col) + row_start;
+        const int* p = INTEGER(col);
         std::copy(p, p + T, ks.q_reset_col.data() + row_start);
       } else {
         Rcpp::stop("patch_data_rows: q_reset_column '%s' must be logical or integer",
@@ -550,10 +552,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    ks.belief_reset_col_name.c_str());
       SEXP col = data[ks.belief_reset_col_name.c_str()];
       if (TYPEOF(col) == LGLSXP) {
-        const int* p = LOGICAL(col) + row_start;
+        const int* p = LOGICAL(col);
         std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* p = INTEGER(col) + row_start;
+        const int* p = INTEGER(col);
         std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
       } else {
         Rcpp::stop("patch_data_rows: belief_reset_column '%s' must be logical or integer",
@@ -594,10 +596,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    bs.covariate_coding_name.c_str());
 
       for (int c = 0; c < ncol; ++c) {
-        std::copy(src + c * src_nrow + row_start,
-                  src + c * src_nrow + row_end,
+        std::copy(src + c * src_nrow,
+                  src + c * src_nrow + T,
                   dst_mat.colptr(c) + row_start);
-      }
+        }
     }
   };
 

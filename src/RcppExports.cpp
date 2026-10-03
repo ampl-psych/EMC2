@@ -547,13 +547,27 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_subject_pipeline_result
-Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr);
-RcppExport SEXP _EMC2_get_subject_pipeline_result(SEXP xptrSEXP) {
+Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr, int row_start, int row_end);
+RcppExport SEXP _EMC2_get_subject_pipeline_result(SEXP xptrSEXP, SEXP row_startSEXP, SEXP row_endSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_subject_pipeline_result(xptr));
+    Rcpp::traits::input_parameter< int >::type row_start(row_startSEXP);
+    Rcpp::traits::input_parameter< int >::type row_end(row_endSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_subject_pipeline_result(xptr, row_start, row_end));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_subject_pipeline_covariates
+Rcpp::NumericMatrix get_subject_pipeline_covariates(SEXP xptr, Rcpp::IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_get_subject_pipeline_covariates(SEXP xptrSEXP, SEXP kernel_output_codesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_subject_pipeline_covariates(xptr, kernel_output_codes));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -673,7 +687,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
     {"_EMC2_create_subject_pipeline", (DL_FUNC) &_EMC2_create_subject_pipeline, 7},
     {"_EMC2_step_subject_pipeline", (DL_FUNC) &_EMC2_step_subject_pipeline, 5},
-    {"_EMC2_get_subject_pipeline_result", (DL_FUNC) &_EMC2_get_subject_pipeline_result, 1},
+    {"_EMC2_get_subject_pipeline_result", (DL_FUNC) &_EMC2_get_subject_pipeline_result, 3},
+    {"_EMC2_get_subject_pipeline_covariates", (DL_FUNC) &_EMC2_get_subject_pipeline_covariates, 2},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
     {"_EMC2_rSDM", (DL_FUNC) &_EMC2_rSDM, 4},
     {"_EMC2_rPSDM", (DL_FUNC) &_EMC2_rPSDM, 4},

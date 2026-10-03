@@ -129,8 +129,12 @@ step_subject_pipeline <- function(xptr, new_designs, new_data, row_start, row_en
     invisible(.Call(`_EMC2_step_subject_pipeline`, xptr, new_designs, new_data, row_start, row_end))
 }
 
-get_subject_pipeline_result <- function(xptr) {
-    .Call(`_EMC2_get_subject_pipeline_result`, xptr)
+get_subject_pipeline_result <- function(xptr, row_start = 0L, row_end = -1L) {
+    .Call(`_EMC2_get_subject_pipeline_result`, xptr, row_start, row_end)
+}
+
+get_subject_pipeline_covariates <- function(xptr, kernel_output_codes) {
+    .Call(`_EMC2_get_subject_pipeline_covariates`, xptr, kernel_output_codes)
 }
 
 rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {

@@ -36,7 +36,7 @@ struct DesignEntry {
 
     for (int col = 0; col < dm_ncol; ++col) {
       double*       dst_col = dm_data.colptr(col) + row_start;
-      const double* src_col = src + col * src_nrow + row_start;
+      const double* src_col = src + col * src_nrow;   // src is a slice, not full sized
 
       std::copy(src_col, src_col + n_new, dst_col);
     }
@@ -307,29 +307,21 @@ struct ParamTable {
       DesignEntry& entry = design_plan[i];
 
       // Must remain structurally consistent with the designs used at construction.
-      if (!entry.valid || entry.dm_null)
-        continue;
+      if (!entry.valid || entry.dm_null) continue;
 
       if (Rf_isNull(designs[i]))
-        Rcpp::stop(
-          "ParamTable::patch_design_rows: design %d was non-NULL at setup "
-          "but is NULL during update",
-          i
-        );
+        Rcpp::stop("ParamTable::patch_design_rows: design %d was non-NULL at setup but is NULL during update", i);
 
       Rcpp::NumericMatrix dm = designs[i];
 
-      if (dm.nrow() < row_end)
-        Rcpp::stop(
-          "ParamTable::patch_design_rows: design %d has fewer than row_end rows",
-          i
-        );
+      const int n_patch = row_end - row_start;
 
+      if (dm.nrow() != n_patch) {
+        Rcpp::stop("ParamTable::patch_design_rows: design %d has %d rows; expected %d "
+          "for patch range [%d, %d)",i,dm.nrow(),n_patch,row_start,row_end);
+      }
       if (dm.ncol() != entry.dm_ncol)
-        Rcpp::stop(
-          "ParamTable::patch_design_rows: design %d has a changed column count",
-          i
-        );
+        Rcpp::stop("ParamTable::patch_design_rows: design %d has a changed column count",i);
 
       entry.patch_rows(row_start, row_end, dm.begin(), dm.nrow());
     }
@@ -338,15 +330,20 @@ struct ParamTable {
   // ---------------------------------------------------------------------------
   // materialize (non-hot, returns Rcpp matrix for R interface)
   // ---------------------------------------------------------------------------
-  Rcpp::NumericMatrix materialize() const {
+  Rcpp::NumericMatrix materialize(int row_start = 0,
+                                  int row_end   = -1) const {
+
+    const int end = (row_end < 0) ? n_trials : row_end;
+    const int n_rows = end - row_start;
+
     const int p = (int)active_cols.size();
-    Rcpp::NumericMatrix out(n_trials, p);
+    Rcpp::NumericMatrix out(n_rows, p);
     Rcpp::CharacterVector out_names(p);
     for (int j = 0; j < p; ++j) {
       int base_j = active_cols[j];
       double* dst = &out(0, j);
-      const double* src = base.colptr(base_j);
-      std::copy(src, src + n_trials, dst);
+      const double* src = base.colptr(base_j) + row_start;
+      std::copy(src, src + n_rows, dst);
       out_names[j] = base_names[base_j];
     }
     Rcpp::colnames(out) = out_names;

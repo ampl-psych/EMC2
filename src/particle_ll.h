@@ -124,6 +124,10 @@ void step_subject_pipeline(
     int                    row_start,
     int                    row_end);
 
-Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr);
+Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr, int row_start, int row_end);
+
+Rcpp::NumericMatrix get_subject_pipeline_covariates(
+    SEXP xptr,
+    Rcpp::IntegerVector kernel_output_codes = Rcpp::IntegerVector::create(1));
 
 #endif

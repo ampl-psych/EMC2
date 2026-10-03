@@ -2103,11 +2103,11 @@ make_data_unconditional <- function(data, pars, design, model,
       attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
 
       # 2. ffunctions_pre
-      if (has_ffunctions_pre) {
-        dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
-        class(dadm_ctx) <- "data.frame"
-        attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+      dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+      class(dadm_ctx) <- "data.frame"
+      attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
+      if (has_ffunctions_pre) {
         for (i in names(ffunctions_pre)) {
           result_full <- ffunctions_pre[[i]](dadm_ctx)
           if (is.list(result_full)) {
@@ -2140,8 +2140,7 @@ make_data_unconditional <- function(data, pars, design, model,
 
       # 4. Designs for current trial
       designs_current <- make_designs_cached(dadm_current, key)
-      for (nm in names(designs_current))
-        designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
+      for (nm in names(designs_current)) designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
 
       # 5. Covariate coding
       if (has_covariate_coding) {
@@ -2154,7 +2153,18 @@ make_data_unconditional <- function(data, pars, design, model,
           }
         }
         attr(dadm_subj_df, "covariate_coding") <- covariate_coding_prefix
+
+        covariate_coding_ctx <- lapply(covariate_coding_prefix,function(m) m[idx_ctx, , drop = FALSE])
+        attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
+
       }
+
+      #
+      designs_ctx <- lapply(designs_prefix, function(m) {
+        out <- m[idx_ctx, , drop = FALSE]
+        attr(out, "parameter_design") <- attr(m, "parameter_design")
+        out
+      })
 
       # 6. Step pipeline — patch designs + data, run rows [idx_curr)
       row_start <- idx_ctx[1] - 1L   # 0-based
@@ -2162,15 +2172,14 @@ make_data_unconditional <- function(data, pars, design, model,
 
       step_subject_pipeline(
         xptr        = sp,
-        new_designs = designs_prefix,
-        new_data    = dadm_subj_df,
+        new_designs = designs_ctx,  # only pass context
+        new_data    = dadm_ctx,     # only pass context
         row_start   = row_start,
         row_end     = row_end
       )
 
       # 7. Extract pm for current trial rows only
-      pm_full <- get_subject_pipeline_result(sp)
-      pm      <- pm_full[idx_curr, , drop = FALSE]
+      pm <- get_subject_pipeline_result(sp, row_start=idx_curr[1L]-1L, row_end=idx_curr[length(idx_curr)])
 
       # 8. Ttransform + bounds
       pr <- model_list$Ttransform(pm, dadm_current)
@@ -2234,8 +2243,10 @@ make_data_unconditional <- function(data, pars, design, model,
 
       # 11. Trialwise parameters on last trial
       if (tmp_return_trialwise) {
-        sub_trialwise_parameters <- as.data.frame(cbind(
-          pm_full, attr(pm_full, "trialwise_parameters")))
+        covariates <- get_subject_pipeline_covariates(sp, kernel_output_codes = as.integer(kernel_output_codes))
+        pm_full <- get_subject_pipeline_result(sp)
+
+        sub_trialwise_parameters <- as.data.frame(cbind(pm_full, covariates))
         sub_trialwise_parameters$subject <- subj
         sub_trialwise_parameters$trial   <- rep(trial_vals, each = n_acc)
       }

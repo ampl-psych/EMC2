@@ -1441,13 +1441,28 @@ void step_subject_pipeline(
 
 
 // [[Rcpp::export]]
-Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr)
+Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr, int row_start=0, int row_end=-1)
 {
   Rcpp::XPtr<SubjectPipeline> sp(xptr);
-  return sp->param_table.materialize();
+  return sp->param_table.materialize(row_start, row_end);
 }
 
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_subject_pipeline_covariates(SEXP xptr,Rcpp::IntegerVector kernel_output_codes)
+{
+  Rcpp::XPtr<SubjectPipeline> sp(xptr);
 
+  TrendRuntime* tr = sp->has_trend() ? sp->trend_runtime.get() : nullptr;
+
+  if (!tr) Rcpp::stop("get_subject_pipeline_covariates: pipeline has no trend");
+
+  std::vector<int> kernel_codes(
+      kernel_output_codes.begin(),
+      kernel_output_codes.end()
+  );
+
+  return get_covariate_matrix(sp->param_table, tr, kernel_codes);
+}
 
 // // [[Rcpp::export]]
 // void step_subject_pipeline(Rcpp::XPtr<SubjectPipeline> ctx_ptr,
