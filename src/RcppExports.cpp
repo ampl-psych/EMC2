@@ -515,6 +515,48 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// create_subject_pipeline
+SEXP create_subject_pipeline(Rcpp::NumericMatrix pars, const Rcpp::List& designs, const Rcpp::List& transform, const Rcpp::DataFrame& data, const Rcpp::NumericVector& constants, const Rcpp::List& pretransform, const Rcpp::Nullable<Rcpp::List>& trend);
+RcppExport SEXP _EMC2_create_subject_pipeline(SEXP parsSEXP, SEXP designsSEXP, SEXP transformSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP pretransformSEXP, SEXP trendSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type transform(transformSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::DataFrame& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type pretransform(pretransformSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::Nullable<Rcpp::List>& >::type trend(trendSEXP);
+    rcpp_result_gen = Rcpp::wrap(create_subject_pipeline(pars, designs, transform, data, constants, pretransform, trend));
+    return rcpp_result_gen;
+END_RCPP
+}
+// step_subject_pipeline
+void step_subject_pipeline(SEXP xptr, const Rcpp::List& new_designs, const Rcpp::DataFrame& new_data, int row_start, int row_end);
+RcppExport SEXP _EMC2_step_subject_pipeline(SEXP xptrSEXP, SEXP new_designsSEXP, SEXP new_dataSEXP, SEXP row_startSEXP, SEXP row_endSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type new_designs(new_designsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::DataFrame& >::type new_data(new_dataSEXP);
+    Rcpp::traits::input_parameter< int >::type row_start(row_startSEXP);
+    Rcpp::traits::input_parameter< int >::type row_end(row_endSEXP);
+    step_subject_pipeline(xptr, new_designs, new_data, row_start, row_end);
+    return R_NilValue;
+END_RCPP
+}
+// get_subject_pipeline_result
+Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr);
+RcppExport SEXP _EMC2_get_subject_pipeline_result(SEXP xptrSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_subject_pipeline_result(xptr));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rCDM
 DataFrame rCDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
 RcppExport SEXP _EMC2_rCDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
@@ -629,6 +671,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 12},
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
+    {"_EMC2_create_subject_pipeline", (DL_FUNC) &_EMC2_create_subject_pipeline, 7},
+    {"_EMC2_step_subject_pipeline", (DL_FUNC) &_EMC2_step_subject_pipeline, 5},
+    {"_EMC2_get_subject_pipeline_result", (DL_FUNC) &_EMC2_get_subject_pipeline_result, 1},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
     {"_EMC2_rSDM", (DL_FUNC) &_EMC2_rSDM, 4},
     {"_EMC2_rPSDM", (DL_FUNC) &_EMC2_rPSDM, 4},

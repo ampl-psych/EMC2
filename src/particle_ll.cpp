@@ -1,55 +1,19 @@
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include <Rcpp.h>
 #include <unordered_map>
 
-// Utilities first — no dependencies on model types
-#include "utility_functions.h"
-#include "transform_utils.h"
-#include "ParamTable.h"
-#include "TrendEngine.h"
-#include "math_utils.h"
-
-#include "model_CDM.h"
-// for extract_y -- should be moved elsewhere
-#include "model_MRI.h"
-
-// RaceSetup last — references functions defined in model headers above
-#include "RaceSetup.h"
-#include "CensorSpec.h"
-#include "TruncSpec.h"
-
-// Stop-signal models (after RaceSetup.h: they build on model_RDM.h and
-// model_exgaussian.h). Header-only; include from this translation unit only.
-#include "model_SS_EXG.h"
-#include "model_SS_RDEX.h"
-#include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
+#include "particle_ll.h"
 using namespace Rcpp;
 
 // =============================================================================
 // PipelineCache — pre-computed specs and masks for the parameter pipeline
 // =============================================================================
 
-struct PipelineCache {
-  std::unordered_set<std::string> postmap_param_set;
-  std::vector<TransformSpec>      postmap_specs;
-  std::vector<TransformSpec>      premap_specs;       // empty if no premap trend
-  std::vector<TransformSpec>      pretransform_specs; // empty if no pretransform trend
-
-  // Masks — std::vector<bool> so safe inside OpenMP regions
-  std::vector<bool> mask_premap;            // regular premap designs
-  std::vector<bool> mask_premap_reparam;    // reparam targets that are premap
-  std::vector<bool> mask_map;               // regular main designs
-  std::vector<bool> mask_reparam;           // reparam in main step
-};
-
 PipelineCache make_pipeline_cache(
     ParamTable& param_table,
     const Rcpp::List& designs,
     const std::vector<TransformSpec>& transform_specs,
-    TrendRuntime* trend_runtime_ptr)
+    TrendRuntime* trend_runtime_ptr,
+    bool compute_col_is_constant)
 {
   static const std::unordered_set<std::string> empty_set;
 
@@ -113,54 +77,56 @@ PipelineCache make_pipeline_cache(
     }
   }
   // --- Constant-column flags ---
-  // Start pessimistic
-  std::fill(param_table.col_is_constant.begin(),
-            param_table.col_is_constant.end(), false);
+  if (compute_col_is_constant) {
+    // Start pessimistic
+    std::fill(param_table.col_is_constant.begin(),
+              param_table.col_is_constant.end(), false);
 
-  // Pass 1: a parameter is constant only if ALL its design entries are constant
-  std::unordered_map<int, bool> all_constant_so_far;
+    // Pass 1: a parameter is constant only if ALL its design entries are constant
+    std::unordered_map<int, bool> all_constant_so_far;
 
-  for (const DesignEntry& entry : param_table.design_plan) {
-    if (!entry.valid) continue;
-    int idx = entry.out_idx;
-    if (all_constant_so_far.find(idx) == all_constant_so_far.end()) {
-      // First entry for this parameter: initialise to this entry's constancy
-      all_constant_so_far[idx] = entry.dm_is_constant;
-    } else {
-      // Subsequent entry: only constant if all so far were constant too
-      all_constant_so_far[idx] = all_constant_so_far[idx] && entry.dm_is_constant;
-    }
-  }
-
-  for (auto& kv : all_constant_so_far) {
-    param_table.col_is_constant[kv.first] = kv.second;
-  }
-
-
-  // Trend targets are non-constant
-  if (trend_runtime_ptr) {
-    for (const std::string& nm : trend_runtime_ptr->all_trend_targets()) {
-      auto it = param_table.name_to_base_idx.find(nm);
-      if (it != param_table.name_to_base_idx.end())
-        param_table.col_is_constant[it->second] = false;
-    }
-  }
-
-  // Pass 2: reparam targets inherit non-constancy from their inputs
-  for (int i = 0; i < n_designs; ++i) {
-    if (!cache.mask_reparam[i] && !cache.mask_premap_reparam[i]) continue;
-    const DesignEntry& entry = param_table.design_plan[i];
-    if (!entry.valid) continue;
-
-    bool all_inputs_constant = true;
-    for (int cidx : entry.coef_idx) {
-      if (cidx >= 0 && !param_table.col_is_constant[cidx]) {
-        all_inputs_constant = false;
-        break;
+    for (const DesignEntry& entry : param_table.design_plan) {
+      if (!entry.valid) continue;
+      int idx = entry.out_idx;
+      if (all_constant_so_far.find(idx) == all_constant_so_far.end()) {
+        // First entry for this parameter: initialise to this entry's constancy
+        all_constant_so_far[idx] = entry.dm_is_constant;
+      } else {
+        // Subsequent entry: only constant if all so far were constant too
+        all_constant_so_far[idx] = all_constant_so_far[idx] && entry.dm_is_constant;
       }
     }
-    // Always write the result, don't rely on Pass 1 value
-    param_table.col_is_constant[entry.out_idx] = all_inputs_constant;
+
+    for (auto& kv : all_constant_so_far) {
+      param_table.col_is_constant[kv.first] = kv.second;
+    }
+
+
+    // Trend targets are non-constant
+    if (trend_runtime_ptr) {
+      for (const std::string& nm : trend_runtime_ptr->all_trend_targets()) {
+        auto it = param_table.name_to_base_idx.find(nm);
+        if (it != param_table.name_to_base_idx.end())
+          param_table.col_is_constant[it->second] = false;
+      }
+    }
+
+    // Pass 2: reparam targets inherit non-constancy from their inputs
+    for (int i = 0; i < n_designs; ++i) {
+      if (!cache.mask_reparam[i] && !cache.mask_premap_reparam[i]) continue;
+      const DesignEntry& entry = param_table.design_plan[i];
+      if (!entry.valid) continue;
+
+      bool all_inputs_constant = true;
+      for (int cidx : entry.coef_idx) {
+        if (cidx >= 0 && !param_table.col_is_constant[cidx]) {
+          all_inputs_constant = false;
+          break;
+        }
+      }
+      // Always write the result, don't rely on Pass 1 value
+      param_table.col_is_constant[entry.out_idx] = all_inputs_constant;
+    }
   }
 
   return cache;
@@ -171,17 +137,6 @@ PipelineCache make_pipeline_cache(
 // PipelineContext — live runtime state, owns objects for the particle loop lifetime
 // =============================================================================
 
-struct PipelineContext {
-  Rcpp::NumericMatrix            particle_matrix;   // after pretransform + constants
-  ParamTable                     param_table;
-  std::vector<TransformSpec>     transform_specs;
-  std::unique_ptr<TrendPlan>     trend_plan;
-  std::unique_ptr<TrendRuntime>  trend_runtime;
-  Rcpp::CharacterVector          keep_names;
-  std::vector<int>               pm_col_to_base_idx;
-  int                            n_active_trials;
-};
-
 PipelineContext make_pipeline_context(
     Rcpp::NumericMatrix particle_matrix,
     const Rcpp::DataFrame& data,
@@ -190,7 +145,7 @@ PipelineContext make_pipeline_context(
     const Rcpp::List& transforms,
     const Rcpp::List& pretransforms,
     const Rcpp::Nullable<Rcpp::List>& trend,
-    const int n_active_trials = -1)
+    const int n_active_trials)
 {
   PipelineContext ctx;
 
@@ -252,51 +207,48 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
 
 
 // =============================================================================
-// run_pars_pipeline — runs steps 3-7 in place on param_table
+// run_pars_pipeline
 // =============================================================================
 
-void run_pars_pipeline(ParamTable&          param_table,
-                       TrendRuntime*        trend_runtime,
-                       const PipelineCache& cache)
+void run_pars_pipeline(ParamTable& param_table,
+                       TrendRuntime* trend_runtime,
+                       const PipelineCache& cache,
+                       int row_start,
+                       int row_end)
   {
-  if (trend_runtime) {
-    // 0) Ensure kernels are reset
-    trend_runtime->reset_all_kernels();
-  }
-
   // 1) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_premap()) {
-    param_table.map_from_designs(cache.mask_premap);
-    param_table.map_from_designs(cache.mask_premap_reparam);
+    param_table.map_from_designs(cache.mask_premap, row_start, row_end);
+    param_table.map_from_designs(cache.mask_premap_reparam, row_start, row_end);
     if (!cache.premap_specs.empty()) {
-      c_do_transform(param_table, cache.premap_specs);
+      c_do_transform(param_table, cache.premap_specs, row_start, row_end);
     }
     for (BaseRuntime& base : trend_runtime->premap_bases) {
-      trend_runtime->apply_base(base, param_table);
+      trend_runtime->apply_base(base, param_table, row_start, row_end);
     }
   }
 
   // 2) Map designs for remaining parameters
-  param_table.map_from_designs(cache.mask_map);
-  param_table.map_from_designs(cache.mask_reparam);
+  param_table.map_from_designs(cache.mask_map, row_start, row_end);
+  param_table.map_from_designs(cache.mask_reparam, row_start, row_end);
 
   // 3) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_pretransform()) {
     if (!cache.pretransform_specs.empty()) {
-      c_do_transform(param_table, cache.pretransform_specs);
+      c_do_transform(param_table, cache.pretransform_specs, row_start, row_end);
     }
     for (BaseRuntime& base : trend_runtime->pretransform_bases) {
-      trend_runtime->apply_base(base, param_table);
+      trend_runtime->apply_base(base, param_table, row_start, row_end);
     }
   }
 
   // 4) Transforms for all parameters excluding trend pars used so far
-  c_do_transform(param_table, cache.postmap_specs);
+  c_do_transform(param_table, cache.postmap_specs, row_start, row_end);
 
   // 5) Posttransform trends
   if (trend_runtime && trend_runtime->has_posttransform()) {
     for (BaseRuntime& base : trend_runtime->posttransform_bases) {
-      trend_runtime->apply_base(base, param_table);
+      trend_runtime->apply_base(base, param_table, row_start, row_end);
     }
   }
 }
@@ -1406,3 +1358,128 @@ void omp_diagnostics(int n_threads = -1) {
   Rcpp::Rcout << "OpenMP is NOT compiled in (_OPENMP not defined).\n";
 #endif
 }
+
+
+
+
+// For persistent parameter mapping pipelines
+
+// [[Rcpp::export]]
+SEXP create_subject_pipeline(
+    Rcpp::NumericMatrix                pars,
+    const Rcpp::List&                  designs,
+    const Rcpp::List&                  transform,
+    const Rcpp::DataFrame&             data,
+    const Rcpp::NumericVector&         constants,
+    const Rcpp::List&                  pretransform,
+    const Rcpp::Nullable<Rcpp::List>& trend)
+{
+  auto ctx = std::make_unique<SubjectPipeline>();
+
+  // Build ParamTable from pars + designs (existing factory function)
+  PipelineContext pctx = make_pipeline_context(
+    pars, data, constants, designs,
+    transform, pretransform, trend);
+
+  ctx->param_table     = std::move(pctx.param_table);
+  ctx->transform_specs = std::move(pctx.transform_specs);
+  ctx->n_trials        = ctx->param_table.n_trials;
+
+  TrendRuntime* trend_rt_ptr = nullptr;
+  if (pctx.trend_runtime) {
+    ctx->trend_plan    = std::move(pctx.trend_plan);
+    ctx->trend_runtime = std::move(pctx.trend_runtime);
+    ctx->trend_plan->enable_incremental_updates();     // permit patch_data_rows
+    trend_rt_ptr       = ctx->trend_runtime.get();
+  }
+
+  ctx->cache = make_pipeline_cache(ctx->param_table, designs,
+                                   ctx->transform_specs,
+                                   trend_rt_ptr,
+                                   /*compute_col_is_constant=*/false);
+  // Store particle values and column mapping for incremental reuse
+  ctx->pm_col_to_base_idx = pctx.pm_col_to_base_idx;
+  ctx->particle_values.resize(pars.ncol());
+  for (int j = 0; j < pars.ncol(); ++j)
+    ctx->particle_values[j] = pars(0,j);
+
+  return Rcpp::XPtr<SubjectPipeline>(ctx.release(), true);
+}
+
+// [[Rcpp::export]]
+void step_subject_pipeline(
+    SEXP                       xptr,
+    const Rcpp::List&          new_designs,
+    const Rcpp::DataFrame&     new_data,
+    int                        row_start,
+    int                        row_end)
+{
+  Rcpp::XPtr<SubjectPipeline> sp(xptr);
+
+  if (row_end > sp->n_trials) Rcpp::stop("step_subject_pipeline: row_end %d exceeds n_trials %d", row_end, sp->n_trials);
+
+  TrendRuntime* tr = sp->has_trend() ? sp->trend_runtime.get() : nullptr;
+
+  // 1) Ensure rows in the parameter table are reset so they're not doubly transformed
+  sp->param_table.reset_rows(row_start, row_end);
+  sp->param_table.fill_rows_from_particle(sp->particle_values,
+                                          sp->pm_col_to_base_idx,
+                                          row_start, row_end);
+
+  // 2) Patch new parameter values into ParamTable
+  sp->param_table.patch_design_rows(new_designs, row_start, row_end);
+
+  // 3) Patch data rows in trendplan & runtime (covariate values, nan_mask, at_mask, covariate_coding)
+  if (sp->trend_plan) {
+    sp->trend_plan->patch_data_rows(new_data, row_start, row_end);
+    sp->trend_runtime->sync_data_rows_from_plan(row_start, row_end);
+  }
+
+  // 4) Run pipeline for this row range only
+  run_pars_pipeline(sp->param_table, tr, sp->cache, row_start, row_end);
+}
+
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr)
+{
+  Rcpp::XPtr<SubjectPipeline> sp(xptr);
+  return sp->param_table.materialize();
+}
+
+
+
+// // [[Rcpp::export]]
+// void step_subject_pipeline(Rcpp::XPtr<SubjectPipeline> ctx_ptr,
+//                            Rcpp::NumericMatrix new_pars,
+//                            int n_new)
+// {
+//   SubjectPipeline& ctx = *ctx_ptr;
+//
+//   if (ctx.is_complete())
+//     Rcpp::stop("step_subject_pipeline: pipeline already complete");
+//
+//   const int row_start = ctx.row_cursor;
+//   const int row_end   = row_start + n_new;
+//
+//   if (row_end > ctx.n_trials)
+//     Rcpp::stop("step_subject_pipeline: row_end %d exceeds n_trials %d",
+//                row_end, ctx.n_trials);
+//
+//   // 1) Patch the new parameter rows into ParamTable
+//   //    new_pars is n_new x n_params, column-major
+//   // ctx.param_table.patch_rows(row_start, row_end, new_pars);
+//
+//   // 2) Patch design matrix rows (if designs are updated per trial)
+//   //    For now: designs are fixed at construction, no patch needed here
+//
+//   // 3) Run the pipeline for this row range
+//   run_pars_pipeline(ctx.param_table,
+//                     ctx.trend_runtime.get(),
+//                     ctx.cache,
+//                     row_start, row_end);
+//
+//   ctx.row_cursor = row_end;
+// }
+
+
