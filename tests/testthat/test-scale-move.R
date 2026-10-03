@@ -40,6 +40,15 @@ test_that("scale_move_log_prior matches the brute-force ratio", {
   }
 })
 
+# state saved before the realised counters / the running block acceptance
+# existed gets them added
+test_that("scale_move_init completes older state", {
+  new <- EMC2:::scale_move_init(NULL, c("a", "b"))
+  expect_identical(new$r_block, 1)
+  old <- new[setdiff(names(new), c("acc_real", "acc_loc_real", "r_block"))]
+  expect_identical(EMC2:::scale_move_init(old, c("a", "b"))[names(new)], new)
+})
+
 # ---- (2) detailed balance on a 2-subject toy -------------------------------
 # Two subjects, two parameters, a heavy-tailed (non-Gaussian) likelihood on
 # sufficient statistics, so the quadratic surrogate the sweep uses is wrong
@@ -121,6 +130,15 @@ test_that("the scale move leaves the posterior invariant on a 2-subject toy", {
   expect_gt(mv$settings$acc_out / mv$settings$n_out, .2)
   expect_true(all(mv$settings$step > 0) && all(mv$settings$loc > 0))
   expect_true(all(mv$settings$acc_loc > iter / 20))
+  # the surrogate is rough but usable: most blocks pass, the running block
+  # acceptance says so, and the realised acceptance of the scale and location
+  # moves sits near target x block acceptance (surrogate acceptance near target)
+  st <- mv$settings
+  expect_gt(st$r_block, .6); expect_lt(st$r_block, 1)
+  for (rate in list(st$acc_real / st$n_in, st$acc_loc_real / st$n_in)) {
+    expect_true(all(rate > .2 & rate < .4))
+  }
+  expect_true(all(st$acc_in / st$n_in > .22 & st$acc_in / st$n_in < .45))
   ess <- function(x) coda::effectiveSize(coda::mcmc(x))
   for (k in colnames(ref$draws)) {
     lg <- k %in% c("s11", "s22", "aux1", "aux2")
@@ -132,30 +150,41 @@ test_that("the scale move leaves the posterior invariant on a 2-subject toy", {
   }
 })
 
-# ---- (2b) a flat surrogate: the step size is capped by the exact check -----
+# ---- (2b) a flat surrogate: the step size is held by the exact check --------
 # With no curvature or gradient in the surrogate the inner acceptance is the
 # prior part alone, which accepts N(0, step^2) log-scale proposals at about
 # .3 at any large step once the group SD sits below the half-t scale, so a
-# step adapted on the surrogate's acceptance runs away (as it did, for a
-# related reason -- a surrogate wrong by orders of magnitude -- on
-# forstmann's DDM sv / SZ, stageH3 / stageH5) while the exact check rejects
-# nearly every block. Adapted on the realised acceptance (surrogate AND exact
-# check) the step settles where the exact likelihoods accept the rescaling,
-# and the posterior is still the right one.
-test_that("with a flat surrogate the step size is held by the exact check", {
+# step adapted on the surrogate's acceptance tunes to the prior (and on a
+# surrogate wrong by orders of magnitude -- forstmann's DDM sv / SZ, stageH3
+# / stageH5 -- runs away) while the exact check rejects most blocks. The
+# steps adapt on the realised acceptance (surrogate AND exact check) with
+# target scale_move_target x the running block acceptance r. Here every
+# parameter's surrogate is flat and the two blocks cannot be split further,
+# so r falls below the block adaptation's lower limit and enters the target
+# at its floor (scale_move_r_floor): the realised acceptance is held near
+# target x floor, the steps stay bounded, and the posterior is still the
+# right one. (Without the floor larger steps lower r and with it the target:
+# steps of 10-20 at a realised acceptance of .06, stageH5b/REPORT.md.)
+test_that("with a flat surrogate the realised acceptance is held at the floored target", {
   skip_on_cran()
   sampler <- toy_emc[[1]]
   iter <- 12000
   ref <- toy_run(sampler, iter, use_move = FALSE, seed = 1)
   mv <- toy_run(sampler, iter, use_move = TRUE, seed = 4, surrogate = "flat")
   st <- mv$settings
-  # the surrogate accepted far more than the exact check let through, and the
-  # steps stayed at the scale the exact conditional of a log SD has
-  expect_true(all(st$acc_in > 1.5 * st$acc_real))
-  expect_true(all(st$step < 2.5) && all(st$loc < 2.5))
-  # the realised acceptance over the run is near the Robbins-Monro target
-  expect_true(all(st$acc_real / st$n_in > .15 & st$acc_real / st$n_in < .5))
-  expect_true(all(st$acc_loc_real / st$n_in > .15 & st$acc_loc_real / st$n_in < .5))
+  # the surrogate accepted more than the exact check let through; most blocks
+  # failed, and the running block acceptance is below its floor
+  expect_true(all(st$acc_in > st$acc_real) && all(st$acc_loc > st$acc_loc_real))
+  expect_gt(sum(st$acc_in), 1.5 * sum(st$acc_real))
+  expect_lt(st$acc_out / st$n_out, EMC2:::scale_move_r_floor)
+  expect_lt(st$r_block, .5)
+  # the realised acceptance over the run is near target x floor, for scale
+  # and location moves alike, and the steps are bounded
+  target <- EMC2:::scale_move_target * EMC2:::scale_move_r_floor
+  for (rate in list(st$acc_real / st$n_in, st$acc_loc_real / st$n_in)) {
+    expect_true(all(rate > .6 * target & rate < 1.6 * target))
+  }
+  expect_true(all(st$step < 15) && all(st$loc < 15))
   ess <- function(x) coda::effectiveSize(coda::mcmc(x))
   for (k in colnames(ref$draws)) {
     lg <- k %in% c("s11", "s22", "aux1", "aux2")
@@ -233,12 +262,16 @@ test_that("with the scale move the conjugate posterior is recovered and the funn
   expect_gt(sm[[1]]$acc_out / sm[[1]]$n_out, .98)
   expect_identical(sm[[1]]$acc_real, sm[[1]]$acc_in)
   expect_identical(sm[[1]]$acc_loc_real, sm[[1]]$acc_loc)
+  # ... so the running block acceptance never leaves 1 and the target is
+  # scale_move_target itself
+  expect_identical(sm[[1]]$r_block, 1)
   # more sample iterations: the step sizes stay frozen
   emc2 <- fit(emc, cores_for_chains = 1, iter = 1600, verbose = FALSE, particle_factor = 20,
               step_size = 500, stop_criteria = list(sample = list(iter = 1600)))
   for (ch in 1:2) {
     sm2 <- attr(emc2[[ch]]$samples, "scale_move")
     expect_identical(sm2$step, sm[[ch]]$step)
+    expect_identical(sm2$r_block, sm[[ch]]$r_block)
     expect_gt(sm2$n_in[1], sm[[ch]]$n_in[1])
   }
   # the exact posterior of the group SDs (mean within 4 Monte-Carlo SEs,

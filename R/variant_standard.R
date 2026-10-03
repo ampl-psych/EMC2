@@ -890,6 +890,27 @@ gibbs_step_standard <- function(sampler, alpha) {
 # is the prior part alone) gets the step the prior and the exact check
 # agree on. Where the surrogate is exact (a Gaussian likelihood) every
 # block passes and nothing changes. The same holds for the location step.
+# The target of the realised acceptance is scale_move_target x r, with r a
+# running average of the block acceptance (r_block: exponentially weighted,
+# weight scale_move_r_weight per sweep, starting at 1, updated after the
+# steps so that a sweep's target does not depend on its own outcome, and
+# frozen with the steps). A parameter whose moves are innocuous has a
+# realised acceptance of about its surrogate acceptance x r -- its moves
+# share the fate of the block -- so a target of scale_move_target alone
+# pushed the surrogate acceptance of every parameter to scale_move_target /
+# r and the steps to a quarter of what the surrogate allows through blocks
+# that pass about half the time, which cost group-SD mixing on the hardest
+# grid cell (stageH5/REPORT.md section 4, stageH5b/REPORT.md). With the
+# target scaled by r such a parameter's surrogate acceptance returns to
+# scale_move_target, a parameter whose moves make blocks fail more often
+# than the average block still shrinks, and with r = 1 (surrogate exact)
+# nothing changes. r enters the target no lower than scale_move_r_floor,
+# the block acceptance below which the sweep is split into more blocks: a
+# lower r means the blocks cannot be split further and still fail, i.e. the
+# surrogate is poor for most parameters, and without the floor larger steps
+# would lower r and with it the target (on the flat-surrogate toy of
+# test-scale-move.R the steps then go to 10-20 at a realised acceptance of
+# .06).
 # State lives in attr(samples, "scale_move") and travels with the chain
 # (concat_emc); acc_in / acc_loc count the surrogate's acceptances and
 # acc_real / acc_loc_real the realised ones.
@@ -899,6 +920,8 @@ gibbs_step_standard <- function(sampler, alpha) {
 # sampler never runs it.
 
 scale_move_target <- .3
+scale_move_r_weight <- .05
+scale_move_r_floor <- .35
 
 scale_move_stages <- function(){
   if(legacy_sampler()) return(character(0))
@@ -921,7 +944,8 @@ scale_move_log_prior <- function(delta, A_j, a_j){
 # block acceptance window that adapts it); acc_in / acc_loc / n_in count the
 # sweep's inner (surrogate) acceptances, acc_real / acc_loc_real the
 # realised ones (inner AND the block's exact check, what the step sizes
-# adapt on) and acc_out / n_out the delayed-acceptance step's (per block).
+# adapt on) and acc_out / n_out the delayed-acceptance step's (per block);
+# r_block: the running block acceptance that scales the steps' target.
 scale_move_init <- function(settings, par_names){
   p <- length(par_names)
   zero <- setNames(rep(0, p), par_names)
@@ -930,11 +954,13 @@ scale_move_init <- function(settings, par_names){
                      loc = zero + .2, log_loc_sum = zero, log_loc_n = zero, uses = 0,
                      blocks = 1, win_acc = 0, win_n = 0,
                      acc_in = zero, acc_loc = zero, n_in = zero, acc_out = 0, n_out = 0, iter = 0,
-                     acc_real = zero, acc_loc_real = zero)
+                     acc_real = zero, acc_loc_real = zero, r_block = 1)
   }
   # state saved before the realised counters existed
   if(is.null(settings$acc_real)) settings$acc_real <- zero
   if(is.null(settings$acc_loc_real)) settings$acc_loc_real <- zero
+  # ... and before the running block acceptance did
+  if(is.null(settings$r_block)) settings$r_block <- 1
   settings
 }
 
@@ -995,6 +1021,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   # block then passed the exact check (the realised acceptance the step
   # sizes adapt on)
   acc <- acc_loc <- acc_sur <- acc_sur_loc <- rep(0, p)
+  blk_n <- blk_acc <- 0                   # this sweep's blocks checked / passed
   # The sweep, in B blocks: the parameters are dealt into B random blocks, each
   # block's scale and location moves run in random order on the surrogate,
   # and each block is then accepted or rejected against the exact likelihoods
@@ -1055,6 +1082,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
     if(is.finite(lr_out) && log(runif(1)) < lr_out){
       settings$acc_out <- settings$acc_out + 1
       settings$win_acc <- settings$win_acc + 1
+      blk_acc <- blk_acc + 1
       tvar <- tvar * outer(f_acc, f_acc)
       tvinv <- tvinv / outer(f_acc, f_acc)
       if(do_loc) pars$subj_mu <- pars$subj_mu + mu_shift
@@ -1066,6 +1094,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
       if(do_loc){ tmu <- tmu0; pr <- pr0 }
     }
     settings$win_n <- settings$win_n + 1
+    blk_n <- blk_n + 1
   }
   pars$tvar <- tvar; pars$tvinv <- tvinv
   pars$a_half <- a
@@ -1078,8 +1107,13 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   settings$n_in <- settings$n_in + 1
   settings$iter <- settings$iter + 1
   if(!frozen){
-    settings$step <- exp(log(settings$step) + gain * (acc - scale_move_target))
-    if(do_loc) settings$loc <- exp(log(settings$loc) + gain * (acc_loc - scale_move_target))
+    target <- scale_move_target * max(settings$r_block, scale_move_r_floor)
+    settings$step <- exp(log(settings$step) + gain * (acc - target))
+    if(do_loc) settings$loc <- exp(log(settings$loc) + gain * (acc_loc - target))
+    # the running block acceptance, for the next sweep's target (in this form
+    # it stays exactly 1 while every block passes)
+    if(blk_n > 0) settings$r_block <- settings$r_block +
+        scale_move_r_weight * (blk_acc / blk_n - settings$r_block)
     settings$uses <- settings$uses + 1
     if(settings$uses > 20){
       settings$log_step_sum <- settings$log_step_sum + log(settings$step)
@@ -1092,7 +1126,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
     # number of blocks, from the block acceptance over a window of 40 blocks
     if(settings$win_n >= 40){
       rate <- settings$win_acc / settings$win_n
-      if(rate < .35) settings$blocks <- min(p, 2 * settings$blocks)
+      if(rate < scale_move_r_floor) settings$blocks <- min(p, 2 * settings$blocks)
       else if(rate > .75) settings$blocks <- max(1, settings$blocks %/% 2)
       settings$win_acc <- settings$win_n <- 0
     }
