@@ -748,7 +748,7 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt,
       std::copy(src, src + T, dst);
     }
     auto& kptr = k_rt.kernel_ptrs[0];
-    if (row_start == 0) kptr->reset();
+    if(row_start == 0) kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
               k_rt.kernel_input, ks.at_mask, ks.nan_mask, row_start, row_end);
   } else {
@@ -766,7 +766,7 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt,
     // run each slot kernel against its pre-allocated buffer
     for (int s = 0; s < k_rt.n_slots(); ++s) {
       auto& kptr = k_rt.kernel_ptrs[s];
-      if (row_start == 0) kptr->reset();
+      if(row_start == 0) kptr->reset();
 
       // covariate slots get a zero-copy view of their nan column;
       // par_input slots get an all-valid mask (no covariate to check)

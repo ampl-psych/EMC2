@@ -216,6 +216,13 @@ void run_pars_pipeline(ParamTable& param_table,
                        int row_start,
                        int row_end)
   {
+  if (trend_runtime) {
+    // 0) Ensure kernels are reset
+    if(row_start == 0) {
+      trend_runtime->reset_all_kernels();
+    }
+  }
+
   // 1) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_premap()) {
     param_table.map_from_designs(cache.mask_premap, row_start, row_end);
