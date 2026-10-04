@@ -1898,6 +1898,43 @@ has_delta_rules <- function(model) {
 }
 
 # New make_data_unconditional, but this one with persistent subject pipelines
+stack_designs <- function(designs_previous, designs_current) {
+  if (is.null(designs_previous)) {
+    return(designs_current)
+  }
+
+  out <- Map(
+    function(previous, current) {
+      if (is.null(previous) || is.null(current)) {
+        if (!identical(is.null(previous), is.null(current))) {
+          stop("Inconsistent NULL designs across context trials.")
+        }
+        return(NULL)
+      }
+      result <- rbind(previous, current)
+      attr(result, "parameter_design") <- attr(current, "parameter_design")
+      result
+    },
+    designs_previous, designs_current
+  )
+
+  names(out) <- names(designs_current)
+  out
+}
+
+
+make_cache_key <- function(key_cols, dadm_slice) {
+  key <- paste(sapply(key_cols, function(fc) {
+    val <- dadm_slice[[fc]][1]  # only look at first row
+    if (is.na(val)) stop(sprintf("Column '%s' is NA for subject '%s' trial %d.", fc, subj, current_trial))
+    else if (is.logical(val)) as.character(as.integer(val))
+    else if (is.factor(val))  as.character(as.integer(val))
+    else as.character(val)
+  }), collapse = "_")
+  if (nchar(key) == 0) key <- "intercept_only"
+  key
+}
+
 make_data_unconditional <- function(data, pars, design, model,
                                              return_trialwise_parameters,
                                              kernel_output_codes = c(1L),
@@ -2004,7 +2041,7 @@ make_data_unconditional <- function(data, pars, design, model,
   trend     <- model_list$trend
   has_trend <- !is.null(trend)
 
-  bases_with_coding <- if (has_trend) {
+  bases_with_coding <- if(has_trend) {
     Filter(function(b) !is.null(b$coding), trend$bases)
   } else list()
   has_covariate_coding <- length(bases_with_coding) > 0
@@ -2035,10 +2072,7 @@ make_data_unconditional <- function(data, pars, design, model,
       c(unlist(idx_by_trial[lookback], use.names = FALSE), idx_by_trial[[j]])
     }
 
-    particle_matrix <- matrix(
-      as.numeric(pars[which(subj == subj_levels), , drop = FALSE]),
-      nrow = 1
-    )
+    particle_matrix <- matrix(as.numeric(pars[which(subj == subj_levels), , drop = FALSE]), nrow = 1)
     colnames(particle_matrix) <- colnames(pars)
 
     designs_prefix <- lapply(attr(dadm_full, "designs"), function(m) {
@@ -2049,6 +2083,7 @@ make_data_unconditional <- function(data, pars, design, model,
     })
 
     if (has_covariate_coding) {
+      # run covariate coding on a single trial to get returned dimensions
       idx_t1  <- idx_by_trial[[1]]
       dadm_t1 <- dadm_subj[idx_t1, , drop = FALSE]
       covariate_coding_prefix <- list()
@@ -2057,9 +2092,7 @@ make_data_unconditional <- function(data, pars, design, model,
         cov_names <- kernel$cov_names
         for (map_name in names(base$coding)) {
           trial1_result <- base$coding[[map_name]](dadm = dadm_t1, cov_names)
-          if (is.null(dim(trial1_result)))
-            trial1_result <- matrix(trial1_result, nrow = 1,
-                                    dimnames = list(NULL, names(trial1_result)))
+          if (is.null(dim(trial1_result))) trial1_result <- matrix(trial1_result, nrow = 1, dimnames = list(NULL, names(trial1_result)))
           covariate_coding_prefix[[map_name]] <- matrix(
             0, nrow = n_rows_subj, ncol = ncol(trial1_result),
             dimnames = list(NULL, colnames(trial1_result))
@@ -2080,15 +2113,11 @@ make_data_unconditional <- function(data, pars, design, model,
     # -----------------------------------------------------------------------
     # Build subject pipeline — one per subject
     # -----------------------------------------------------------------------
-    sp <- create_subject_pipeline(
-      pars                = particle_matrix,
-      designs             = designs_prefix,
-      transform           = model_list$transform,
-      data                = dadm_subj_df,
-      constants           = constants,
-      pretransform        = model_list$pre_transform,
-      trend               = model_list$trend
-    )
+    sp <- create_subject_pipeline(pars = particle_matrix, designs = designs_prefix,
+                                  transform = model_list$transform, data = dadm_subj_df,
+                                  constants = constants, pretransform = model_list$pre_transform,
+                                  trend = model_list$trend)
+    dadm_previous <- NULL
 
     for (j in seq_along(trial_vals)) {
       current_trial        <- trial_vals[j]
@@ -2126,45 +2155,33 @@ make_data_unconditional <- function(data, pars, design, model,
         }
       }
 
-      # 3. Condition key
-      key <- paste(sapply(key_cols, function(fc) {
-        val <- dadm_subj_df[[fc]][idx_curr[1]]
-        if (is.na(val)) stop(sprintf(
-          "Column '%s' is NA for subject '%s' trial %d.",
-          fc, subj, current_trial))
-        else if (is.logical(val)) as.character(as.integer(val))
-        else if (is.factor(val))  as.character(as.integer(val))
-        else as.character(val)
-      }), collapse = "_")
-      if (nchar(key) == 0) key <- "intercept_only"
-
-      # 4. Designs for current trial
+      # 3. Designs for current trial
+      key <- make_cache_key(key_cols, dadm_slice=dadm_current)
       designs_current <- make_designs_cached(dadm_current, key)
-      for (nm in names(designs_current)) designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
+
+      # Designs for previous trial (if existing)
+      if(j > 1L && n_context_trials > 0L) {
+        key <- make_cache_key(key_cols, dadm_previous)
+        designs_previous <- make_designs_cached(dadm_slice = dadm_previous, key = key)
+        designs_ctx <- stack_designs(designs_previous,designs_current)
+      } else {
+        designs_ctx <- designs_current
+      }
 
       # 5. Covariate coding
       if (has_covariate_coding) {
-        for (base in bases_with_coding) {
+        covariate_coding_ctx <- list()
+
+        for(base in bases_with_coding) {
           kernel    <- trend$kernels[[base$kernel_id]]
           cov_names <- kernel$cov_names
-          for (scheme_name in names(base$coding)) {
-            result <- base$coding[[scheme_name]](dadm = dadm_current, cov_names)
-            covariate_coding_prefix[[scheme_name]][idx_curr, ] <- as.matrix(result)
+          for(scheme_name in names(base$coding)) {
+            result <- base$coding[[scheme_name]](dadm = dadm_ctx, cov_names)
+            covariate_coding_ctx[[scheme_name]] <- as.matrix(result)
           }
         }
-        attr(dadm_subj_df, "covariate_coding") <- covariate_coding_prefix
-
-        covariate_coding_ctx <- lapply(covariate_coding_prefix,function(m) m[idx_ctx, , drop = FALSE])
         attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
-
       }
-
-      #
-      designs_ctx <- lapply(designs_prefix, function(m) {
-        out <- m[idx_ctx, , drop = FALSE]
-        attr(out, "parameter_design") <- attr(m, "parameter_design")
-        out
-      })
 
       # 6. Step pipeline — patch designs + data, run rows [idx_curr)
       row_start <- idx_ctx[1] - 1L   # 0-based
@@ -2209,37 +2226,20 @@ make_data_unconditional <- function(data, pars, design, model,
 
         for (i in names(ffunctions_post)) {
           result_full <- ffunctions_post[[i]](dadm_ctx)
-          if (is.list(result_full)) {
-            for (col in names(result_full)) {
-              dadm_ctx[[col]]               <- result_full[[col]]
+          if(is.list(result_full)) {
+            for(col in names(result_full)) {
+              dadm_ctx[[col]]     <- result_full[[col]]
+              dadm_current[[col]] <- utils::tail(result_full[[col]], length(idx_curr))
               dadm_subj_df[[col]][idx_curr] <- utils::tail(result_full[[col]], length(idx_curr))
             }
           } else {
-            dadm_ctx[[i]]                   <- result_full
-            dadm_subj_df[[i]][idx_curr]     <- utils::tail(result_full, length(idx_curr))
+            dadm_ctx[[i]]     <- result_full
+            dadm_current[[i]] <- utils::tail(result_full, length(idx_curr))
+            dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
           }
         }
-
-        # Update designs post-ffunction
-        key_post <- paste(sapply(key_cols, function(fc) {
-          val <- dadm_subj_df[[fc]][idx_curr[1]]
-          if (is.na(val)) stop(sprintf(
-            "Column '%s' is NA for subject '%s' trial %d.",
-            fc, subj, current_trial))
-          else if (is.logical(val)) as.character(as.integer(val))
-          else if (is.factor(val))  as.character(as.integer(val))
-          else as.character(val)
-        }), collapse = "_")
-        if (nchar(key_post) == 0) key_post <- "intercept_only"
-
-        dadm_current_post <- lapply(dadm_subj_df, `[`, idx_curr)
-        class(dadm_current_post) <- "data.frame"
-        attr(dadm_current_post, "row.names") <- .set_row_names(length(idx_curr))
-
-        designs_current_post <- make_designs_cached(dadm_current_post, key_post)
-        for (nm in names(designs_current_post))
-          designs_prefix[[nm]][idx_curr, ] <- designs_current_post[[nm]]
       }
+      dadm_previous <- dadm_current
 
       # 11. Trialwise parameters on last trial
       if (tmp_return_trialwise) {
@@ -2252,11 +2252,10 @@ make_data_unconditional <- function(data, pars, design, model,
       }
     }
 
-    if (return_trialwise_parameters)
-      trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
+    if(return_trialwise_parameters) trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
 
     missing_in_full <- setdiff(names(dadm_subj_df), names(dadm_full))
-    if (length(missing_in_full))
+    if(length(missing_in_full))
       for (nm in missing_in_full) dadm_full[[nm]] <- NA
     dadm_full[subj_rows, names(dadm_subj_df)] <- dadm_subj_df
   }
