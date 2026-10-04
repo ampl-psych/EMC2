@@ -332,7 +332,7 @@ for the subject step) in `B` random parameter blocks of any size, each block's c
 accepted or rejected against the subjects' *exact* likelihoods in one more `calc_ll_manager` call
 per subject (delayed acceptance, so the move is exact whatever the surrogate's quality, not an
 approximation) -- `B x n_subjects` extra single-row likelihood evaluations per iteration, about
-0.1 ms each. The scale step size (Robbins-Monro, target acceptance .3) and `B` itself (kept where
+0.1 ms each. The scale step size (Robbins-Monro, target .3 scaled as below) and `B` itself (kept where
 the per-block acceptance is in [.35, .75]) adapt during `adapt`, are averaged over its tail the
 same way the particle kernel's own tuning is (section 4's rule: nothing adapts once draws are
 kept), and are frozen for `sample`. The acceptance the step sizes adapt on is the *realised* one:
@@ -343,9 +343,19 @@ whatever its quality: on forstmann's DDM `sv`/`SZ` (below), where the surrogate 
 three orders of magnitude, its acceptance was a coin toss on the proposal's sign at any step, the
 step ran away to 6-11 log-SD units and the exact check rejected nearly every block. With the
 realised acceptance the exact check's rejections bound the step by what the exact likelihoods
-accept; a surrogate that is flat in a parameter gets the step the prior and the exact check agree
-on; where the surrogate is exact (a Gaussian likelihood) every block passes and nothing changes
-(`test-scale-move.R`, which also checks the flat-surrogate case). `options(emc.scale_move =
+accept; where the surrogate is exact (a Gaussian likelihood) every block passes and nothing
+changes. Because a move shares the fate of its block, the Robbins-Monro target of the realised
+acceptance is `.3 x r`, with `r` a running block acceptance (`r_block`: exponentially weighted,
+weight .05 per sweep, starting at 1, frozen with the steps): a parameter whose moves are
+innocuous then keeps a surrogate acceptance near .3, where a fixed target of .3 through blocks
+that pass half the time pushed it to .6 and shrank every step to a quarter, which cost group-SD
+mixing on the grid's hardest cell; a parameter whose moves make blocks fail more than the
+average block still has its step shrunk. `r` enters the target no lower than .35, the block
+acceptance below which the sweep is split into more blocks, so that when blocks cannot be split
+further the target does not follow a collapsing block acceptance down (`test-scale-move.R`
+checks this case with a surrogate that is flat in every parameter;
+`rating-work/sampler/hier/stageH5b/REPORT.md` has the replicated comparison of the three
+rules). `options(emc.scale_move =
 FALSE)` turns the sweep off; the legacy sampler never runs it.
 
 **Validation** (`rating-work/sampler/hier/stageH2/REPORT.md`, conjugate cell `p25`, 25 parameters
