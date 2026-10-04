@@ -45,8 +45,53 @@ test_that("scale_move_log_prior matches the brute-force ratio", {
 test_that("scale_move_init completes older state", {
   new <- EMC2:::scale_move_init(NULL, c("a", "b"))
   expect_identical(new$r_block, 1)
-  old <- new[setdiff(names(new), c("acc_real", "acc_loc_real", "r_block"))]
+  old <- new[setdiff(names(new), c("acc_real", "acc_loc_real", "r_block", "active_scale", "active_loc"))]
   expect_identical(EMC2:::scale_move_init(old, c("a", "b"))[names(new)], new)
+  expect_true(all(new$active_scale) && all(new$active_loc))
+})
+
+# ---- the gate (Stage H6b) ---------------------------------------------------
+test_that("scale_move_gate drops only the useless moves of a sweep that cannot be split further", {
+  pn <- c("a", "b", "c")
+  mk <- function(blocks, step, loc, acc = 10, n = 100) {
+    s <- EMC2:::scale_move_init(NULL, pn); s$blocks <- blocks
+    s$n_in[] <- n; s$acc_real[] <- acc; s$acc_loc_real[] <- acc; s$step[] <- step; s$loc[] <- loc
+    s
+  }
+  # 200 subjects. a, b: the posterior variance of the log group SD is the Gibbs step's own (1 / 400);
+  # c: a funnel, a hundred times wider. Group means: posterior variance = group variance / n for all.
+  var_lsd <- c(.0025, .0025, .25); var_mu <- rep(4e-4, 3); mean_var <- rep(.08, 3)
+  gate <- function(sm, decide = TRUE, vm = var_mu) EMC2:::scale_move_gate(sm, var_lsd, vm, mean_var, 200, decide)
+  # realised acceptance .1; u_scale = .1 step^2 / var_lsd = 1.6, 1.6e-4, 4e-3 against kappa x Gibbs = .1, .1, .001
+  #                         u_loc   = .1 loc^2 / var_mu   = .4, 6e-5, 6e-5    against .1
+  chain <- function(blocks) mk(blocks, step = c(.2, .002, .1), loc = c(.04, .0005, .0005))
+  # recorded only
+  out <- gate(list(chain(3), chain(3)), decide = FALSE)
+  expect_true(all(out[[1]]$active_scale) && all(out[[1]]$active_loc))
+  expect_length(out[[1]]$gate, 1); expect_false(out[[1]]$gate[[1]]$decide)
+  expect_identical(out[[2]]$mark$n_in, out[[2]]$n_in)
+  expect_equal(unname(out[[1]]$gate[[1]]$u_scale), c(1.6, 1.6e-4, 4e-3))
+  expect_equal(unname(out[[1]]$gate[[1]]$gibbs_scale), c(1, 1, .01))
+  # one chain's sweep can still be split: nothing is dropped
+  out <- gate(list(chain(3), chain(2)))
+  expect_false(out[[1]]$gate[[1]]$full)
+  expect_true(all(out[[1]]$active_scale) && all(out[[1]]$active_loc))
+  # as many blocks as parameters in both chains: b loses both moves, c (the funnel) keeps its scale move
+  out <- gate(list(chain(3), chain(3)))
+  expect_identical(unname(out[[1]]$active_scale), c(TRUE, FALSE, TRUE))
+  expect_identical(unname(out[[1]]$active_loc), c(TRUE, FALSE, FALSE))
+  expect_identical(out[[1]]$active_scale, out[[2]]$active_scale)
+  # a dropped move stays dropped whatever its counters do later; with two parameters left, two blocks are "full"
+  again <- lapply(out, function(x) { x$n_in[] <- 200; x$acc_real[] <- 60; x$acc_loc_real[] <- 60; x$blocks <- 2; x$step[] <- 1; x$loc[] <- 1; x })
+  out2 <- gate(again)
+  expect_true(out2[[1]]$gate[[2]]$full)
+  expect_identical(unname(out2[[1]]$active_scale), c(TRUE, FALSE, TRUE))
+  expect_identical(unname(out2[[1]]$active_loc), c(TRUE, FALSE, FALSE))
+  expect_length(out2[[1]]$gate, 2)
+  # no location moves (a group design): none is active, the scale moves are judged as before
+  out <- gate(list(chain(3), chain(3)), vm = NULL)
+  expect_false(any(out[[1]]$active_loc))
+  expect_identical(unname(out[[1]]$active_scale), c(TRUE, FALSE, TRUE))
 })
 
 # ---- (2) detailed balance on a 2-subject toy -------------------------------
@@ -308,4 +353,88 @@ test_that("options(emc.scale_move = FALSE) and the legacy sampler run no move", 
   emc <- suppressWarnings(fit(conj_emc, cores_for_chains = 1, stop_criteria = stop_short, verbose = FALSE,
                               particle_factor = 20, step_size = 5))
   expect_null(attr(emc[[1]]$samples, "scale_move"))
+})
+
+# ---- the gate and the first steps in the sweep itself (Stage H6b) ----------
+test_that("the sweep leaves a gated parameter alone", {
+  sampler <- toy_emc[[1]]
+  set.seed(3)
+  p <- 2; n <- 2; mu <- c(.1, -.1); a <- c(.5, 2); Sigma <- diag(c(.3, .3))
+  alpha <- matrix(c(.3, -.2, -.3, .25), p, n, dimnames = list(toy_pars, NULL))
+  ll <- sapply(1:n, function(s) as.numeric(EMC2:::calc_ll_manager(matrix(alpha[, s], 1, dimnames = list(NULL, toy_pars)),
+                                                                  sampler$data[[s]], sampler$model)))
+  lik_prec <- lapply(1:n, function(s) { d <- sampler$data[[s]]; list(prec = diag(2 * d$T), lin = 2 * d$T * d$ybar) })
+  pars <- list(tmu = mu, tvar = Sigma, tvinv = solve(Sigma), a_half = a, subj_mu = matrix(mu, p, n), alpha = alpha)
+  settings <- EMC2:::scale_move_init(NULL, toy_pars); settings$iter <- 1; settings$blocks <- 2
+  settings$step[] <- .3; settings$loc[] <- .1
+  # parameter b out of the sweep: its group variance, mean, subjects and step never change
+  settings$active_scale[] <- c(TRUE, FALSE); settings$active_loc[] <- c(TRUE, FALSE)
+  moved <- FALSE; same <- TRUE; st <- settings; pr <- pars; al <- alpha; l <- ll
+  for (i in 1:200) {
+    sm <- EMC2:::scale_move_standard(sampler, pr, al, l, st, lik_prec)
+    pr <- sm$pars; al <- sm$alpha; l <- sm$ll; st <- sm$settings
+    same <- same && identical(pr$tvar[2, 2], Sigma[2, 2]) && identical(pr$tmu[2], mu[2]) && identical(al[2, ], alpha[2, ])
+    if (pr$tvar[1, 1] != Sigma[1, 1]) moved <- TRUE
+  }
+  expect_true(same)
+  expect_true(moved)
+  expect_identical(st$step[["b"]], .3); expect_identical(st$loc[["b"]], .1)
+  expect_equal(unname(st$acc_in[2] + st$acc_loc[2]), 0)
+  # nothing left in the sweep: it returns what it was given, at no cost
+  settings$active_scale[] <- FALSE; settings$active_loc[] <- FALSE
+  sm <- EMC2:::scale_move_standard(sampler, pars, alpha, ll, settings, lik_prec)
+  expect_identical(sm$pars, pars); expect_identical(sm$alpha, alpha); expect_identical(sm$settings, settings)
+})
+
+test_that("the sweep's first steps start at the moves' conditional scale when that is below the default", {
+  sampler <- toy_emc[[1]]
+  set.seed(4)
+  p <- 2; n <- 2; mu <- c(.1, -.1); a <- c(.5, 2); Sigma <- diag(c(.3, .3))
+  alpha <- matrix(c(.3, -.2, -.3, .25), p, n, dimnames = list(toy_pars, NULL))
+  ll <- sapply(1:n, function(s) as.numeric(EMC2:::calc_ll_manager(matrix(alpha[, s], 1, dimnames = list(NULL, toy_pars)),
+                                                                  sampler$data[[s]], sampler$model)))
+  pars <- list(tmu = mu, tvar = Sigma, tvinv = solve(Sigma), a_half = a, subj_mu = matrix(mu, p, n), alpha = alpha)
+  run1 <- function(curv) {
+    lik_prec <- lapply(1:n, function(s) list(prec = diag(curv), lin = rep(0, 2)))
+    EMC2:::scale_move_standard(sampler, pars, alpha, ll, EMC2:::scale_move_init(NULL, toy_pars), lik_prec, gain = 0)$settings
+  }
+  # a flat surrogate: the default starts (.5, .2), limited only by the prior part of the scale move
+  flat <- run1(c(0, 0))
+  A <- rep(sampler$prior$A, length.out = 2)
+  expect_equal(unname(flat$step), pmin(.5, 2.4 / sqrt(4 / (A^2 * a))))
+  expect_equal(unname(flat$loc), pmin(.2, 2.4 / sqrt(diag(sampler$prior$theta_mu_invar))))
+  # a sharp one in parameter a: its steps start at 2.4 / sqrt(sum of curvatures), b's as before
+  sharp <- run1(c(1e4, 0))
+  R <- alpha - mu
+  expect_equal(sharp$step[["a"]], unname(2.4 / sqrt(sum(R[1, ]^2) * 1e4 + 4 / (A[1]^2 * a[1]))))
+  expect_equal(sharp$loc[["a"]], 2.4 / sqrt(2 * 1e4 + sampler$prior$theta_mu_invar[1, 1]))
+  expect_equal(sharp$step[["b"]], flat$step[["b"]]); expect_equal(sharp$loc[["b"]], flat$loc[["b"]])
+})
+
+test_that("the block's exact check is timed serially and forked, and gives the same values either way", {
+  skip_on_os("windows")
+  sampler <- toy_emc[[1]]
+  p <- 2; n <- 2; mu <- c(.1, -.1); a <- c(.5, 2); Sigma <- diag(c(.3, .3))
+  alpha <- matrix(c(.3, -.2, -.3, .25), p, n, dimnames = list(toy_pars, NULL))
+  ll <- sapply(1:n, function(s) as.numeric(EMC2:::calc_ll_manager(matrix(alpha[, s], 1, dimnames = list(NULL, toy_pars)),
+                                                                  sampler$data[[s]], sampler$model)))
+  lik_prec <- lapply(1:n, function(s) { d <- sampler$data[[s]]; list(prec = diag(2 * d$T), lin = 2 * d$T * d$ybar) })
+  pars <- list(tmu = mu, tvar = Sigma, tvinv = solve(Sigma), a_half = a, subj_mu = matrix(mu, p, n), alpha = alpha)
+  run <- function(n_cores, check_serial = NULL) {
+    set.seed(9)
+    st <- EMC2:::scale_move_init(NULL, toy_pars); st$iter <- 1; st$check_serial <- check_serial
+    pr <- pars; al <- alpha; l <- ll
+    for (i in 1:40) {
+      sm <- EMC2:::scale_move_standard(sampler, pr, al, l, st, lik_prec, n_cores = n_cores)
+      pr <- sm$pars; al <- sm$alpha; l <- sm$ll; st <- sm$settings
+    }
+    list(pars = pr, alpha = al, ll = l, settings = st)
+  }
+  one <- run(1); two <- run(2); ser <- run(2, TRUE); par <- run(2, FALSE)
+  for (x in list(two, ser, par)) {
+    expect_identical(x$pars, one$pars); expect_identical(x$alpha, one$alpha); expect_identical(x$ll, one$ll)
+  }
+  expect_null(one$settings$check_serial)                      # one core: nothing to choose
+  expect_true(is.logical(two$settings$check_serial))          # timed, and decided
+  expect_length(two$settings$check_time$parallel, 3)
 })

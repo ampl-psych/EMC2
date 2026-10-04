@@ -915,6 +915,23 @@ gibbs_step_standard <- function(sampler, alpha) {
 # (concat_emc); acc_in / acc_loc count the surrogate's acceptances and
 # acc_real / acc_loc_real the realised ones.
 #
+# Many subjects (Stage H6b). The surrogate's error has the same sign in
+# nearly every subject (the likelihood's skew), so in a move common to all
+# subjects it adds up with n while the move's tolerance grows with sqrt(n):
+# with several hundred subjects the moves of well-identified parameters pass
+# the exact check only at steps far below the posterior SD of what they
+# move, while each block still costs one likelihood evaluation per subject
+# (Eisenberg Simon, 518 subjects: 2.8 times the run time for no gain in
+# mixing; rating-work/sampler/hier/stageH6/REPORT.md). Two things follow.
+# The steps start at the moves' conditional scale on the surrogate where
+# that is below the default start (they come down slowly: at most
+# gain x target per sweep). And the sweep is gated (scale_move_gate): a
+# move that adds little to what the group-level Gibbs step does anyway is
+# left out for the rest of the fit, decided after each step of adapt once
+# the steps have had adapt_converge$min sweeps to settle (run_emc) -- and only
+# when the sweep is already split into as many blocks as it has parameters,
+# so a sweep whose blocks pass is never touched.
+#
 # options(emc.scale_move = FALSE) turns the move off (A/B); a character
 # vector names the stages it runs in (default adapt and sample); the legacy
 # sampler never runs it.
@@ -922,6 +939,7 @@ gibbs_step_standard <- function(sampler, alpha) {
 scale_move_target <- .3
 scale_move_r_weight <- .05
 scale_move_r_floor <- .35
+scale_move_kappa <- .1
 
 scale_move_stages <- function(){
   if(legacy_sampler()) return(character(0))
@@ -961,7 +979,66 @@ scale_move_init <- function(settings, par_names){
   if(is.null(settings$acc_loc_real)) settings$acc_loc_real <- zero
   # ... and before the running block acceptance did
   if(is.null(settings$r_block)) settings$r_block <- 1
+  # ... and before the gate did: every move is in the sweep
+  if(is.null(settings$active_scale)) settings$active_scale <- zero == 0
+  if(is.null(settings$active_loc)) settings$active_loc <- zero == 0
   settings
+}
+
+# The gate, for all chains' settings `sm` at once. A move (the scale move or
+# the location move of one parameter) is dropped from the sweep, for the rest
+# of the fit, when
+# (i) the sweep cannot be split into more blocks: every chain already has as
+#     many blocks as there are parameters still in the sweep; and
+# (ii) the move adds little to what the group-level Gibbs step does anyway:
+#     its expected squared jump per sweep since the last call (realised
+#     acceptance x step^2) is below scale_move_kappa times the Gibbs step's
+#     own, the conditional variance of the quantity given the subjects (about
+#     1 / (2 n) for a log group SD and group variance / n for a group mean,
+#     n subjects).
+# Both are taken as shares of the posterior variance of the quantity moved
+# (var_lsd: log group SD, var_mu: group mean, NULL without location moves;
+# mean_var: mean group variance; all per parameter, from one stretch of
+# draws pooled over chains), so that in a funnel, where the Gibbs step's
+# share is small, a move with a small step is still kept. The chains decide
+# jointly (mean of their values). Realised acceptance alone would not do:
+# given enough adapt iterations the steps reach their acceptance target at
+# a useless size. decide = FALSE only records the values and restarts the
+# counters. What was decided is kept in settings$gate (one entry per call)
+# and settings$active_scale / active_loc.
+scale_move_gate <- function(sm, var_lsd, var_mu, mean_var, n_subjects, decide = TRUE){
+  p <- length(sm[[1]]$step)
+  act_s <- sm[[1]]$active_scale; act_l <- sm[[1]]$active_loc
+  if(is.null(act_s)) act_s <- rep(TRUE, p)
+  if(is.null(act_l)) act_l <- rep(TRUE, p)
+  if(is.null(var_mu)) act_l <- rep(FALSE, p)
+  n_act <- sum(act_s | act_l)
+  u <- lapply(sm, function(x){
+    m <- x$mark
+    if(is.null(m)) m <- list(acc_real = 0 * x$acc_real, acc_loc_real = 0 * x$acc_loc_real, n_in = 0 * x$n_in)
+    n <- pmax(1, x$n_in - m$n_in)
+    list(us = (x$acc_real - m$acc_real) / n * x$step^2 / var_lsd,
+         ul = if(is.null(var_mu)) rep(0, p) else (x$acc_loc_real - m$acc_loc_real) / n * x$loc^2 / var_mu)
+  })
+  us <- Reduce(`+`, lapply(u, `[[`, "us")) / length(u)
+  ul <- Reduce(`+`, lapply(u, `[[`, "ul")) / length(u)
+  us[!is.finite(us)] <- Inf; ul[!is.finite(ul)] <- Inf     # no posterior variance yet: keep
+  gs <- pmin(1, 1 / (2 * n_subjects) / var_lsd)
+  gl <- if(is.null(var_mu)) rep(1, p) else pmin(1, mean_var / n_subjects / var_mu)
+  gs[!is.finite(gs)] <- 0; gl[!is.finite(gl)] <- 0
+  full <- n_act > 0 && all(sapply(sm, function(x) x$blocks >= n_act))
+  if(decide && full){
+    act_s <- act_s & !(us < scale_move_kappa * gs)
+    act_l <- act_l & !(ul < scale_move_kappa * gl)
+  }
+  lapply(sm, function(x){
+    x$active_scale <- setNames(act_s, names(x$step)); x$active_loc <- setNames(act_l, names(x$step))
+    x$gate <- c(x$gate, list(list(sweeps = x$n_in[1], decide = decide, full = full, blocks = x$blocks, r_block = x$r_block,
+                                  u_scale = us, u_loc = ul, gibbs_scale = gs, gibbs_loc = gl,
+                                  active_scale = act_s, active_loc = act_l)))
+    x$mark <- list(acc_real = x$acc_real, acc_loc_real = x$acc_loc_real, n_in = x$n_in)
+    x
+  })
 }
 
 # Start averaging the step sizes (the tail of adapt) ...
@@ -987,6 +1064,9 @@ scale_move_freeze <- function(settings){
 # Returns the (possibly) updated pars, alpha_full, ll and settings.
 scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, lik_prec,
                                 frozen = FALSE, n_cores = 1, r_cores = 1, gain = .1){
+  # the gate left no move in the sweep
+  if(!is.null(settings$active_scale) && !any(settings$active_scale | settings$active_loc))
+    return(list(pars = pars, alpha = alpha_full, ll = prev_ll, settings = settings))
   nuisance <- sampler$nuisance
   if(is.null(nuisance)) nuisance <- rep(FALSE, nrow(alpha_full))
   keep <- which(!nuisance)
@@ -1029,8 +1109,26 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   # the number of moves a block accepts, so B is adapted in adapt to keep the
   # block acceptance in [.35, .75] (one block where the surrogate is exact)
   # and is frozen for sample.
-  B <- max(1, min(p, settings$blocks))
-  blocks <- split(sample.int(p), rep(seq_len(B), length.out = p))
+  # The moves the gate kept (scale_move_gate); a parameter with neither move
+  # is in no block.
+  act_s <- if(is.null(settings$active_scale)) rep(TRUE, p) else settings$active_scale
+  act_l <- if(!do_loc) rep(FALSE, p) else if(is.null(settings$active_loc)) rep(TRUE, p) else settings$active_loc
+  act <- which(act_s | act_l)
+  B <- max(1, min(length(act), settings$blocks))
+  blocks <- if(length(act) == 0) list() else
+    split(act[sample.int(length(act))], rep(seq_len(B), length.out = length(act)))
+  # First sweep: start the steps at the moves' conditional scale on the
+  # surrogate where that is below the default start
+  if(!frozen && settings$iter == 0){
+    cs <- 2.4 / sqrt(rowSums(R^2 * Ljj[keep, , drop = FALSE]) + 4 / (A^2 * a))
+    ok <- is.finite(cs) & cs > 0
+    settings$step[ok] <- pmax(1e-4, pmin(settings$step, cs))[ok]
+    if(do_loc){
+      cl <- 2.4 / sqrt(rowSums(Ljj[keep, , drop = FALSE]) + diag(P0))
+      ok <- is.finite(cl) & cl > 0
+      settings$loc[ok] <- pmax(1e-4, pmin(settings$loc, cl))[ok]
+    }
+  }
   for(blk in blocks){
     # the block's start state, restored if the block is rejected
     R0 <- R; a0 <- a; G0 <- G; alpha0 <- alpha_new
@@ -1038,7 +1136,8 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
     f_acc <- rep(1, p)
     surr <- numeric(n)                    # accumulated surrogate log-likelihood change
     moved <- FALSE
-    moves <- if(do_loc) sample(c(blk, blk + p)) else sample(blk)
+    moves <- c(blk[act_s[blk]], (blk + p)[act_l[blk]])
+    moves <- moves[sample.int(length(moves))]
     for(k in moves){
       scale <- k <= p
       j <- if(scale) k else k - p
@@ -1074,10 +1173,29 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
     }
     if(!moved) next
     settings$n_out <- settings$n_out + 1
-    ll_new <- unlist(parallel::mclapply(seq_len(n), function(s){
+    # The block's exact check: one likelihood per subject. Forking n_cores
+    # children for it costs more than the likelihoods themselves when they
+    # are cheap (518 subjects x ~100 trials: about 30 ms in this process
+    # against 230 ms forked from a fit's process, eight times per iteration),
+    # so the first checks are timed both ways, three each, and the faster way
+    # is kept (settings$check_serial). The values do not depend on the way.
+    ll_one <- function(s){
       x <- matrix(alpha_new[, s], nrow = 1, dimnames = list(NULL, pn))
       as.numeric(calc_ll_manager(x, dadm = sampler$data[[s]], model = sampler$model, r_cores = r_cores))
-    }, mc.cores = n_cores))
+    }
+    serial <- if(n_cores <= 1) TRUE else settings$check_serial
+    timing <- is.null(serial)
+    if(timing) serial <- length(settings$check_time$serial) <= length(settings$check_time$parallel)
+    t_check <- proc.time()[["elapsed"]]
+    ll_new <- if(serial) unlist(lapply(seq_len(n), ll_one)) else
+      unlist(parallel::mclapply(seq_len(n), ll_one, mc.cores = n_cores))
+    if(timing){
+      t_check <- proc.time()[["elapsed"]] - t_check
+      if(serial) settings$check_time$serial <- c(settings$check_time$serial, t_check)
+      else settings$check_time$parallel <- c(settings$check_time$parallel, t_check)
+      if(length(settings$check_time$parallel) >= 3)
+        settings$check_serial <- min(settings$check_time$serial) <= min(settings$check_time$parallel)
+    }
     lr_out <- sum(ll_new - prev_ll) - sum(surr)
     if(is.finite(lr_out) && log(runif(1)) < lr_out){
       settings$acc_out <- settings$acc_out + 1
@@ -1108,8 +1226,8 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
   settings$iter <- settings$iter + 1
   if(!frozen){
     target <- scale_move_target * max(settings$r_block, scale_move_r_floor)
-    settings$step <- exp(log(settings$step) + gain * (acc - target))
-    if(do_loc) settings$loc <- exp(log(settings$loc) + gain * (acc_loc - target))
+    settings$step[act_s] <- exp(log(settings$step[act_s]) + gain * (acc[act_s] - target))
+    if(do_loc) settings$loc[act_l] <- exp(log(settings$loc[act_l]) + gain * (acc_loc[act_l] - target))
     # the running block acceptance, for the next sweep's target (in this form
     # it stays exactly 1 while every block passes)
     if(blk_n > 0) settings$r_block <- settings$r_block +
@@ -1126,7 +1244,7 @@ scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, li
     # number of blocks, from the block acceptance over a window of 40 blocks
     if(settings$win_n >= 40){
       rate <- settings$win_acc / settings$win_n
-      if(rate < scale_move_r_floor) settings$blocks <- min(p, 2 * settings$blocks)
+      if(rate < scale_move_r_floor) settings$blocks <- min(max(1, length(act)), 2 * settings$blocks)
       else if(rate > .75) settings$blocks <- max(1, settings$blocks %/% 2)
       settings$win_acc <- settings$win_n <- 0
     }

@@ -103,6 +103,14 @@ The potential stop criteria to be set are:
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
+In the \code{adapt} stage of a hierarchical model (every type but \code{single}),
+\code{min_unique} is not the only condition: adapt also continues until, over
+its last 250 iterations, the largest Rhat across chains of any subject's
+parameter is below 1.2 (checked from 250 adapt iterations on, given up at
+1000). The \code{sample} stage's proposals are built from those draws and are
+not changed once draws are kept. \code{options(emc.adapt_converge = FALSE)}
+restores the \code{min_unique}-only rule.
+
 \code{min_es} (integer): The minimum number of effective samples across all parameters in the selection
 
 \code{omit_mpsrf} (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is \code{FALSE}.

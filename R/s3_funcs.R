@@ -534,6 +534,14 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
+#' In the ``adapt`` stage of a hierarchical model (every type but ``single``),
+#' ``min_unique`` is not the only condition: adapt also continues until, over
+#' its last 250 iterations, the largest Rhat across chains of any subject's
+#' parameter is below 1.2 (checked from 250 adapt iterations on, given up at
+#' 1000). The ``sample`` stage's proposals are built from those draws and are
+#' not changed once draws are kept. ``options(emc.adapt_converge = FALSE)``
+#' restores the ``min_unique``-only rule.
+#'
 #' ``min_es`` (integer): The minimum number of effective samples across all parameters in the selection
 #'
 #' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.

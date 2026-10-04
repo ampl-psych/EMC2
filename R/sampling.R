@@ -680,6 +680,8 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   # component, whose location and scale are those of the group level it was
   # estimated at.
   lik <- if(exact) tune$lik_prec[[s]] else NULL
+  # ... in its draw-based version where there is one (create_lik_prec)
+  if(!is.null(lik$post)) lik <- lik$post
   lik_prec <- lik$prec
   prior_prec <- if(is.null(lik_prec)) NULL else tryCatch(solve(group_var), error = function(e) NULL)
   cond <- conditional_proposal(lik, prior_prec, group_mu)

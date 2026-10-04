@@ -161,6 +161,10 @@ run_emc <- function(emc, stage, stop_criteria,
                                verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
+    # the interweaving sweep's gate, once its steps have had adapt_converge$min sweeps to settle
+    if(stage == "adapt" && !legacy_sampler()){
+      emc <- gate_scale_move(emc, kernel_window, decide = chain_n(emc)[1, "adapt"] >= adapt_converge$min, verbose = verbose)
+    }
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
@@ -219,41 +223,61 @@ run_emc <- function(emc, stage, stop_criteria,
 # counts) is not, and in a hierarchical funnel the difference is large
 # (rating-work/sampler/hier/stageH1/REPORT.md). The kernel is therefore built
 # and tuned here, at the end of adapt: the sample-stage proposals are made
-# from the adapt draws and stored (add_proposals), and one more step of adapt
-# is run with that kernel, in which its step size, mixing weights and number
-# of particles are adapted. Those draws are labelled adapt and not kept.
+# from the last kernel_window adapt iterations and stored (add_proposals), and
+# one more step of adapt is run with that kernel, in which its step size,
+# mixing weights and number of particles are adapted. Those draws are
+# labelled adapt and not kept.
+#
+# A kernel that is never revisited has to be built from draws that are worth
+# it. With a group level, adapt therefore does not stop on min_unique alone
+# (about 100 iterations, while the chains still disagree: with 518 subjects
+# the kernel of a few of them was then poor, and those subjects set the
+# fit's Rhat -- 20 of 20 fits above 1.1 at max_tries;
+# rating-work/sampler/hier/stageH6/REPORT.md). It also waits until, over the
+# window the kernel is built from, the subject-level parameters agree across
+# chains (adapt_converged): the largest Rhat of alpha over the last
+# kernel_window iterations below adapt_converge$rhat, read from
+# adapt_converge$min adapt iterations on and given up at adapt_converge$max.
+# options(emc.adapt_converge = FALSE) restores the min_unique-only rule.
+kernel_window <- 250
+adapt_converge <- list(min = 250, max = 1000, rhat = 1.2)
+
+adapt_converge_on <- function(emc){
+  !legacy_sampler() && !isFALSE(getOption("emc.adapt_converge")) && emc[[1]]$type != "single"
+}
+
+# Have the adapt draws the sample-stage kernel would be built from converged?
+adapt_converged <- function(emc, n_adapt, verbose = FALSE){
+  if(!adapt_converge_on(emc)) return(TRUE)
+  if(n_adapt < adapt_converge$min) return(FALSE)
+  rhat <- max(window_rhat(emc, kernel_window))
+  ok <- rhat < adapt_converge$rhat
+  if(verbose) message(sprintf("  adapt, %d iterations: max Rhat of alpha over the last %d = %.3f%s", n_adapt, kernel_window, rhat,
+                              if(!ok && n_adapt >= adapt_converge$max) " (limit of adapt iterations reached)" else ""))
+  ok || n_adapt >= adapt_converge$max
+}
+
 tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileName, particle_factor,
                                search_width, cores_per_chain, cores_for_chains, n_blocks,
                                on_singular, r_cores){
   if (verbose) message("Tuning the sample-stage kernel")
-  emc <- add_proposals(emc, "sample", cores_per_chain*cores_for_chains, n_blocks)
-  for(i in 1:length(emc)){
-    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
-    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
-      for(k in 1:length(x)){
-        x[[k]]$proposal_counts <- rep(0, length(x[[k]]$proposal_counts))
-        x[[k]]$acc_counts <- rep(0, length(x[[k]]$proposal_counts))
-        x[[k]]$iter <- 25
-        x[[k]]$local_uses <- x[[k]]$log_eps_sum <- x[[k]]$log_eps_n <- 0
-        x[[k]]$log_ess_sum <- x[[k]]$log_ess_n <- 0
-      }
-      return(x)
-    })
-    # the scale move's step sizes: average over the tail from here on
-    sm <- attr(emc[[i]]$samples, "scale_move")
-    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_reset_tail(sm)
+  n_cores <- cores_per_chain*cores_for_chains
+  # a block of adapt-labelled iterations run with the sample-stage kernel
+  run_block <- function(emc, iter){
+    sub_emc <- subset(emc, filter = chain_n(emc)[1,"adapt"] - 1, stage = "adapt")
+    sub_emc <- auto_mclapply(sub_emc, run_stages, stage = "adapt", kernel = "sample", iter = iter,
+                             verbose = verbose, verboseProgress = verboseProgress,
+                             particle_factor = particle_factor, search_width = search_width,
+                             n_cores = cores_per_chain, mc.cores = cores_for_chains,
+                             on_singular = on_singular, r_cores = r_cores)
+    check_chain_failures(sub_emc, "adapt", fileName)
+    class(sub_emc) <- "emc"
+    if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
+    concat_emc(emc, sub_emc, iter, "adapt")
   }
-  step_size <- 100
-  sub_emc <- subset(emc, filter = chain_n(emc)[1,"adapt"] - 1, stage = "adapt")
-  sub_emc <- auto_mclapply(sub_emc, run_stages, stage = "adapt", kernel = "sample", iter = step_size,
-                           verbose = verbose, verboseProgress = verboseProgress,
-                           particle_factor = particle_factor, search_width = search_width,
-                           n_cores = cores_per_chain, mc.cores = cores_for_chains,
-                           on_singular = on_singular, r_cores = r_cores)
-  check_chain_failures(sub_emc, "adapt", fileName)
-  class(sub_emc) <- "emc"
-  if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
-  emc <- concat_emc(emc, sub_emc, step_size, "adapt")
+  emc <- add_proposals(emc, "sample", n_cores, n_blocks, window = kernel_window)
+  emc <- reset_kernel_tail(emc)
+  emc <- run_block(emc, 100)
   # Freeze the local step size at the average over the tail, and the number
   # of particles where the average effective sample size meets its target
   for(i in 1:length(emc)){
@@ -274,6 +298,69 @@ tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileNam
   return(emc)
 }
 
+# Restart the counters and averages that the tuning of the sample-stage kernel
+# is read from (tune_sample_kernel)
+reset_kernel_tail <- function(emc){
+  for(i in 1:length(emc)){
+    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
+    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
+      for(k in 1:length(x)){
+        x[[k]]$proposal_counts <- rep(0, length(x[[k]]$proposal_counts))
+        x[[k]]$acc_counts <- rep(0, length(x[[k]]$proposal_counts))
+        x[[k]]$iter <- 25
+        x[[k]]$local_uses <- x[[k]]$log_eps_sum <- x[[k]]$log_eps_n <- 0
+        x[[k]]$log_ess_sum <- x[[k]]$log_ess_n <- 0
+      }
+      return(x)
+    })
+    # the scale move's step sizes: average over the tail from here on
+    sm <- attr(emc[[i]]$samples, "scale_move")
+    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_reset_tail(sm)
+  }
+  emc
+}
+
+# Rhat (not split) of every subject x parameter alpha across the chains, over
+# the last n iterations of each chain. A few subjects whose chains sit apart
+# for a whole window are what a kernel built too early leaves behind; the
+# mean over entries (burn's criterion) does not show them
+# (rating-work/sampler/hier/stageH6b/REPORT.md, calibration).
+window_rhat <- function(emc, n){
+  idx <- emc[[1]]$samples$idx
+  it <- max(1, idx - n + 1):idx
+  n <- length(it)
+  M <- lapply(emc, function(x) rowMeans(x$samples$alpha[, , it, drop = FALSE], dims = 2))
+  V <- mapply(function(x, m) (rowMeans(x$samples$alpha[, , it, drop = FALSE]^2, dims = 2) - m^2) * n / (n - 1),
+              emc, M, SIMPLIFY = FALSE)
+  W <- Reduce(`+`, V) / length(V)
+  Mbar <- Reduce(`+`, M) / length(M)
+  B <- n * Reduce(`+`, lapply(M, function(m) (m - Mbar)^2)) / (length(M) - 1)
+  r <- sqrt(((n - 1) / n * W + B / n) / W)
+  r[!is.finite(r)] <- Inf
+  r
+}
+
+# The interweaving sweep's gate (scale_move_gate), from the sweeps since its
+# last call and the group-level draws of the last n_iter iterations
+gate_scale_move <- function(emc, n_iter, decide = TRUE, verbose = FALSE){
+  sm <- lapply(emc, function(x) attr(x$samples, "scale_move"))
+  if(any(sapply(sm, is.null)) || emc[[1]]$type != "standard") return(emc)
+  idx <- emc[[1]]$samples$idx; it <- max(2, idx - n_iter + 1):idx
+  tv <- do.call(cbind, lapply(emc, function(x) apply(x$samples$theta_var[, , it, drop = FALSE], 3, diag)))
+  p <- nrow(tv)
+  mu <- if(is.null(emc[[1]]$group_designs) && nrow(emc[[1]]$samples$theta_mu) == p)
+    do.call(cbind, lapply(emc, function(x) x$samples$theta_mu[, it, drop = FALSE])) else NULL
+  sm <- scale_move_gate(sm, var_lsd = apply(.5 * log(tv), 1, stats::var),
+                        var_mu = if(is.null(mu)) NULL else apply(mu, 1, stats::var),
+                        mean_var = rowMeans(tv), n_subjects = emc[[1]]$n_subjects, decide = decide)
+  for(i in seq_along(emc)) attr(emc[[i]]$samples, "scale_move") <- sm[[i]]
+  if(verbose && decide){
+    dropped <- p - sum(sm[[1]]$active_scale | sm[[1]]$active_loc)
+    if(dropped > 0) message(sprintf("  sweep gate: %d of %d parameters left out of the sweep", dropped, p))
+  }
+  emc
+}
+
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1,
                        kernel = NULL)
@@ -290,7 +377,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   return(sampler)
 }
 
-add_proposals <- function(emc, stage, n_cores, n_blocks){
+add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
   legacy <- legacy_sampler()
   # The sample stage's proposals are built once and then re-used at every step
   # and in every later call (see tune_sample_kernel); only the legacy sampler
@@ -317,7 +404,7 @@ add_proposals <- function(emc, stage, n_cores, n_blocks){
     # if(!is.null(emc[[1]]$g_map_fixed)){
     #   emc <- create_eff_proposals_lm(emc, n_cores)
     # } else{    }
-    emc <- create_eff_proposals(emc, n_cores)
+    emc <- create_eff_proposals(emc, n_cores, window = window)
   }
   if(stage %in% c("adapt", "sample") && !legacy && emc[[1]]$type != "single"){
     emc <- create_lik_prec(emc, n_cores)
@@ -348,9 +435,19 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-# Likelihood precision of every subject for the local kernel (new_particle),
-# evaluated at the mean of the subject's recent draws (the window
-# create_chain_proposals uses). One estimate, shared by the chains.
+# Likelihood precision of every subject (new_particle, scale_move_standard),
+# from the subject's recent draws (the window create_chain_proposals uses).
+# One estimate, shared by the chains. Two versions:
+# - by finite differences at the mean of the draws (lik_precision): `prec`,
+#   `lin`. The interweaving sweep's surrogate.
+# - for type "standard", from the covariance of the draws themselves
+#   (lik_precision_draws): `post`, a list(prec, lin) that the particle step
+#   uses in place of the first where it exists. The finite differences give
+#   the curvature at one point; a subject whose likelihood is skewed or
+#   ridge-shaped has a posterior much wider than that curvature says (in the
+#   Eisenberg Simon fit of 518 subjects the local proposal of the worst
+#   subjects was 2-3 times too narrow in t0 and B, and those subjects set the
+#   fit's Rhat; rating-work/sampler/hier/stageH6/REPORT.md, stageH6b).
 create_lik_prec <- function(emc, n_cores){
   idx <- emc[[1]]$samples$idx
   history_idx <- unique(pmax(1, round(idx - min(250, idx/1.5)):idx - 1))
@@ -358,13 +455,110 @@ create_lik_prec <- function(emc, n_cores){
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
                     by_subject = T, merge_chains = T, return_mcmc = F,
                     remove_dup = F, remove_constants = F)
+  group <- window_group_level(emc, history_idx, dim(alpha)[3])
   lik_prec <- auto_mclapply(1:emc[[1]]$n_subjects, function(sub){
     draws <- matrix(alpha[, sub, ], nrow = dim(alpha)[1], dimnames = list(dimnames(alpha)[[1]], NULL))
-    tryCatch(lik_precision(rowMeans(draws), apply(draws, 1, stats::sd), emc[[1]]$data[[sub]], emc[[1]]$model),
-             error = function(e) NULL)
+    lik <- tryCatch(lik_precision(rowMeans(draws), apply(draws, 1, stats::sd), emc[[1]]$data[[sub]], emc[[1]]$model),
+                    error = function(e) NULL)
+    if(!is.null(group) && !is.null(lik)){
+      lik$post <- tryCatch(lik_precision_draws(draws, group$prec, group$mu[, sub], lik, n_chains = length(emc)),
+                           error = function(e) NULL)
+    }
+    lik
   }, mc.cores = n_cores)
   for(i in 1:length(emc)) emc[[i]]$lik_prec <- lik_prec
   return(emc)
+}
+
+# The group level over the window the likelihood precisions are built from:
+# the mean group precision and each subject's mean group-level mean
+# (p x n_subjects). NULL when the draw-based likelihood precision does not
+# apply: types other than "standard", nuisance parameters, too few draws.
+window_group_level <- function(emc, history_idx, n_draws){
+  x1 <- emc[[1]]
+  if(x1$type != "standard" || any(x1$nuisance) || n_draws < 100) return(NULL)
+  tryCatch({
+    prec <- 0; mu <- 0
+    for(x in emc){
+      for(i in history_idx) prec <- prec + chol2inv(chol(x$samples$theta_var[, , i]))
+      fs <- filtered_samples(x, history_idx, type = x1$type)
+      mu <- mu + if(is.null(fs$subj_mu)) matrix(rowMeans(fs$theta_mu), nrow(fs$theta_mu), x1$n_subjects)
+                 else apply(fs$subj_mu, 1:2, mean)
+    }
+    n <- length(emc) * length(history_idx)
+    out <- list(prec = prec / n, mu = mu / length(emc))
+    if(!all(is.finite(out$prec)) || !all(is.finite(out$mu)) || nrow(out$mu) != nrow(out$prec)) return(NULL)
+    out
+  }, error = function(e) NULL)
+}
+
+# Likelihood precision of one subject from its draws: the inverse of their
+# covariance V minus the group precision P of the same window, i.e. the
+# likelihood's curvature averaged over the posterior instead of taken at one
+# point. In the coordinates in which P is the identity the draws' precision
+# is M = P^-1/2 V^-1 P^-1/2 and the likelihood's is M - I.
+# - Directions in which M - I is clearly positive take the draws' estimate.
+#   "Clearly": an eigenvalue of M - I above tau, where tau is at least the
+#   size the largest eigenvalue reaches by sampling noise alone for p
+#   parameters and the draws' effective number, (1 + sqrt(p / ESS))^2 - 1.
+# - In the other directions the draws show the prior: either the group level
+#   is collapsed (a funnel), where the difference is noise and only the
+#   finite differences `fd` know the likelihood, or the likelihood says little
+#   there. They take the finite-difference estimate -- but no more than tau,
+#   because the draws do rule out more than that: a curvature taken at one
+#   point of a skewed likelihood can be far too large for a posterior that is
+#   in fact as wide as the prior.
+# The linear term puts the conditional mean at the draws' mean when the group
+# level is the window's (P, mu); in the directions left to `fd` it is the
+# finite-difference quadratic's, taken with the other directions held at the
+# draws' mean (its cross terms with them belong in the linear term: without
+# that the conditional proposal sits many posterior SDs off).
+# draws: p x N, in n_chains blocks of equal length. Returns list(prec, lin,
+# n_draws = number of directions taken from the draws, n_capped, tau, ess),
+# or NULL (too few distinct draws, or not computable).
+lik_precision_draws <- function(draws, P, mu, fd, tau = .5, n_chains = 1){
+  p <- nrow(draws); N <- ncol(draws)
+  if(length(unique(draws[1, ])) < max(50, 5 * p)) return(NULL)
+  blk <- rep(seq_len(n_chains), each = N %/% n_chains, length.out = N)
+  ess <- stats::median(sapply(seq_len(p), function(j) sum(tapply(draws[j, ], blk, function(x)
+    tryCatch(as.numeric(coda::effectiveSize(x)), error = function(e) 1)))))
+  tau <- max(tau, (1 + sqrt(p / max(ess, p)))^2 - 1)
+  m <- rowMeans(draws)
+  Vinv <- chol2inv(chol(stats::cov(t(draws))))
+  e <- eigen(P, symmetric = TRUE)
+  if(any(e$values <= 0)) return(NULL)
+  Ph <- e$vectors %*% (sqrt(e$values) * t(e$vectors))        # P^1/2
+  Pih <- e$vectors %*% (t(e$vectors) / sqrt(e$values))       # P^-1/2
+  M <- Pih %*% Vinv %*% Pih
+  eg <- eigen((M + t(M)) / 2, symmetric = TRUE)
+  lam <- eg$values - 1
+  trusted <- lam > tau
+  U <- eg$vectors[, trusted, drop = FALSE]
+  mt <- drop(Ph %*% m); mut <- drop(Ph %*% mu)
+  Lw <- U %*% (lam[trusted] * t(U))
+  lw <- drop(U %*% (eg$values[trusted] * drop(t(U) %*% mt) - drop(t(U) %*% mut)))
+  n_capped <- 0
+  if(!all(trusted)){
+    C <- eg$vectors[, !trusted, drop = FALSE]                 # basis of the other directions
+    Fw <- Pih %*% fd$prec %*% Pih
+    Fc <- t(C) %*% Fw %*% C
+    ef <- eigen((Fc + t(Fc)) / 2, symmetric = TRUE)
+    Vc <- C %*% ef$vectors
+    phi <- pmax(ef$values, 0)
+    capped <- phi > tau
+    n_capped <- sum(capped)
+    phi[capped] <- tau
+    Lw <- Lw + Vc %*% (phi * t(Vc))
+    lfd <- drop(t(Vc) %*% (Pih %*% fd$lin - Fw %*% (U %*% drop(t(U) %*% mt))))
+    lemp <- (phi + 1) * drop(t(Vc) %*% mt) - drop(t(Vc) %*% mut)
+    lw <- lw + drop(Vc %*% ifelse(capped, lemp, lfd))
+  }
+  L <- Ph %*% Lw %*% Ph
+  L <- (L + t(L)) / 2
+  lin <- drop(Ph %*% lw)
+  if(!all(is.finite(L)) || !all(is.finite(lin))) return(NULL)
+  dimnames(L) <- dimnames(fd$prec); names(lin) <- names(fd$lin)
+  list(prec = L, lin = lin, n_draws = sum(trusted), n_capped = n_capped, tau = tau, ess = ess)
 }
 
 check_progress <- function (emc, stage, iter, stop_criteria,
@@ -423,12 +617,16 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   else {
     adapted <- TRUE
   }
+  # max_tries reached with only adapt's convergence rule unmet is not worth
+  # the warning below: the kernel is then built from the draws there are
+  enough_unique <- adapted
+  if(stage == "adapt" && adapted) adapted <- adapt_converged(emc, total_iters_stage, verbose)
   done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   if (trys_done & iter_done) {
-    if(!(es_done & gd$gd_done & adapted)){
+    if(!(es_done & gd$gd_done & enough_unique)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
@@ -545,9 +743,25 @@ set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
 }
 
 
-create_eff_proposals <- function(emc, n_cores){
+# window: build them from the last `window` adapt iterations of each chain
+# only (the draws adapt_converged() judged), or from as many more as the joint
+# covariance of a subject's parameters and the group level needs (twice its
+# dimension in draws).
+create_eff_proposals <- function(emc, n_cores, window = NULL){
   samples_merged <- merge_chains(emc)
-  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc))
+  full_filter <- NULL
+  if(!is.null(window) && chain_n(emc)[1, "sample"] == 0){
+    n_it <- emc[[1]]$samples$idx
+    n_adapt <- chain_n(emc)[1, "adapt"]
+    p <- sum(!emc[[1]]$nuisance)
+    window <- max(window, ceiling(2 * (2 * p + p * (p + 1) / 2) / length(emc)))
+    if(window < n_adapt){
+      it <- (n_it - window + 1):n_it
+      full_filter <- unlist(lapply(seq_along(emc), function(i) (i - 1) * n_it + it))
+    }
+  }
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc),
+                                  full_filter = full_filter)
 
   type <- emc[[1]]$type
   components <- attr(emc[[1]]$data, "components")
