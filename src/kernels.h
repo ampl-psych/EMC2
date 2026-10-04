@@ -1200,6 +1200,7 @@ struct BetaBinomialKernel : DBMBaseKernel {
                  n_trial = n_trial_pending;
                  if(belief_reset_ && belief_reset_[r]) {
                    n_hit = 0.0; n_trial = 0.0;
+                   n_hit_pending = 0.0; n_trial_pending = 0.0;
                  }
                  const double a_t = a0_col[r] + n_hit;
                  const double b_t = b0_col[r] + (n_trial - n_hit);
