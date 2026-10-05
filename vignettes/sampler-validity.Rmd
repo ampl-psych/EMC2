@@ -1,6 +1,6 @@
 ---
 title: "Sampler Validity"
-description: "Why the particle step was biased in high dimensions, the exact and (in the sample stage) fixed kernel that replaces it, and the evidence that it is calibrated"
+description: "Why the particle step was biased in high dimensions, the exact and (in the sample stage) fixed kernel that replaces it, the evidence that it is calibrated, and how it compares with Stan"
 author: "Andrew Heathcote"
 output: rmarkdown::html_document
 vignette: >
@@ -374,7 +374,7 @@ an SBC cell and two real datasets under the sweep. It passes on simulated data w
 (the twelfth, `m35_standard_500`, was already the grid's hardest cell pre-sweep and fails only
 barely); the SBC cell it does not even touch (`diagonal-gamma`, where `do_scale` is `FALSE`) shows
 no regression either. Two things did not survive contact with real data, and are open issues
-(section 8), not resolved by this vignette:
+(section 9), not resolved by this vignette:
 
 - On forstmann (19-subject DDM), the scale move's step size ran away to 6-11 log-SD units on the
   weakly-identified `sv`/`SZ` parameters (every other parameter: 0.1-0.4) -- not a new failure
@@ -490,7 +490,114 @@ judges the subject level by a quantile of its Rhats (99%: at most 1 in 100 entri
 instead of the largest, which keeps the criterion from tightening as subjects are added; it is an option,
 not the default.
 
-## 8. What is still open
+A note on the numbers. Every Rhat quoted before this subsection (sections 6-7) and the `fit()` Rhat
+columns of section 8 are coda's corrected estimate, read by the old rule, as `fit()` reported them at
+the time. The same chains read lower on the split-Rhat, by most for the largest values: on Eisenberg at
+1000 draws the largest of the 4144 subject-level values was 1.17 by coda against 1.05 by the split-Rhat
+(median of five runs; `rating-work/sampler/hier/stageH6c/REPORT_round2.md`, section 3). Under the rule as
+it now is (`rating-work/sampler/hier/stageH6d/REPORT_impl.md`, section 2; five runs per cell): Eisenberg
+stops on its criterion in 3 of 5 `fit()` runs (largest split-Rhat 1.09 [1.07, 1.21], a median 1061 draws
+kept, 37 minutes against 63, every group-level quantity within 2.3 Monte-Carlo SEs of Stan); the `k25`
+funnel cells and `m35_standard_500` pass in 5 of 5 (before: 4-5 and 3 of 5) in 0.5-0.65 of the time;
+forstmann passes in 1 of 5, as before.
+
+## 8. The sampler against Stan (2026-10-05)
+
+Sections 3-7 compare EMC2 with itself, with an exact Gibbs reference on a conjugate model, and with
+SBC. For the cases that gave trouble there is no exact answer, so Stan's NUTS was used as the gold
+standard on exactly EMC2's posterior: same data, priors (the Huang-Wand auxiliary variables integrated
+out in closed form), bounds and per-trial likelihood floor; the Stan group level checked against the
+exact Gibbs reference on the conjugate model `p25`, and each Stan likelihood against `calc_ll_manager`
+(`rating-work/sampler/stan/REPORT_refs.md`). EMC2 (`e9c820a9`: section 7's changes up to the many-subject
+ones, before the stop rule of section 7's last subsection) was then run on the same `emc` objects: per
+case five `fit()` runs with defaults and 3-15 long runs (5000-10000 sample draws, no stop rule), 3 chains
+each, with the legacy sampler on two cases and a `DDM_EPS = 1e-6` build on three
+(`rating-work/sampler/stan/REPORT_compare.md`; 109 jobs on NCI's Gadi). Every group mean, log group SD
+and group correlation, every parameter of three subjects (draws) and every subject parameter (summaries)
+were compared.
+
+**Verdicts.** "Agrees" = within Monte-Carlo error of Stan, judged as described below. The `fit()` column
+is coda's Rhat read by the old stop rule (see the note at the end of section 7). ESS ratio = EMC2's
+effective draws per core-hour over Stan's, for the median group-level quantity and the worst one.
+
+| case | Stan's verdict | EMC2 `fit()`: alpha Rhat at stop, median [range] of 5 (coda, old rule) | EMC2 long runs against Stan | ESS per core-hour, EMC2 / Stan: median; worst | EMC2's verdict |
+|---|---|---|---|---|---|
+| `p25` conjugate funnel | no problem; exact posterior recovered | exact (section 7) | -- | -- | right |
+| `k25_n20_N200` (LNR funnel) | stiff but sampled: ~1000 leapfrogs per draw | 1.14 [1.11, 1.18] | agrees (6 x 10000) | 2.6; 0.6 | right but slow; partly the posterior |
+| `k25_n8_N500` | no problem (Rhat <= 1.009) | 1.14 [1.13, 1.28] | agrees (5 x 10000) | 0.52; 0.012 (log SD of `t0`) | right but slow |
+| `ddm_floor` (simulated, `sv` / `SZ` near the floor) | no problem | 1.59 [1.21, 2.00] | agrees (5 x 10000) | 7.6; 0.15 | right but slow |
+| `ddm_in` (simulated, `sv` / `SZ` inside) | no problem, costly per gradient | 1.10 [1.07, 1.22] | agrees (5 x 5000) | 44; 4.1 | right but slow; cheaper than NUTS |
+| forstmann, `sv` | no problem; the `sv` plateau is real and crossed | 1.57 [1.33, 1.87] | agrees (5 x 10000) | 15; 0.020 (`mu_sv`) | right but slow |
+| forstmann, `sv` + `SZ` | no problem; same plateau | 1.42 [1.20, 1.84] | agrees within a wide error (15 x 10000; below) | 97; 0.54 | right but very slow |
+| Eisenberg (RDM, 518 subjects) | no problem: 4144 alphas Rhat <= 1.009 | 1.22 [1.09, 1.54] | agrees (3 x 5000) | 0.51; 0.25 (`mu_v`) | right but slow |
+| `many_plain` (simulated RDM, 300 subjects) | at its tree-depth limit | 1.14 [1.07, 1.23] | agrees (3 x 5000) | 0.97; 0.33 | right but slow; NUTS works hard too |
+| `many_C` (300 subjects, correlated funnel) | partly a posterior problem: 32-50 effective draws of the funnel SDs | 2.14 [1.48, 3.31] | agrees within a very wide error (3 x 5000) | 0.54; 0.011 | posterior hard for both |
+
+So EMC2 gets the right answer everywhere, and on six cases (`k25_n8_N500`, both simulated DDMs, both
+forstmann models, Eisenberg) it is slow where NUTS has no difficulty at all. It is not generally slower:
+per core-hour it is 8-97 times cheaper than NUTS on the typical group-level quantity of the DDMs, whose
+gradients are expensive, and comparable on LNR and RDM. What it lacks is mixing on a few group-level
+directions -- a funnel's neck, a likelihood plateau at a parameter's bound, a ridge along a weakly
+identified combination -- and those set `fit()`'s Rhat and the Monte-Carlo error that matters (on the
+slowest quantity, 0.011-0.6 of NUTS's rate on eight of nine cases). In long runs a chain enters a neck or
+a plateau and stays 50-5000 iterations; NUTS's longest stay below its own 5% point is 2-8 draws.
+
+**How Monte-Carlo error was judged.** A single run can look wrong: `ddm_in`'s first long run had
+`mu_v_Sright` and `mu_sv` 8-9 ESS-based standard errors from Stan, because each of its three chains sat at
+its own level for all 5000 draws, an offset the within-chain ESS cannot see. So the comparison uses (i) the
+larger of the ESS-based standard error and a chain-batch one (each chain a batch, so offsets between chains
+count), (ii) the share of EMC2's draws beyond Stan's 5% and 95% points, and (iii) several independent long
+runs per case. The calibration that settles whether a remaining difference is EMC2's error or a different
+posterior is EMC2 against itself: z-scores of the `fit()` runs against the long runs, built the same way. If
+EMC2 sampled a different posterior, EMC2-vs-EMC2 would be tighter than EMC2-vs-Stan. SD of the z-scores over
+every subject parameter:
+
+| case (subject parameters) | `fit()` vs Stan | long vs Stan | `fit()` vs long |
+|---|---|---|---|
+| `k25_n20_N200` (500) | 1.21 | 1.48 | 1.36 |
+| `k25_n8_N500` (200) | 1.85 | 1.31 | 1.57 |
+| `ddm_floor` (90) | 0.91 | 0.84 | 0.96 |
+| `ddm_in` (90) | 1.13 | 1.18 | 1.07 |
+| forstmann `sv` (152) | 1.41 | 1.29 | 1.76 |
+| forstmann `sv` + `SZ` (171) | 0.93 | 1.48 | 1.30 |
+| Eisenberg (4144) | 1.19 | 1.45 | 1.40 |
+| `many_plain` (1800) | 0.99 | 1.46 | 1.32 |
+| `many_C` (2400) | 1.46 | 1.38 | 1.22 |
+
+The z-scores are 1.2-1.5 times too wide, and equally too wide between EMC2's own runs: the excess is EMC2's
+Monte-Carlo error being under-stated by its ESS (by about 1.5-2 in variance), not a different posterior. With
+chain-batch errors the group-level z-scores have SD near 1 against Stan, and the largest group-level |z| per
+case is 2.2-3.3 over 49-425 quantities. The literal criterion first planned (ESS-based |z| < 4 and SD ratio in
+[0.9, 1.1] on every quantity) is failed for that reason by every case but `ddm_floor` and `ddm_in`'s `fit()`
+runs.
+
+**forstmann with `sv` + `SZ`: the hardest case for EMC2.** Group means agree, but in 2 of 15 long runs a
+chain moved onto a region where `SZ` sits at its lower bound for every subject (group mean -2.3 on the probit
+scale against the bound -2.33, log group SD -5 to -11) and stayed up to 8900 iterations. The region is real:
+the likelihood there is as high as at Stan's mode, so with `SZ` that small its value hardly matters and the
+group SD can collapse; Stan visits it too (0.8% of its draws), EMC2 4.6% with a run-level SE of 2.9%. It is not
+the DDM's precision (the log-likelihood at `DDM_EPS` 5e-3 and 1e-6 differs by under 1e-3 per subject there).
+Within Monte-Carlo error, but that error is set by whether a run happens to fall onto the plateau: 45 chains x
+10000 draws leave a 3% standard error on a 1% tail where NUTS needs four chains of 1000. EMC2 cannot pin the
+`SZ` group level of this model at any practical run length.
+
+**The legacy sampler was wrong, with good Rhat.** `options(emc.sampler = "legacy")`, three `fit()` runs each:
+
+| | alpha Rhat at stop | group means / log SDs / correlations: largest \|z\| | subject parameters beyond \|z\| = 4 | SD ratios |
+|---|---|---|---|---|
+| Eisenberg | 1.01-1.02 | 26 / 46 / 26 | 2966 of 4144 | 0.53-2.46 |
+| forstmann, `sv` + `SZ` | 1.04-1.09 | 9.2 / 25 / 16 | 50 of 171 | 0.33-1.08 |
+
+It converges quickly and confidently to the wrong distribution (section 2's kernel is not a valid MCMC
+kernel), which is the strongest single argument for the changes since 2026-09-30, and a reminder that a
+good convergence diagnostic is not evidence of a correct answer.
+
+Three findings for the package came out of matching the target (none changes a posterior here; section 9):
+`fit()` stops with an error when a group covariance becomes numerically singular; the RDM's Wald survivor
+overflows for `2 B v / s^2 > 709.8`, which the sampler can reach; and the DDM's `DDM_EPS = 5e-3` changes no
+posterior, while `1e-6` costs nothing measurable at the level of a `fit()`.
+
+## 9. What is still open
 
 An earlier version of this section said that the hierarchical fits which do not converge
 (few trials per weakly identified parameter: 8-40 subjects x 200-500 trials x 25-35 parameters,
@@ -505,18 +612,45 @@ interweaving sweep of section 7.
 
 What remains, as of this writing:
 
-- **Eisenberg Simon: what is left after section 7's many-subject changes.** Two runs in five still
-  stop just above 1.1. A few subjects (`s095` `B`, `s273` `t0`, `s084` `v_lMd`) have 3-5% of their
-  posterior mass in a shoulder several SDs from the mode (Stan: skewness 2.5-3.6; not the
-  likelihood floor): a chain with Gaussian proposals enters it rarely and stays a few hundred
-  iterations, so at 1000-2000 draws a run either misses the shoulder or over-weights it. And the
-  group means of `v` and `v_lMd` sit on a ridge (the matching accumulator's rate is identified,
-  their difference barely; autocorrelation time 45-100 under every build), which single-parameter
-  moves cannot follow. Both need new moves (a local kernel with a mixture of scales for the
-  shoulders; a joint group-level move for the ridge). forstmann's `sv` stays slow for the same kind
-  of reason (its group mean on a likelihood plateau), which no step-size change addresses. One
+- **Slow group-level directions (section 8).** EMC2 is right on every case compared with Stan, but
+  slow on funnel necks, plateaus at a bound and ridges, where NUTS is not. On Eisenberg two runs in
+  five still end above 1.1 under the current rule. A few subjects (`s095` `B`, `s273` `t0`, `s084`
+  `v_lMd`) have 3-5% of their posterior mass in a shoulder several SDs from the mode (Stan: skewness
+  2.5-3.6; not the likelihood floor); a chain enters it every 300-900 draws and stays 50-300, so a
+  1000-2000 draw run either misses it or over-weights it, but pooled over 15 chains x 3000 draws every
+  build's shoulder mass equals Stan's (`stageH6c/REPORT_round2.md`): run length, not a bias. The group
+  means of `v` and `v_lMd` sit on a ridge (the matching accumulator's rate is identified, their
+  difference barely; autocorrelation time 45-100). Joint group-level moves along the slowest
+  directions (shift, rescale, shear, with partial non-centring) were prototyped and are exact
+  (`rating-work/sampler/hier/stageH6c/`, `h6c_candidate.patch`): they halve the ridge's
+  autocorrelation time on a simulated 300-subject cell, but on Eisenberg none is a gain per minute
+  (+15-62% time for a ridge 1.25-1.5 times faster), so they are set aside, not in the package.
+  forstmann's `sv` stays slow for the same kind of reason (its group mean on a likelihood plateau),
+  and with `sv` + `SZ` a plateau with `SZ` at its bound that EMC2 enters rarely and leaves after
+  thousands of iterations means EMC2 cannot pin that model's `SZ` group level (section 8). One
   Eisenberg fit in 54 never left the likelihood floor after `preburn` (one chain with every
   subject's `v_iMd` at its bound): open.
+- **`fit()` stops on a singular group covariance.** 3 of the 90 default-build runs of section 8 (LNR
+  and DDM cases) ended with "group covariance became computationally singular" in the sample stage;
+  `on_singular` defaults to `NULL` (no recovery). A retry by default, or a guard in the group step, is
+  an option.
+- **The RDM's Wald survivor overflows** (`pigt0()` drops the loser's term when `2 B v / s^2 > 709.8`).
+  Reached once in section 8 by the current sampler (a simulated subject, 745; Stan's maximum 587) and
+  by the legacy sampler on Eisenberg (1021). A log-scale evaluation removes it.
+- **EMC2's ESS is optimistic** by about 1.5-2 in variance (section 8), because chains carry offsets
+  that last longer than the within-chain autocorrelation the estimator sees; `stop_criteria$min_es`
+  inherits that.
+- **DDM precision.** `DDM_EPS = 5e-3` changes no posterior in section 8, and `1e-6` costs nothing
+  measurable at the level of a `fit()` (x1.17-1.20 per likelihood evaluation, diluted by the rest of
+  an iteration). Making 1e-6 the default is for the DDM's maintainers to decide; the start-point
+  integration's absolute tolerance, which cannot resolve densities near the floor, is a separate point.
+- **The stop rule (section 7).** `max_tries` does not bind until 1000 draws are kept (the discard keeps
+  lowering the count: one Eisenberg run generated 3300 draws in 33 checks to keep 1029); a hard limit is
+  a one-line change with its own consequence (fewer than 1000 draws). `gd_quantile = .99` costs nothing
+  on the replays and stops the small funnel cells at 1200-1400 draws instead of the limit; whether it
+  becomes the default wants more designs replayed and a report at the stop of which entries were let
+  through. With burn ending sooner, forstmann's smallest group-level ESS was 32 against 46 (five runs
+  each, p = .10): read as run-to-run spread, worth a look if forstmann is refitted.
 - **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
   than that on models that are not shaped like the `k25` reproducer, even where there is no
   funnel.
@@ -528,7 +662,10 @@ What remains, as of this writing:
   (`stageH6b/many_cells.R`, `variant = "C"`), in which only `v_Cd + v_lMd:Cd / 2` is identified per
   subject and the group SDs of the two parameters are not. Every build fails it (subject-level Rhat
   1.5-2.6), the fixed-kernel builds worse than `002a5c6f`. Scaling one parameter's deviations moves
-  the identified combination, so this needs a joint (rotated) group-level move; not implemented.
+  the identified combination, so this needs a joint (rotated) group-level move. The prototype above
+  with a shear brings it into agreement with Stan on all 24 group-level quantities but still not to
+  Rhat 1.1; NUTS itself gets only 32-50 effective draws of its funnel SDs (section 8: hard for both).
+  Not implemented.
 - **Only `type = "standard"` runs the sweep** (`do_scale`); `diagonal` and `blocked` share enough
   of the code path that they probably only need the call site enabled, but this is unconfirmed.
   `factor`, `infnt_factor` and `SEM` are untested for the move; `diagonal-gamma` was incidentally
@@ -536,10 +673,10 @@ What remains, as of this writing:
 - **No sweep in burn**; `init()` still starts every chain in the neck (subjects bunched at the
   group mean, group SD about 0.14 for every parameter), and `preburn`/`burn` keep the old search
   step.
-- **The exact reference is R-only for the conjugate model** (`stageH1/exact_gibbs.R`); Stan (NUTS)
-  references now exist for it and for the `k25` cells, forstmann and Eisenberg
-  (`rating-work/sampler/stan/REPORT_refs.md`). The systematic comparison of the final build with
-  all of them is still to come.
+- **References.** The exact reference is R-only for the conjugate model (`stageH1/exact_gibbs.R`);
+  the Stan references of section 8 cover LNR, RDM and DDM cases but no rating model (an MTLNR
+  reference was judged unnecessary: `m35_standard_500` shows the same slow-mixing signature as the
+  `k25` cells, which agree with Stan), and none for `type` other than `standard`.
 - **Dispersed starts** (as an alternative or supplement to fixing the mixing) have not been tried.
 
 ## References
