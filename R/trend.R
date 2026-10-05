@@ -1572,9 +1572,11 @@ make_data_unconditional <- function(data, pars, design, model,
       }
       attr(ffunctions_post[[i]], "output_column_names") <- out_names
       ffun_cols <- c(ffun_cols, out_names)
-      for(col in out_names) {
-        dadm_full[[col]][] <- NA
-      }
+      # This is perhaps confusing, but we cannot set the output of post-trial functions to NA, since a pre-trial function may need this to run...
+      # This probably deserves a bit more thinking.
+      # for(col in out_names) {
+      #   dadm_full[[col]][] <- NA
+      # }
     }
   }
 
