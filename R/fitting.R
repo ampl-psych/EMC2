@@ -30,6 +30,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
     if(is.null(stop_criteria$omit_mpsrf)) stop_criteria$omit_mpsrf <- TRUE
   }
+  if(!is.null(stop_criteria$gd_quantile)){
+    q <- stop_criteria$gd_quantile
+    if(!is.numeric(q) || length(q) != 1 || is.na(q) || q <= 0 || q > 1) stop("gd_quantile must be a single number in (0, 1]")
+    if(is.null(stop_criteria$max_gd)) stop("gd_quantile only applies to max_gd")
+  }
   # min_es also needs a selection: without one, check_progress() has nothing to
   # take the effective size of and the criterion is silently always satisfied.
   if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
@@ -627,7 +632,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   }
   gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose=FALSE,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
-                 n_blocks)
+                 n_blocks, gd_quantile = stop_criteria[["gd_quantile"]])
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
@@ -687,75 +692,102 @@ check_progress <- function (emc, stage, iter, stop_criteria,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
 
-check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
-                     selection, iter, n_blocks = 1)
-{
-  get_gds <- function(emc,omit_mpsrf, selection, stage) {
-    gd_out <- c()
-    alpha <- NULL
-    for(select in selection){
-      gd <- unlist(gd_summary.emc(emc, selection = select, stage = stage,
-                                  omit_mpsrf = omit_mpsrf, stat = NULL))
-      gd_out <- c(gd_out, c(gd))
-      if(select == "alpha"){
-        alpha <- gd
+# The Rhats a stop rule reads, over the draws of `stage` after its first
+# `filter`: the split-Rhat (split_rhat()) of every selected parameter. The
+# subject-level parameters are taken from the stored array in one pass --
+# through gd_summary() they cost one call per subject, which with several
+# hundred subjects took longer than the sampling between two checks -- and
+# are returned parameter by parameter, subjects within, as gd_summary() does.
+stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
+  gd_out <- c(); alpha <- NULL; alpha_all <- NULL; other <- c()
+  for(select in selection){
+    if(select == "alpha" && omit_mpsrf){
+      its <- lapply(emc, function(x){
+        it <- which(x$samples$stage[seq_len(x$samples$idx)] == stage)
+        if(filter > 0) it <- it[-seq_len(min(filter, length(it)))]
+        it
+      })
+      n <- min(lengths(its))
+      p <- dim(emc[[1]]$samples$alpha)[1]; ns <- dim(emc[[1]]$samples$alpha)[2]
+      if(n < 4){
+        gd <- rep(NaN, p * ns); is_const <- rep(FALSE, p * ns)
+      } else{
+        X <- vapply(seq_along(emc), function(i){
+          a <- emc[[i]]$samples$alpha[, , its[[i]][seq_len(n)], drop = FALSE]
+          t(matrix(a, p * ns, n))                           # draws x (subjects, parameters within)
+        }, matrix(0, n, p * ns))
+        # an entry with one value in every draw of every chain is not a sampled
+        # quantity: left out of the criterion, as get_pars() leaves it out
+        is_const <- rowSums(colSums(abs(X - rep(X[1, , 1], each = n)), dims = 1)) == 0
+        gd <- c(t(matrix(split_rhat(X), p, ns)))            # parameters, subjects within
+        is_const <- c(t(matrix(is_const, p, ns)))
       }
+      gd[is.na(gd)] <- Inf
+      alpha_all <- gd
+      gd <- gd[!is_const]
+      alpha <- gd
+    } else{
+      # get_pars() keeps draws filter:n, subset() (the discard) drops the first
+      # filter: one more here, so that both read the draws that would be kept
+      gd <- unlist(gd_summary.emc(emc, selection = select, stage = stage, filter = if(filter > 0) filter + 1 else 0,
+                                  omit_mpsrf = omit_mpsrf, stat = NULL, digits = 6))
+      gd[is.na(gd)] <- Inf
+      if(select == "alpha") alpha <- alpha_all <- gd else other <- c(other, c(gd))
     }
-    gd_out[is.na(gd_out)] <- Inf
-    return(list(gd = gd_out, alpha = alpha))
+    gd_out <- c(gd_out, c(gd))
   }
+  # alpha_all: every subject-level entry in its place, for set_tune_ess()
+  list(gd = gd_out, alpha = alpha, other = other, alpha_all = alpha_all)
+}
+
+# The number a max_gd criterion compares with its bound: the largest Rhat of
+# the selection, or, with stop_criteria$gd_quantile = q, the larger of the q
+# quantile of the subject-level (alpha) Rhats and the largest of the others.
+# With thousands of subject-level parameters the largest is set by a handful of
+# them; a quantile makes the criterion independent of the number of subjects.
+gd_top <- function(g, gd_quantile = NULL){
+  if(is.null(gd_quantile) || is.null(g$alpha) || !all(is.finite(g$alpha))) return(max(g$gd))
+  max(as.numeric(stats::quantile(g$alpha, gd_quantile)), g$other)
+}
+
+check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
+                     selection, iter, n_blocks = 1, gd_quantile = NULL)
+{
   if(is.null(max_gd) & is.null(mean_gd)) return(list(gd_done = TRUE, emc = emc))
   if(!emc[[1]]$init | !stage %in% emc[[1]]$samples$stage)
     return(list(gd_done = FALSE, emc = emc))
   if(is.null(omit_mpsrf)) omit_mpsrf <- TRUE
-  gd <- get_gds(emc,omit_mpsrf,selection, stage)
-  alpha_gd <- gd$alpha
-  gd <- gd$gd
-  if(!is.null(max_gd)){
-    ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
-  } else{
-    ok_max_gd <- TRUE
+  gd_ok <- function(g){
+    ok_max <- if(is.null(max_gd)) TRUE else all(is.finite(g$gd)) && gd_top(g, gd_quantile) < max_gd
+    ok_mean <- if(is.null(mean_gd)) TRUE else all(is.finite(g$gd)) && mean(g$gd) < mean_gd
+    ok_max & ok_mean
   }
-  if(!is.null(mean_gd)){
-    ok_mean_gd <- ifelse(all(is.finite(gd)), mean(gd) < mean_gd, FALSE)
-  } else{
-    ok_mean_gd <- TRUE
-  }
-
-  ok_gd <- ok_mean_gd & ok_max_gd
+  g <- stage_gds(emc, selection, stage, omit_mpsrf)
+  ok_gd <- gd_ok(g)
   if(!ok_gd) {
+    # Chains that are still moving into the posterior: if the diagnostic is
+    # better without the first third of the stage's draws, those are dropped
+    # for good. Decided on the largest Rhat whatever gd_quantile is: the
+    # largest is the sensitive detector of what is left of a transient.
     n_remove <- round(chain_n(emc)[,stage][1]/3)
-    samplers_short <- subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE)
-    if (is(samplers_short,"try-error")){
-      gd_short <- Inf
-    } else{
-      gd_short <- get_gds(samplers_short,omit_mpsrf,selection, stage)
-      alpha_gd_short <- gd_short$alpha
-      gd_short <- gd_short$gd
+    g_short <- tryCatch(stage_gds(emc, selection, stage, omit_mpsrf, filter = n_remove), error = function(e) NULL)
+    if(!is.null(g_short) &&
+       ((is.null(max_gd) && mean(g_short$gd) < mean(g$gd)) || (!is.null(max_gd) && max(g_short$gd) < max(g$gd)))){
+      emc_short <- try(subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE), silent = TRUE)
+      if(!is(emc_short, "try-error")){
+        g <- g_short
+        emc <- emc_short
+        ok_gd <- gd_ok(g)
+      }
     }
-    if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {
-      gd <- gd_short
-      alpha_gd <- alpha_gd_short
-      emc <- samplers_short
-    }
-    if(!is.null(max_gd)){
-      ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
-    } else{
-      ok_max_gd <- TRUE
-    }
-    if(!is.null(mean_gd)){
-      ok_mean_gd <- ifelse(all(is.finite(gd)), mean(gd) < mean_gd, FALSE)
-    } else{
-      ok_mean_gd <- TRUE
-    }
-    ok_gd <- ok_mean_gd & ok_max_gd
   }
+  gd <- g$gd
   if(verbose) {
     type <- "Rhat"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
-  emc <- set_tune_ess(emc, alpha_gd, mean_gd, max_gd)
+  emc <- set_tune_ess(emc, g$alpha_all, mean_gd, max_gd)
   class(emc) <- "emc"
   return(list(gd = gd, gd_done = ok_gd, emc = emc))
 }
