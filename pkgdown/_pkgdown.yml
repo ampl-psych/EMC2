@@ -14,6 +14,14 @@ reference:
   - RDM
   - DDMGNG
   - SDT
+  - MTLNR
+- title: Rating Models
+- contents:
+  - MTLNR
+  - rating_summary
+  - plot_ratings
+  - zroc
+  - plot_zroc
 - title: Neural Likelihoods
 - contents:
   - DDMnn

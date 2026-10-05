@@ -201,6 +201,14 @@ get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds
     .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
 }
 
+omp_runtime <- function() {
+    .Call(`_EMC2_omp_runtime`)
+}
+
+omp_release_pool <- function() {
+    .Call(`_EMC2_omp_release_pool`)
+}
+
 omp_diagnostics <- function(n_threads = -1L) {
     invisible(.Call(`_EMC2_omp_diagnostics`, n_threads))
 }

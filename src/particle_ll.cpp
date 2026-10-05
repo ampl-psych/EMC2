@@ -3,6 +3,11 @@
 #endif
 
 #include <Rcpp.h>
+#include "build_info.h"   // EMC2_OMP_PAUSE (configure)
+#if defined(_OPENMP) && (defined(__linux__) || defined(__APPLE__))
+#include <dlfcn.h>        // dladdr: which OpenMP runtime the entry points resolve to
+#define EMC2_OMP_DLADDR 1
+#endif
 #include <unordered_map>
 
 // Utilities first — no dependencies on model types
@@ -27,6 +32,7 @@
 #include "model_SS_RDEX.h"
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
 #include "model_NN.h"        // neural likelihoods (type "NN"): registration-driven, thread-safe per particle
+#include "model_mtlnr.h"     // rating models: correlated multiple-threshold LNR, joint per-trial kernel
 using namespace Rcpp;
 
 // =============================================================================
@@ -818,6 +824,24 @@ NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
         if (!return_trialwise) result(0, i) = sum;
       }
     // -----------------------------------------------------------------------
+    // Rating models (MTLNR): joint per-trial kernel reading both accumulator
+    // rows and RR, like MULTINOMIAL_LOGIT reads all rows of a trial. No
+    // censoring/truncation (refused by make_mtlnr_spec).
+    // -----------------------------------------------------------------------
+    } else if (type == "MTLNR") {
+      const MTLNRSpec spec = make_mtlnr_spec(data, ctx.param_table, n_lR);
+      for (int i = 0; i < n_particles; ++i) {
+        if (i > 0) ctx.param_table.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(ctx.param_table, trend_runtime_ptr, cache);
+        std::fill(ll_buf.begin(), ll_buf.end(), 0.0);
+        mtlnr_trial_ll(spec, ctx.param_table, idx_win, min_ll, ll_buf.data());
+        c_do_bound(ctx.param_table, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_buf.data(), n_choice_trials, n_lR, min_ll, participating);
+        double* tw = return_trialwise ? result_ptr + (ptrdiff_t)i * out_rows : nullptr;
+        const double sum = expand_clamp_sum(ll_buf.data(), exp_ptr, n_exp, min_ll, tw);
+        if (!return_trialwise) result(0, i) = sum;
+      }
+    // -----------------------------------------------------------------------
     // Discrete-Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
     // -----------------------------------------------------------------------
     } else {
@@ -1250,6 +1274,41 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
       }
 
       // -----------------------------------------------------------------------
+      // Rating models (MTLNR): the spec is data-only, shared read-only
+      // -----------------------------------------------------------------------
+    } else if (type == "MTLNR") {
+      const MTLNRSpec spec = make_mtlnr_spec(data, ctx.param_table, n_lR);
+
+#pragma omp parallel for schedule(static) num_threads(n_threads_used)
+      for (int i = 0; i < n_particles; ++i) {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        ParamTable&          pt_local = pt_vec[tid];
+        TrendRuntime*        tr_local = tr_vec[tid].get();
+        std::vector<double>& ll_trial = ll_buf_vec[tid];
+        std::vector<int>&    is_ok    = is_ok_vec[tid];
+
+        pt_local.fill_from_particle_row(ctx.particle_matrix, i, ctx.pm_col_to_base_idx);
+        run_pars_pipeline(pt_local, tr_local, cache);
+        std::fill(ll_trial.begin(), ll_trial.end(), 0.0);
+        mtlnr_trial_ll(spec, pt_local, idx_win, min_ll, ll_trial.data());
+
+        c_do_bound(pt_local, bound_specs, is_ok);
+        apply_bounds(is_ok, ll_trial.data(), n_choice_trials, n_lR, min_ll, participating);
+
+        if (return_trialwise) {
+          std::vector<double>& tw = tw_vec[tid];
+          expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll, tw.data());
+          std::copy(tw.begin(), tw.end(), result_ptr + (ptrdiff_t)i * out_rows);
+        } else {
+          result_ptr[i] = expand_clamp_sum(ll_trial.data(), exp_ptr, n_exp, min_ll);
+        }
+      }
+
+      // -----------------------------------------------------------------------
       // Choice-RT branch (DDM + race)
       // -----------------------------------------------------------------------
     } else {
@@ -1424,6 +1483,47 @@ List get_pars_c_wrapper(NumericMatrix particle_matrix,
   return result;
 }
 
+
+// The shared object the OpenMP entry points of this library resolve to
+// (e.g. ".../libgomp.so.1", ".../libiomp5.so", ".../libomp.dylib"): "none"
+// without OpenMP, "" if it cannot be told.
+// [[Rcpp::export(rng = false)]]
+std::string omp_runtime() {
+#ifndef _OPENMP
+  return "none";
+#elif defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (dladdr((void*) &omp_get_max_threads, &info) && info.dli_fname) return std::string(info.dli_fname);
+  return "";
+#else
+  return "";
+#endif
+}
+
+// Release the OpenMP runtime's thread pool (omp_pause_resource_all). With GNU
+// libgomp a process that has opened a parallel region and then forks leaves
+// its children waiting on the parent's pool for ever; after the release a
+// forked child opens its own. The next parallel region here rebuilds the pool
+// (about 0.1 ms at 4 threads, 0.5 ms at 16). Only done with libgomp: Intel's
+// libiomp5 (2021.10) survives a fork without it and crashes in the first
+// parallel region after a hard pause. Returns 0 on success, 1 if the runtime
+// refused, 2 if called inside a parallel region (nothing done), -1 if not
+// available: not libgomp, or no omp_pause_resource_all in this build
+// (configure sets EMC2_OMP_PAUSE).
+// [[Rcpp::export(rng = false)]]
+int omp_release_pool() {
+#if defined(_OPENMP) && defined(EMC2_OMP_PAUSE) && EMC2_OMP_PAUSE && defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (!dladdr((void*) &omp_pause_resource_all, &info) || !info.dli_fname) return -1;
+  const std::string path(info.dli_fname);
+  const std::string::size_type slash = path.find_last_of('/');
+  if (path.find("gomp", slash == std::string::npos ? 0 : slash) == std::string::npos) return -1;
+  if (omp_in_parallel()) return 2;
+  return omp_pause_resource_all(omp_pause_hard) == 0 ? 0 : 1;
+#else
+  return -1;
+#endif
+}
 
 // [[Rcpp::export]]
 void omp_diagnostics(int n_threads = -1) {

@@ -805,6 +805,453 @@ gibbs_step_standard <- function(sampler, alpha) {
 }
 
 
+# Interweaving (ASIS) scale move -----------------------------------------------
+#
+# The centred alternation "subjects | (mu, Sigma)" / "(mu, Sigma) | subjects"
+# mixes slowly where a group variance is small relative to what the subjects'
+# data say about them (the hierarchical funnel): with Sigma_jj tiny the
+# subjects cannot move away from mu_j, and with the subjects at mu_j the
+# conjugate draw of Sigma_jj stays tiny (rating-work/sampler/hier/stageH1/
+# REPORT.md: autocorrelation time of log SD about 500 iterations even with an
+# exact subject draw). This move is the non-centred step of Yu & Meng's (2011)
+# ancillarity-sufficiency interweaving: for each parameter j it rescales the
+# group SD, every subject's deviation from mu_j and the prior's auxiliary
+# variable a_j together,
+#   alpha'_sj = mu_sj + f (alpha_sj - mu_sj),  Sigma' = D Sigma D,  a'_j = a_j / f^2,
+#   D = diag(1, .., f, .., 1),  f = exp(delta),  delta ~ N(0, step_j^2).
+# In the non-centred parameterisation the standardised deviations do not
+# change, so the group density's quadratic form is unchanged, and with a_j
+# scaled along the prior's trace term v [Sigma^-1]_jj / a_j is unchanged
+# too. What is left of the prior ratio and the Jacobian is the same for
+# every covariance block size d (group density f^-n; Jacobians f^n of the
+# deviations, f^(d + 1) of the block, f^-2 of a_j; the inverse-Wishart
+# IW(v + d - 1, 2 v diag(1 / a)) determinant f^-(v + 2 d) and normalising
+# constant f^(v + d - 1); the IG(1/2, 1/A_j^2) prior of a_j):
+#   log r = sum_s [l_s(alpha'_s) - l_s(alpha_s)] + delta - (exp(2 delta) - 1) / (A_j^2 a_j)
+# (scale_move_log_prior(), checked against a brute-force evaluation in
+# test-scale-move.R). Scaling a_j along matters: with a_j held, the ratio is
+# -(v + d - 1) delta - (v / a_j) [Sigma^-1]_jj (exp(-2 delta) - 1), a
+# Gamma((v + d) / 2, .) conditional for the scaled precision, so on a
+# 25-parameter block each accepted move changes log SD by about 0.15 and the
+# chain crawls along the a_j - Sigma_jj ridge instead (IAT of log group SD
+# still about 100 on the p25 conjugate cell); with a_j scaled along the
+# conditional is as wide as the half-t marginal.
+#
+# The same alternation pins the group means when a group SD is small: mu_j |
+# alpha has SD tau_j / sqrt(n) and the subjects cannot leave mu_j, so with
+# the scale move alone the group means of the weak parameters still had an
+# autocorrelation time of 40-130 iterations on the p25 cell. The sweep
+# therefore also has a location move per parameter, the non-centred step
+# for the mean: mu'_j = mu_j + e, alpha'_sj = alpha_sj + e, e ~ N(0, loc_j^2),
+# which leaves the deviations and so the group density unchanged and is
+# accepted with the likelihood ratios and the ratio of the N(m0, V0) prior
+# of mu (a translation: no Jacobian). It runs when the group level has no
+# design (mu_j is then the subjects' common mean); with a group design the
+# move would have to act on the intercept, which is left open.
+#
+# A sweep over all parameters would cost p likelihood evaluations per subject
+# per iteration. Instead the sweep runs on the quadratic approximation of each
+# subject's log-likelihood that the particle step already has (lik_prec,
+# H1b), in a random order, which gives a Markov kernel that is reversible for
+# the approximate posterior; the result is then proposed to the exact
+# posterior and accepted with the ratio of the exact to the approximate
+# likelihood ratios, which costs ONE likelihood evaluation per subject
+# (delayed acceptance / surrogate transition, Christen & Fox 2005; Liu 2001,
+# section 9.4). The stationary distribution is the exact posterior whatever
+# the quality of the approximation; a poor one just lowers the acceptance.
+# Where the approximation is exact (a Gaussian likelihood) every sweep is
+# accepted. Subjects without a likelihood precision get a flat surrogate.
+# Because the approximation's error adds up over the moves a sweep accepts
+# (one sweep of 25 LNR parameters x 20 subjects was accepted 6% of the
+# time), the sweep is dealt into blocks of parameters, each accepted or
+# rejected on its own; the number of blocks adapts to the block acceptance.
+#
+# The step sizes are adapted (Robbins-Monro, target scale_move_target) in
+# adapt and in the tail of adapt that tunes the sample kernel, where their
+# log average is also recorded; tune_sample_kernel() freezes them at that
+# average and nothing adapts in the sample stage (H1b's rule: no adaptation
+# once draws are kept). The acceptance they adapt on is the REALISED one: a
+# move counts as accepted when the surrogate accepted it AND its block then
+# passed the exact check. Adapting on the surrogate's acceptance alone
+# tunes the step to the surrogate, whatever its quality: where the
+# surrogate is wrong about a parameter its acceptance says nothing about
+# the exact move, so the step can settle anywhere -- it ran away to 6-11
+# log-SD units on forstmann's DDM sv and SZ (rating-work/sampler/hier/
+# stageH3/REPORT.md section 2a, stageH5/REPORT.md), where the surrogate's
+# gradient and curvature were wrong by three orders of magnitude (the
+# finite-difference step of lik_precision() straddled the likelihood's
+# floor at the model's bound), the inner acceptance was a coin toss on the
+# sign of the proposal at any step, and the exact check rejected nearly
+# every such block, leaving the group SD to the slow centred random walk.
+# With the realised acceptance the exact check's rejections shrink the
+# step until the rescaling is one the exact likelihoods accept, which is
+# the step a random walk on the exact conditional wants, and a surrogate
+# that is flat in a parameter (no curvature, no gradient: the inner ratio
+# is the prior part alone) gets the step the prior and the exact check
+# agree on. Where the surrogate is exact (a Gaussian likelihood) every
+# block passes and nothing changes. The same holds for the location step.
+# The target of the realised acceptance is scale_move_target x r, with r a
+# running average of the block acceptance (r_block: exponentially weighted,
+# weight scale_move_r_weight per sweep, starting at 1, updated after the
+# steps so that a sweep's target does not depend on its own outcome, and
+# frozen with the steps). A parameter whose moves are innocuous has a
+# realised acceptance of about its surrogate acceptance x r -- its moves
+# share the fate of the block -- so a target of scale_move_target alone
+# pushed the surrogate acceptance of every parameter to scale_move_target /
+# r and the steps to a quarter of what the surrogate allows through blocks
+# that pass about half the time, which cost group-SD mixing on the hardest
+# grid cell (stageH5/REPORT.md section 4, stageH5b/REPORT.md). With the
+# target scaled by r such a parameter's surrogate acceptance returns to
+# scale_move_target, a parameter whose moves make blocks fail more often
+# than the average block still shrinks, and with r = 1 (surrogate exact)
+# nothing changes. r enters the target no lower than scale_move_r_floor,
+# the block acceptance below which the sweep is split into more blocks: a
+# lower r means the blocks cannot be split further and still fail, i.e. the
+# surrogate is poor for most parameters, and without the floor larger steps
+# would lower r and with it the target (on the flat-surrogate toy of
+# test-scale-move.R the steps then go to 10-20 at a realised acceptance of
+# .06).
+# State lives in attr(samples, "scale_move") and travels with the chain
+# (concat_emc); acc_in / acc_loc count the surrogate's acceptances and
+# acc_real / acc_loc_real the realised ones.
+#
+# Many subjects (Stage H6b). The surrogate's error has the same sign in
+# nearly every subject (the likelihood's skew), so in a move common to all
+# subjects it adds up with n while the move's tolerance grows with sqrt(n):
+# with several hundred subjects the moves of well-identified parameters pass
+# the exact check only at steps far below the posterior SD of what they
+# move, while each block still costs one likelihood evaluation per subject
+# (Eisenberg Simon, 518 subjects: 2.8 times the run time for no gain in
+# mixing; rating-work/sampler/hier/stageH6/REPORT.md). Two things follow.
+# The steps start at the moves' conditional scale on the surrogate where
+# that is below the default start (they come down slowly: at most
+# gain x target per sweep). And the sweep is gated (scale_move_gate): a
+# move that adds little to what the group-level Gibbs step does anyway is
+# left out for the rest of the fit, decided after each step of adapt once
+# the steps have had adapt_converge$min sweeps to settle (run_emc) -- and only
+# when the sweep is already split into as many blocks as it has parameters,
+# so a sweep whose blocks pass is never touched.
+#
+# options(emc.scale_move = FALSE) turns the move off (A/B); a character
+# vector names the stages it runs in (default adapt and sample); the legacy
+# sampler never runs it.
+
+scale_move_target <- .3
+scale_move_r_weight <- .05
+scale_move_r_floor <- .35
+scale_move_kappa <- .1
+
+scale_move_stages <- function(){
+  if(legacy_sampler()) return(character(0))
+  opt <- getOption("emc.scale_move")
+  if(is.null(opt) || isTRUE(opt)) return(c("adapt", "sample"))
+  if(isFALSE(opt)) return(character(0))
+  as.character(opt)
+}
+
+# Prior + group-density + Jacobian part of the log acceptance ratio of a
+# log-scale change delta of parameter j with a_j scaled along (everything
+# but the likelihoods)
+scale_move_log_prior <- function(delta, A_j, a_j){
+  delta - (exp(2 * delta) - 1) / (A_j^2 * a_j)
+}
+
+# step: the scale move's step sizes (log SD scale); loc: the location move's
+# (parameter scale); the *_sum / *_n fields average their logs over the tail
+# of adapt; blocks: the number of blocks the sweep is split into (win_*: the
+# block acceptance window that adapts it); acc_in / acc_loc / n_in count the
+# sweep's inner (surrogate) acceptances, acc_real / acc_loc_real the
+# realised ones (inner AND the block's exact check, what the step sizes
+# adapt on) and acc_out / n_out the delayed-acceptance step's (per block);
+# r_block: the running block acceptance that scales the steps' target.
+scale_move_init <- function(settings, par_names){
+  p <- length(par_names)
+  zero <- setNames(rep(0, p), par_names)
+  if(is.null(settings)){
+    settings <- list(step = zero + .5, log_step_sum = zero, log_step_n = zero,
+                     loc = zero + .2, log_loc_sum = zero, log_loc_n = zero, uses = 0,
+                     blocks = 1, win_acc = 0, win_n = 0,
+                     acc_in = zero, acc_loc = zero, n_in = zero, acc_out = 0, n_out = 0, iter = 0,
+                     acc_real = zero, acc_loc_real = zero, r_block = 1)
+  }
+  # state saved before the realised counters existed
+  if(is.null(settings$acc_real)) settings$acc_real <- zero
+  if(is.null(settings$acc_loc_real)) settings$acc_loc_real <- zero
+  # ... and before the running block acceptance did
+  if(is.null(settings$r_block)) settings$r_block <- 1
+  # ... and before the gate did: every move is in the sweep
+  if(is.null(settings$active_scale)) settings$active_scale <- zero == 0
+  if(is.null(settings$active_loc)) settings$active_loc <- zero == 0
+  settings
+}
+
+# The gate, for all chains' settings `sm` at once. A move (the scale move or
+# the location move of one parameter) is dropped from the sweep, for the rest
+# of the fit, when
+# (i) the sweep cannot be split into more blocks: every chain already has as
+#     many blocks as there are parameters still in the sweep; and
+# (ii) the move adds little to what the group-level Gibbs step does anyway:
+#     its expected squared jump per sweep since the last call (realised
+#     acceptance x step^2) is below scale_move_kappa times the Gibbs step's
+#     own, the conditional variance of the quantity given the subjects (about
+#     1 / (2 n) for a log group SD and group variance / n for a group mean,
+#     n subjects).
+# Both are taken as shares of the posterior variance of the quantity moved
+# (var_lsd: log group SD, var_mu: group mean, NULL without location moves;
+# mean_var: mean group variance; all per parameter, from one stretch of
+# draws pooled over chains), so that in a funnel, where the Gibbs step's
+# share is small, a move with a small step is still kept. The chains decide
+# jointly (mean of their values). Realised acceptance alone would not do:
+# given enough adapt iterations the steps reach their acceptance target at
+# a useless size. decide = FALSE only records the values and restarts the
+# counters. What was decided is kept in settings$gate (one entry per call)
+# and settings$active_scale / active_loc.
+scale_move_gate <- function(sm, var_lsd, var_mu, mean_var, n_subjects, decide = TRUE){
+  p <- length(sm[[1]]$step)
+  act_s <- sm[[1]]$active_scale; act_l <- sm[[1]]$active_loc
+  if(is.null(act_s)) act_s <- rep(TRUE, p)
+  if(is.null(act_l)) act_l <- rep(TRUE, p)
+  if(is.null(var_mu)) act_l <- rep(FALSE, p)
+  n_act <- sum(act_s | act_l)
+  u <- lapply(sm, function(x){
+    m <- x$mark
+    if(is.null(m)) m <- list(acc_real = 0 * x$acc_real, acc_loc_real = 0 * x$acc_loc_real, n_in = 0 * x$n_in)
+    n <- pmax(1, x$n_in - m$n_in)
+    list(us = (x$acc_real - m$acc_real) / n * x$step^2 / var_lsd,
+         ul = if(is.null(var_mu)) rep(0, p) else (x$acc_loc_real - m$acc_loc_real) / n * x$loc^2 / var_mu)
+  })
+  us <- Reduce(`+`, lapply(u, `[[`, "us")) / length(u)
+  ul <- Reduce(`+`, lapply(u, `[[`, "ul")) / length(u)
+  us[!is.finite(us)] <- Inf; ul[!is.finite(ul)] <- Inf     # no posterior variance yet: keep
+  gs <- pmin(1, 1 / (2 * n_subjects) / var_lsd)
+  gl <- if(is.null(var_mu)) rep(1, p) else pmin(1, mean_var / n_subjects / var_mu)
+  gs[!is.finite(gs)] <- 0; gl[!is.finite(gl)] <- 0
+  full <- n_act > 0 && all(sapply(sm, function(x) x$blocks >= n_act))
+  if(decide && full){
+    act_s <- act_s & !(us < scale_move_kappa * gs)
+    act_l <- act_l & !(ul < scale_move_kappa * gl)
+  }
+  lapply(sm, function(x){
+    x$active_scale <- setNames(act_s, names(x$step)); x$active_loc <- setNames(act_l, names(x$step))
+    x$gate <- c(x$gate, list(list(sweeps = x$n_in[1], decide = decide, full = full, blocks = x$blocks, r_block = x$r_block,
+                                  u_scale = us, u_loc = ul, gibbs_scale = gs, gibbs_loc = gl,
+                                  active_scale = act_s, active_loc = act_l)))
+    x$mark <- list(acc_real = x$acc_real, acc_loc_real = x$acc_loc_real, n_in = x$n_in)
+    x
+  })
+}
+
+# Start averaging the step sizes (the tail of adapt) ...
+scale_move_reset_tail <- function(settings){
+  settings$uses <- 0
+  settings$log_step_sum[] <- 0; settings$log_step_n[] <- 0
+  settings$log_loc_sum[] <- 0; settings$log_loc_n[] <- 0
+  settings
+}
+
+# ... and freeze them at the average for the sample stage
+scale_move_freeze <- function(settings){
+  ok <- settings$log_step_n >= 10
+  settings$step[ok] <- exp(settings$log_step_sum[ok] / settings$log_step_n[ok])
+  ok <- settings$log_loc_n >= 10
+  settings$loc[ok] <- exp(settings$log_loc_sum[ok] / settings$log_loc_n[ok])
+  settings
+}
+
+# One sweep of the move. pars: the group step's output (tmu, tvar, tvinv,
+# a_half, subj_mu, alpha = the p x n non-nuisance alphas); alpha_full: all
+# n_pars x n current alphas; prev_ll: the subjects' current log-likelihoods.
+# Returns the (possibly) updated pars, alpha_full, ll and settings.
+scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings, lik_prec,
+                                frozen = FALSE, n_cores = 1, r_cores = 1, gain = .1){
+  # the gate left no move in the sweep
+  if(!is.null(settings$active_scale) && !any(settings$active_scale | settings$active_loc))
+    return(list(pars = pars, alpha = alpha_full, ll = prev_ll, settings = settings))
+  nuisance <- sampler$nuisance
+  if(is.null(nuisance)) nuisance <- rep(FALSE, nrow(alpha_full))
+  keep <- which(!nuisance)
+  p <- length(keep); n <- ncol(alpha_full)
+  A <- rep(sampler$prior$A, length.out = p)
+  a <- pars$a_half
+  tvar <- pars$tvar; tvinv <- pars$tvinv
+  R <- pars$alpha - pars$subj_mu          # deviations, p x n
+  # location moves: only without a group design (then tmu is the p-vector of
+  # common means and the prior on it N(m0, V0))
+  do_loc <- is.null(sampler$group_designs) && length(pars$tmu) == p
+  if(do_loc){
+    tmu <- pars$tmu
+    P0 <- sampler$prior$theta_mu_invar
+    pr <- drop(P0 %*% (tmu - sampler$prior$theta_mu_mean))
+    mu_shift <- rep(0, p)
+  }
+  # surrogate: gradient g_s = lin_s - L_s alpha_s and curvature L_s,jj per subject
+  G <- matrix(0, nrow(alpha_full), n)
+  Ljj <- matrix(0, nrow(alpha_full), n)
+  has_lik <- rep(FALSE, n)
+  for(s in seq_len(n)){
+    lik <- lik_prec[[s]]
+    if(is.null(lik) || is.null(lik$prec)) next
+    has_lik[s] <- TRUE
+    G[, s] <- lik$lin - drop(lik$prec %*% alpha_full[, s])
+    Ljj[, s] <- diag(lik$prec)
+  }
+  pn <- rownames(alpha_full)
+  alpha_new <- alpha_full
+  # acc_sur / acc_sur_loc: accepted on the surrogate; acc / acc_loc: and the
+  # block then passed the exact check (the realised acceptance the step
+  # sizes adapt on)
+  acc <- acc_loc <- acc_sur <- acc_sur_loc <- rep(0, p)
+  blk_n <- blk_acc <- 0                   # this sweep's blocks checked / passed
+  # The sweep, in B blocks: the parameters are dealt into B random blocks, each
+  # block's scale and location moves run in random order on the surrogate,
+  # and each block is then accepted or rejected against the exact likelihoods
+  # (one evaluation per subject per block). The surrogate's error grows with
+  # the number of moves a block accepts, so B is adapted in adapt to keep the
+  # block acceptance in [.35, .75] (one block where the surrogate is exact)
+  # and is frozen for sample.
+  # The moves the gate kept (scale_move_gate); a parameter with neither move
+  # is in no block.
+  act_s <- if(is.null(settings$active_scale)) rep(TRUE, p) else settings$active_scale
+  act_l <- if(!do_loc) rep(FALSE, p) else if(is.null(settings$active_loc)) rep(TRUE, p) else settings$active_loc
+  act <- which(act_s | act_l)
+  B <- max(1, min(length(act), settings$blocks))
+  blocks <- if(length(act) == 0) list() else
+    split(act[sample.int(length(act))], rep(seq_len(B), length.out = length(act)))
+  # First sweep: start the steps at the moves' conditional scale on the
+  # surrogate where that is below the default start
+  if(!frozen && settings$iter == 0){
+    cs <- 2.4 / sqrt(rowSums(R^2 * Ljj[keep, , drop = FALSE]) + 4 / (A^2 * a))
+    ok <- is.finite(cs) & cs > 0
+    settings$step[ok] <- pmax(1e-4, pmin(settings$step, cs))[ok]
+    if(do_loc){
+      cl <- 2.4 / sqrt(rowSums(Ljj[keep, , drop = FALSE]) + diag(P0))
+      ok <- is.finite(cl) & cl > 0
+      settings$loc[ok] <- pmax(1e-4, pmin(settings$loc, cl))[ok]
+    }
+  }
+  for(blk in blocks){
+    # the block's start state, restored if the block is rejected
+    R0 <- R; a0 <- a; G0 <- G; alpha0 <- alpha_new
+    if(do_loc){ tmu0 <- tmu; pr0 <- pr; mu_shift <- rep(0, p) }
+    f_acc <- rep(1, p)
+    surr <- numeric(n)                    # accumulated surrogate log-likelihood change
+    moved <- FALSE
+    moves <- c(blk[act_s[blk]], (blk + p)[act_l[blk]])
+    moves <- moves[sample.int(length(moves))]
+    for(k in moves){
+      scale <- k <= p
+      j <- if(scale) k else k - p
+      jj <- keep[j]
+      if(scale){
+        delta <- rnorm(1, 0, settings$step[j]); f <- exp(delta)
+        d <- (f - 1) * R[j, ]
+        lp <- scale_move_log_prior(delta, A[j], a[j])
+      } else{
+        e <- rnorm(1, 0, settings$loc[j])
+        d <- rep(e, n)
+        lp <- -e * pr[j] - .5 * e^2 * P0[j, j]
+      }
+      dsurr <- d * G[jj, ] - .5 * d^2 * Ljj[jj, ]
+      lr <- sum(dsurr) + lp
+      if(is.finite(lr) && log(runif(1)) < lr){
+        moved <- TRUE
+        alpha_new[jj, ] <- alpha_new[jj, ] + d
+        for(s in which(has_lik)) G[, s] <- G[, s] - d[s] * lik_prec[[s]]$prec[, jj]
+        surr <- surr + dsurr
+        if(scale){
+          acc_sur[j] <- 1
+          R[j, ] <- f * R[j, ]
+          a[j] <- a[j] / f^2
+          f_acc[j] <- f_acc[j] * f
+        } else{
+          acc_sur_loc[j] <- 1
+          tmu[j] <- tmu[j] + e
+          pr <- pr + e * P0[, j]
+          mu_shift[j] <- mu_shift[j] + e
+        }
+      }
+    }
+    if(!moved) next
+    settings$n_out <- settings$n_out + 1
+    # The block's exact check: one likelihood per subject. Forking n_cores
+    # children for it costs more than the likelihoods themselves when they
+    # are cheap (518 subjects x ~100 trials: about 30 ms in this process
+    # against 230 ms forked from a fit's process, eight times per iteration),
+    # so the first checks are timed both ways, three each, and the faster way
+    # is kept (settings$check_serial). The values do not depend on the way.
+    ll_one <- function(s){
+      x <- matrix(alpha_new[, s], nrow = 1, dimnames = list(NULL, pn))
+      as.numeric(calc_ll_manager(x, dadm = sampler$data[[s]], model = sampler$model, r_cores = r_cores))
+    }
+    serial <- if(n_cores <= 1) TRUE else settings$check_serial
+    timing <- is.null(serial)
+    if(timing) serial <- length(settings$check_time$serial) <= length(settings$check_time$parallel)
+    t_check <- proc.time()[["elapsed"]]
+    ll_new <- if(serial) unlist(lapply(seq_len(n), ll_one)) else
+      unlist(parallel::mclapply(seq_len(n), ll_one, mc.cores = n_cores))
+    if(timing){
+      t_check <- proc.time()[["elapsed"]] - t_check
+      if(serial) settings$check_time$serial <- c(settings$check_time$serial, t_check)
+      else settings$check_time$parallel <- c(settings$check_time$parallel, t_check)
+      if(length(settings$check_time$parallel) >= 3)
+        settings$check_serial <- min(settings$check_time$serial) <= min(settings$check_time$parallel)
+    }
+    lr_out <- sum(ll_new - prev_ll) - sum(surr)
+    if(is.finite(lr_out) && log(runif(1)) < lr_out){
+      settings$acc_out <- settings$acc_out + 1
+      settings$win_acc <- settings$win_acc + 1
+      blk_acc <- blk_acc + 1
+      tvar <- tvar * outer(f_acc, f_acc)
+      tvinv <- tvinv / outer(f_acc, f_acc)
+      if(do_loc) pars$subj_mu <- pars$subj_mu + mu_shift
+      alpha_full <- alpha_new
+      prev_ll <- ll_new
+      acc[blk] <- acc_sur[blk]; acc_loc[blk] <- acc_sur_loc[blk]
+    } else{
+      R <- R0; a <- a0; G <- G0; alpha_new <- alpha0
+      if(do_loc){ tmu <- tmu0; pr <- pr0 }
+    }
+    settings$win_n <- settings$win_n + 1
+    blk_n <- blk_n + 1
+  }
+  pars$tvar <- tvar; pars$tvinv <- tvinv
+  pars$a_half <- a
+  if(do_loc) pars$tmu <- tmu
+  pars$alpha <- alpha_full[keep, , drop = FALSE]
+  settings$acc_in <- settings$acc_in + acc_sur
+  settings$acc_loc <- settings$acc_loc + acc_sur_loc
+  settings$acc_real <- settings$acc_real + acc
+  settings$acc_loc_real <- settings$acc_loc_real + acc_loc
+  settings$n_in <- settings$n_in + 1
+  settings$iter <- settings$iter + 1
+  if(!frozen){
+    target <- scale_move_target * max(settings$r_block, scale_move_r_floor)
+    settings$step[act_s] <- exp(log(settings$step[act_s]) + gain * (acc[act_s] - target))
+    if(do_loc) settings$loc[act_l] <- exp(log(settings$loc[act_l]) + gain * (acc_loc[act_l] - target))
+    # the running block acceptance, for the next sweep's target (in this form
+    # it stays exactly 1 while every block passes)
+    if(blk_n > 0) settings$r_block <- settings$r_block +
+        scale_move_r_weight * (blk_acc / blk_n - settings$r_block)
+    settings$uses <- settings$uses + 1
+    if(settings$uses > 20){
+      settings$log_step_sum <- settings$log_step_sum + log(settings$step)
+      settings$log_step_n <- settings$log_step_n + 1
+      if(do_loc){
+        settings$log_loc_sum <- settings$log_loc_sum + log(settings$loc)
+        settings$log_loc_n <- settings$log_loc_n + 1
+      }
+    }
+    # number of blocks, from the block acceptance over a window of 40 blocks
+    if(settings$win_n >= 40){
+      rate <- settings$win_acc / settings$win_n
+      if(rate < scale_move_r_floor) settings$blocks <- min(max(1, length(act)), 2 * settings$blocks)
+      else if(rate > .75) settings$blocks <- max(1, settings$blocks %/% 2)
+      settings$win_acc <- settings$win_n <- 0
+    }
+  }
+  list(pars = pars, alpha = alpha_full, ll = prev_ll, settings = settings)
+}
+
 last_sample_standard <- function(store) {
   tmu <- store$theta_mu[, store$idx, drop = TRUE]
   names(tmu) <- rownames(store$theta_mu)

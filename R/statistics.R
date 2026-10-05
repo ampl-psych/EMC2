@@ -254,25 +254,49 @@ split_mcl <- function(mcl)
   coda::as.mcmc.list(c(mcl,mcl2))
 }
 
-gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mpsrf = TRUE)
-{
-  mcl <- split_mcl(mcl)
-  gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
-  gd_out <- gd[[1]][,1] # Remove CI
-  if(!omit_mpsrf){
-    gd_out <- c(gd_out, gd$mpsrf)
-    names(gd_out)[length(gd_out)] <- "mpsrf"
-  }
+# Split-Rhat of every variable of X (draws x variables x chains): each chain
+# is halved, so that a chain that is still moving disagrees with itself, and
+# the potential scale reduction factor of Gelman & Rubin (1992) is taken over
+# the half-chains, sqrt(((n - 1) / n W + B / n) / W) with W the mean
+# within-half-chain variance and B / n the variance of the half-chain means.
+# This is the one definition of Rhat in the package (gd_summary(), summary(),
+# and the stop rules of fit()). It is not coda::gelman.diag()'s point estimate,
+# which multiplies by a degrees-of-freedom correction sqrt((d + 3) / (d + 1))
+# that is large whenever the half-chains' variances differ (one chain visiting
+# a shoulder of a skewed posterior reads as 1.15-1.2 where this reads 1.05)
+# and log- or logit-transforms any all-positive column although the sampled
+# parameters are already unbounded. A variable that does not vary returns NaN.
+split_rhat <- function(X){
+  n <- dim(X)[1]; h <- n %/% 2
+  if(h < 2) return(stats::setNames(rep(NaN, dim(X)[2]), dimnames(X)[[2]]))
+  k <- dim(X)[2]
+  X1 <- X[seq_len(h), , , drop = FALSE]; X2 <- X[h + seq_len(h), , , drop = FALSE]
+  # centred on the first draw, so that the sums of squares below do not cancel
+  ctr <- rep(X[1, , 1], each = h)
+  m <- cbind(matrix(colMeans(X1 - ctr), nrow = k), matrix(colMeans(X2 - ctr), nrow = k))
+  v <- (cbind(matrix(colMeans((X1 - ctr)^2), nrow = k), matrix(colMeans((X2 - ctr)^2), nrow = k)) - m^2) * h / (h - 1)
+  W <- rowMeans(v)
+  B_n <- rowSums((m - rowMeans(m))^2) / (ncol(m) - 1)
+  r <- suppressWarnings(sqrt(((h - 1) / h * W + B_n) / W))
+  r[!is.finite(r)] <- NaN
+  stats::setNames(r, dimnames(X)[[2]])
+}
 
-  if (is(gd, "try-error")){
-    if(omit_mpsrf){
-      return(list(psrf=matrix(Inf)))
-    } else{
-      return(list(psrf=matrix(Inf),mpsrf=Inf))
-    }
-  } else{
-    return(gd_out)
+# Split-Rhat of the columns of an mcmc.list (one mcmc per chain); with
+# omit_mpsrf = FALSE also coda's multivariate psrf of the halved chains.
+gelman_diag_robust <- function(mcl, omit_mpsrf = TRUE)
+{
+  if(!is.list(mcl)) mcl <- list(mcl)
+  n <- min(unlist(lapply(mcl, NROW)))
+  X <- vapply(mcl, function(x) as.matrix(x)[seq_len(n), , drop = FALSE],
+              matrix(0, n, NCOL(mcl[[1]])))
+  dimnames(X) <- list(NULL, colnames(as.matrix(mcl[[1]])), NULL)
+  gd_out <- split_rhat(X)
+  if(!omit_mpsrf){
+    mp <- try(gelman.diag(split_mcl(mcl), autoburnin = FALSE, transform = FALSE, multivariate = TRUE)$mpsrf, silent = TRUE)
+    gd_out <- c(gd_out, mpsrf = if(is(mp, "try-error") || is.null(mp)) Inf else mp)
   }
+  return(gd_out)
 }
 
 # #' Calculate information criteria (DIC, BPIC), effective number of parameters and
