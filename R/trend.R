@@ -2027,12 +2027,17 @@ make_data_unconditional <- function(data, pars, design, model,
     cache <- list()
     function(dadm_slice, key) {
       if (is.null(cache[[key]])) {
-        cache[[key]] <<- lapply(
+        out <- lapply(
           stats::setNames(p_types, p_types),
           function(x) make_dm(design$Flist[[x]], da = dadm_slice,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
         )
+        if(!is.null(design$parameter_design)) {
+          parsed <- parse_parameter_design(design$parameter_design, out)
+          out <- expand_parameter_design(parsed, out)
+        }
+        cache[[key]] <<- out
       }
       cache[[key]]
     }
