@@ -2182,7 +2182,12 @@ make_data_unconditional <- function(data, pars, design, model,
           cov_names <- kernel$cov_names
           for(scheme_name in names(base$coding)) {
             result <- base$coding[[scheme_name]](dadm = dadm_ctx, cov_names)
-            covariate_coding_ctx[[scheme_name]] <- as.matrix(result)
+            if(is.null(dim(result))) {
+              result <- matrix(result, nrow = 1)
+            } else {
+              result <- as.matrix(result)
+            }
+            covariate_coding_ctx[[scheme_name]] <- result
           }
         }
         attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
