@@ -84,27 +84,31 @@ if the conventional bound aren't desired.
 see \code{DDM()} for an example of such bounds. Bounds are used to set limits to
 the likelihood landscape that cannot reasonable be achieved with \code{transform}}
 
-\item{parameter_design}{A list specifying linear reparameterisations of model
-parameters in terms of sampled parameters. It must contain:
+\item{parameter_design}{A list of formulas specifying how model parameters
+are derived from sampled parameters. Each formula has the form
+\code{target ~ expression}, where \code{target} is a model parameter name
+(or sub-parameter column name) and \code{expression} is an arithmetic
+combination of sampled parameter names.
+
+Three use cases are supported:
 \describe{
-\item{\code{weights}}{A named numeric matrix where each row defines one
-reparameterised model parameter and each column is either a sampled
-parameter name or the name of a function in \code{functions}. The row names
-become the names of the reparameterised model parameters. The value in
-each cell is the weight applied to that column's contribution.}
+\item{Reparametrisation}{A model parameter is expressed as a linear
+combination of new sampled parameters. The new source parameters must be
+added explicitly to \code{formula} (e.g. \code{alphaMean ~ 1}).}
+\item{Full linking}{All parameters of one parameter type are linked
+to a parameters of another type (e.g. \code{lambda ~ alpha}).}
+\item{Sub-parameter linking}{A single sub-parameter column is linked to
+another (e.g. \code{B_lRd.lambda_errorFALSE ~ B_lRd.alpha_errorFALSE}).
+This requires the formula to be the same for the involved parameter types}
 }
 
-Example — a static reparameterisation of \code{alphaPos} and \code{alphaNeg} into mean and difference
-components:
+Example — reparametrising \code{v.alphaPos} and \code{v.alphaNeg} into
+mean and difference components (requires \code{alphaMean ~ 1} and
+\code{alphaDiff ~ 1} in \code{formula}):
 \preformatted{
   parameter_design = list(
-    weights = matrix(
-      c(1,  0.5,
-        1, -0.5),
-      nrow = 2, byrow = TRUE,
-      dimnames = list(c("alphaPos", "alphaNeg"),
-                      c("alphaMean", "alphaDiff"))
-    )
+    v.alphaPos ~ alphaMean + 0.5*alphaDiff,
+    v.alphaNeg ~ alphaMean - 0.5*alphaDiff
   )
   }}
 
