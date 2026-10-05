@@ -1475,7 +1475,7 @@ stack_designs <- function(designs_previous, designs_current) {
 make_cache_key <- function(key_cols, dadm_slice) {
   key <- paste(sapply(key_cols, function(fc) {
     val <- dadm_slice[[fc]][1]  # only look at first row
-    if (is.na(val)) stop(sprintf("Column '%s' is NA for subject '%s' trial %d.", fc, subj, current_trial))
+    if (is.na(val)) stop(sprintf("Column '%s' is NA in make_cache_key()"))
     else if (is.logical(val)) as.character(as.integer(val))
     else if (is.factor(val))  as.character(as.integer(val))
     else as.character(val)
@@ -1517,7 +1517,7 @@ make_data_unconditional <- function(data, pars, design, model,
   }
 
   n_acc <- sum(dadm_full$trials == dadm_full$trials[1] &
-                 dadm_full$subjects == dadm_full$subjects[1])
+               dadm_full$subjects == dadm_full$subjects[1])
 
   # -----------------------------------------------------------------------
   # Step 2: Design cache setup (identical to original)
@@ -1716,31 +1716,33 @@ make_data_unconditional <- function(data, pars, design, model,
       dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
       class(dadm_ctx) <- "data.frame"
       attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+      ctx_curr_idx <- seq.int(length(idx_ctx)-length(idx_curr)+1, length(idx_ctx))
 
       if (has_ffunctions_pre) {
         # Positions of the current trial within dadm_ctx.
-        ctx_curr_idx <- seq.int(length(idx_ctx)-length(idx_curr)+1, length(idx_ctx))
         for(i in names(ffunctions_pre)) {
           result_full <- ffunctions_pre[[i]](dadm_ctx)
           output_type <- attr(ffunctions_pre[[i]], "output_type")
-          out_names   <- attr(ffunctions_pre[[i]], "output_column_names")
+          # out_names   <- attr(ffunctions_pre[[i]], "output_column_names")
 
-          if (output_type == "list") {
-            for (col in out_names) {
-              result_curr <- utils::tail(result_full[[col]], length(idx_curr))
+          if(output_type == "list") {
+            out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+            for(col in out_names) {
+              result_curr <- result_full[[col]][ctx_curr_idx]
               dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
               dadm_current[[col]]           <- result_curr
               dadm_subj_df[[col]][idx_curr] <- result_curr
             }
           } else if(output_type == "matrix") {
-            for (col in out_names) {
-              result_curr <- utils::tail(result_full[, col], length(idx_curr))
-              dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
-              dadm_current[[col]]           <- result_curr
-              dadm_subj_df[[col]][idx_curr] <- result_curr
+            out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+            result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
+            dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
+            dadm_current[,out_names]         <- result_curr
+            for(col in out_names) {
+              dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
             }
           } else {
-            result_curr                   <- utils::tail(result_full, length(idx_curr))
+            result_curr                   <- result_full[ctx_curr_idx]
             dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
             dadm_current[[i]]             <- result_curr
             dadm_subj_df[[i]][idx_curr]   <- result_curr
@@ -1822,28 +1824,34 @@ make_data_unconditional <- function(data, pars, design, model,
         for (i in names(ffunctions_post)) {
           result_full <- ffunctions_post[[i]](dadm_ctx)
           output_type <- attr(ffunctions_post[[i]], "output_type")
-          out_names   <- attr(ffunctions_post[[i]], "output_column_names")
-          # no need to write to dadm_ctx anymore - that one isnt needed anymore
+          #out_names   <- attr(ffunctions_post[[i]], "output_column_names")
+          # *still* need to write to dadm_ctx, since the last function's output might be needed for the next function
           # writing to dadm_current make creating dadm_previous easier/faster than another materalisation
 
-          if (output_type == "list") {
-            for (col in out_names) {
-              result_curr <- utils::tail(result_full[[col]], length(idx_curr))
+          if(output_type == "list") {
+            out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+            for(col in out_names) {
+              result_curr <- result_full[[col]][ctx_curr_idx]
+              dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
               dadm_current[[col]]           <- result_curr
               dadm_subj_df[[col]][idx_curr] <- result_curr
             }
           } else if(output_type == "matrix") {
-            for (col in out_names) {
-              result_curr <- utils::tail(result_full[, col], length(idx_curr))
-              dadm_current[[col]]           <- result_curr
-              dadm_subj_df[[col]][idx_curr] <- result_curr
+            out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+            result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
+            dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
+            dadm_current[,out_names]         <- result_curr
+            for(col in out_names) {
+              dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
             }
           } else {
-            result_curr                   <- utils::tail(result_full, length(idx_curr))
+            result_curr                   <- result_full[ctx_curr_idx]
+            dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
             dadm_current[[i]]             <- result_curr
             dadm_subj_df[[i]][idx_curr]   <- result_curr
           }
         }
+
       }
       dadm_previous <- dadm_current
 
