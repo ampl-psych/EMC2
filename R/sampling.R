@@ -680,6 +680,8 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   # component, whose location and scale are those of the group level it was
   # estimated at.
   lik <- if(exact) tune$lik_prec[[s]] else NULL
+  # ... in its draw-based version where there is one (create_lik_prec)
+  if(!is.null(lik$post)) lik <- lik$post
   lik_prec <- lik$prec
   prior_prec <- if(is.null(lik_prec)) NULL else tryCatch(solve(group_var), error = function(e) NULL)
   cond <- conditional_proposal(lik, prior_prec, group_mu)
@@ -835,9 +837,23 @@ conditional_proposal <- function(lik, prior_prec, group_mu){
 # roughly one likelihood standard deviation), which keeps the differences well
 # above numerical noise whatever the scale of the posterior the centre came
 # from -- in a collapsed group level the posterior scale says nothing about
-# the likelihood's. p^2 + p + 1 likelihood evaluations plus the step search.
-# Returns list(prec, lin): the positive semi-definite precision and the linear
-# term of the quadratic approximation of the log-likelihood,
+# the likelihood's. The search brackets the step (the largest step found too
+# small, the smallest found too large) and bisects in log scale once it has
+# both, because a multiplicative search alone bounces for ever between a
+# step on a flat stretch of the likelihood and one across a cliff: the DDM
+# returns min_ll per trial outside its bounds (sv, SZ < .01), forstmann's
+# subjects sit a log unit or two above that floor in sv / SZ, and the x10 /
+# x0.1 search landed on the floor side half the time and read the floor as
+# a curvature of 10^3-10^4 with a gradient to match (rating-work/sampler/
+# hier/stageH5/REPORT.md) -- a surrogate that narrowed the local proposal
+# of those parameters to ~0.01 and made every interweaving move on them fail
+# its exact check. A parameter whose step never settles (flat to one side, a
+# cliff within any usable step to the other) gets no likelihood precision
+# and no gradient, cross terms included: the surrogate is flat in it, which
+# the subject step (group precision alone) and the sweep (prior part and
+# exact check) both handle. p^2 + p + 1 likelihood evaluations plus the step
+# search. Returns list(prec, lin): the positive semi-definite precision and
+# the linear term of the quadratic approximation of the log-likelihood,
 # -1/2 x' prec x + lin' x; or NULL if the centre has no finite likelihood.
 lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_rounds = 8){
   p <- length(centre)
@@ -852,6 +868,11 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
   E <- diag(p)
   fp <- fm <- rep(NA_real_, p)
   todo <- rep(TRUE, p)
+  # bracket of the step: the largest h whose drop was too small and the
+  # smallest whose drop was too large (or not finite); once both exist the
+  # next h is their geometric mean, so the search settles instead of bouncing
+  # between a flat stretch and a cliff
+  lo <- rep(NA_real_, p); hi <- rep(NA_real_, p)
   for(r in seq_len(max_rounds)){
     k <- which(todo)
     D <- E[k, , drop = FALSE] * h[k]
@@ -861,10 +882,22 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
     ok <- is.finite(drop_k) & drop_k > target/3 & drop_k < target*3
     todo[k[ok]] <- FALSE
     if(!any(todo) || r == max_rounds) break
-    bad <- drop_k[!ok]
-    h[k[!ok]] <- h[k[!ok]] * ifelse(!is.finite(bad), .25,
-                                    ifelse(bad <= 0, 4, pmin(10, pmax(.1, sqrt(target/bad)))))
+    kb <- k[!ok]; bad <- drop_k[!ok]
+    small <- is.finite(bad) & bad <= target/3
+    lo[kb[small]] <- pmax(lo[kb[small]], h[kb[small]], na.rm = TRUE)
+    hi[kb[!small]] <- pmin(hi[kb[!small]], h[kb[!small]], na.rm = TRUE)
+    h_new <- h[kb] * ifelse(!is.finite(bad), .25,
+                            ifelse(bad <= 0, 4, pmin(10, pmax(.1, sqrt(target/bad)))))
+    both <- is.finite(lo[kb]) & is.finite(hi[kb])
+    h_new[both] <- sqrt(lo[kb[both]] * hi[kb[both]])
+    h[kb] <- h_new
   }
+  # A parameter whose step never settled has a likelihood that is flat to
+  # one side and falls off a cliff to the other within any usable step (a
+  # bound of the model, or a floor of the likelihood): central differences
+  # would read the cliff as a huge curvature and gradient. It gets no
+  # likelihood precision and no gradient, cross terms included.
+  cliff <- todo | !is.finite(fp) | !is.finite(fm)
   H <- diag((2*f0 - fp - fm)/h^2, p)
   if(p > 1){
     pairs <- utils::combn(p, 2)
@@ -879,6 +912,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
     H[t(pairs[2:1, , drop = FALSE])] <- off
   }
   H[!is.finite(H)] <- 0
+  H[cliff, ] <- 0; H[, cliff] <- 0
   # Nearest positive semi-definite matrix: directions in which the likelihood
   # is flat or convex at the centre get no likelihood precision
   eig <- eigen(H, symmetric = TRUE)
@@ -886,7 +920,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
   H <- (H + t(H))/2
   dimnames(H) <- list(names(centre), names(centre))
   grad <- (fp - fm)/(2*h)
-  grad[!is.finite(grad)] <- 0
+  grad[!is.finite(grad) | cliff] <- 0
   list(prec = H, lin = drop(H %*% centre) + grad)
 }
 
@@ -1260,6 +1294,83 @@ check_prop_performance <- function(prop_performance, stage){
   return(round(prop_performance))
 }
 
+# Fork safety of the OpenMP backend (options(emc.ll_backend = "multithreaded")).
+# With GNU libgomp (gcc on Linux) a process that has opened a parallel region
+# and then forks leaves its children unable to open one: they wait on the
+# parent's thread pool for ever. So a threaded likelihood in the R session
+# (compare(), a profile plot, a stage run with one core, ...) followed by a
+# fit with forked chains would hang. The LLVM/Intel runtime (libomp on macOS,
+# libiomp5) survives a fork and Windows does not fork: nothing is done there
+# (omp_state$hazard is FALSE).
+#  - The top-level process (the one the package was loaded in, omp_state$top_pid;
+#    a forked process inherits that value and has another pid) releases its
+#    pool after every threaded call (omp_release_pool, libgomp only), so
+#    whatever it forks later is safe. Forked processes (chains, subject
+#    workers) keep theirs: they do not fork after using it, and rebuilding it
+#    at every call would cost them.
+#  - A process that keeps a live pool (the release is not available or failed,
+#    or it is a forked process) records its pid in omp_state$pool_pid, which a
+#    fork copies. A process that finds a pid other than its own there was
+#    forked from a process with a live pool: it takes the serial likelihood.
+omp_state <- new.env(parent = emptyenv())
+
+# Can a fork after a parallel region hang with this OpenMP runtime? Not on
+# macOS or Windows, without OpenMP, or with the LLVM/Intel runtime; yes with
+# libgomp, and assumed so for a runtime that is not recognised.
+omp_fork_hazard <- function(runtime = omp_runtime(), sysname = Sys.info()[["sysname"]]){
+  if(.Platform$OS.type != "unix" || identical(sysname, "Darwin")) return(FALSE)
+  !(identical(runtime, "none") || grepl("iomp|libomp", basename(runtime)))
+}
+
+omp_state_init <- function(){
+  omp_state$hazard <- omp_fork_hazard()
+  omp_state$top_pid <- Sys.getpid()
+  omp_state$pool_pid <- NULL
+  omp_state$warned <- FALSE
+}
+
+omp_serial_advice <- paste0(
+  "To keep the threaded likelihood, start a fresh R session and set ",
+  "options(emc.ll_backend = \"multithreaded\", emc.n_threads = ) before anything else, ",
+  "so that no likelihood is evaluated in the session itself before the chains are forked.")
+
+# Can this process open an OpenMP parallel region? FALSE (with one warning) if
+# it was forked from a process with a live pool.
+omp_fork_ok <- function(){
+  if(!isTRUE(omp_state$hazard) || is.null(omp_state$pool_pid) || omp_state$pool_pid == Sys.getpid()) return(TRUE)
+  if(!isTRUE(omp_state$warned)){
+    omp_state$warned <- TRUE
+    warning("emc.ll_backend = \"multithreaded\": this process was forked from one that had already ",
+            "run a threaded likelihood and could not release its OpenMP thread pool, in which case ",
+            "a threaded likelihood here would hang. Using the serial likelihood instead. ",
+            omp_serial_advice, call. = FALSE)
+  }
+  FALSE
+}
+
+# After a threaded likelihood: release the pool (top-level process) or record
+# that this process has a live one.
+omp_after_threaded <- function(){
+  if(!isTRUE(omp_state$hazard)) return(invisible(NULL))
+  pid <- Sys.getpid()
+  if(identical(pid, omp_state$top_pid)){
+    if(omp_release_pool() == 0L){
+      omp_state$pool_pid <- NULL
+      return(invisible(NULL))
+    }
+    if(!isTRUE(omp_state$warned)){
+      omp_state$warned <- TRUE
+      warning("emc.ll_backend = \"multithreaded\": the OpenMP thread pool of this R session could not ",
+              "be released (no omp_pause_resource_all in this build, an OpenMP runtime that is not ",
+              "recognised, or the call failed). Processes forked from this session from now on ",
+              "(parallel chains, cores_per_chain > 1) will use the serial likelihood, because a ",
+              "threaded one could hang. ", omp_serial_advice, call. = FALSE)
+    }
+  }
+  omp_state$pool_pid <- pid
+  invisible(NULL)
+}
+
 calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 1, return_trialwise=FALSE){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, model, component)
@@ -1278,12 +1389,13 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       # neural likelihoods: the registration and the live evaluator
       nn <- if (identical(model$c_name, "NN")) nn_native_args(model$nn, attr(dadm, "constants"))
 
-      if (backend == "multithreaded") {
+      if (backend == "multithreaded" && omp_fork_ok()) {
         lls <- calc_ll_multithreaded(proposals, dadm, constants = constants, designs = designs,
                                      type = model$c_name, model$bound, model$transform,
                                      model$pre_transform, p_types = p_types,
                                      min_ll = log(1e-10), model$trend, n_threads = n_threads, return_trialwise=return_trialwise,
                                      nn = nn)
+        omp_after_threaded()
       } else {
         lls <- calc_ll(proposals, dadm, constants = constants, designs = designs,
                        type = model$c_name, model$bound, model$transform,

@@ -103,11 +103,13 @@ chain_n <- function(emc)
   }))
 }
 
-extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains) {
+extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains, full_filter = NULL) {
   type <- sampler$type
   samples <- sampler$samples
   nuis_type <- sampler$sampler_nuis$type
-  if("sample" %in% stage & !is.null(max_n_sample)){
+  if(!is.null(full_filter)){
+    # the caller's own filter (indices into the merged chains)
+  } else if("sample" %in% stage & !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
     if(length(sample_filter) > max_n_sample){
