@@ -50,7 +50,12 @@ test_that("the sample-stage kernel is fixed", {
   st <- emc[[1]]$samples$stage[seq_len(emc[[1]]$samples$idx)]
   expect_lt(max(which(st == "adapt")), min(which(st == "sample")))
   expect_equal(sum(st == "sample"), 20)
-  expect_named(kernel$lik_prec[[1]]$post, c("prec", "lin", "n_draws", "n_capped", "tau", "ess"))
+  # ... where the group level is stable over the window it is built from (lik_prec_draws_cv)
+  idx <- max(which(st == "adapt")) - 100           # the kernel is built before the 100 tuning iterations
+  win <- unique(pmax(1, round(idx - min(250, idx / 1.5)):idx - 1))
+  if (EMC2:::group_precision_cv(emc, win) < EMC2:::lik_prec_draws_cv) {
+    expect_named(kernel$lik_prec[[1]]$post, c("prec", "lin", "n_draws", "n_capped", "tau", "ess"))
+  } else expect_null(kernel$lik_prec[[1]]$post)
   pm <- lapply(emc, function(x) attr(x$samples, "pm_settings"))
   expect_length(pm[[1]][[1]][[1]]$mix, 4)
   # more sample iterations: same proposals, same step size, mixing weights and particles
@@ -101,6 +106,43 @@ test_that("the legacy sampler keeps adapting in the sample stage", {
 })
 
 # ---- Stage H6b: the draw-based likelihood precision ------------------------
+test_that("adapt_stop: converged, stalled, at the limit, or carry on", {
+  stop_rule <- EMC2:::adapt_stop
+  expect_equal(EMC2:::adapt_converge$stall, 3)
+  expect_equal(stop_rule(c(1.35, 1.12), 400), "converged")
+  expect_equal(stop_rule(c(1.5, 1.4, 1.3, 1.25), 600), "")              # still improving
+  # forstmann's adapt (H6b Part B, replicate 1): no new minimum after 400 iterations
+  expect_equal(stop_rule(c(1.658, 1.657, 2.327), 500), "")
+  expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260), 600), "")
+  expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260, 2.273), 700), "stalled")
+  # a new minimum restarts the count; a tie with the best is no improvement
+  expect_equal(stop_rule(c(2, 1.9, 1.95, 1.96, 1.8, 1.85), 800), "")
+  expect_equal(stop_rule(c(1.5, 1.5, 1.6, 1.5), 600), "stalled")
+  expect_equal(stop_rule(c(1.5, 1.4, 1.3, 1.25), EMC2:::adapt_converge$max), "limit")
+})
+
+test_that("the draw-based likelihood precision is used only where the group level is stable over the window", {
+  # a mock emc: 3 chains x 250 iterations of a 3-parameter group covariance
+  mock <- function(sd_log_sd, seed = 1) {
+    set.seed(seed)
+    lapply(1:3, function(i) {
+      tv <- array(0, c(3, 3, 250))
+      for (it in 1:250) tv[, , it] <- diag(exp(2 * (log(c(.3, .5, .2)) + sd_log_sd * rnorm(3))))
+      list(type = "standard", nuisance = rep(FALSE, 3), samples = list(theta_var = tv))
+    })
+  }
+  # Eisenberg-like (SD of log group SD .07): CV of the precision about .14; funnel-like (SD 1): far above
+  cv_stable <- EMC2:::group_precision_cv(mock(.07), 1:250)
+  cv_funnel <- EMC2:::group_precision_cv(mock(1), 1:250)
+  expect_lt(cv_stable, .25); expect_gt(cv_stable, .1)
+  expect_gt(cv_funnel, 2)
+  expect_equal(EMC2:::lik_prec_draws_cv, .5)
+  # the funnel-like window gets no draw-based precision, whatever else it has
+  expect_null(EMC2:::window_group_level(mock(1), 1:250, 750))
+  # not computable (a zero variance): Inf, so no draw-based precision either
+  bad <- mock(.07); bad[[2]]$samples$theta_var[1, 1, 5] <- 0
+  expect_identical(EMC2:::group_precision_cv(bad, 1:250), Inf)
+})
 test_that("adapt_converged reads the window the kernel is built from", {
   skip_on_os("windows")
   RNGkind("L'Ecuyer-CMRG")
@@ -110,16 +152,22 @@ test_that("adapt_converged reads the window the kernel is built from", {
   class(emc) <- "emc"
   emc <- EMC2:::restore_duplicates(emc)
   # too few adapt iterations: not yet; at the limit: stop whatever the draws say
-  expect_false(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$min - 1))
-  expect_true(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$max))
+  expect_false(as.vector(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$min - 1)))
+  expect_true(as.vector(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$max)))
   r <- EMC2:::window_rhat(emc, EMC2:::kernel_window)
   expect_equal(dim(r), c(4, 4))
-  expect_identical(EMC2:::adapt_converged(emc, 300), max(r) < EMC2:::adapt_converge$rhat)
+  a <- EMC2:::adapt_converged(emc, 300)
+  expect_identical(as.vector(a), max(r) < EMC2:::adapt_converge$rhat)
+  expect_equal(attr(a, "rhat"), max(r))
+  # the history of earlier checks is carried and extended
+  expect_equal(attr(EMC2:::adapt_converged(emc, 300, history = c(2, 1.5)), "rhat"), c(2, 1.5, max(r)))
   # chains that sit apart in one subject's parameter: not converged
   bad <- emc; n <- bad[[1]]$samples$idx
   bad[[1]]$samples$alpha[2, 3, ] <- bad[[1]]$samples$alpha[2, 3, ] + 10
   expect_gt(EMC2:::window_rhat(bad, EMC2:::kernel_window)[2, 3], 3)
-  expect_false(EMC2:::adapt_converged(bad, 300))
+  expect_false(as.vector(EMC2:::adapt_converged(bad, 300)))
+  # ... unless the window Rhat has stopped improving: no new minimum in adapt_converge$stall checks
+  expect_true(as.vector(EMC2:::adapt_converged(bad, 600, history = c(1.5, 4, 4, 4)[seq_len(EMC2:::adapt_converge$stall)])))
   # the legacy sampler and single-subject fits keep the old rule
   op <- options(emc.sampler = "legacy"); expect_true(EMC2:::adapt_converged(bad, 10)); options(op)
 })

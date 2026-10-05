@@ -238,23 +238,43 @@ run_emc <- function(emc, stage, stop_criteria,
 # chains (adapt_converged): the largest Rhat of alpha over the last
 # kernel_window iterations below adapt_converge$rhat, read from
 # adapt_converge$min adapt iterations on and given up at adapt_converge$max.
+# Where that Rhat does not come down -- a parameter on a plateau or in a
+# funnel keeps the largest entry above the bound however long adapt runs (16
+# of 20 runs of the small funnel cells went to the limit, forstmann's DDM at
+# 1.6 times the run time; stageH6b/REPORT_partB.md) -- adapt also stops once
+# adapt_converge$stall successive checks have not improved on the best
+# earlier one (adapt_stop).
 # options(emc.adapt_converge = FALSE) restores the min_unique-only rule.
 kernel_window <- 250
-adapt_converge <- list(min = 250, max = 1000, rhat = 1.2)
+adapt_converge <- list(min = 250, max = 1000, rhat = 1.2, stall = 3)
 
 adapt_converge_on <- function(emc){
   !legacy_sampler() && !isFALSE(getOption("emc.adapt_converge")) && emc[[1]]$type != "single"
 }
 
-# Have the adapt draws the sample-stage kernel would be built from converged?
-adapt_converged <- function(emc, n_adapt, verbose = FALSE){
+# Have the adapt draws the sample-stage kernel would be built from converged,
+# or stopped improving? history: the window Rhats of the earlier checks of
+# this adapt run (check_progress keeps them). Returns TRUE / FALSE with the
+# history including this check as attribute "rhat".
+adapt_converged <- function(emc, n_adapt, history = NULL, verbose = FALSE){
   if(!adapt_converge_on(emc)) return(TRUE)
-  if(n_adapt < adapt_converge$min) return(FALSE)
-  rhat <- max(window_rhat(emc, kernel_window))
-  ok <- rhat < adapt_converge$rhat
-  if(verbose) message(sprintf("  adapt, %d iterations: max Rhat of alpha over the last %d = %.3f%s", n_adapt, kernel_window, rhat,
-                              if(!ok && n_adapt >= adapt_converge$max) " (limit of adapt iterations reached)" else ""))
-  ok || n_adapt >= adapt_converge$max
+  if(n_adapt < adapt_converge$min) return(structure(FALSE, rhat = history))
+  h <- c(history, max(window_rhat(emc, kernel_window)))
+  why <- adapt_stop(h, n_adapt)
+  if(verbose) message(sprintf("  adapt, %d iterations: max Rhat of alpha over the last %d = %.3f%s", n_adapt, kernel_window, h[length(h)],
+                              switch(why, limit = " (limit of adapt iterations reached)",
+                                     stalled = sprintf(" (no improvement in %d checks)", adapt_converge$stall), "")))
+  structure(why != "", rhat = h)
+}
+
+# The stop rule on the window Rhats h of this adapt run's checks (the last is
+# the current one): "converged", "stalled", "limit" or "" (carry on).
+adapt_stop <- function(h, n_adapt){
+  k <- adapt_converge$stall; n <- length(h)
+  if(h[n] < adapt_converge$rhat) return("converged")
+  if(n > k && min(h[(n - k + 1):n]) >= min(h[1:(n - k)])) return("stalled")
+  if(n_adapt >= adapt_converge$max) return("limit")
+  ""
 }
 
 tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileName, particle_factor,
@@ -473,10 +493,23 @@ create_lik_prec <- function(emc, n_cores){
 # The group level over the window the likelihood precisions are built from:
 # the mean group precision and each subject's mean group-level mean
 # (p x n_subjects). NULL when the draw-based likelihood precision does not
-# apply: types other than "standard", nuisance parameters, too few draws.
+# apply: types other than "standard", nuisance parameters, too few draws --
+# or a group level that moves over the window. lik_precision_draws subtracts
+# the window's mean group precision from the draws' precision, which is the
+# likelihood's only if the group precision is about constant over the
+# window. In a funnel it is not: in the small funnel cells of the ladder
+# the worst parameter's group precision 1 / sigma^2 varied 8-20-fold
+# (coefficient of variation over the window), the conditional proposal's
+# acceptance fell 2-10-fold and subject-level ESS by a third, where with
+# many subjects (CV at most .18-.29) the draws' estimate helps
+# (stageH6b/REPORT_partB.md). So it is used only where the largest CV over
+# the parameters is below lik_prec_draws_cv.
+lik_prec_draws_cv <- .5
+
 window_group_level <- function(emc, history_idx, n_draws){
   x1 <- emc[[1]]
   if(x1$type != "standard" || any(x1$nuisance) || n_draws < 100) return(NULL)
+  if(group_precision_cv(emc, history_idx) >= lik_prec_draws_cv) return(NULL)
   tryCatch({
     prec <- 0; mu <- 0
     for(x in emc){
@@ -490,6 +523,17 @@ window_group_level <- function(emc, history_idx, n_draws){
     if(!all(is.finite(out$prec)) || !all(is.finite(out$mu)) || nrow(out$mu) != nrow(out$prec)) return(NULL)
     out
   }, error = function(e) NULL)
+}
+
+# The largest coefficient of variation, over the parameters, of the group
+# precision 1 / sigma^2 over iterations history_idx of all chains (Inf if
+# not computable)
+group_precision_cv <- function(emc, history_idx){
+  pr <- do.call(cbind, lapply(emc, function(x) 1 / apply(x$samples$theta_var[, , history_idx, drop = FALSE], 3, diag)))
+  pr <- matrix(pr, ncol = length(emc) * length(history_idx))
+  cv <- apply(pr, 1, stats::sd) / rowMeans(pr)
+  if(!all(is.finite(cv))) return(Inf)
+  max(cv)
 }
 
 # Likelihood precision of one subject from its draws: the inverse of their
@@ -620,7 +664,11 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   # max_tries reached with only adapt's convergence rule unmet is not worth
   # the warning below: the kernel is then built from the draws there are
   enough_unique <- adapted
-  if(stage == "adapt" && adapted) adapted <- adapt_converged(emc, total_iters_stage, verbose)
+  adapt_rhat <- progress$adapt_rhat
+  if(stage == "adapt" && adapted){
+    adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat, verbose)
+    adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
+  }
   done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
@@ -635,7 +683,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
               trys = trys, n_blocks = gd$n_blocks, gd=gd,
-              total_iters_stage=total_iters_stage,
+              total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
 

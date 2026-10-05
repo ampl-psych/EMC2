@@ -106,8 +106,8 @@ The potential stop criteria to be set are:
 In the \code{adapt} stage of a hierarchical model (every type but \code{single}),
 \code{min_unique} is not the only condition: adapt also continues until, over
 its last 250 iterations, the largest Rhat across chains of any subject's
-parameter is below 1.2 (checked from 250 adapt iterations on, given up at
-1000). The \code{sample} stage's proposals are built from those draws and are
+parameter is below 1.2 (checked from 250 adapt iterations on, given up after
+three checks without improvement or at 1000). The \code{sample} stage's proposals are built from those draws and are
 not changed once draws are kept. \code{options(emc.adapt_converge = FALSE)}
 restores the \code{min_unique}-only rule.
 
