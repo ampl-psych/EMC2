@@ -532,6 +532,16 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``max_gd`` (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 #'
+#' ``gd_quantile`` (numeric in (0, 1], only with ``max_gd``): judge the subject-level parameters (``alpha``) by
+#' this quantile of their Gelman-Rubin diagnostics instead of by the largest, e.g. ``gd_quantile = .99``; every
+#' other selected parameter must still be below ``max_gd``. With hundreds of subjects the largest of thousands of
+#' diagnostics is set by a handful of them; a quantile makes the criterion independent of the number of subjects.
+#' Default ``NULL``: the largest.
+#'
+#' The Gelman-Rubin diagnostic that ``mean_gd`` and ``max_gd`` read is the split-Rhat that [gd_summary()] reports.
+#' It is checked every ``step_size`` iterations. When a check fails and the diagnostic is lower without the first
+#' third of the stage's draws, those draws are dropped: chains that are still arriving at the posterior.
+#'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
 #' In the ``adapt`` stage of a hierarchical model (every type but ``single``),
@@ -1042,6 +1052,15 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
 #' i.e. the ratio of between to within MCMC chain variance.
 #'
+#' The statistic is the split-Rhat: each chain is cut in half, so that a chain that is still moving
+#' disagrees with itself, and the potential scale reduction factor of Gelman and Rubin (1992),
+#' `sqrt(((n - 1) / n * W + B / n) / W)` with `W` the mean within-half-chain variance and `B / n` the
+#' variance of the half-chain means, is taken over the half-chains. It is the statistic `fit()`'s stop rules
+#' read. It is not the point estimate of `coda::gelman.diag()`, which EMC2 reported up to version 3.4.1:
+#' that one adds a degrees-of-freedom correction, which is large whenever the chains' variances differ
+#' (a chain visiting the shoulder of a skewed posterior), and log-transforms all-positive parameters.
+#' Values are therefore somewhat lower than before, mostly for the parameters with the highest values.
+#'
 #' See: Gelman, A and Rubin, DB (1992)
 #' Inference from iterative simulation using multiple sequences, *Statistical Science*, 7, 457-511.
 #'
@@ -1049,7 +1068,7 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #'
 #' @param emc An emc object
 #' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param omit_mpsrf Boolean. If `TRUE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`).
+#' @param omit_mpsrf Boolean. If `FALSE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`) of the halved chains.
 #' @param stat A string. Should correspond to a function that can be applied to a vector,
 #' which will be performed on the vector/rows or columns of the matrix of the parameters
 #' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,

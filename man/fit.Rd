@@ -101,6 +101,16 @@ The potential stop criteria to be set are:
 
 \code{max_gd} (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 
+\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): judge the subject-level parameters (\code{alpha}) by
+this quantile of their Gelman-Rubin diagnostics instead of by the largest, e.g. \code{gd_quantile = .99}; every
+other selected parameter must still be below \code{max_gd}. With hundreds of subjects the largest of thousands of
+diagnostics is set by a handful of them; a quantile makes the criterion independent of the number of subjects.
+Default \code{NULL}: the largest.
+
+The Gelman-Rubin diagnostic that \code{mean_gd} and \code{max_gd} read is the split-Rhat that \code{\link[=gd_summary]{gd_summary()}} reports.
+It is checked every \code{step_size} iterations. When a check fails and the diagnostic is lower without the first
+third of the stage's draws, those draws are dropped: chains that are still arriving at the posterior.
+
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
 In the \code{adapt} stage of a hierarchical model (every type but \code{single}),

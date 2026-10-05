@@ -455,6 +455,41 @@ sampling, section 4) did so with a biased posterior: against Stan it was off on 
 and log SDs (up to 7.5 Monte-Carlo SEs) and too narrow (SD ratios 0.84-1.00), and the subjects with
 heavy posterior shoulders (below) were under-sampled.
 
+### The stop rule and the Rhat it reads (2026-10-06)
+
+With the kernel fixed, a sample-stage stop rule only decides when to stop and which draws to keep, so
+any rule can be replayed exactly on a run that kept every draw. That was done for 41 candidate rules on
+40 runs of six data sets (Eisenberg, two small funnel cells, forstmann's full DDM, two simulated
+300-subject cells), each also with its own burn and adapt draws put back in front of the sample stage as
+a real transient. Three results shaped what `fit()` does now.
+
+1. *The discard is needed.* On a failed check `fit()` drops the first third of the stage's draws when the
+   largest Rhat is lower without it. Without that, a transient stays in: on Eisenberg 17 of 20 runs still
+   pass with 500 pre-sample draws kept (chains that drift together have a split-Rhat below 1.1), with an
+   error 1.6 times (subject level) and 2.5 times (group level) that of a stationary window, and 3-9 times
+   on the small funnel cells. Everything cheaper that was tried (a margin, a cap at half the draws, a
+   fixed warm-up fraction) removes a long transient less well, and a separate test for drift (batch means,
+   or Geweke's diagnostic pooled over chains) cannot tell a transient from slow mixing: it fires at
+   24-81% of the checks of the slowly mixing fits.
+2. *The statistic was the problem.* `coda::gelman.diag()`'s point estimate carries a degrees-of-freedom
+   correction that grows with the differences between the chains' variances. A subject with 3-5% of its
+   posterior in a shoulder (three of Eisenberg's 518 have one, in the Stan reference too) is visited there
+   by one chain at a time, for 50-300 draws every 300-900: its split-Rhat is 1.05 and coda's 1.15-1.2,
+   and the largest of 4144 values is what the criterion reads. The same rule on the split-Rhat stops on
+   its criterion in 18 of 20 replayed runs against 3, with the retained draws as accurate as a window of
+   the same length from the end of the run.
+3. *A check should cost nothing.* Through `gd_summary()` a check took 58-108 seconds on Eisenberg, more
+   than the 100 draws between two checks; from the stored array it takes half a second.
+
+So the rule is the old one on the split-Rhat (`?gd_summary`), which is also what `gd_summary()` and
+`summary()` now report, in `burn` as in `sample`. What it does not do: a pass says that the chains agree,
+not that there are enough effective draws (the smallest group-level effective size on Eisenberg at the
+stop is about 60; `stop_criteria$min_es` is the tool for that), and fits that mix slowly (forstmann's `sv`
+plateau, the 300-subject ridges) still end at the 20-check limit, correctly. `stop_criteria$gd_quantile`
+judges the subject level by a quantile of its Rhats (99%: at most 1 in 100 entries above the bound)
+instead of the largest, which keeps the criterion from tightening as subjects are added; it is an option,
+not the default.
+
 ## 8. What is still open
 
 An earlier version of this section said that the hierarchical fits which do not converge
