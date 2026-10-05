@@ -404,6 +404,57 @@ no regression either. Two things did not survive contact with real data, and are
   one of the grid's 12 `standard` cells exceeds it (1.56x-11.57x per sample iteration), including
   9-parameter cells that never funnel. It stays close to ~20% only on cells that actually funnel.
 
+**Many subjects (2026-10-05; `rating-work/sampler/hier/stageH6/REPORT.md`, `stageH6b/REPORT.md`,
+`stageH6b/REPORT_partB.md`).** The Eisenberg Simon regression above (RDM, 518 subjects, 8 parameters)
+turned out not to be the sweep: with the sweep off it was the same (20 of 20 fits above 1.1 at
+`fit()`'s maximum tries, minimum subject-level ESS 14 per 1000 draws). The cause was section 4's fixed
+sample-stage kernel, built when `adapt` stopped on `min_unique` after about 100 iterations, from draws
+in which a few subjects' chains still sat apart; those subjects' kernels were poor for the rest of the
+fit and set its Rhat. The mean Rhat over a window (burn's criterion) does not show this; the largest
+does. Four changes, replicated five times per cell on Gadi:
+
+- *Converged adapt.* `adapt` also waits until the largest Rhat of alpha over the last 250 iterations
+  (the window the kernel is built from) is below 1.2, from 250 iterations on; it gives up after three
+  checks without a new minimum or at 1000 (`adapt_converged()`, `adapt_stop()` in `R/fitting.R`;
+  `options(emc.adapt_converge = FALSE)` switches it off). The efficient proposals are built from
+  that window.
+- *Likelihood precision from the draws* (`lik_precision_draws()`). The particle step's conditional
+  proposal used the finite-difference curvature at one point, two to three times too narrow for the
+  skewed posteriors of the worst subjects (`t0`, `B`). It now uses the window's draws: their inverse
+  covariance minus the window's mean group precision, in the directions where that is clearly
+  positive, and the finite differences (capped at what the draws allow) elsewhere. The subtraction
+  is only right if the group precision is about constant over the window, so this is used only
+  where the largest coefficient of variation of the group precision over the window is below .5
+  (`lik_prec_draws_cv`): .17-.33 on Eisenberg and on a simulated 300-subject cell, 8-20 for the worst
+  parameter of the ladder's funnel cells, where an earlier version that used it everywhere halved
+  the conditional proposal's acceptance and cost a third of the subject-level ESS.
+- *A gate on the sweep.* With hundreds of subjects the surrogate's error has the same sign in nearly
+  every subject and adds up, so moves of well-identified parameters pass the exact check only at
+  steps far below the posterior SD of what they move, while each block still costs one likelihood
+  per subject. A move is dropped for the rest of the fit when the sweep is already split into one
+  block per parameter and its expected squared jump per sweep is under a tenth of the group-level
+  Gibbs step's own (`scale_move_gate()`, decided from 300 adapt sweeps on). On Eisenberg it keeps
+  four scale and three location moves; on the ladder cells it never fires. The steps start at each
+  move's conditional scale on the surrogate.
+- *The exact check in-process.* The block's exact check forked one process per core; for cheap
+  likelihoods forking cost more than the likelihoods (0.26-0.34 s against 0.10-0.13 s per block on
+  Eisenberg). The first checks are timed both ways and the faster is kept (`check_serial` in
+  `attr(samples, "scale_move")`).
+
+Results with `fit()` defaults (five runs each): Eisenberg subject-level Rhat 1.10 [1.08, 1.16] (3 of 5
+below 1.1), ESS 5% quantile / minimum 211 / 48 per 1000 draws, 63 minutes (the ungated sweep took 150);
+against the Stan reference of `rating-work/sampler/stan/REPORT_refs.md` no group-level quantity is
+more than 4 Monte-Carlo SEs off (two between 3 and 4, on `B` and `t0`). The `k25` funnel cells and
+`m35_standard_500` mix as well as or better than before (conditional-proposal acceptance .29-.33
+against .14-.21, a third to a half as many particles) and run 2-4 times faster; `p25` reproduces the
+exact posterior. forstmann (DDM) is 1.3 times slower: its `sv` plateau keeps adapt's window Rhat at
+1.2-2.2, so adapt runs 600-1000 iterations.
+
+The earlier sampler that passed Eisenberg (`002a5c6f`, which kept re-estimating its proposals during
+sampling, section 4) did so with a biased posterior: against Stan it was off on 10 of 16 group means
+and log SDs (up to 7.5 Monte-Carlo SEs) and too narrow (SD ratios 0.84-1.00), and the subjects with
+heavy posterior shoulders (below) were under-sampled.
+
 ## 8. What is still open
 
 An earlier version of this section said that the hierarchical fits which do not converge
@@ -419,20 +470,30 @@ interweaving sweep of section 7.
 
 What remains, as of this writing:
 
-- **The Eisenberg Simon regression found by section 7's regression testing is under active
-  investigation** (`stageH3/REPORT.md`). The forstmann runaway and the surrogate fault behind it
-  are fixed (section 7); whether the same fault is part of the Eisenberg regression is worth
-  checking first there, since the RDM has bounded parameters as well. forstmann's `sv` itself
-  stays slow (its group mean on a likelihood plateau), which no step-size change addresses.
+- **Eisenberg Simon: what is left after section 7's many-subject changes.** Two runs in five still
+  stop just above 1.1. A few subjects (`s095` `B`, `s273` `t0`, `s084` `v_lMd`) have 3-5% of their
+  posterior mass in a shoulder several SDs from the mode (Stan: skewness 2.5-3.6; not the
+  likelihood floor): a chain with Gaussian proposals enters it rarely and stays a few hundred
+  iterations, so at 1000-2000 draws a run either misses the shoulder or over-weights it. And the
+  group means of `v` and `v_lMd` sit on a ridge (the matching accumulator's rate is identified,
+  their difference barely; autocorrelation time 45-100 under every build), which single-parameter
+  moves cannot follow. Both need new moves (a local kernel with a mixture of scales for the
+  shoulders; a joint group-level move for the ridge). forstmann's `sv` stays slow for the same kind
+  of reason (its group mean on a likelihood plateau), which no step-size change addresses. One
+  Eisenberg fit in 54 never left the likelihood floor after `preburn` (one chain with every
+  subject's `v_iMd` at its bound): open.
 - **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
   than that on models that are not shaped like the `k25` reproducer, even where there is no
   funnel.
 - **The location move only runs without a group-level design** (`do_loc`, section 7); with one,
   only the scale move runs, so a funnel in the group means under a group design is not yet
   addressed.
-- **The scale move is diagonal only** (`Sigma'_jj` scaled independently per parameter); a
-  full-`Sigma` version (correlated collapse) has not been needed by any reproducer so far but is
-  not implemented.
+- **The scale move is diagonal only** (`Sigma'_jj` scaled independently per parameter), and a
+  correlated collapse now has a reproducer: a simulated 300-subject RDM cell with a 2 x 2 design
+  (`stageH6b/many_cells.R`, `variant = "C"`), in which only `v_Cd + v_lMd:Cd / 2` is identified per
+  subject and the group SDs of the two parameters are not. Every build fails it (subject-level Rhat
+  1.5-2.6), the fixed-kernel builds worse than `002a5c6f`. Scaling one parameter's deviations moves
+  the identified combination, so this needs a joint (rotated) group-level move; not implemented.
 - **Only `type = "standard"` runs the sweep** (`do_scale`); `diagonal` and `blocked` share enough
   of the code path that they probably only need the call site enabled, but this is unconfirmed.
   `factor`, `infnt_factor` and `SEM` are untested for the move; `diagonal-gamma` was incidentally
@@ -440,8 +501,10 @@ What remains, as of this writing:
 - **No sweep in burn**; `init()` still starts every chain in the neck (subjects bunched at the
   group mean, group SD about 0.14 for every parameter), and `preburn`/`burn` keep the old search
   step.
-- **The exact reference is R-only** (`stageH1/exact_gibbs.R`); an independent second reference
-  (e.g. Stan/cmdstanr on the same conjugate model) remains a potential follow-up, not done.
+- **The exact reference is R-only for the conjugate model** (`stageH1/exact_gibbs.R`); Stan (NUTS)
+  references now exist for it and for the `k25` cells, forstmann and Eisenberg
+  (`rating-work/sampler/stan/REPORT_refs.md`). The systematic comparison of the final build with
+  all of them is still to come.
 - **Dispersed starts** (as an alternative or supplement to fixing the mixing) have not been tried.
 
 ## References
