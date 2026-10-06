@@ -68,12 +68,13 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 \item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
 group-level covariance becomes computationally singular during sampling (which
 otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
-keeps the default behaviour: error immediately, naming the diverging parameters.
+keeps the defaults below: up to 3 re-draws of the group step, then an error
+naming the diverging parameters.
 A list may set any of:
 \itemize{
 \item \code{max_retries} — integer; on a singular covariance, re-draw the group
 (Gibbs) step this many times before giving up on that iteration. Rescues
-transient early-burn singularities. Default 0.
+transient singularities. Default 3.
 \item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
 are exhausted, \code{"carry_forward"} reuses the previous iteration's group
 parameters and continues instead of aborting.

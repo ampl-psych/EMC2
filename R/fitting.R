@@ -76,7 +76,8 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
 #' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
 #' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
-#' covariance becomes computationally singular during sampling. `NULL` errors immediately.
+#' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
+#' group step, then an error.
 #' A list may set `max_retries` (integer, re-draw the group step on failure), `on_exhausted`
 #' (`"error"` or `"carry_forward"` the previous group parameters), `max_carry_forward`
 #' (consecutive carried-forward iterations before giving up).

@@ -185,11 +185,12 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   return(pm_settings)
 }
 
-# Normalise the user-facing `on_singular` control list, filling defaults. NULL
-# (the default) reproduces the pre-existing behaviour: no recovery, error on a
-# singular group covariance (reported by check_chain_failures).
+# Normalise the user-facing `on_singular` control list, filling defaults. By
+# default a numerically singular group draw is re-drawn up to 3 times (such a
+# draw sits at the edge of floating point, so excluding it changes nothing in
+# practice), then the chain errors (reported by check_chain_failures).
 resolve_on_singular <- function(on_singular) {
-  defaults <- list(max_retries = 0, on_exhausted = "error",
+  defaults <- list(max_retries = 3, on_exhausted = "error",
                    max_carry_forward = 10)
   if (is.null(on_singular)) return(defaults)
   if (!is.list(on_singular)) stop("`on_singular` must be a list or NULL")

@@ -630,10 +630,19 @@ What remains, as of this writing:
   thousands of iterations means EMC2 cannot pin that model's `SZ` group level (section 8). One
   Eisenberg fit in 54 never left the likelihood floor after `preburn` (one chain with every
   subject's `v_iMd` at its bound): open.
-- **`fit()` stops on a singular group covariance.** 3 of the 90 default-build runs of section 8 (LNR
-  and DDM cases) ended with "group covariance became computationally singular" in the sample stage;
-  `on_singular` defaults to `NULL` (no recovery). A retry by default, or a guard in the group step, is
-  an option.
+- **Within-subject trade-offs (LBA).** On forstmann's LBA (`v ~ lM`, `sv ~ lM`, `B ~ E + lR`, `A`, `t0`;
+  19 subjects) `fit()` with its defaults stops at its 20-check limit in 3 of 5 runs, although the
+  posterior agrees with long runs (5000 draws, 7 minutes, Rhat 1.03-1.07) and the legacy sampler's is
+  20-33% too narrow for 18 subject parameters. Each failure is one subject whose parameters move together
+  along strong posterior correlations (`v` with `v_lMd` -.97, with `sv` .95, `B` with `v` .84 and `t0`
+  -.79): a chain drifts along that ridge for 100-300 iterations. More draws are the remedy; a move along
+  a subject's posterior correlations (the particle step's proposals are built from its draws, but still
+  mix slowly there) would be the sampler's.
+- **A singular group covariance.** 3 of the 90 default-build runs of section 8 (LNR and DDM cases)
+  ended with "group covariance became computationally singular" in the sample stage. `fit()` now
+  re-draws the group step up to 3 times by default (`on_singular`) before giving up; whether that is
+  always enough is not yet known (the three runs could not be reproduced: the parallel random-number
+  stream is not reproducible across runs).
 - **The RDM's Wald survivor overflows** (`pigt0()` drops the loser's term when `2 B v / s^2 > 709.8`).
   Reached once in section 8 by the current sampler (a simulated subject, 745; Stan's maximum 587) and
   by the legacy sampler on Eisenberg (1021). A log-scale evaluation removes it.
@@ -647,7 +656,8 @@ What remains, as of this writing:
 - **The sample kernel's local step size is often its last tuned value, not the tail's average.** In the
   100-iteration tail that tunes the sample kernel the local kernel runs on 25-35 iterations; the first 20 uses
   are warm-up and the average needs 10 more, so many subject-chains keep the last Robbins-Monro value (5 of 8
-  on a small test model). The kernel is still fixed and exact, so this costs efficiency, not correctness; a
+  on a 4-subject test model, but 2-4% in the forstmann LBA fits below). The kernel is still fixed and exact,
+  so this costs efficiency, not correctness; a
   longer tail or a shorter warm-up would change every fit, so it needs the conjugate exactness check and the
   ladder rerun.
 - **The stop rule (section 7).** `max_tries` does not bind until 1000 draws are kept (the discard keeps

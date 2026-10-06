@@ -598,12 +598,13 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param on_singular A list or `NULL` (the default). Controls recovery when the
 #' group-level covariance becomes computationally singular during sampling (which
 #' otherwise aborts the run, typically from an unidentified parameter). `NULL`
-#' keeps the default behaviour: error immediately, naming the diverging parameters.
+#' keeps the defaults below: up to 3 re-draws of the group step, then an error
+#' naming the diverging parameters.
 #' A list may set any of:
 #' \itemize{
 #'   \item `max_retries` — integer; on a singular covariance, re-draw the group
 #'     (Gibbs) step this many times before giving up on that iteration. Rescues
-#'     transient early-burn singularities. Default 0.
+#'     transient singularities. Default 3.
 #'   \item `on_exhausted` — `"error"` (default) or `"carry_forward"`. When retries
 #'     are exhausted, `"carry_forward"` reuses the previous iteration's group
 #'     parameters and continues instead of aborting.
