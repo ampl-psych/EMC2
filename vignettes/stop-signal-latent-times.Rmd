@@ -1,0 +1,360 @@
+---
+title: "Latent Stop and Go Finishing Times"
+description: "Simulating SSRT and go-race finishing times from stop-signal models with make_stop_data()"
+author: "Andrew Heathcote"
+output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{"Latent Stop and Go Finishing Times"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+set.seed(1)
+knitr::opts_chunk$set(fig.width = 7, fig.height = 4, message = FALSE)
+```
+
+## Introduction
+
+In the race models of the stop-signal task, `SSEXG` and `SSRDEX`, a stop racer
+and one or more go racers run on each stop trial, and the observed response
+depends on which finishes first. The quantity of main interest, the stop-signal
+reaction time (SSRT), is never observed: on a successful stop we only know the
+stop racer finished before the go racers, and on a signal-respond trial we only
+know it did not.
+
+`make_stop_data()` simulates the race and returns, for every simulated trial,
+the finishing times that produced it:
+
+* `SSRT`: the stop racer's finishing time, measured from stop-signal onset;
+* `goRT` and `goR`: the finishing time (from go onset) and identity of the
+  winner of the go race.
+
+It can simulate from a parameter vector, like `make_data()`, or from the
+posterior of a fitted model, like `predict()`. The posterior version gives
+posterior distributions of SSRT and of the go-race winner's time under the
+fitted model, including all the features that model has: lower bounds on the
+finishing-time distributions, trigger and go failures, stop-triggered
+accumulators, trends, and censoring and truncation of the data.
+
+This vignette describes what `make_stop_data()` returns, how it works, how to
+use it, and how it has been tested.
+
+## What it returns
+
+The output is the simulated data set, the same as `make_data()` or `predict()`
+gives (with a `postn` column for posterior draws), plus these columns:
+
+| Column | Content |
+|--------|---------|
+| `goR` | Winning go accumulator (a factor with the response levels). `NA` on a go failure. |
+| `goRT` | Finishing time of the go-race winner, from go onset. `Inf` on a go failure. |
+| `SSRT` | Stop racer's finishing time, from stop-signal onset. `Inf` on a trigger failure; `NA` on go trials (no stop signal) unless `stop_on_go_trials = TRUE`. |
+| `goMissingness` | Censoring of `goRT`, coded like `missingness`: `NA` observed, `1` below `LC`, `2` above `UC`. |
+
+`goRT` and `goR` are reported on every trial, including stop trials where the
+stop racer won and so no go response was made. That is the point of the
+function: it gives the go time that the stop process inhibited.
+
+## How it works
+
+`make_stop_data()` does not have its own simulator. It uses the stop-signal
+models' random functions, which `make_data()` and `predict()` also use. For each trial,
+those functions draw a finishing time for every racer into one matrix:
+the stop racer, the go racers and any stop-triggered racers. Stop
+finishing times are drawn relative to stop-signal onset. The stop-signal delay
+(SSD) is then added to the stop racer, and the response is whichever racer
+finishes first.
+
+With `make_stop_data()` the same functions also return the stop and go times
+from that matrix, before SSD is added. Several properties follow from this:
+
+* **The latent times are the ones that produced the data.** On a go trial
+  with a response, `rt == goRT`. On a signal-respond trial, `rt == goRT` and
+  `goRT < SSD + SSRT`. On a stop trial with no go response, either the go
+  process failed (`goRT = Inf`) or `goRT > SSD + SSRT`.
+* **Lower bounds are respected.** `SSRT` is drawn from the ex-Gaussian
+  distribution with lower bound `exgS_lb`. The bound applies to the time from stop-signal
+  onset, as in the likelihood, so `SSRT > exgS_lb` while `SSD + SSRT` can be
+  smaller. For `SSEXG`, go finishing times have lower bound `exg_lb`. These
+  bounds are parameters of the finishing-time distributions, distinct from
+  truncation of the data (below).
+* **Failures are explicit.** A trigger failure (probability `tf`) gives
+  `SSRT = Inf`; a go failure (probability `gf`) gives `goRT = Inf` and
+  `goR = NA`.
+* **Stop-triggered accumulators** (factor `lI`) are not part of the go race:
+  `goR` never names one.
+* **Trends** on go and/or stop parameters are applied trial by trial, because
+  the latent times are drawn from each trial's own parameters. When a trend
+  covariate depends on behaviour, or the SSD staircase is re-run, the data
+  are simulated trial by trial, as in `predict()`.
+* **Truncation and censoring follow the data.** Censoring and truncation
+  settings (`TC` in `design()` or `make_data()`, or `LT`/`LC`/`UC`/`UT` columns
+  in the data; see `?make_missing`) are applied as for the observed data.
+  A truncated trial is removed with its latent times. The go race is censored
+  at the same `LC`/`UC` bounds as `rt`: a censored `goRT` is `NA`, and
+  `goMissingness` records the direction. A go failure counts as a response
+  later than a finite `UC`. Set `censor_go = FALSE` for the uncensored go
+  times.
+* **The simulated data do not change.** Reading the latent times takes no
+  extra random numbers, so for a given seed `make_stop_data()` returns
+  exactly the `R`, `rt` and `SSD` that `make_data()` does. With
+  `stop_on_go_trials = TRUE`, the extra stop draws on go trials are made
+  last, so they do not change the data either.
+
+## Using it with a parameter vector
+
+We use an ex-Gaussian race with two go racers, one matching the stimulus and
+one not. `make_ssd()` adjusts SSD with a staircase.
+
+```{r}
+design_ss <- design(model = SSEXG,
+  factors = list(subjects = 1, S = c("left", "right")),
+  Rlevels = c("left", "right"),
+  matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+  formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                 gf ~ 1, tf ~ 1), report_p_vector = FALSE)
+p_true <- c(mu = log(.6), mu_lMTRUE = log(.8), sigma = log(.05), tau = log(.2),
+            muS = log(.2), sigmaS = log(.03), tauS = log(.05),
+            gf = qnorm(.05), tf = qnorm(.1))
+sim <- make_stop_data(p_true, design_ss, n_trials = 2000,
+                      functions = list(SSD = make_ssd()))
+head(sim[, c("S", "SSD", "R", "rt", "goR", "goRT", "SSRT")])
+```
+
+The lower bounds `exg_lb` and `exgS_lb` take their default value of 0.05.
+
+### The stop finishing-time distribution
+
+On stop trials where the stop racer was triggered, `SSRT` follows the
+ex-Gaussian with lower bound `exgS_lb`. The curve is that density, computed
+directly from the parameters.
+
+```{r}
+dexg <- function(x, mu, sigma, tau)
+  exp(sigma^2 / (2 * tau^2) - (x - mu) / tau) / tau * pnorm((x - mu) / sigma - sigma / tau)
+pexg <- function(q, mu, sigma, tau)
+  pnorm((q - mu) / sigma) -
+    exp(sigma^2 / (2 * tau^2) - (q - mu) / tau) * pnorm((q - mu) / sigma - sigma / tau)
+dtexg <- function(x, mu, sigma, tau, lb)
+  ifelse(x > lb, dexg(x, mu, sigma, tau) / (1 - pexg(lb, mu, sigma, tau)), 0)
+
+stop_trial <- is.finite(sim$SSD)
+ssrt <- sim$SSRT[stop_trial & is.finite(sim$SSRT)]
+hist(ssrt, breaks = 50, freq = FALSE, main = "SSRT", xlab = "Seconds from stop-signal onset")
+curve(dtexg(x, .2, .03, .05, .05), add = TRUE, lwd = 2, col = "red")
+c(trigger_failure_rate = mean(is.infinite(sim$SSRT[stop_trial])), min_SSRT = min(ssrt))
+```
+
+### The go race
+
+`goRT` is the minimum of the go racers' finishing times. On a stimulus
+`left` trial the matching racer has `mu = .6 * .8` and the other `mu = .6`,
+so the density of the winner's time is $f_1 S_2 + f_2 S_1$, where $S = 1 - F$.
+
+```{r}
+Sexg <- function(x, mu) {
+  out <- 1 - (pexg(x, mu, .05, .2) - pexg(.05, mu, .05, .2)) / (1 - pexg(.05, mu, .05, .2))
+  ifelse(x > .05, out, 1)
+}
+dwin <- function(x) dtexg(x, .48, .05, .2, .05) * Sexg(x, .6) + dtexg(x, .6, .05, .2, .05) * Sexg(x, .48)
+go_left <- sim$goRT[sim$S == "left" & is.finite(sim$goRT)]
+hist(go_left, breaks = 50, freq = FALSE, main = "Go-race winner (stimulus left)",
+     xlab = "Seconds from go onset")
+curve(dwin(x), add = TRUE, lwd = 2, col = "red")
+```
+
+### Seeing the race
+
+Each stop trial is a point: the go winner's time against the stop racer's
+finishing time on the go clock (`SSD + SSRT`). Points below the diagonal are
+signal-respond trials, where the go racer finished first and a response was made. Points
+above it are successful stops.
+
+```{r}
+st <- stop_trial & is.finite(sim$goRT) & is.finite(sim$SSRT)
+responded <- !is.na(sim$R[st])
+plot(sim$SSD[st] + sim$SSRT[st], sim$goRT[st], pch = 16, cex = .5,
+     col = ifelse(responded, "black", "grey60"),
+     xlab = "SSD + SSRT", ylab = "goRT")
+abline(0, 1, col = "red")
+legend("topleft", c("signal-respond", "successful stop"),
+       pch = 16, col = c("black", "grey60"), bty = "n")
+```
+
+### SSRT on go trials
+
+No stop signal is presented on go trials, so `SSRT` is `NA` there. Set
+`stop_on_go_trials = TRUE` to draw a stop racer on every trial. This gives more
+SSRT draws for estimating its distribution, and the simulated
+data are unchanged.
+
+```{r}
+set.seed(2)
+a <- make_data(p_true, design_ss, n_trials = 200, functions = list(SSD = make_ssd()))
+set.seed(2)
+b <- make_stop_data(p_true, design_ss, n_trials = 200,
+                    functions = list(SSD = make_ssd()), stop_on_go_trials = TRUE)
+identical(a[, c("R", "rt", "SSD")], b[, c("R", "rt", "SSD")])
+sum(is.na(b$SSRT))
+```
+
+## Censoring and truncation
+
+Suppose responses faster than 0.4 s and slower than a 0.7 s deadline are
+censored. `rt` is then censored, and so is the go-race winner, at the same
+bounds.
+
+```{r}
+set.seed(3)
+cen <- make_stop_data(p_true, design_ss, n_trials = 500,
+                      functions = list(SSD = make_ssd()), TC = list(LC = .4, UC = .7))
+table(goMissingness = cen$goMissingness, useNA = "ifany")
+range(cen$goRT, na.rm = TRUE)
+```
+
+On go trials `goMissingness` equals `missingness`. On stop trials the go race
+is censored even when the stop racer won: whatever the stop process did, the
+go response would not have been observed in the window. Use `censor_go = FALSE`
+to keep the uncensored go times.
+
+Truncation (`LT`, `UT`) removes trials whose observed response falls outside
+the window. Their latent times are removed with them, so the latent times are
+for the same trials as the observed data.
+
+## Trends
+
+Latent times are drawn from each trial's own parameters, so trends carry
+through. Here the mean of the stop racer's Gaussian component rises with SSD:
+`muS = 0.2 + 0.2 * min(1, 5 * SSD)`.
+
+```{r}
+trend <- make_trend(make_base("muS", "lin", make_kernel("SSD", "slin_incr"),
+                              phase = "posttransform"))
+design_tr <- design(model = SSEXG,
+  factors = list(subjects = 1, S = c("left", "right")),
+  Rlevels = c("left", "right"),
+  matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+  trend = trend, transform = list(func = c(muS.w = "exp")),
+  formula = list(mu ~ lM, sigma ~ 1, tau ~ 1, muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                 gf ~ 1, tf ~ 1), report_p_vector = FALSE)
+p_tr <- sampled_pars(design_tr, doMap = FALSE)
+p_tr[] <- c(p_true, muS.k_sat = log(5), muS.w = log(.2))[names(p_tr)]
+ssd_grid <- function(d) rep(c(Inf, .05, Inf, .1, Inf, .15, Inf, .3), length.out = nrow(d))
+sim_tr <- make_stop_data(p_tr, design_tr, n_trials = 2000, functions = list(SSD = ssd_grid))
+ok <- is.finite(sim_tr$SSD) & is.finite(sim_tr$SSRT)
+round(tapply(sim_tr$SSRT[ok], sim_tr$SSD[ok], mean), 3)
+```
+
+The mean SSRT rises with SSD up to SSD = 0.2, where the trend reaches its
+maximum.
+
+## Using it with a fitted model
+
+For a fitted model, `make_stop_data()` takes `n_post` draws from the posterior
+and simulates the latent times for each. It has the same arguments as `predict()`.
+By default the observed trials and SSDs are used. With
+`conditional_on_data = FALSE`, a staircase given to `design()` is re-run
+trial by trial.
+
+We fit `SSEXG` to 500 trials simulated from `p_true` (this takes a few
+minutes, so the fitted object is loaded below).
+
+```{r, eval = FALSE}
+dat <- make_data(p_true, design_ss, n_trials = 250, functions = list(SSD = make_ssd()))
+emc <- make_emc(dat, design_ss, type = "single")
+emc <- fit(emc, fileName = "data/make_stop_data.RData")
+```
+
+```{r}
+load("data/make_stop_data.RData")
+post <- make_stop_data(emc, n_post = 100, stop_on_go_trials = TRUE)
+dim(post)
+```
+
+`stop_on_go_trials = TRUE` gives an SSRT on every trial (about 500 per
+posterior draw rather than the 125 or so stop trials), which smooths the
+per-draw distributions below. Statistics about the race itself use the stop trials only.
+
+### Posterior distribution of SSRT
+
+Each posterior draw gives an SSRT distribution. Below, the grey curves are
+densities for 20 draws and the red curve is the true distribution.
+
+```{r}
+ok_ssrt <- is.finite(post$SSRT)
+plot(NULL, xlim = c(0, .6), ylim = c(0, 10), xlab = "SSRT", ylab = "Density",
+     main = "Posterior SSRT distributions")
+for (i in 1:20) {
+  x <- post$SSRT[ok_ssrt & post$postn == i]
+  lines(density(x, from = .05), col = "grey70")
+}
+curve(dtexg(x, .2, .03, .05, .05), add = TRUE, lwd = 2, col = "red")
+```
+
+With about 125 stop trials the shape of the SSRT distribution is poorly
+constrained by the data. `muS`, `sigmaS` and `tauS` trade off against each
+other, so the posterior distributions are much wider than the true one. Its
+location is well constrained. For example, the posterior of mean SSRT (which,
+because of the lower bound, is not exactly `muS + tauS`) covers the true
+value:
+
+```{r}
+mean_ssrt <- tapply(post$SSRT[ok_ssrt], post$postn[ok_ssrt], mean)
+true_mean <- integrate(function(x) x * dtexg(x, .2, .03, .05, .05), .05, 2)$value
+round(c(true = true_mean, quantile(mean_ssrt, c(.025, .5, .975))), 3)
+```
+
+The same can be done for the go race. For example, the proportion of stop
+trials on which the stop process inhibited a go response that would otherwise
+have been made (the go racer finished, but after the stop racer), and the mean
+time of those inhibited go responses:
+
+```{r}
+stop_post <- is.finite(post$SSD)
+inhibited <- stop_post & is.finite(post$goRT) & is.na(post$R)
+p_inhibited <- tapply(inhibited[stop_post], post$postn[stop_post], mean)
+rt_inhibited <- tapply(post$goRT[inhibited], post$postn[inhibited], mean)
+round(rbind(p_inhibited = quantile(p_inhibited, c(.025, .5, .975)),
+            mean_goRT_inhibited = quantile(rt_inhibited, c(.025, .5, .975))), 3)
+```
+
+## How it was tested
+
+The tests are in `tests/testthat/test-make_stop_data.R`. They check:
+
+1. **Distributions.** For `SSEXG` and `SSRDEX`, Kolmogorov-Smirnov tests compare
+   `SSRT` with the ex-Gaussian distribution with lower bound `exgS_lb`, and `goRT` with the
+   distribution of the minimum of the go racers (ex-Gaussian with lower bound
+   `exg_lb` for `SSEXG`; `t0` plus Wald for `SSRDEX`). The comparison distributions
+   are the ones the likelihood uses. The bounds are set high
+   enough to matter (`exgS_lb = 0.15`), and every `SSRT` exceeds it.
+2. **Exact consistency with the simulated data.** On every trial, for both
+   models: `rt == goRT` and `R == goR` for go responses; `goRT < SSD + SSRT`
+   on signal-respond trials; `goRT > SSD + SSRT` or `goRT = Inf` when no go
+   response was made on a stop trial; `SSRT` is `NA` on go trials.
+3. **Failures.** The proportions of `SSRT = Inf` on stop trials and of
+   `goRT = Inf` match `tf` and `gf`.
+4. **Stop-triggered accumulators.** With a stop-triggered response option,
+   such responses occur but are never the go winner, and check 2 still holds.
+5. **No change to the data.** With the same seed, `make_data()` and
+   `make_stop_data()` (including `stop_on_go_trials = TRUE`) return identical
+   `R`, `rt`, `SSD` and `missingness`, with staircase SSDs.
+6. **Censoring and truncation.** `goRT` below `LC` or above `UC` is `NA` with
+   `goMissingness` 1 or 2 and `goR` is `NA`; uncensored values equal the
+   `censor_go = FALSE` values; on go trials `goMissingness` equals
+   `missingness`; go failures stay `Inf` without a finite `UC`; with `LT`/`UT`
+   the same trials are removed as by `make_data()`.
+7. **Trends.** With a trend on `muS` over SSD, `SSRT` follows the trended
+   distribution (Kolmogorov-Smirnov test). With a covariate trend on the go `mu`,
+   `goRT` increases with the covariate. Check 2 holds in both cases.
+8. **Fitted models.** On an `emc` object, both the default path (observed
+   SSDs, which are reproduced) and the trial-by-trial path
+   (`conditional_on_data = FALSE`, staircase re-run) return the latent columns
+   and satisfy check 2 for every posterior draw.
+9. **Model check.** Models other than `SSEXG` and `SSRDEX` are rejected.
+
+The existing stop-signal, censoring and trend test files, and the full package
+test suite, pass with these changes.

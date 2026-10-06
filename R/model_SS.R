@@ -384,7 +384,34 @@ rtexG <- function(n, mu, sigma, tau, lb) {
   out
 }
 
-
+# Latent finishing times for the SS random functions (make_stop_data).
+# dt is the race matrix before SSD is added (row 1 stop, rows 2.. go and
+# stop-triggered accumulators), so the times returned are those that produced
+# the simulated R and rt. goRT/goR: fastest go accumulator (stop-triggered
+# accumulators excluded), Inf/NA on go failure. SSRT: stop finishing time from
+# stop-signal onset (lower bound exgS_lb), Inf on trigger failure, NA on go
+# trials unless attr(pars, "stop_on_go_trials") is TRUE, in which case a stop
+# racer (with trigger failure) is drawn for go trials too. Any such draws are
+# the last random numbers used, so R and rt are unchanged by them.
+ss_latent_times <- function(dt, pars, is1, isST, isStrial, lR) {
+  nacc <- length(levels(lR))
+  go <- dt[-1, , drop = FALSE]
+  go[isST] <- Inf
+  goRT <- apply(go, 2, min)
+  goR <- apply(go, 2, which.min)
+  goR[is.infinite(goRT)] <- NA
+  SSRT <- dt[1, ]
+  SSRT[!isStrial] <- NA
+  if (isTRUE(attr(pars, "stop_on_go_trials")) && any(!isStrial)) {
+    sp <- pars[is1, c("muS", "sigmaS", "tauS", "exgS_lb", "tf"), drop = FALSE][!isStrial, , drop = FALSE]
+    ng <- nrow(sp)
+    SSRT[!isStrial] <- rtexG(ng, mu = sp[, "muS"], sigma = sp[, "sigmaS"],
+                             tau = sp[, "tauS"], lb = sp[, "exgS_lb"])
+    SSRT[!isStrial][sp[, "tf"] > runif(ng)] <- Inf
+  }
+  data.frame(goR = factor(goR, levels = 1:nacc, labels = levels(lR)),
+             goRT = goRT, SSRT = SSRT)
+}
 
 rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
                         ok=rep(TRUE,dim(pars)[1]))
@@ -487,6 +514,10 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     lb = pars[is1, "exgS_lb"][isTS]
   )
 
+  # latent finishing times (make_stop_data), before the staircase split
+  latent <- if (isTRUE(attr(pars, "latent")))
+    ss_latent_times(dt, pars, is1, isST, isStrial, lR) else NULL
+
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
   stair <- pstair[is1]
@@ -581,9 +612,12 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
                             rt=allrt, SSD = allSSD)
+    if (!is.null(latent)) out <- cbind.data.frame(out, latent)
     return(out)
   }
-  cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
+  out <- cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
+  if (!is.null(latent)) out <- cbind.data.frame(out, latent)
+  out
 }
 
 
@@ -865,6 +899,10 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     lb = pars[is1, "exgS_lb"][isTS]
   )
 
+  # latent finishing times (make_stop_data), before the staircase split
+  latent <- if (isTRUE(attr(pars, "latent")))
+    ss_latent_times(dt, pars, is1, isST, isStrial, lR) else NULL
+
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
   stair <- pstair[is1]
@@ -958,9 +996,12 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     allR[!stair] <- R
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
                             rt=allrt, SSD = allSSD)
+    if (!is.null(latent)) out <- cbind.data.frame(out, latent)
     return(out)
   }
-  cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
+  out <- cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
+  if (!is.null(latent)) out <- cbind.data.frame(out, latent)
+  out
 }
 
 #### RDEX stop probability ----

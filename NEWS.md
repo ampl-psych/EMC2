@@ -12,6 +12,7 @@
 
 ## New features
 
+-   New `make_stop_data()` for the stop-signal models `SSEXG` and `SSRDEX`: simulates as `make_data()` (parameter vector) or `predict()` (fitted `emc` object) and adds the latent finishing times behind each trial, the go-race winner (`goR`, `goRT`) and the stop racer's finishing time from stop-signal onset (`SSRT`). The draws respect the stop and go lower bounds (`exgS_lb`, `exg_lb`), trigger and go failures, trends on go and stop parameters, truncation, and censoring of the go race at the same `LC`/`UC` bounds as `rt` (`goMissingness`).
 -   Trend parameters are now also returned with map = TRUE
 
 # EMC2 3.4.0

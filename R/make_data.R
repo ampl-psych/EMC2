@@ -277,6 +277,33 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 }
 
 
+# Censor the latent go-race winner (goR, goRT) added by the stop-signal random
+# functions when make_data(..., latent = TRUE). Called before make_missing(), on
+# the same rows, with the same TC settings, so goRT is coded as rt would be:
+# below LC or above UC goRT is NA (goR NA unless LCresponse/UCresponse) and
+# goMissingness is 1 (lower), 2 (upper) or NA (observed). A go failure
+# (goRT = Inf) is upper censored only when UC is finite.
+censor_latent_go <- function(data, TC) {
+  no_censor <- get_missing(TC$no_censor, data, "no_censor", FALSE, "logical")
+  LC <- as.numeric(get_missing(TC$LC, data, "LC", 0, "numeric"))
+  UC <- as.numeric(get_missing(TC$UC, data, "UC", Inf, "numeric"))
+  LCresponse <- get_missing(TC$LCresponse, data, "LCresponse", FALSE, "logical")
+  UCresponse <- get_missing(TC$UCresponse, data, "UCresponse", FALSE, "logical")
+  if (!is.null(TC$rt_resolution)) {
+    data$goRT <- .floor_to_rt_resolution(data$goRT, TC$rt_resolution)
+    LC <- .floor_to_rt_resolution(LC, TC$rt_resolution)
+    UC <- .floor_to_rt_resolution(UC, TC$rt_resolution)
+  }
+  cutL <- !no_censor & !is.na(data$goRT) & data$goRT < LC
+  cutU <- !no_censor & !is.na(data$goRT) & data$goRT > UC & is.finite(UC)
+  data$goMissingness <- NA_integer_
+  data$goMissingness[cutL] <- 1L
+  data$goMissingness[cutU] <- 2L
+  data$goR[(cutL & !LCresponse) | (cutU & !UCresponse)] <- NA
+  data$goRT[cutL | cutU] <- NA_real_
+  data
+}
+
 #' Simulate Data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
@@ -373,6 +400,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
 
   model <- design$model
+  # latent = TRUE (make_stop_data): stop-signal random functions also return
+  # the go-race winner (goR, goRT) and stop finishing time (SSRT)
+  latent <- isTRUE(optionals$latent)
+  if (latent && !isTRUE(model()$c_name %in% c("SSEXG", "SSRDEX")))
+    stop("latent = TRUE requires a stop-signal model (SSEXG or SSRDEX)")
 
   if(grepl("MRI", model()$type)){
     return(make_data_wrapper_MRI(parameters, data, design))
@@ -515,6 +547,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       attr(data, "staircase") <- ssd_meta
       attr(pars, "staircase") <- ssd_meta
     }
+    if (latent) {
+      if (any(names(data)=="RACE")) stop("latent = TRUE is not available with a RACE column")
+      attr(pars, "latent") <- TRUE
+      attr(pars, "stop_on_go_trials") <- isTRUE(optionals$stop_on_go_trials)
+    }
     if (any(names(data)=="RACE")) {
       Rrt <- RACE_rfun(data, pars, model)
     } else Rrt <- model()$rfun(data,pars)
@@ -537,6 +574,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
   }
 
+  if (latent && !isFALSE(optionals$censor_go)) data <- censor_latent_go(data, TC)
   data <- make_missing(data,LT=TC$LT,LC=TC$LC,UC=TC$UC,UT=TC$UT,
                        LCresponse = TC$LCresponse, UCresponse = TC$UCresponse,
                        LCdirection = TC$LCdirection, UCdirection = TC$UCdirection,
