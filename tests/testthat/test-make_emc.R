@@ -73,7 +73,7 @@ test_that("check_chain_failures reports which chain failed and why", {
 # on_singular: recovery from a singular group covariance during sampling.
 test_that("resolve_on_singular fills defaults and validates", {
   d <- resolve_on_singular(NULL)
-  expect_identical(d$max_retries, 0)
+  expect_identical(d$max_retries, 3)
   expect_identical(d$on_exhausted, "error")
   expect_error(resolve_on_singular(list(bad_field = 1)), "unknown")
   expect_error(resolve_on_singular(list(on_exhausted = "nope")))

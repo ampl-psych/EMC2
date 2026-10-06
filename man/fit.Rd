@@ -42,7 +42,7 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as specified
-by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the \code{stop_criteria}.}
 
@@ -68,12 +68,13 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 \item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
 group-level covariance becomes computationally singular during sampling (which
 otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
-keeps the default behaviour: error immediately, naming the diverging parameters.
+keeps the defaults below: up to 3 re-draws of the group step, then an error
+naming the diverging parameters.
 A list may set any of:
 \itemize{
 \item \code{max_retries} — integer; on a singular covariance, re-draw the group
 (Gibbs) step this many times before giving up on that iteration. Rescues
-transient early-burn singularities. Default 0.
+transient singularities. Default 3.
 \item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
 are exhausted, \code{"carry_forward"} reuses the previous iteration's group
 parameters and continues instead of aborting.
@@ -101,7 +102,25 @@ The potential stop criteria to be set are:
 
 \code{max_gd} (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 
+\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): judge the subject-level parameters (\code{alpha}) by
+this quantile of their Gelman-Rubin diagnostics instead of by the largest, e.g. \code{gd_quantile = .99}; every
+other selected parameter must still be below \code{max_gd}. With hundreds of subjects the largest of thousands of
+diagnostics is set by a handful of them; a quantile makes the criterion independent of the number of subjects.
+Default \code{NULL}: the largest.
+
+The Gelman-Rubin diagnostic that \code{mean_gd} and \code{max_gd} read is the split-Rhat that \code{\link[=gd_summary]{gd_summary()}} reports.
+It is checked every \code{step_size} iterations. When a check fails and the diagnostic is lower without the first
+third of the stage's draws, those draws are dropped: chains that are still arriving at the posterior.
+
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
+
+In the \code{adapt} stage of a hierarchical model (every type but \code{single}),
+\code{min_unique} is not the only condition: adapt also continues until, over
+its last 250 iterations, the largest Rhat across chains of any subject's
+parameter is below 1.2 (checked from 250 adapt iterations on, given up after
+three checks without improvement or at 1000). The \code{sample} stage's proposals are built from those draws and are
+not changed once draws are kept. \code{options(emc.adapt_converge = FALSE)}
+restores the \code{min_unique}-only rule.
 
 \code{min_es} (integer): The minimum number of effective samples across all parameters in the selection
 

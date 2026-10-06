@@ -151,6 +151,7 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   # Acceptance ratio tuning
   tune$alphaStar <- ifelse(stage == "sample", 2, 3)
   tune$p_accept <- set_p_accept(stage, tune$search_width)
+  tune$local <- local_components(stage)
   # Potential blocking settings
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
@@ -171,6 +172,8 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
     pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage)
     # For p_accept
     pm_settings[[i]]$epsilon <- check_epsilon(pm_settings[[i]]$epsilon, n_pars, pm_settings[[i]]$mix)
+    # Only local components have an adapted epsilon (see new_particle).
+    if(!legacy_sampler()) pm_settings[[i]]$epsilon[!local_components(stage)[-1]] <- 1
     # For mix and p_accept tuning
     pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage)
     pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage)
@@ -182,11 +185,12 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   return(pm_settings)
 }
 
-# Normalise the user-facing `on_singular` control list, filling defaults. NULL
-# (the default) reproduces the pre-existing behaviour: no recovery, error on a
-# singular group covariance (reported by check_chain_failures).
+# Normalise the user-facing `on_singular` control list, filling defaults. By
+# default a numerically singular group draw is re-drawn up to 3 times (such a
+# draw sits at the edge of floating point, so excluding it changes nothing in
+# practice), then the chain errors (reported by check_chain_failures).
 resolve_on_singular <- function(on_singular) {
-  defaults <- list(max_retries = 0, on_exhausted = "error",
+  defaults <- list(max_retries = 3, on_exhausted = "error",
                    max_carry_forward = 10)
   if (is.null(on_singular)) return(defaults)
   if (!is.list(on_singular)) stop("`on_singular` must be a list or NULL")
@@ -252,8 +256,22 @@ run_stage <- function(pmwgs,
   pm_settings <- attr(pmwgs$samples, "pm_settings")
   # Intialize sampling tuning settings
   if(is.null(pm_settings)) pm_settings <- lapply(1:pmwgs$n_subjects, function(x) return(vector("list", length(unique(tune$components)))))
-  tune <- check_tune_settings(tune, n_pars, stage, particles)
-  pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = stage, n_pars = n_pars, particles)
+  # The kernel run in this stage. It is the stage's own, except in the tail of
+  # adapt, which tunes the sample-stage kernel (tune_sample_kernel()).
+  kernel <- if(is.null(tune$kernel)) stage else tune$kernel
+  tune <- check_tune_settings(tune, n_pars, kernel, particles)
+  pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = kernel, n_pars = n_pars, particles)
+  # Once draws are kept the kernel does not change: no epsilon, mixing-weight
+  # or particle-number adaptation in the sample stage (see new_particle).
+  tune$frozen <- stage == "sample" && !legacy_sampler()
+  tune$lik_prec <- pmwgs$lik_prec
+  tune$exact <- kernel %in% c("adapt", "sample") && !legacy_sampler()
+  # The fixed sample kernel keeps the local kernel (the one that follows the
+  # group level) on at least a quarter of iterations.
+  tune$min_local <- if(tune$exact && kernel == "sample" && pmwgs$type != "single") .25 else 0
+  do_scale <- pmwgs$type == "standard" && kernel %in% scale_move_stages()
+  scale_settings <- attr(pmwgs$samples, "scale_move")
+  if(do_scale) scale_settings <- scale_move_init(scale_settings, pmwgs$par_names[!pmwgs$nuisance])
 
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
@@ -323,11 +341,19 @@ run_stage <- function(pmwgs,
       consec_cf <- 0L
       last_good_pars <- pars
     }
+    alpha_full <- matrix(pmwgs$samples$alpha[, , j-1], nrow = n_pars, ncol = pmwgs$n_subjects,
+                         dimnames = dimnames(pmwgs$samples$alpha)[1:2])
+    prev_ll <- pmwgs$samples$subj_ll[, j-1]
+    if(do_scale){
+      sm <- scale_move_standard(pmwgs, pars, alpha_full, prev_ll, scale_settings, tune$lik_prec,
+                                frozen = isTRUE(tune$frozen), n_cores = n_cores, r_cores = r_cores)
+      pars <- sm$pars; alpha_full <- sm$alpha; prev_ll <- sm$ll; scale_settings <- sm$settings
+    }
     pars_comb <- pars
     if(any(nuisance)){
       pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1, drop = FALSE], pmwgs$sampler_nuis$type)
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance, pars$subj_mu)
-      pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
+      pars_comb$alpha <- alpha_full
       pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                         group_level = pars_nuis,
                                                                         j = j,
@@ -337,8 +363,8 @@ run_stage <- function(pmwgs,
     }
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, pm_settings, eff_mu, eff_var,
-                                    chains_mu, chains_var, pmwgs$samples$subj_ll[,j-1],
-                                    MoreArgs = list(pars_comb, pmwgs$model, stage,
+                                    chains_mu, chains_var, prev_ll,
+                                    MoreArgs = list(pars_comb, pmwgs$model, kernel,
                                                     pmwgs$type,
                                                     tune),
                                     mc.cores =n_cores, r_cores = r_cores)
@@ -362,6 +388,7 @@ run_stage <- function(pmwgs,
          call. = FALSE)
   })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
+  if(do_scale) attr(pmwgs$samples, "scale_move") <- scale_settings
   if (verboseProgress) close(pb)
   if (verbose && n_cf > 0) {
     message("  [on_singular] group covariance recovered on ", n_cf, " carried forward",
@@ -563,6 +590,27 @@ run_stage <- function(pmwgs,
 #   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 # }
 
+# options(emc.sampler = "legacy") restores the previous particle step and
+# tuning, kept for comparison (vignette("sampler-validity")).
+legacy_sampler <- function() identical(getOption("emc.sampler"), "legacy")
+
+# Which proposal components of each stage are centred on the chain's current
+# value ("local", random-walk-like); the others are independent of it. Order
+# matches the Mus/Sigmas lists in new_particle.
+local_components <- function(stage){
+  switch(stage,
+         preburn = c(FALSE, TRUE),
+         burn = c(FALSE, TRUE, TRUE),
+         adapt = c(FALSE, TRUE, FALSE),
+         c(FALSE, TRUE, FALSE, FALSE))
+}
+
+# Row-wise log(sum(exp(.))) of a matrix
+log_sum_exp_rows <- function(x){
+  m <- apply(x, 1, max)
+  m + log(rowSums(exp(x - m)))
+}
+
 new_particle <- function (s, data, pm_settings, eff_mu = NULL,
                           eff_var = NULL, chains_mu = NULL,
                           chains_var = NULL, prev_ll,
@@ -577,7 +625,8 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   subj_mu <- parameters$alpha[,s]
   out_lls <- numeric(length(unq_components))
   particle_multiplier <- 1
-  # Set the proposals
+  # Set the proposals. Components centred on subj_mu are "local"
+  # (local_components()), the others are independent of the current value.
   if(stage == "preburn"){
     Mus <- list(group_mu, subj_mu)
     Sigmas <- list(group_var, group_var)
@@ -594,18 +643,63 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     Sigmas <- list(group_var, chains_var, chains_var, eff_var)
   }
   n_proposals <- length(Mus)
+  local <- local_components(stage)
+  # Local and independent components in one importance-weighted batch are not
+  # a valid MCMC step (the current value's weight contains a proposal density
+  # centred on itself), but they make a fast search: preburn and burn, whose
+  # draws are discarded, keep it. adapt and sample use an exact kernel: each
+  # iteration either the local kernel or the global (independent) one, chosen
+  # with the mixture weights.
+  exact <- isTRUE(tune$exact)
+  # With a group level the local covariance is (lik_prec + current prior
+  # precision)^-1, so the proposal narrows with the group variance instead of
+  # freezing; the same terms give the conditional proposal that replaces the
+  # chain-mean component. lik_prec is NULL for type "single".
+  lik <-if(exact) tune$lik_prec[[s]] else NULL
+  # ... in its draw-based version where there is one (create_lik_prec)
+  if(!is.null(lik$post)) lik <- lik$post
+  lik_prec <- lik$prec
+  prior_prec <- if(is.null(lik_prec)) NULL else group_precision(group_var)
+  cond <- conditional_proposal(lik, prior_prec, group_mu)
+  if(!is.null(cond)){
+    Mus[[3]] <- cond$mu
+    Sigmas[[3]] <- cond$var
+  }
 
   for(i in unq_components){
     # Add 1 to epsilons such that prior/group-level proposals aren't scaled
     epsilons <- c(1, pm_settings[[i]]$epsilon)
     idx <- tune$components == i
-    # Draw new proposals for each component
-    particle_numbers <- numbers_from_proportion(pm_settings[[i]]$mix, pm_settings[[i]]$n_particles*particle_multiplier)
+    mix <- pm_settings[[i]]$mix
+    if(exact){
+      use_local <- runif(1) < sum(mix[local])
+      active <- if(use_local) local else !local
+    } else{
+      active <- rep(TRUE, n_proposals)
+    }
+    mix_active <- numeric(n_proposals)
+    mix_active[active] <- mix[active] / sum(mix[active])
+    particle_numbers <- numeric(n_proposals)
+    particle_numbers[active] <- numbers_from_proportion(mix_active[active],
+                                                        pm_settings[[i]]$n_particles*particle_multiplier)
+    # The exact local kernel is an ensemble move (Tjelmeland, 2004; Neal,
+    # 2011): each local component j gets an auxiliary centre
+    # c_j ~ N(subj_mu, S_j), particles come from N(c_j, S_j), and the target
+    # pi(theta) prod_j N(theta | c_j, S_j) has marginal pi. Given the centres no
+    # component depends on the current value, so the weights below are exact.
+    centres <- Mus
+    covs <- vector("list", n_proposals)
+    for(j in which(active)){
+      base_cov <- if(exact && local[j]) local_cov(lik_prec, prior_prec, idx) else NULL
+      if(is.null(base_cov)) base_cov <- Sigmas[[j]][idx, idx, drop = FALSE]
+      covs[[j]] <- base_cov * (epsilons[j]^2)
+      if(exact && local[j]) centres[[j]][idx] <- particle_draws(1, Mus[[j]][idx], covs[[j]])
+    }
     proposals <- vector("list", n_proposals +1)
     proposals[[1]] <- subj_mu[idx]
-    for(j in 1:n_proposals){
+    for(j in which(active)){
       # Fill up the proposals
-      proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * (epsilons[j]^2))
+      proposals[[j + 1]] <- particle_draws(particle_numbers[j], centres[[j]][idx], covs[[j]])
     }
     proposals <- do.call(rbind, proposals)
 
@@ -647,26 +741,28 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     } else{
       prior_density <- lp
     }
-    # We can start from 2, since first proposal is prior density
-    lm <- pm_settings[[i]]$mix[1]*exp(lp)
-    for(k in 2:length(Sigmas)){
-      # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings[[i]]$mix[k] * mvtnorm::dmvnorm(
+    # Log mixture density of the active components (component 1 is the prior,
+    # already in lp) and the local kernel's extra target factors
+    log_dens <- matrix(NA_real_, nrow(proposals), sum(active))
+    extra <- 0
+    for(k in seq_along(which(active))){
+      j <- which(active)[k]
+      dens <- if(j == 1) lp else mvtnorm::dmvnorm(
         x = proposals[, idx, drop = FALSE],
-        mean = Mus[[k]][idx],
-        sigma = Sigmas[[k]][idx, idx, drop = FALSE] * (epsilons[k]^2)
+        mean = centres[[j]][idx],
+        sigma = covs[[j]],
+        log = TRUE
       )
+      log_dens[, k] <- log(mix_active[j]) + dens
+      if(exact && local[j]) extra <- extra + dens
     }
+    lm <- log_sum_exp_rows(log_dens)
     # Avoid infinite values
-    lm <- log(lm)
     infnt_idx <- is.infinite(lm)
     lm[infnt_idx] <- min(lm[!infnt_idx])
 
-
-
-
     # Calculate weights and center
-    l <- lw_total + prior_density - lm
+    l <- lw_total + prior_density + extra - lm
     weights <- exp(l - max(l))
     # Do MH step and return everything
     idx_ll <- sample(x = sum(particle_numbers) + 1, size = 1, prob = weights)
@@ -678,9 +774,116 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     # cat(sprintf("[i=%d] weights[1:5]: %s\n", i, paste(round(weights[1:5]/sum(weights), 4), collapse=",")))
     out_lls[i] <- lw[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
-    pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
+    if(!isTRUE(tune$frozen)) pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
   }
   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
+}
+
+# Nuisance parameters have a zero block in the merged group variance
+# (merge_group_level()): they get no prior precision, so the likelihood alone
+# shapes their proposal, instead of making the whole matrix singular.
+group_precision <- function(group_var){
+  free <- diag(group_var) > 0
+  P <- matrix(0, nrow(group_var), ncol(group_var), dimnames = dimnames(group_var))
+  inv <- tryCatch(solve(group_var[free, free, drop = FALSE]), error = function(e) NULL)
+  if(is.null(inv)) return(NULL)
+  P[free, free] <- inv
+  P
+}
+
+# Covariance of the local kernel for the parameters in idx: the inverse of
+# likelihood precision + current prior (group-level) precision. NULL when it
+# cannot be formed; the caller then falls back on the chain covariance.
+local_cov <- function(lik_prec, prior_prec, idx){
+  if(is.null(lik_prec) || is.null(prior_prec)) return(NULL)
+  tryCatch({
+    S <- chol2inv(chol(lik_prec[idx, idx, drop = FALSE] + prior_prec[idx, idx, drop = FALSE]))
+    if(all(is.finite(S))) S else NULL
+  }, error = function(e) NULL)
+}
+
+# Gaussian approximation of a subject's conditional posterior given the group
+# level: precision = likelihood precision + prior precision, mean = the
+# precision-weighted combination of the likelihood's linear term and the group
+# mean. NULL when it cannot be formed.
+conditional_proposal <- function(lik, prior_prec, group_mu){
+  if(is.null(lik) || is.null(prior_prec)) return(NULL)
+  tryCatch({
+    S <- chol2inv(chol(lik$prec + prior_prec))
+    mu <- drop(S %*% (lik$lin + prior_prec %*% group_mu))
+    if(!all(is.finite(S)) || !all(is.finite(mu))) return(NULL)
+    names(mu) <- names(group_mu)
+    list(mu = mu, var = S)
+  }, error = function(e) NULL)
+}
+
+# Likelihood precision (minus the Hessian) of one subject at centre, by
+# central differences. Each step is searched for so that the log-likelihood
+# drops by about target, which keeps the differences above noise whatever
+# scale h came from. The search brackets the step and bisects in log scale: a
+# multiplicative search can bounce between a flat stretch and a cliff (a
+# likelihood floored at a model bound, e.g. the DDM's min_ll). A parameter
+# whose step never settles gets no precision and no gradient, cross terms
+# included. Returns list(prec, lin) of -1/2 x' prec x + lin' x, or NULL if
+# f(centre) is not finite.
+lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_rounds = 8){
+  p <- length(centre)
+  ll <- function(X){
+    colnames(X) <- names(centre)
+    as.vector(calc_ll_manager(X, dadm = dadm, model = model, r_cores = r_cores))
+  }
+  shift <- function(D) sweep(D, 2, centre, "+")
+  f0 <- ll(matrix(centre, nrow = 1))
+  if(!is.finite(f0)) return(NULL)
+  h[!is.finite(h) | h <= 0] <- .1
+  E <- diag(p)
+  fp <- fm <- rep(NA_real_, p)
+  todo <- rep(TRUE, p)
+  lo <-rep(NA_real_, p); hi <- rep(NA_real_, p)
+  for(r in seq_len(max_rounds)){
+    k <- which(todo)
+    D <- E[k, , drop = FALSE] * h[k]
+    f <- ll(shift(rbind(D, -D)))
+    fp[k] <- f[seq_along(k)]; fm[k] <- f[length(k) + seq_along(k)]
+    drop_k <- f0 - (fp[k] + fm[k])/2
+    ok <- is.finite(drop_k) & drop_k > target/3 & drop_k < target*3
+    todo[k[ok]] <- FALSE
+    if(!any(todo) || r == max_rounds) break
+    kb <- k[!ok]; bad <- drop_k[!ok]
+    small <- is.finite(bad) & bad <= target/3
+    lo[kb[small]] <- pmax(lo[kb[small]], h[kb[small]], na.rm = TRUE)
+    hi[kb[!small]] <- pmin(hi[kb[!small]], h[kb[!small]], na.rm = TRUE)
+    h_new <- h[kb] * ifelse(!is.finite(bad), .25,
+                            ifelse(bad <= 0, 4, pmin(10, pmax(.1, sqrt(target/bad)))))
+    both <- is.finite(lo[kb]) & is.finite(hi[kb])
+    h_new[both] <- sqrt(lo[kb[both]] * hi[kb[both]])
+    h[kb] <- h_new
+  }
+  cliff <-todo | !is.finite(fp) | !is.finite(fm)
+  H <- diag((2*f0 - fp - fm)/h^2, p)
+  if(p > 1){
+    pairs <- utils::combn(p, 2)
+    D <- matrix(0, ncol(pairs), p)
+    D[cbind(seq_len(ncol(pairs)), pairs[1,])] <- h[pairs[1,]]
+    D[cbind(seq_len(ncol(pairs)), pairs[2,])] <- h[pairs[2,]]
+    f <- ll(shift(rbind(D, -D)))
+    fpp <- f[seq_len(ncol(pairs))]; fmm <- f[ncol(pairs) + seq_len(ncol(pairs))]
+    off <- -(fpp + fmm - fp[pairs[1,]] - fm[pairs[1,]] - fp[pairs[2,]] - fm[pairs[2,]] + 2*f0) /
+      (2*h[pairs[1,]]*h[pairs[2,]])
+    H[t(pairs)] <- off
+    H[t(pairs[2:1, , drop = FALSE])] <- off
+  }
+  H[!is.finite(H)] <- 0
+  H[cliff, ] <- 0; H[, cliff] <- 0
+  # Nearest positive semi-definite matrix: directions in which the likelihood
+  # is flat or convex at the centre get no likelihood precision
+  eig <- eigen(H, symmetric = TRUE)
+  H <- eig$vectors %*% (pmax(eig$values, 0) * t(eig$vectors))
+  H <- (H + t(H))/2
+  dimnames(H) <- list(names(centre), names(centre))
+  grad <- (fp - fm)/(2*h)
+  grad[!is.finite(grad) | cliff] <- 0
+  list(prec = H, lin = drop(H %*% centre) + grad)
 }
 
 
@@ -704,6 +907,7 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # using the known counts in particle_numbers.
     # We're also tracking acceptance of group-level proposals, which is minorly wasteful
     offset <- 2  # start index in 'weights' for new proposals
+    rate_now <- rep(NA_real_, length(particle_numbers))  # this iteration's rates
     for (j in seq_along(particle_numbers)) {
       # The chunk of new weights for proposal j
       n_j <- particle_numbers[j]
@@ -713,6 +917,7 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
         better_j <- sum(draws_j > old_weight)
         # Accumulate that in acceptance counts
         pm_settings$acc_counts[j] <- pm_settings$acc_counts[j] + better_j
+        rate_now[j] <- better_j / n_j
         offset <- offset + n_j
       }
     }
@@ -721,23 +926,40 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # ----------------------------------------
     acc_rates <- ifelse(pm_settings$proposal_counts > 0, pm_settings$acc_counts / pm_settings$proposal_counts, 0)
 
-    # .1 for preburn, .4 for burn and adapt and .6 for sample
-    clamp_min <- ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6))
-
     # D) Adapt epsilon via continuous approach
     # ----------------------------------------
-    # pm_settings$epsilon is a vector, same length as pm_settings$mix
-    # tune$p_accept is also a vector, e.g. c(0.2, 0.3, 0.6) for each proposal
-    new_epsilon <- update_epsilon_continuous(
-      epsilon   = pm_settings$epsilon,
-      acceptance = acc_rates[-1],
-      target     = tune$p_accept,
-      iter       = pm_settings$iter,
-      d          = n_pars,
-      alphaStar  = tune$alphaStar,
-      damp       = 100,          # Example
-      clamp      = c(clamp_min, 5)    # Example range
-    )
+    # Only local components are scaled: for them acceptance is self-correcting
+    # and the clamp only a numerical guard. For independent ones low acceptance
+    # means too narrow, so shrinking them on acceptance would drive them to the
+    # floor.
+    legacy <- legacy_sampler()
+    # legacy floors: .1 for preburn, .4 for burn and adapt and .6 for sample
+    clamp <- if(legacy) c(ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6)), 5)
+             else c(.01, 20)
+    if(isTRUE(tune$exact)){
+      # Exact kernels: the local step moves only on iterations that used the
+      # local kernel, from that iteration's rate (a windowed rate overshoots);
+      # tune_sample_kernel() freezes it at the average of the later log steps.
+      new_epsilon <- pm_settings$epsilon
+      for(j in which(tune$local & !is.na(rate_now))){
+        signal <- max(-1, min(3, (rate_now[j] - tune$p_accept[j - 1]) / tune$p_accept[j - 1]))
+        new_epsilon[j - 1] <- min(clamp[2], max(clamp[1], exp(log(new_epsilon[j - 1]) + .1 * signal)))
+        pm_settings$local_uses <- sum(pm_settings$local_uses, 1)
+        if(pm_settings$local_uses > 20) pm_settings$log_eps_sum <- sum(pm_settings$log_eps_sum, log(new_epsilon[j - 1]))
+      }
+    } else {
+      new_epsilon <- update_epsilon_continuous(
+        epsilon   = pm_settings$epsilon,
+        acceptance = acc_rates[-1],
+        target     = tune$p_accept,
+        iter       = pm_settings$iter,
+        d          = n_pars,
+        alphaStar  = tune$alphaStar,
+        damp       = 100,          # Example
+        clamp      = clamp,
+        relative   = !legacy
+      )
+    }
     pm_settings$epsilon <- new_epsilon
 
     # E) Adapt mixing weights based on acceptance vs. target
@@ -767,6 +989,10 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
       # 5) Impose a floor, re-normalize
       new_mix <- pmax(new_mix, 0.02)
       new_mix <- new_mix / sum(new_mix)
+      if(isTRUE(tune$min_local > 0) && sum(new_mix[tune$local]) < tune$min_local){
+        new_mix[tune$local] <- new_mix[tune$local] * tune$min_local / sum(new_mix[tune$local])
+        new_mix[!tune$local] <- new_mix[!tune$local] * (1 - tune$min_local) / sum(new_mix[!tune$local])
+      }
       pm_settings$mix <- new_mix
     }
 
@@ -775,12 +1001,22 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # -------------------------------------------------------
     # If length mix > 2, we're in sample stage
     # Only reduce number of particles when we're already converged
-    if (length(pm_settings$mix) > 3 && pm_settings$gd_good) {
+    # The exact sample kernel is only tuned in the tail of adapt (it is fixed
+    # in the sample stage), so that is where its number of particles is set
+    if (length(pm_settings$mix) > 3 && (pm_settings$gd_good || isTRUE(tune$exact))) {
       ess <- sum(weights)^2 / sum(weights^2)
       desired_ess <- tune$target_ESS
       scale_factor <- (desired_ess / ess)^tune$ESS_scale
       new_num_particles <- round(pm_settings$n_particles * scale_factor)
       pm_settings$n_particles <- max(25, min(tune$max_particles, new_num_particles))
+      if(isTRUE(tune$exact)){
+        # 100 iterations are too few for the update above to settle: the tail
+        # records ESS per particle and tune_sample_kernel() uses its average.
+        pm_settings$log_ess_sum <- sum(pm_settings$log_ess_sum, log(ess / (length(weights) - 1)))
+        pm_settings$log_ess_n <- sum(pm_settings$log_ess_n, 1)
+        pm_settings$ess_target <- tune$target_ESS
+        pm_settings$max_particles <- tune$max_particles
+      }
     }
   }
 
@@ -798,15 +1034,17 @@ update_epsilon_continuous <- function(
     d,
     alphaStar,
     damp = 100,
-    clamp = c(0.6, 4)
+    clamp = c(0.6, 4),
+    relative = TRUE
 ) {
   log_eps <- log(epsilon)
   # 2) define step size
   # We'll do one pass per element. If you want a single c_term, that's also fine.
   c_term <- (1 - 1/d)*sqrt(2*pi)*exp(alphaStar^2/2)/(2*alphaStar) + 1/(d*target*(1-target))
   step_size <- c_term / max(damp, iter)
-  # 3) compute difference from target acceptance
-  diff_accept <- acceptance - target
+  # 3) compute difference from target acceptance, relative and clipped to
+  # [-1, 1]: with a small target the raw one shrinks a too-wide proposal slowly
+  diff_accept <- if(relative) pmax(-1, pmin(1, (acceptance - target) / target)) else acceptance - target
   # 4) update in log space (vectorized)
   log_eps_new <- log_eps + step_size * diff_accept
   # 5) exponentiate
@@ -925,10 +1163,17 @@ set_p_accept <- function(stage, search_width){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
+  # adapt/sample: the local component targets ~3% of particles beating the
+  # current value (where the ensemble move's ESS per iteration peaks);
+  # independent components are not scaled.
   if(stage == "preburn") return(0.02 * (1/search_width))
   if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
-  if(stage == "adapt") return(c(0.2, 0.25)* (1/search_width))
-  if(stage == "sample") return(c(0.3, 0.3, 0.3)* (1/search_width))
+  if(legacy_sampler()){
+    if(stage == "adapt") return(c(0.2, 0.25)* (1/search_width))
+    if(stage == "sample") return(c(0.3, 0.3, 0.3)* (1/search_width))
+  }
+  if(stage == "adapt") return(c(0.03, 0.25)* (1/search_width))
+  if(stage == "sample") return(c(0.03, 0.3, 0.3)* (1/search_width))
 }
 
 get_default_mix <- function(stage){
