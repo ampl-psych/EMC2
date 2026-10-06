@@ -644,6 +644,12 @@ What remains, as of this writing:
   measurable at the level of a `fit()` (x1.17-1.20 per likelihood evaluation, diluted by the rest of
   an iteration). Making 1e-6 the default is for the DDM's maintainers to decide; the start-point
   integration's absolute tolerance, which cannot resolve densities near the floor, is a separate point.
+- **The sample kernel's local step size is often its last tuned value, not the tail's average.** In the
+  100-iteration tail that tunes the sample kernel the local kernel runs on 25-35 iterations; the first 20 uses
+  are warm-up and the average needs 10 more, so many subject-chains keep the last Robbins-Monro value (5 of 8
+  on a small test model). The kernel is still fixed and exact, so this costs efficiency, not correctness; a
+  longer tail or a shorter warm-up would change every fit, so it needs the conjugate exactness check and the
+  ladder rerun.
 - **The stop rule (section 7).** `max_tries` does not bind until 1000 draws are kept (the discard keeps
   lowering the count: one Eisenberg run generated 3300 draws in 33 checks to keep 1029); a hard limit is
   a one-line change with its own consequence (fewer than 1000 draws). `gd_quantile = .99` costs nothing

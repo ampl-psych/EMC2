@@ -172,9 +172,7 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
     pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage)
     # For p_accept
     pm_settings[[i]]$epsilon <- check_epsilon(pm_settings[[i]]$epsilon, n_pars, pm_settings[[i]]$mix)
-    # Components independent of the chain's current value are used at the
-    # scale of their estimated covariance; only the local (random-walk-like)
-    # components have an adapted epsilon (see new_particle).
+    # Only local components have an adapted epsilon (see new_particle).
     if(!legacy_sampler()) pm_settings[[i]]$epsilon[!local_components(stage)[-1]] <- 1
     # For mix and p_accept tuning
     pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage)
@@ -266,16 +264,10 @@ run_stage <- function(pmwgs,
   # or particle-number adaptation in the sample stage (see new_particle).
   tune$frozen <- stage == "sample" && !legacy_sampler()
   tune$lik_prec <- pmwgs$lik_prec
-  # Tuning of the exact kernels (update_pm_settings)
   tune$exact <- kernel %in% c("adapt", "sample") && !legacy_sampler()
-  # With a group level, the local kernel is the one that follows it whatever
-  # the shape of the likelihood. The
-  # sample-stage kernel is fixed, so the local kernel keeps at least a quarter
-  # of the iterations whatever the acceptance rates were while it was tuned.
+  # The fixed sample kernel keeps the local kernel (the one that follows the
+  # group level) on at least a quarter of iterations.
   tune$min_local <- if(tune$exact && kernel == "sample" && pmwgs$type != "single") .25 else 0
-  # The interweaving scale move (scale_move_standard) runs after the group
-  # step in the stages named by scale_move_stages(); its step sizes adapt
-  # except in the sample stage
   do_scale <- pmwgs$type == "standard" && kernel %in% scale_move_stages()
   scale_settings <- attr(pmwgs$samples, "scale_move")
   if(do_scale) scale_settings <- scale_move_init(scale_settings, pmwgs$par_names[!pmwgs$nuisance])
@@ -597,9 +589,8 @@ run_stage <- function(pmwgs,
 #   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 # }
 
-# TRUE when options(emc.sampler = "legacy") asks for the pre-2026-09-30
-# particle step and tuning (kept for comparison; not a valid MCMC kernel in
-# high dimensions, see vignette("sampler-validity")).
+# options(emc.sampler = "legacy") restores the previous particle step and
+# tuning, kept for comparison (vignette("sampler-validity")).
 legacy_sampler <- function() identical(getOption("emc.sampler"), "legacy")
 
 # Which proposal components of each stage are centred on the chain's current
@@ -652,34 +643,18 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   }
   n_proposals <- length(Mus)
   local <- local_components(stage)
-  # Putting local and independent components in one importance-weighted
-  # batch is not a valid MCMC step: the current value's weight then contains
-  # a proposal density centred on itself, and the chain's stationary
-  # distribution moves towards the proposal (under-dispersed when the
-  # proposal is narrower than the posterior, over-dispersed when wider; see
-  # rating-work/sampler/REPORT.md). It is, however, a fast stochastic
-  # hill-climb, so preburn and burn -- whose draws are discarded -- keep it as
-  # the search step. adapt and sample, whose draws build the proposals and
-  # the posterior, use an exact kernel: each iteration ONE of two kernels,
-  # chosen with the mixture weights -- the local kernel (components centred
-  # on the current value) or the global kernel (the independent components).
-  # options(emc.sampler = "legacy") restores the pre-2026-09-30 sampler in
-  # full (this step in every stage, plus its tuning, floors and fallbacks) so
-  # the two can be compared; see vignette("sampler-validity").
-  exact <- stage %in% c("adapt", "sample") && !legacy_sampler()
-  # The local kernel's covariance follows the current group level: the
-  # subject's conditional posterior precision is (approximately) its
-  # likelihood precision plus the current prior precision, so the proposal
-  # narrows with the group variance instead of freezing when the group
-  # variance collapses. The step conditions on the group level, so a proposal
-  # that depends on it is legitimate. lik_prec is estimated outside the stage
-  # (create_lik_prec) and is NULL for type "single" (no group level to follow).
-  # The same two terms give an independence proposal that follows the group
-  # level -- the Gaussian approximation of the subject's conditional posterior
-  # at the current (mu, Sigma) -- which takes the place of the chain-mean
-  # component, whose location and scale are those of the group level it was
-  # estimated at.
-  lik <- if(exact) tune$lik_prec[[s]] else NULL
+  # Local and independent components in one importance-weighted batch are not
+  # a valid MCMC step (the current value's weight contains a proposal density
+  # centred on itself), but they make a fast search: preburn and burn, whose
+  # draws are discarded, keep it. adapt and sample use an exact kernel: each
+  # iteration either the local kernel or the global (independent) one, chosen
+  # with the mixture weights.
+  exact <- isTRUE(tune$exact)
+  # With a group level the local covariance is (lik_prec + current prior
+  # precision)^-1, so the proposal narrows with the group variance instead of
+  # freezing; the same terms give the conditional proposal that replaces the
+  # chain-mean component. lik_prec is NULL for type "single".
+  lik <-if(exact) tune$lik_prec[[s]] else NULL
   # ... in its draw-based version where there is one (create_lik_prec)
   if(!is.null(lik$post)) lik <- lik$post
   lik_prec <- lik$prec
@@ -708,11 +683,9 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
                                                         pm_settings[[i]]$n_particles*particle_multiplier)
     # The exact local kernel is an ensemble move (Tjelmeland, 2004; Neal,
     # 2011): each local component j gets an auxiliary centre
-    # c_j ~ N(subj_mu, S_j), particles are drawn from N(c_j, S_j), and the
-    # target of the step is pi(theta) prod_j N(theta | c_j, S_j), whose
-    # marginal over the centres is pi. Given the centres every component is
-    # independent of the current value, so the importance weights below are
-    # exact for either kernel.
+    # c_j ~ N(subj_mu, S_j), particles come from N(c_j, S_j), and the target
+    # pi(theta) prod_j N(theta | c_j, S_j) has marginal pi. Given the centres no
+    # component depends on the current value, so the weights below are exact.
     centres <- Mus
     covs <- vector("list", n_proposals)
     for(j in which(active)){
@@ -831,30 +804,15 @@ conditional_proposal <- function(lik, prior_prec, group_mu){
   }, error = function(e) NULL)
 }
 
-# Likelihood precision (minus the Hessian of the log-likelihood) of one
-# subject at `centre`, by central differences. The step of each parameter is
-# searched for so that the log-likelihood drops by about `target` (a step of
-# roughly one likelihood standard deviation), which keeps the differences well
-# above numerical noise whatever the scale of the posterior the centre came
-# from -- in a collapsed group level the posterior scale says nothing about
-# the likelihood's. The search brackets the step (the largest step found too
-# small, the smallest found too large) and bisects in log scale once it has
-# both, because a multiplicative search alone bounces for ever between a
-# step on a flat stretch of the likelihood and one across a cliff: the DDM
-# returns min_ll per trial outside its bounds (sv, SZ < .01), forstmann's
-# subjects sit a log unit or two above that floor in sv / SZ, and the x10 /
-# x0.1 search landed on the floor side half the time and read the floor as
-# a curvature of 10^3-10^4 with a gradient to match (rating-work/sampler/
-# hier/stageH5/REPORT.md) -- a surrogate that narrowed the local proposal
-# of those parameters to ~0.01 and made every interweaving move on them fail
-# its exact check. A parameter whose step never settles (flat to one side, a
-# cliff within any usable step to the other) gets no likelihood precision
-# and no gradient, cross terms included: the surrogate is flat in it, which
-# the subject step (group precision alone) and the sweep (prior part and
-# exact check) both handle. p^2 + p + 1 likelihood evaluations plus the step
-# search. Returns list(prec, lin): the positive semi-definite precision and
-# the linear term of the quadratic approximation of the log-likelihood,
-# -1/2 x' prec x + lin' x; or NULL if the centre has no finite likelihood.
+# Likelihood precision (minus the Hessian) of one subject at centre, by
+# central differences. Each step is searched for so that the log-likelihood
+# drops by about target, which keeps the differences above noise whatever
+# scale h came from. The search brackets the step and bisects in log scale: a
+# multiplicative search can bounce between a flat stretch and a cliff (a
+# likelihood floored at a model bound, e.g. the DDM's min_ll). A parameter
+# whose step never settles gets no precision and no gradient, cross terms
+# included. Returns list(prec, lin) of -1/2 x' prec x + lin' x, or NULL if
+# f(centre) is not finite.
 lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_rounds = 8){
   p <- length(centre)
   ll <- function(X){
@@ -868,11 +826,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
   E <- diag(p)
   fp <- fm <- rep(NA_real_, p)
   todo <- rep(TRUE, p)
-  # bracket of the step: the largest h whose drop was too small and the
-  # smallest whose drop was too large (or not finite); once both exist the
-  # next h is their geometric mean, so the search settles instead of bouncing
-  # between a flat stretch and a cliff
-  lo <- rep(NA_real_, p); hi <- rep(NA_real_, p)
+  lo <-rep(NA_real_, p); hi <- rep(NA_real_, p)
   for(r in seq_len(max_rounds)){
     k <- which(todo)
     D <- E[k, , drop = FALSE] * h[k]
@@ -892,12 +846,7 @@ lik_precision <- function(centre, h, dadm, model, r_cores = 1, target = 1, max_r
     h_new[both] <- sqrt(lo[kb[both]] * hi[kb[both]])
     h[kb] <- h_new
   }
-  # A parameter whose step never settled has a likelihood that is flat to
-  # one side and falls off a cliff to the other within any usable step (a
-  # bound of the model, or a floor of the likelihood): central differences
-  # would read the cliff as a huge curvature and gradient. It gets no
-  # likelihood precision and no gradient, cross terms included.
-  cliff <- todo | !is.finite(fp) | !is.finite(fm)
+  cliff <-todo | !is.finite(fp) | !is.finite(fm)
   H <- diag((2*f0 - fp - fm)/h^2, p)
   if(p > 1){
     pairs <- utils::combn(p, 2)
@@ -966,37 +915,24 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
 
     # D) Adapt epsilon via continuous approach
     # ----------------------------------------
-    # pm_settings$epsilon is a vector, same length as pm_settings$mix - 1
-    # tune$p_accept is also a vector, e.g. c(0.2, 0.3, 0.6) for each proposal.
-    # Only the local (random-walk-like) components are scaled; the acceptance
-    # of a step-size adaptation is self-correcting for those (tiny steps ->
-    # half the particles beat the current value -> epsilon grows), so the
-    # floor is only a numerical guard. Independent components are used at the
-    # scale of their estimated covariance: for those, low acceptance means
-    # the proposal is too NARROW, so acceptance-driven shrinking would drive
-    # them to the floor.
+    # Only local components are scaled: for them acceptance is self-correcting
+    # and the clamp only a numerical guard. For independent ones low acceptance
+    # means too narrow, so shrinking them on acceptance would drive them to the
+    # floor.
     legacy <- legacy_sampler()
     # legacy floors: .1 for preburn, .4 for burn and adapt and .6 for sample
     clamp <- if(legacy) c(ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6)), 5)
              else c(.01, 20)
     if(isTRUE(tune$exact)){
-      # Exact kernels (adapt, and the tail of adapt that tunes the sample
-      # kernel): the local step size is updated only in the iterations that
-      # used the local kernel, from that iteration's own rate. (Driving it
-      # every iteration with the rate accumulated over the window makes it
-      # overshoot and oscillate, which matters once the value is frozen.) The
-      # log step sizes of the later uses are averaged; tune_sample_kernel()
-      # freezes the kernel at that average.
+      # Exact kernels: the local step moves only on iterations that used the
+      # local kernel, from that iteration's rate (a windowed rate overshoots);
+      # tune_sample_kernel() freezes it at the average of the later log steps.
       new_epsilon <- pm_settings$epsilon
-      new_epsilon[!tune$local[-1]] <- 1
       for(j in which(tune$local & !is.na(rate_now))){
         signal <- max(-1, min(3, (rate_now[j] - tune$p_accept[j - 1]) / tune$p_accept[j - 1]))
         new_epsilon[j - 1] <- min(clamp[2], max(clamp[1], exp(log(new_epsilon[j - 1]) + .1 * signal)))
         pm_settings$local_uses <- sum(pm_settings$local_uses, 1)
-        if(pm_settings$local_uses > 20){
-          pm_settings$log_eps_sum <- sum(pm_settings$log_eps_sum, log(new_epsilon[j - 1]))
-          pm_settings$log_eps_n <- sum(pm_settings$log_eps_n, 1)
-        }
+        if(pm_settings$local_uses > 20) pm_settings$log_eps_sum <- sum(pm_settings$log_eps_sum, log(new_epsilon[j - 1]))
       }
     } else {
       new_epsilon <- update_epsilon_continuous(
@@ -1010,7 +946,6 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
         clamp      = clamp,
         relative   = !legacy
       )
-      if(!legacy) new_epsilon[!tune$local[-1]] <- 1
     }
     pm_settings$epsilon <- new_epsilon
 
@@ -1062,10 +997,8 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
       new_num_particles <- round(pm_settings$n_particles * scale_factor)
       pm_settings$n_particles <- max(25, min(tune$max_particles, new_num_particles))
       if(isTRUE(tune$exact)){
-        # One step of 100 iterations is too short for the update above to
-        # arrive, so the tail also records the effective sample size per
-        # particle; tune_sample_kernel() sets the number of particles from
-        # its average (same fixed point: ESS = target).
+        # 100 iterations are too few for the update above to settle: the tail
+        # records ESS per particle and tune_sample_kernel() uses its average.
         pm_settings$log_ess_sum <- sum(pm_settings$log_ess_sum, log(ess / (length(weights) - 1)))
         pm_settings$log_ess_n <- sum(pm_settings$log_ess_n, 1)
         pm_settings$ess_target <- tune$target_ESS
@@ -1096,10 +1029,8 @@ update_epsilon_continuous <- function(
   # We'll do one pass per element. If you want a single c_term, that's also fine.
   c_term <- (1 - 1/d)*sqrt(2*pi)*exp(alphaStar^2/2)/(2*alphaStar) + 1/(d*target*(1-target))
   step_size <- c_term / max(damp, iter)
-  # 3) compute difference from target acceptance -- relative to the target
-  # and clipped to [-1, 1]: with a small target the raw difference (legacy)
-  # would shrink a far-too-wide proposal (acceptance 0) much more slowly than
-  # it grows a far-too-narrow one.
+  # 3) compute difference from target acceptance, relative and clipped to
+  # [-1, 1]: with a small target the raw one shrinks a too-wide proposal slowly
   diff_accept <- if(relative) pmax(-1, pmin(1, (acceptance - target) / target)) else acceptance - target
   # 4) update in log space (vectorized)
   log_eps_new <- log_eps + step_size * diff_accept
@@ -1219,12 +1150,9 @@ set_p_accept <- function(stage, search_width){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
-  # adapt/sample (exact kernel): the local component's step size is adapted
-  # so that about 3% of its particles beat the current value -- for the
-  # ensemble move this is where the effective sample size per iteration is
-  # maximal in 9 to 35 dimensions (rating-work/sampler/REPORT.md). The
-  # independent components are not scaled; their targets only enter the
-  # mixing-weight adaptation.
+  # adapt/sample: the local component targets ~3% of particles beating the
+  # current value (where the ensemble move's ESS per iteration peaks);
+  # independent components are not scaled.
   if(stage == "preburn") return(0.02 * (1/search_width))
   if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
   if(legacy_sampler()){

@@ -254,18 +254,10 @@ split_mcl <- function(mcl)
   coda::as.mcmc.list(c(mcl,mcl2))
 }
 
-# Split-Rhat of every variable of X (draws x variables x chains): each chain
-# is halved, so that a chain that is still moving disagrees with itself, and
-# the potential scale reduction factor of Gelman & Rubin (1992) is taken over
-# the half-chains, sqrt(((n - 1) / n W + B / n) / W) with W the mean
-# within-half-chain variance and B / n the variance of the half-chain means.
-# This is the one definition of Rhat in the package (gd_summary(), summary(),
-# and the stop rules of fit()). It is not coda::gelman.diag()'s point estimate,
-# which multiplies by a degrees-of-freedom correction sqrt((d + 3) / (d + 1))
-# that is large whenever the half-chains' variances differ (one chain visiting
-# a shoulder of a skewed posterior reads as 1.15-1.2 where this reads 1.05)
-# and log- or logit-transforms any all-positive column although the sampled
-# parameters are already unbounded. A variable that does not vary returns NaN.
+# Split-Rhat of every variable of X (draws x variables x chains): Gelman &
+# Rubin's (1992) PSRF over the half-chains, without coda's degrees-of-freedom
+# correction or transform (see ?gd_summary). The one definition of Rhat in the
+# package; NaN for a variable that does not vary.
 split_rhat <- function(X){
   n <- dim(X)[1]; h <- n %/% 2
   if(h < 2) return(stats::setNames(rep(NaN, dim(X)[2]), dimnames(X)[[2]]))

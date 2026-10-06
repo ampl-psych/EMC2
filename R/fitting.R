@@ -210,7 +210,7 @@ run_emc <- function(emc, stage, stop_criteria,
 
   if(stage == "adapt" && !legacy_sampler() && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
-    emc <- tune_sample_kernel(emc, step_size = step_size, verbose = verbose, verboseProgress = verboseProgress,
+    emc <- tune_sample_kernel(emc, verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName, particle_factor = particle_factor, search_width = search_width,
                               cores_per_chain = cores_per_chain, cores_for_chains = cores_for_chains,
                               n_blocks = n_blocks, on_singular = on_singular, r_cores = r_cores)
@@ -221,48 +221,24 @@ run_emc <- function(emc, stage, stop_criteria,
   return(emc)
 }
 
-# The sample stage runs one fixed kernel, so that its draws are from a Markov
-# chain with the posterior as its stationary distribution: a kernel that keeps
-# being re-chosen from the chain's own recent draws (proposals re-estimated
-# every step, step size and mixing weights following a window of acceptance
-# counts) is not, and in a hierarchical funnel the difference is large
-# (rating-work/sampler/hier/stageH1/REPORT.md). The kernel is therefore built
-# and tuned here, at the end of adapt: the sample-stage proposals are made
-# from the last kernel_window adapt iterations and stored (add_proposals), and
-# one more step of adapt is run with that kernel, in which its step size,
-# mixing weights and number of particles are adapted. Those draws are
-# labelled adapt and not kept.
-#
-# A kernel that is never revisited has to be built from draws that are worth
-# it. With a group level, adapt therefore does not stop on min_unique alone
-# (about 100 iterations, while the chains still disagree: with 518 subjects
-# the kernel of a few of them was then poor, and those subjects set the
-# fit's Rhat -- 20 of 20 fits above 1.1 at max_tries;
-# rating-work/sampler/hier/stageH6/REPORT.md). It also waits until, over the
-# window the kernel is built from, the subject-level parameters agree across
-# chains (adapt_converged): the largest Rhat of alpha over the last
-# kernel_window iterations below adapt_converge$rhat, read from
-# adapt_converge$min adapt iterations on and given up at adapt_converge$max.
-# Where that Rhat does not come down -- a parameter on a plateau or in a
-# funnel keeps the largest entry above the bound however long adapt runs (16
-# of 20 runs of the small funnel cells went to the limit, forstmann's DDM at
-# 1.6 times the run time; stageH6b/REPORT_partB.md) -- adapt also stops once
-# adapt_converge$stall successive checks have not improved on the best
-# earlier one (adapt_stop).
-# options(emc.adapt_converge = FALSE) restores the min_unique-only rule.
+# The sample stage runs one fixed kernel: a kernel re-chosen from the chain's
+# own recent draws is not a valid MCMC kernel. It is built here, at the end of
+# adapt, from the last kernel_window adapt iterations (add_proposals), and
+# tuned in one more 100-iteration adapt step (labelled adapt, not kept).
+# Because it is never revisited, adapt with a group level also waits
+# (adapt_converged) until the largest Rhat of alpha over that window is below
+# adapt_converge$rhat, read from adapt_converge$min iterations on and given up
+# after adapt_converge$stall checks without improvement or at
+# adapt_converge$max. options(emc.adapt_converge = FALSE) turns this off.
 kernel_window <- 250
 adapt_converge <- list(min = 250, max = 1000, rhat = 1.2, stall = 3)
-
-adapt_converge_on <- function(emc){
-  !legacy_sampler() && !isFALSE(getOption("emc.adapt_converge")) && emc[[1]]$type != "single"
-}
 
 # Have the adapt draws the sample-stage kernel would be built from converged,
 # or stopped improving? history: the window Rhats of the earlier checks of
 # this adapt run (check_progress keeps them). Returns TRUE / FALSE with the
 # history including this check as attribute "rhat".
 adapt_converged <- function(emc, n_adapt, history = NULL, verbose = FALSE){
-  if(!adapt_converge_on(emc)) return(TRUE)
+  if(legacy_sampler() || isFALSE(getOption("emc.adapt_converge")) || emc[[1]]$type == "single") return(TRUE)
   if(n_adapt < adapt_converge$min) return(structure(FALSE, rhat = history))
   h <- c(history, max(window_rhat(emc, kernel_window)))
   why <- adapt_stop(h, n_adapt)
@@ -282,7 +258,7 @@ adapt_stop <- function(h, n_adapt){
   ""
 }
 
-tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileName, particle_factor,
+tune_sample_kernel <- function(emc, verbose, verboseProgress, fileName, particle_factor,
                                search_width, cores_per_chain, cores_for_chains, n_blocks,
                                on_singular, r_cores){
   if (verbose) message("Tuning the sample-stage kernel")
@@ -305,51 +281,56 @@ tune_sample_kernel <- function(emc, step_size, verbose, verboseProgress, fileNam
   emc <- run_block(emc, 100)
   # Freeze the local step size at the average over the tail, and the number
   # of particles where the average effective sample size meets its target
-  for(i in 1:length(emc)){
-    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
-    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
-      for(k in 1:length(x)){
-        if(isTRUE(x[[k]]$log_eps_n >= 10)) x[[k]]$epsilon[1] <- exp(x[[k]]$log_eps_sum / x[[k]]$log_eps_n)
-        if(isTRUE(x[[k]]$log_ess_n >= 10)){
-          n_particles <- round(x[[k]]$ess_target / exp(x[[k]]$log_ess_sum / x[[k]]$log_ess_n))
-          x[[k]]$n_particles <- max(25, min(x[[k]]$max_particles, n_particles))
-        }
-      }
-      return(x)
-    })
-    sm <- attr(emc[[i]]$samples, "scale_move")
-    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_freeze(sm)
-  }
-  return(emc)
+  emc <- map_pm_settings(emc, function(x){
+    n_avg <- x$local_uses - 20             # local uses after the warm-up
+    if(isTRUE(n_avg >= 10)) x$epsilon[1] <- exp(x$log_eps_sum / n_avg)
+    if(isTRUE(x$log_ess_n >= 10)){
+      n_particles <- round(x$ess_target / exp(x$log_ess_sum / x$log_ess_n))
+      x$n_particles <- max(25, min(x$max_particles, n_particles))
+    }
+    x
+  })
+  map_scale_move(emc, scale_move_freeze)
 }
 
 # Restart the counters and averages that the tuning of the sample-stage kernel
 # is read from (tune_sample_kernel)
 reset_kernel_tail <- function(emc){
-  for(i in 1:length(emc)){
-    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
-    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
-      for(k in 1:length(x)){
-        x[[k]]$proposal_counts <- rep(0, length(x[[k]]$proposal_counts))
-        x[[k]]$acc_counts <- rep(0, length(x[[k]]$proposal_counts))
-        x[[k]]$iter <- 25
-        x[[k]]$local_uses <- x[[k]]$log_eps_sum <- x[[k]]$log_eps_n <- 0
-        x[[k]]$log_ess_sum <- x[[k]]$log_ess_n <- 0
-      }
-      return(x)
-    })
-    # the scale move's step sizes: average over the tail from here on
+  emc <- map_pm_settings(emc, function(x){
+    x <- reset_acc_counts(x); x$iter <- 25
+    x$local_uses <- x$log_eps_sum <- 0
+    x$log_ess_sum <- x$log_ess_n <- 0
+    x
+  })
+  map_scale_move(emc, scale_move_reset_tail)
+}
+
+# f applied to every component of every subject's particle settings, or to
+# the sweep's settings, of every chain
+map_pm_settings <- function(emc, f){
+  for(i in seq_along(emc)){
+    pm <- attr(emc[[i]]$samples, "pm_settings")
+    if(!is.null(pm)) attr(emc[[i]]$samples, "pm_settings") <- lapply(pm, function(x) lapply(x, f))
+  }
+  emc
+}
+map_scale_move <- function(emc, f){
+  for(i in seq_along(emc)){
     sm <- attr(emc[[i]]$samples, "scale_move")
-    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- scale_move_reset_tail(sm)
+    if(!is.null(sm)) attr(emc[[i]]$samples, "scale_move") <- f(sm)
   }
   emc
 }
 
-# Rhat (not split) of every subject x parameter alpha across the chains, over
-# the last n iterations of each chain. A few subjects whose chains sit apart
-# for a whole window are what a kernel built too early leaves behind; the
-# mean over entries (burn's criterion) does not show them
-# (rating-work/sampler/hier/stageH6b/REPORT.md, calibration).
+reset_acc_counts <- function(x){
+  x$proposal_counts <- rep(0, length(x$proposal_counts))
+  x$acc_counts <- rep(0, length(x$proposal_counts))
+  x
+}
+
+# Rhat (not split) of every subject x parameter alpha over the last n
+# iterations; the largest entry finds the few subjects whose chains sit apart,
+# which the mean (burn's criterion) hides.
 window_rhat <- function(emc, n){
   idx <- emc[[1]]$samples$idx
   it <- max(1, idx - n + 1):idx
@@ -460,22 +441,14 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-# Likelihood precision of every subject (new_particle, scale_move_standard),
-# from the subject's recent draws (the window create_chain_proposals uses).
-# One estimate, shared by the chains. Two versions:
-# - by finite differences at the mean of the draws (lik_precision): `prec`,
-#   `lin`. The interweaving sweep's surrogate.
-# - for type "standard", from the covariance of the draws themselves
-#   (lik_precision_draws): `post`, a list(prec, lin) that the particle step
-#   uses in place of the first where it exists. The finite differences give
-#   the curvature at one point; a subject whose likelihood is skewed or
-#   ridge-shaped has a posterior much wider than that curvature says (in the
-#   Eisenberg Simon fit of 518 subjects the local proposal of the worst
-#   subjects was 2-3 times too narrow in t0 and B, and those subjects set the
-#   fit's Rhat; rating-work/sampler/hier/stageH6/REPORT.md, stageH6b).
+# Likelihood precision of every subject from its recent draws, shared by the
+# chains: by finite differences at the draws' mean (lik_precision(), the
+# sweep's surrogate) and, for type "standard", from the draws' covariance
+# (lik_precision_draws(), $post, used by the particle step where it exists),
+# because one point's curvature is too narrow for a skewed posterior.
 create_lik_prec <- function(emc, n_cores){
   idx <- emc[[1]]$samples$idx
-  history_idx <- unique(pmax(1, round(idx - min(250, idx/1.5)):idx - 1))
+  history_idx <- proposal_window(idx)
   alpha <- get_pars(emc, filter = history_idx, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
                     by_subject = T, merge_chains = T, return_mcmc = F,
@@ -495,20 +468,11 @@ create_lik_prec <- function(emc, n_cores){
   return(emc)
 }
 
-# The group level over the window the likelihood precisions are built from:
-# the mean group precision and each subject's mean group-level mean
-# (p x n_subjects). NULL when the draw-based likelihood precision does not
-# apply: types other than "standard", nuisance parameters, too few draws --
-# or a group level that moves over the window. lik_precision_draws subtracts
-# the window's mean group precision from the draws' precision, which is the
-# likelihood's only if the group precision is about constant over the
-# window. In a funnel it is not: in the small funnel cells of the ladder
-# the worst parameter's group precision 1 / sigma^2 varied 8-20-fold
-# (coefficient of variation over the window), the conditional proposal's
-# acceptance fell 2-10-fold and subject-level ESS by a third, where with
-# many subjects (CV at most .18-.29) the draws' estimate helps
-# (stageH6b/REPORT_partB.md). So it is used only where the largest CV over
-# the parameters is below lik_prec_draws_cv.
+# The window's mean group precision and group means (p x n_subjects), or NULL
+# where the draw-based precision does not apply: not "standard", nuisance
+# parameters, < 100 draws, or a group precision that is not about constant
+# over the window (largest CV >= lik_prec_draws_cv, e.g. a funnel), since
+# lik_precision_draws() subtracts it.
 lik_prec_draws_cv <- .5
 
 window_group_level <- function(emc, history_idx, n_draws){
@@ -542,29 +506,21 @@ group_precision_cv <- function(emc, history_idx){
 }
 
 # Likelihood precision of one subject from its draws: the inverse of their
-# covariance V minus the group precision P of the same window, i.e. the
-# likelihood's curvature averaged over the posterior instead of taken at one
-# point. In the coordinates in which P is the identity the draws' precision
-# is M = P^-1/2 V^-1 P^-1/2 and the likelihood's is M - I.
-# - Directions in which M - I is clearly positive take the draws' estimate.
-#   "Clearly": an eigenvalue of M - I above tau, where tau is at least the
-#   size the largest eigenvalue reaches by sampling noise alone for p
-#   parameters and the draws' effective number, (1 + sqrt(p / ESS))^2 - 1.
-# - In the other directions the draws show the prior: either the group level
-#   is collapsed (a funnel), where the difference is noise and only the
-#   finite differences `fd` know the likelihood, or the likelihood says little
-#   there. They take the finite-difference estimate -- but no more than tau,
-#   because the draws do rule out more than that: a curvature taken at one
-#   point of a skewed likelihood can be far too large for a posterior that is
-#   in fact as wide as the prior.
+# covariance V minus the group precision P of the same window. In coordinates
+# where P is the identity the draws' precision is M = P^-1/2 V^-1 P^-1/2 and
+# the likelihood's M - I. Directions where an eigenvalue of M - I exceeds tau
+# (at least the largest eigenvalue's sampling noise for p parameters and the
+# draws' ESS, (1 + sqrt(p / ESS))^2 - 1) take the draws' estimate; in the
+# others the draws show the prior (a collapsed group level, or a likelihood
+# that says little), so they take the finite-difference estimate `fd`, capped
+# at tau since the draws rule out more than that.
 # The linear term puts the conditional mean at the draws' mean when the group
 # level is the window's (P, mu); in the directions left to `fd` it is the
 # finite-difference quadratic's, taken with the other directions held at the
-# draws' mean (its cross terms with them belong in the linear term: without
-# that the conditional proposal sits many posterior SDs off).
-# draws: p x N, in n_chains blocks of equal length. Returns list(prec, lin,
-# n_draws = number of directions taken from the draws, n_capped, tau, ess),
-# or NULL (too few distinct draws, or not computable).
+# draws' mean (without those cross terms the conditional proposal sits many
+# posterior SDs off). draws: p x N, in n_chains blocks of equal length.
+# Returns list(prec, lin, n_draws = directions taken from the draws,
+# n_capped, tau, ess), or NULL (too few distinct draws, or not computable).
 lik_precision_draws <- function(draws, P, mu, fd, tau = .5, n_chains = 1){
   p <- nrow(draws); N <- ncol(draws)
   if(length(unique(draws[1, ])) < max(50, 5 * p)) return(NULL)
@@ -607,7 +563,7 @@ lik_precision_draws <- function(draws, P, mu, fd, tau = .5, n_chains = 1){
   lin <- drop(Ph %*% lw)
   if(!all(is.finite(L)) || !all(is.finite(lin))) return(NULL)
   dimnames(L) <- dimnames(fd$prec); names(lin) <- names(fd$lin)
-  list(prec = L, lin = lin, n_draws = sum(trusted), n_capped = n_capped, tau = tau, ess = ess)
+  list(prec = L, lin = lin, n_draws = sum(trusted), n_capped = n_capped)
 }
 
 check_progress <- function (emc, stage, iter, stop_criteria,
@@ -692,12 +648,9 @@ check_progress <- function (emc, stage, iter, stop_criteria,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
 
-# The Rhats a stop rule reads, over the draws of `stage` after its first
-# `filter`: the split-Rhat (split_rhat()) of every selected parameter. The
-# subject-level parameters are taken from the stored array in one pass --
-# through gd_summary() they cost one call per subject, which with several
-# hundred subjects took longer than the sampling between two checks -- and
-# are returned parameter by parameter, subjects within, as gd_summary() does.
+# The Rhats a stop rule reads (split_rhat()), subject-level ones from the
+# stored array in one pass (gd_summary() costs one call per subject), in
+# gd_summary()'s order.
 stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   gd_out <- c(); alpha <- NULL; alpha_all <- NULL; other <- c()
   for(select in selection){
@@ -740,11 +693,8 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   list(gd = gd_out, alpha = alpha, other = other, alpha_all = alpha_all)
 }
 
-# The number a max_gd criterion compares with its bound: the largest Rhat of
-# the selection, or, with stop_criteria$gd_quantile = q, the larger of the q
-# quantile of the subject-level (alpha) Rhats and the largest of the others.
-# With thousands of subject-level parameters the largest is set by a handful of
-# them; a quantile makes the criterion independent of the number of subjects.
+# max_gd's statistic: the largest Rhat, or with gd_quantile that quantile of
+# the alpha Rhats and the largest of the rest (see ?fit).
 gd_top <- function(g, gd_quantile = NULL){
   if(is.null(gd_quantile) || is.null(g$alpha) || !all(is.finite(g$alpha))) return(max(g$gd))
   max(as.numeric(stats::quantile(g$alpha, gd_quantile)), g$other)
@@ -924,16 +874,16 @@ sub_blocking <- function(emc, n_blocks){
   return(components)
 }
 
+# The draws the proposals are built from: the last 250 iterations, or the last
+# third once there are fewer than 375
+proposal_window <- function(idx) unique(pmax(1, round(idx - min(250, idx / 1.5)):idx - 1))
+
 create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_subjects <- emc[[1]]$n_subjects
   n_chains <- length(emc)
   n_pars <- emc[[1]]$n_pars
   stage <- emc[[1]]$samples$stage[length(emc[[1]]$samples$stage)]
-  if(is.null(samples_idx)){
-    idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
-    samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
-  }
-  history_idx <- unique(pmax(1, samples_idx - 1))
+  history_idx <- if(is.null(samples_idx)) proposal_window(emc[[1]]$samples$idx) else unique(pmax(1, samples_idx - 1))
   LL <- get_pars(emc, filter = history_idx, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
                  merge_chains = T, return_mcmc = F, remove_constants = F,
@@ -964,9 +914,8 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     }
     # Subjects without a usable covariance: use the mean of the other
     # subjects', else this chain's previous one, else a scaled-down prior
-    # variance (its epsilon then adapts quickly). Never a fixed diag(.5):
-    # for a concentrated posterior that is orders of magnitude too wide and
-    # the chain cannot recover from it.
+    # variance (its epsilon then adapts quickly). A fixed diag(.5) can be
+    # orders of magnitude too wide for a concentrated posterior.
     null_idx <- sapply(chains_var, is.null)
     if(all(null_idx)){
       mean_chains_var <- if(legacy_sampler()) diag(n_pars) * .5 else NULL
@@ -991,8 +940,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       # So we scale the epsilon a bit to account for narrow individual proposals
       prop_var_ratio <- 2
     } else{
-      # epsilon scales standard deviations, prop_var is a variance (the
-      # legacy sampler used the variance ratio)
+      # epsilon scales standard deviations, prop_var is a variance
       prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
       if(!legacy_sampler()) prop_var_ratio <- sqrt(prop_var_ratio)
     }
@@ -1014,32 +962,23 @@ reset_pm_settings <- function(emc, stage){
   legacy <- legacy_sampler()
   # Acceptance counts restart every step (step_size iterations), so the
   # epsilon and mixing-weight adaptation follows the recent window rather
-  # than the whole stage's history (the legacy sampler reset them only at a
-  # new stage and in burn).
+  # than the whole stage's history.
   if(legacy && !(new_stage || stage == "burn")) return(emc)
   # The sample stage's kernel is fixed: it keeps the settings that the tail of
   # adapt tuned for it (tune_sample_kernel)
   if(!legacy && stage == "sample") return(emc)
-  for(i in 1:length(emc)){
-    pm_settings <- attr(emc[[i]]$samples, "pm_settings")
-    if(is.null(pm_settings)) next   # first preburn step: nothing to reset yet
-    attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
-      for(i in 1:length(x)){
-        x[[i]]$proposal_counts <- rep(0, length(x[[i]]$proposal_counts))
-        x[[i]]$acc_counts <- rep(0, length(x[[i]]$proposal_counts))
-        if(new_stage){
-          x[[i]]$iter <- 25
-          x[[i]]$mix <- NULL
-          # burn's epsilons belong to (prior-variance, chains_var) random
-          # walks; adapt's first scaled component is the chains_var one, so
-          # carry that epsilon (check_epsilon then pads the vector)
-          if(stage == "adapt" && !legacy) x[[i]]$epsilon <- x[[i]]$epsilon[length(x[[i]]$epsilon)]
-        }
-      }
-      return(x)
-    })
-  }
-  return(emc)
+  map_pm_settings(emc, function(x){
+    x <- reset_acc_counts(x)
+    if(new_stage){
+      x$iter <- 25
+      x$mix <- NULL
+      # burn's epsilons belong to (prior-variance, chains_var) random
+      # walks; adapt's first scaled component is the chains_var one, so
+      # carry that epsilon (check_epsilon then pads the vector)
+      if(stage == "adapt" && !legacy) x$epsilon <- x$epsilon[length(x$epsilon)]
+    }
+    x
+  })
 }
 
 update_epsilon_scale <- function(pmwgs, prop_var_ratio){
