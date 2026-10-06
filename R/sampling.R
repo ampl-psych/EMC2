@@ -659,7 +659,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   # ... in its draw-based version where there is one (create_lik_prec)
   if(!is.null(lik$post)) lik <- lik$post
   lik_prec <- lik$prec
-  prior_prec <- if(is.null(lik_prec)) NULL else tryCatch(solve(group_var), error = function(e) NULL)
+  prior_prec <- if(is.null(lik_prec)) NULL else group_precision(group_var)
   cond <- conditional_proposal(lik, prior_prec, group_mu)
   if(!is.null(cond)){
     Mus[[3]] <- cond$mu
@@ -777,6 +777,18 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     if(!isTRUE(tune$frozen)) pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
   }
   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
+}
+
+# Nuisance parameters have a zero block in the merged group variance
+# (merge_group_level()): they get no prior precision, so the likelihood alone
+# shapes their proposal, instead of making the whole matrix singular.
+group_precision <- function(group_var){
+  free <- diag(group_var) > 0
+  P <- matrix(0, nrow(group_var), ncol(group_var), dimnames = dimnames(group_var))
+  inv <- tryCatch(solve(group_var[free, free, drop = FALSE]), error = function(e) NULL)
+  if(is.null(inv)) return(NULL)
+  P[free, free] <- inv
+  P
 }
 
 # Covariance of the local kernel for the parameters in idx: the inverse of

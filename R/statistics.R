@@ -255,18 +255,18 @@ split_mcl <- function(mcl)
 }
 
 # Split-Rhat of every variable of X (draws x variables x chains): Gelman &
-# Rubin's (1992) PSRF over the half-chains, without coda's degrees-of-freedom
-# correction or transform (see ?gd_summary). The one definition of Rhat in the
-# package; NaN for a variable that does not vary.
-split_rhat <- function(X){
-  n <- dim(X)[1]; h <- n %/% 2
+# Rubin's (1992) PSRF over the half-chains (split = FALSE: the whole chains),
+# without coda's degrees-of-freedom correction or transform (see ?gd_summary).
+# The one definition of Rhat in the package; NaN for a variable that does not
+# vary.
+split_rhat <- function(X, split = TRUE){
+  n <- dim(X)[1]; h <- if(split) n %/% 2 else n
   if(h < 2) return(stats::setNames(rep(NaN, dim(X)[2]), dimnames(X)[[2]]))
-  k <- dim(X)[2]
-  X1 <- X[seq_len(h), , , drop = FALSE]; X2 <- X[h + seq_len(h), , , drop = FALSE]
+  segs <- if(split) list(X[seq_len(h), , , drop = FALSE], X[h + seq_len(h), , , drop = FALSE]) else list(X)
   # centred on the first draw, so that the sums of squares below do not cancel
   ctr <- rep(X[1, , 1], each = h)
-  m <- cbind(colMeans(X1 - ctr), colMeans(X2 - ctr))
-  v <- (cbind(colMeans((X1 - ctr)^2), colMeans((X2 - ctr)^2)) - m^2) * h / (h - 1)
+  m <- do.call(cbind, lapply(segs, function(S) colMeans(S - ctr)))
+  v <- (do.call(cbind, lapply(segs, function(S) colMeans((S - ctr)^2))) - m^2) * h / (h - 1)
   W <- rowMeans(v)
   B_n <- rowSums((m - rowMeans(m))^2) / (ncol(m) - 1)
   r <- suppressWarnings(sqrt(((h - 1) / h * W + B_n) / W))

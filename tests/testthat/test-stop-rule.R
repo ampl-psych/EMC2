@@ -37,6 +37,10 @@ test_that("the stop rule's one-pass subject-level Rhats are gd_summary()'s", {
   expect_equal(g$alpha, unname(unlist(ref)), tolerance = 1e-5)       # parameters, subjects within
   expect_equal(unname(g$other), unname(unlist(gd_summary(samples_LNR, selection = "mu", stat = NULL, digits = 6))), tolerance = 1e-5)
   expect_length(g$gd, length(g$alpha) + length(g$other))
+  # omit_mpsrf = FALSE: the multivariate psrfs join the rest, the alpha Rhats stay as they are
+  gm <- stage_gds(samples_LNR, "alpha", "sample", omit_mpsrf = FALSE)
+  expect_identical(gm$alpha, g$alpha)
+  expect_equal(unname(gm$other), unname(sapply(gd_summary(samples_LNR, selection = "alpha", stat = NULL, digits = 6, omit_mpsrf = FALSE), `[[`, "mpsrf")), tolerance = 1e-5)
   # without the first 16 draws of the stage: what subset() would keep, for both selections
   g2 <- stage_gds(samples_LNR, c("alpha", "mu"), "sample", filter = 16)
   short <- subset(samples_LNR, stage = "sample", filter = 16)

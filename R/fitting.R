@@ -335,16 +335,20 @@ reset_acc_counts <- function(x){
 window_rhat <- function(emc, n){
   idx <- emc[[1]]$samples$idx
   it <- max(1, idx - n + 1):idx
-  n <- length(it)
-  M <- lapply(emc, function(x) rowMeans(x$samples$alpha[, , it, drop = FALSE], dims = 2))
-  V <- mapply(function(x, m) (rowMeans(x$samples$alpha[, , it, drop = FALSE]^2, dims = 2) - m^2) * n / (n - 1),
-              emc, M, SIMPLIFY = FALSE)
-  W <- Reduce(`+`, V) / length(V)
-  Mbar <- Reduce(`+`, M) / length(M)
-  B <- n * Reduce(`+`, lapply(M, function(m) (m - Mbar)^2)) / (length(M) - 1)
-  r <- sqrt(((n - 1) / n * W + B / n) / W)
-  r[!is.finite(r)] <- Inf
-  r
+  d <- dim(emc[[1]]$samples$alpha)
+  r <- split_rhat(alpha_draws(emc, rep(list(it), length(emc))), split = FALSE)
+  r[is.na(r)] <- Inf
+  matrix(r, d[1], d[2])
+}
+
+# The alpha draws its[[i]] of chain i (the first min(lengths(its)) of each) as
+# draws x (subjects, parameters within) x chains, split_rhat()'s layout
+alpha_draws <- function(emc, its){
+  n <- min(lengths(its)); d <- dim(emc[[1]]$samples$alpha)
+  vapply(seq_along(emc), function(i){
+    a <- emc[[i]]$samples$alpha[, , its[[i]][seq_len(n)], drop = FALSE]
+    t(matrix(a, d[1] * d[2], n))
+  }, matrix(0, n, d[1] * d[2]))
 }
 
 # The interweaving sweep's gate (scale_move_gate), from the sweeps since its
@@ -655,7 +659,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
 stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   gd_out <- c(); alpha <- NULL; alpha_all <- NULL; other <- c()
   for(select in selection){
-    if(select == "alpha" && omit_mpsrf){
+    if(select == "alpha"){
       its <- lapply(emc, function(x){
         it <- which(x$samples$stage[seq_len(x$samples$idx)] == stage)
         if(filter > 0) it <- it[-seq_len(min(filter, length(it)))]
@@ -665,14 +669,22 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
       p <- dim(emc[[1]]$samples$alpha)[1]; ns <- dim(emc[[1]]$samples$alpha)[2]
       if(n < 4){
         gd <- rep(NaN, p * ns); is_const <- rep(FALSE, p * ns)
+        mpsrf <- rep(Inf, p)
       } else{
-        X <- vapply(seq_along(emc), function(i){
-          a <- emc[[i]]$samples$alpha[, , its[[i]][seq_len(n)], drop = FALSE]
-          t(matrix(a, p * ns, n))                           # draws x (subjects, parameters within)
-        }, matrix(0, n, p * ns))
+        X <- alpha_draws(emc, its)
         # an entry with one value in every draw of every chain is not a sampled
         # quantity: left out of the criterion, as get_pars() leaves it out
         is_const <- rowSums(colSums(abs(X - rep(X[1, , 1], each = n)), dims = 1)) == 0
+        # gd_summary()'s multivariate psrf, one per parameter across subjects:
+        # kept out of alpha (and so out of gd_quantile and set_tune_ess()), it
+        # is one of "the rest"
+        mpsrf <- if(omit_mpsrf) NULL else vapply(seq_len(p), function(j){
+          cols <- (seq_len(ns) - 1) * p + j
+          cols <- cols[!is_const[cols]]
+          if(!length(cols)) return(NA_real_)
+          gelman_diag_robust(lapply(seq_along(emc), function(i) coda::mcmc(matrix(X[, cols, i], n))),
+                             omit_mpsrf = FALSE)[["mpsrf"]]
+        }, 0)
         gd <- c(t(matrix(split_rhat(X), p, ns)))            # parameters, subjects within
         is_const <- c(t(matrix(is_const, p, ns)))
       }
@@ -680,13 +692,18 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
       alpha_all <- gd
       gd <- gd[!is_const]
       alpha <- gd
+      if(!omit_mpsrf){
+        mpsrf <- mpsrf[!is.na(mpsrf)]
+        other <- c(other, mpsrf)
+        gd <- c(gd, mpsrf)
+      }
     } else{
       # get_pars() keeps draws filter:n, subset() (the discard) drops the first
       # filter: one more here, so that both read the draws that would be kept
       gd <- unlist(gd_summary.emc(emc, selection = select, stage = stage, filter = if(filter > 0) filter + 1 else 0,
                                   omit_mpsrf = omit_mpsrf, stat = NULL, digits = 6))
       gd[is.na(gd)] <- Inf
-      if(select == "alpha") alpha <- alpha_all <- gd else other <- c(other, c(gd))
+      other <- c(other, c(gd))
     }
     gd_out <- c(gd_out, c(gd))
   }
@@ -879,6 +896,16 @@ sub_blocking <- function(emc, n_blocks){
 # third once there are fewer than 375
 proposal_window <- function(idx) unique(pmax(1, round(idx - min(250, idx / 1.5)):idx - 1))
 
+# Diagonal prior variance of every subject-level parameter, matched by name:
+# the group-level prior leaves nuisance parameters out, they get its mean.
+prior_fallback_var <- function(sampler){
+  pv <- diag(as.matrix(sampler$prior$theta_mu_var))
+  v <- unname(pv[sampler$par_names])
+  if(length(pv) == sampler$n_pars && is.null(names(pv))) v <- pv
+  v[is.na(v)] <- mean(pv)
+  diag(v, sampler$n_pars)
+}
+
 create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_subjects <- emc[[1]]$n_subjects
   n_chains <- length(emc)
@@ -929,7 +956,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
         if(null_idx[q]){
           chains_var[[q]] <- if(!is.null(mean_chains_var)) mean_chains_var
           else if(!is.null(prev) && !is.null(prev[[q]])) prev[[q]]
-          else diag(diag(emc[[1]]$prior$theta_mu_var), n_pars) * .1
+          else prior_fallback_var(emc[[1]]) * .1
         }
       }
       if(is.null(mean_chains_var)) mean_chains_var <- Reduce(`+`, chains_var) / n_subjects
