@@ -273,8 +273,8 @@ split_rhat <- function(X){
   X1 <- X[seq_len(h), , , drop = FALSE]; X2 <- X[h + seq_len(h), , , drop = FALSE]
   # centred on the first draw, so that the sums of squares below do not cancel
   ctr <- rep(X[1, , 1], each = h)
-  m <- cbind(matrix(colMeans(X1 - ctr), nrow = k), matrix(colMeans(X2 - ctr), nrow = k))
-  v <- (cbind(matrix(colMeans((X1 - ctr)^2), nrow = k), matrix(colMeans((X2 - ctr)^2), nrow = k)) - m^2) * h / (h - 1)
+  m <- cbind(colMeans(X1 - ctr), colMeans(X2 - ctr))
+  v <- (cbind(colMeans((X1 - ctr)^2), colMeans((X2 - ctr)^2)) - m^2) * h / (h - 1)
   W <- rowMeans(v)
   B_n <- rowSums((m - rowMeans(m))^2) / (ncol(m) - 1)
   r <- suppressWarnings(sqrt(((h - 1) / h * W + B_n) / W))

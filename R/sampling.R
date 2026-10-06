@@ -979,18 +979,6 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # legacy floors: .1 for preburn, .4 for burn and adapt and .6 for sample
     clamp <- if(legacy) c(ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6)), 5)
              else c(.01, 20)
-    new_epsilon <- update_epsilon_continuous(
-      epsilon   = pm_settings$epsilon,
-      acceptance = acc_rates[-1],
-      target     = tune$p_accept,
-      iter       = pm_settings$iter,
-      d          = n_pars,
-      alphaStar  = tune$alphaStar,
-      damp       = 100,          # Example
-      clamp      = clamp,
-      relative   = !legacy
-    )
-    if(!legacy) new_epsilon[!tune$local[-1]] <- 1
     if(isTRUE(tune$exact)){
       # Exact kernels (adapt, and the tail of adapt that tunes the sample
       # kernel): the local step size is updated only in the iterations that
@@ -1010,6 +998,19 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
           pm_settings$log_eps_n <- sum(pm_settings$log_eps_n, 1)
         }
       }
+    } else {
+      new_epsilon <- update_epsilon_continuous(
+        epsilon   = pm_settings$epsilon,
+        acceptance = acc_rates[-1],
+        target     = tune$p_accept,
+        iter       = pm_settings$iter,
+        d          = n_pars,
+        alphaStar  = tune$alphaStar,
+        damp       = 100,          # Example
+        clamp      = clamp,
+        relative   = !legacy
+      )
+      if(!legacy) new_epsilon[!tune$local[-1]] <- 1
     }
     pm_settings$epsilon <- new_epsilon
 

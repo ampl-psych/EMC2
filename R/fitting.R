@@ -1422,14 +1422,17 @@ extractDadms <- function(dadms, names = NULL){
 }
 
 auto_mclapply <- function(X, FUN, mc.cores, ...){
-  if(Sys.info()[1] == "Windows"){
-    cluster <- parallel::makeCluster(mc.cores)
-    list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
-    parallel::stopCluster(cluster)
-  } else{
-    list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
-  }
-  return(list_out)
+  if(Sys.info()[1] == "Windows") return(cluster_lapply(X, FUN, mc.cores, ...))
+  parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
+}
+
+# Socket workers start without the session's options, and the sampler is
+# switched by options(emc.*), so those are copied to the workers.
+cluster_lapply <- function(X, FUN, cores, ...){
+  cluster <- parallel::makeCluster(cores)
+  on.exit(parallel::stopCluster(cluster))
+  parallel::clusterCall(cluster, options, options()[grep("^emc\\.", names(options()))])
+  parallel::parLapply(cl = cluster, X, FUN, ...)
 }
 
 # Turn a silent per-chain sampler failure into an informative error. mclapply
