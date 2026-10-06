@@ -1,5 +1,4 @@
-# The Rhat the package reports and stops on (split_rhat) and the stop rule
-# that reads it (check_gd): Stage H6d of the sampler work.
+# split_rhat() and the stop rule that reads it (check_gd()).
 
 ar1 <- function(n, rho) as.numeric(stats::filter(rnorm(n, 0, sqrt(1 - rho^2)), rho, "recursive"))
 
@@ -38,7 +37,6 @@ test_that("the stop rule's one-pass subject-level Rhats are gd_summary()'s", {
   expect_equal(g$alpha, unname(unlist(ref)), tolerance = 1e-5)       # parameters, subjects within
   expect_equal(unname(g$other), unname(unlist(gd_summary(samples_LNR, selection = "mu", stat = NULL, digits = 6))), tolerance = 1e-5)
   expect_length(g$gd, length(g$alpha) + length(g$other))
-  # without the first draws of the stage
   # without the first 16 draws of the stage: what subset() would keep, for both selections
   g2 <- stage_gds(samples_LNR, c("alpha", "mu"), "sample", filter = 16)
   short <- subset(samples_LNR, stage = "sample", filter = 16)

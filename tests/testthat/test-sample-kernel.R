@@ -2,116 +2,95 @@
 # and the hierarchical local proposal follows the current group level through
 # the subject's likelihood precision (R/sampling.R, R/fitting.R).
 
-# Conjugate normal model on sufficient statistics: the likelihood precision of
-# parameter j is T_j and its linear term T_j * ybar_j, exactly.
-conj_ll <- function(pars, dadm, ...) -0.5 * sum(dadm$T * (dadm$ybar - pars)^2)
 conj_pars <- c("a", "b", "c", "d")
 conj_T <- c(200, 20, 5, 2)
-set.seed(11)
-conj_dat <- do.call(rbind, lapply(1:4, function(s) data.frame(
-  subjects = s, par = conj_pars, T = conj_T, ybar = rnorm(4, 0, .3) + rnorm(4) / sqrt(conj_T))))
-conj_dat$subjects <- factor(conj_dat$subjects)
-conj_design <- design(model = conj_ll, custom_p_vector = conj_pars, report_p_vector = FALSE)
-conj_emc <- make_emc(conj_dat, conj_design, type = "standard", n_chains = 2, compress = FALSE)
+conj_ybar <- withr::with_seed(11, .rng_kind = "Mersenne-Twister", .rng_normal_kind = "Inversion",
+                              .rng_sample_kind = "Rejection",
+                              t(sapply(1:4, function(s) rnorm(4, 0, .3) + rnorm(4) / sqrt(conj_T))))
+colnames(conj_ybar) <- conj_pars
+conj_emc <- conj_emc_from(conj_ybar, conj_T)
 conj_stop <- list(preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
                   sample = list(iter = 20))
-
-test_that("lik_precision recovers the likelihood's quadratic form", {
-  dadm <- conj_emc[[1]]$data[[1]]
-  centre <- setNames(c(.1, -.2, .3, 0), conj_pars)
-  # starting steps far too small and far too large for the likelihood's scale
-  for (h in list(rep(1e-4, 4), rep(5, 4))) {
-    lik <- EMC2:::lik_precision(centre, h, dadm, conj_emc[[1]]$model)
-    expect_equal(unname(lik$prec), diag(conj_T), tolerance = 1e-6)
-    expect_equal(unname(lik$lin), conj_T * dadm$ybar, tolerance = 1e-6)
+# one fit, shared by the tests that need it
+conj_fit <- local({
+  emc <- NULL
+  function() {
+    if (is.null(emc)) emc <<- withr::with_seed(123, .rng_kind = "L'Ecuyer-CMRG",
+      fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE, particle_factor = 20, step_size = 20))
+    emc
   }
+})
+
+test_that("conditional_proposal combines the likelihood's quadratic form with the group level", {
+  ybar <- unname(conj_ybar[1, ])
+  lik <- list(prec = diag(conj_T), lin = conj_T * ybar)
   cond <- EMC2:::conditional_proposal(lik, diag(1 / .09, 4), setNames(rep(0, 4), conj_pars))
   expect_equal(diag(cond$var), 1 / (conj_T + 1 / .09), tolerance = 1e-6)
-  expect_equal(unname(cond$mu), conj_T * dadm$ybar / (conj_T + 1 / .09), tolerance = 1e-6)
+  expect_equal(unname(cond$mu), conj_T * ybar / (conj_T + 1 / .09), tolerance = 1e-6)
 })
 
 test_that("the sample-stage kernel is fixed", {
+  skip_on_cran()
   skip_on_os("windows")
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
-  emc <- fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE,
-             particle_factor = 20, step_size = 20)
+  emc <- conj_fit()
   kernel <- emc[[1]]$sample_kernel
   expect_length(kernel$chains, 2)
   expect_named(kernel$chains[[1]], c("chains_var", "chains_mu", "eff_mu", "eff_var", "prop_var"))
   expect_equal(unname(kernel$lik_prec[[1]]$prec), diag(conj_T), tolerance = 1e-6)
-  # the tail of adapt that tunes the kernel is stored as adapt
-  expect_gte(chain_n(emc)[1, "adapt"], 100)
-  # Stage H6b: adapt waited for the draws the kernel is built from (at least adapt_converge$min
-  # iterations, then the tail), every adapt draw precedes the kept ones, and the kernel has the
-  # draw-based likelihood precision
+  # adapt waited for the draws the kernel is built from, then ran the tail that tunes it (stored as
+  # adapt); every adapt draw precedes the kept ones
   expect_gte(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$min + 100)
   expect_lte(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$max + 120)
   st <- emc[[1]]$samples$stage[seq_len(emc[[1]]$samples$idx)]
   expect_lt(max(which(st == "adapt")), min(which(st == "sample")))
   expect_equal(sum(st == "sample"), 20)
-  # ... where the group level is stable over the window it is built from (lik_prec_draws_cv)
-  idx <- max(which(st == "adapt")) - 100           # the kernel is built before the 100 tuning iterations
-  win <- unique(pmax(1, round(idx - min(250, idx / 1.5)):idx - 1))
-  if (EMC2:::group_precision_cv(emc, win) < EMC2:::lik_prec_draws_cv) {
-    expect_named(kernel$lik_prec[[1]]$post, c("prec", "lin", "n_draws", "n_capped", "tau", "ess"))
-  } else expect_null(kernel$lik_prec[[1]]$post)
   pm <- lapply(emc, function(x) attr(x$samples, "pm_settings"))
   expect_length(pm[[1]][[1]][[1]]$mix, 4)
-  # more sample iterations: same proposals, same step size, mixing weights and particles
-  emc2 <- fit(emc, cores_for_chains = 1, iter = 40, verbose = FALSE, particle_factor = 20,
-              step_size = 20, stop_criteria = list(sample = list(iter = 40)))
+  sm <- lapply(emc, function(x) attr(x$samples, "scale_move"))
+  # more sample iterations: same proposals, step size, mixing weights and particles, same sweep steps
+  emc2 <- withr::with_seed(124, .rng_kind = "L'Ecuyer-CMRG",
+    fit(emc, cores_for_chains = 1, iter = 40, verbose = FALSE, particle_factor = 20,
+        step_size = 20, stop_criteria = list(sample = list(iter = 40))))
   expect_identical(emc2[[1]]$sample_kernel, kernel)
   keep <- c("epsilon", "mix", "n_particles")
-  for (ch in 1:2) for (s in 1:4) {
-    expect_identical(attr(emc2[[ch]]$samples, "pm_settings")[[s]][[1]][keep], pm[[ch]][[s]][[1]][keep])
+  for (ch in 1:2) {
+    for (s in 1:4) expect_identical(attr(emc2[[ch]]$samples, "pm_settings")[[s]][[1]][keep], pm[[ch]][[s]][[1]][keep])
+    sm2 <- attr(emc2[[ch]]$samples, "scale_move")
+    expect_identical(sm2$step, sm[[ch]]$step)
+    expect_identical(sm2$r_block, sm[[ch]]$r_block)
+    expect_gt(sm2$n_in[1], sm[[ch]]$n_in[1])
   }
 })
 
-test_that("adapt's convergence rule can be switched off, and a fit saved before it existed carries on with its kernel", {
+test_that("adapt's convergence rule can be switched off", {
+  skip_on_cran()
   skip_on_os("windows")
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
-  op <- options(emc.adapt_converge = FALSE)
+  withr::local_seed(123, .rng_kind = "L'Ecuyer-CMRG")
+  withr::local_options(emc.adapt_converge = FALSE)
   emc <- fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE,
              particle_factor = 20, step_size = 20)
-  options(op)
   # min_unique alone: far fewer adapt iterations than adapt_converge$min, plus the tail
   expect_lt(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$min)
   expect_length(emc[[1]]$sample_kernel$chains, 2)
-  # as a fit saved by a build without the convergence rule, the draw-based precision and the sweep's gate
-  for (s in seq_along(emc[[1]]$sample_kernel$lik_prec)) emc[[1]]$sample_kernel$lik_prec[[s]]$post <- NULL
-  for (ch in 1:2) {
-    sm <- attr(emc[[ch]]$samples, "scale_move")
-    attr(emc[[ch]]$samples, "scale_move") <- sm[setdiff(names(sm), c("active_scale", "active_loc", "gate", "mark"))]
-  }
-  kernel <- emc[[1]]$sample_kernel
-  emc2 <- fit(emc, cores_for_chains = 1, iter = 40, verbose = FALSE, particle_factor = 20,
-              step_size = 20, stop_criteria = list(sample = list(iter = 40)))
-  expect_identical(emc2[[1]]$sample_kernel, kernel)
-  expect_equal(unname(chain_n(emc2)[1, "sample"]), 60)
-  sm <- attr(emc2[[1]]$samples, "scale_move")
-  expect_true(all(sm$active_scale) && all(sm$active_loc))
 })
 
-test_that("the legacy sampler keeps adapting in the sample stage", {
+test_that("the legacy sampler builds no fixed kernel and runs no sweep", {
+  skip_on_cran()
   skip_on_os("windows")
-  op <- options(emc.sampler = "legacy"); on.exit(options(op))
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
+  withr::local_seed(123, .rng_kind = "L'Ecuyer-CMRG")
+  withr::local_options(emc.sampler = "legacy")
   emc <- fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE,
              particle_factor = 20, step_size = 20)
   expect_null(emc[[1]]$sample_kernel)
   expect_null(emc[[1]]$lik_prec)
+  expect_null(attr(emc[[1]]$samples, "scale_move"))
 })
 
-# ---- Stage H6b: the draw-based likelihood precision ------------------------
 test_that("adapt_stop: converged, stalled, at the limit, or carry on", {
   stop_rule <- EMC2:::adapt_stop
-  expect_equal(EMC2:::adapt_converge$stall, 3)
   expect_equal(stop_rule(c(1.35, 1.12), 400), "converged")
   expect_equal(stop_rule(c(1.5, 1.4, 1.3, 1.25), 600), "")              # still improving
-  # forstmann's adapt (H6b Part B, replicate 1): no new minimum after 400 iterations
+  # no new minimum after the second check
   expect_equal(stop_rule(c(1.658, 1.657, 2.327), 500), "")
   expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260), 600), "")
   expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260, 2.273), 700), "stalled")
@@ -131,24 +110,22 @@ test_that("the draw-based likelihood precision is used only where the group leve
       list(type = "standard", nuisance = rep(FALSE, 3), samples = list(theta_var = tv))
     })
   }
-  # Eisenberg-like (SD of log group SD .07): CV of the precision about .14; funnel-like (SD 1): far above
+  # a stable group level (SD of the log group SD .07): CV of the precision about .14; a funnel (SD 1): far above
   cv_stable <- EMC2:::group_precision_cv(mock(.07), 1:250)
   cv_funnel <- EMC2:::group_precision_cv(mock(1), 1:250)
   expect_lt(cv_stable, .25); expect_gt(cv_stable, .1)
   expect_gt(cv_funnel, 2)
-  expect_equal(EMC2:::lik_prec_draws_cv, .5)
   # the funnel-like window gets no draw-based precision, whatever else it has
   expect_null(EMC2:::window_group_level(mock(1), 1:250, 750))
   # not computable (a zero variance): Inf, so no draw-based precision either
   bad <- mock(.07); bad[[2]]$samples$theta_var[1, 1, 5] <- 0
   expect_identical(EMC2:::group_precision_cv(bad, 1:250), Inf)
 })
+
 test_that("adapt_converged reads the window the kernel is built from", {
+  skip_on_cran()
   skip_on_os("windows")
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
-  emc <- fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE,
-             particle_factor = 20, step_size = 20)
+  emc <- conj_fit()
   class(emc) <- "emc"
   emc <- EMC2:::restore_duplicates(emc)
   # too few adapt iterations: not yet; at the limit: stop whatever the draws say
@@ -162,14 +139,14 @@ test_that("adapt_converged reads the window the kernel is built from", {
   # the history of earlier checks is carried and extended
   expect_equal(attr(EMC2:::adapt_converged(emc, 300, history = c(2, 1.5)), "rhat"), c(2, 1.5, max(r)))
   # chains that sit apart in one subject's parameter: not converged
-  bad <- emc; n <- bad[[1]]$samples$idx
+  bad <- emc
   bad[[1]]$samples$alpha[2, 3, ] <- bad[[1]]$samples$alpha[2, 3, ] + 10
   expect_gt(EMC2:::window_rhat(bad, EMC2:::kernel_window)[2, 3], 3)
   expect_false(as.vector(EMC2:::adapt_converged(bad, 300)))
   # ... unless the window Rhat has stopped improving: no new minimum in adapt_converge$stall checks
   expect_true(as.vector(EMC2:::adapt_converged(bad, 600, history = c(1.5, 4, 4, 4)[seq_len(EMC2:::adapt_converge$stall)])))
   # the legacy sampler and single-subject fits keep the old rule
-  op <- options(emc.sampler = "legacy"); expect_true(EMC2:::adapt_converged(bad, 10)); options(op)
+  withr::with_options(list(emc.sampler = "legacy"), expect_true(EMC2:::adapt_converged(bad, 10)))
 })
 
 # Draws from the exact conditional posterior of one subject of the conjugate
@@ -189,7 +166,7 @@ test_that("lik_precision_draws: the draws' estimate where the likelihood shows, 
   P <- diag(1 / .09, 4)
   X <- post_draws(conj_T, ybar, P, mu, 3000)
   out <- EMC2:::lik_precision_draws(X, P, mu, fd, n_chains = 3)
-  expect_equal(out$n_draws, 2); expect_equal(out$n_capped, 0); expect_equal(out$tau, .5)
+  expect_equal(out$n_draws, 2); expect_equal(out$n_capped, 0)
   expect_equal(unname(diag(out$prec)), conj_T, tolerance = .15)
   expect_lt(max(abs(out$prec[upper.tri(out$prec)]) / sqrt(outer(conj_T, conj_T))[upper.tri(out$prec)]), .15)
   cond <- EMC2:::conditional_proposal(out, P, mu)

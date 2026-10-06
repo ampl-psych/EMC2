@@ -1,10 +1,7 @@
 # lik_precision() (R/sampling.R): the quadratic likelihood surrogate that the
 # subject step's local proposal and the interweaving sweep run on. Its step
-# search must settle, and a parameter whose likelihood is flat to one side
-# and falls off a cliff to the other (a bound of the model with a floored
-# likelihood, as the DDM's sv / SZ on forstmann: rating-work/sampler/hier/
-# stageH5/REPORT.md) must get no precision and no gradient rather than the
-# cliff read as a curvature of 10^3-10^4.
+# search must settle, and a likelihood floored at a model bound must get no
+# precision rather than the cliff read as a huge curvature.
 
 # A custom likelihood on sufficient statistics, parameters (g, h, c): a
 # Gaussian in g (precision T), a heavy-tailed curve in h (flat near its mode,
