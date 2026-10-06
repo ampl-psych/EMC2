@@ -1,6 +1,6 @@
 ---
 title: "Sampler Validity"
-description: "Why the particle step was biased in high dimensions, the exact and (in the sample stage) fixed kernel that replaces it, the evidence that it is calibrated, and how it compares with Stan"
+description: "Why EMC2's particle sampler was replaced, what the current sampler does, and the evidence that it samples the right posterior, including against Stan"
 author: "Andrew Heathcote"
 output: rmarkdown::html_document
 vignette: >
@@ -15,74 +15,76 @@ library(EMC2)
 set.seed(1)
 ```
 
-This vignette is for whoever maintains the sampler. It documents a bias found on 2026-09-30 in the
-particle-MCMC step (`new_particle()` in `R/sampling.R`), how to reproduce it in a few seconds on a
-Gaussian toy and in a couple of minutes with an EMC2 fit, what was changed on the `dev-sampler`
-branch, and the calibration evidence for the change. The old sampler is still in the package:
+This vignette is for users who want to know what EMC2's sampler does and how far to trust it, and for whoever
+maintains it. It explains why the previous particle sampler was not a valid MCMC sampler, describes the current
+one, and gives the evidence that the current one samples the right posterior: exact references, Stan's NUTS on
+the same posteriors, and ordinary fits. The previous sampler is still in the package, so every comparison can be
+rerun with one switch:
 
 ```{r, eval = FALSE}
-options(emc.sampler = "legacy")   # the pre-2026-09-30 step, tuning, floors and fallbacks
-options(emc.sampler = NULL)       # back to the current sampler
+options(emc.sampler = "legacy")   # the previous particle step, tuning and sample stage
+options(emc.sampler = NULL)       # the current sampler
 ```
 
-so every comparison below can be rerun with one switch.
+Throughout, **excess/k** = (mean sample-stage deviance - deviance at the posterior mode) / number of parameters,
+which is 1 for a normal posterior; **SD ratio** = posterior SD / Laplace SD (from the numerical Hessian at the
+mode); **move rate** = the fraction of iterations whose value changed.
 
-## 1. Symptoms
+## 1. Why the previous sampler was replaced
 
-Fitting a 29-35 parameter single-subject model to ~8000 trials (Ratcliff & Starns' recognition data
-with the correlated multiple-threshold LNR, `vignette("rating-models")`) gave chains that never
-left their start points (1-3% acceptance, Rhat up to 4), and where a fit did converge its posterior
-SDs were 1.4-1.7x the Laplace SDs at the mode. A plain 25-parameter LNR showed the same, so this
-was the sampler, not a likelihood. A grid of 48 cells (models with 9 / 25 / 29 / 35 parameters,
-500 / 2000 / 8000 trials per subject, one subject with `type = "single"` and 8 subjects with
-`type = "standard"`) then showed the pattern:
-
-- 9 parameters: fine at every N, both types.
-- 25-35 parameters, converged (Rhat 1.01): deviance excess `mean(D) - D(mode)` of 1.5-1.9 x k
-  instead of k, posterior SD / Laplace SD 1.25-1.4 (max 1.67), for `single`; 1.3-1.6 x k and
-  1.13-1.23 for `standard` at 8000 trials per subject.
-- 29-35 parameters with >= 2000 trials: stuck (move rate .01, Rhat 1.2-2, posterior means up to
-  18 posterior SDs from the truth).
-
-The diagnostics used throughout are: **excess/k** = (mean sample-stage deviance - deviance at the
-posterior mode) / number of parameters, which is 1 for a normal posterior; **SD ratio** = posterior
-SD / Laplace SD (numerical Hessian of log-likelihood + log-prior at the mode); the **move rate**
-(fraction of iterations whose value changed); Rhat; and z = (posterior mean - truth) / posterior SD
-on simulated data.
-
-## 2. The particle step as coded
-
-Each iteration, for each subject, `new_particle()` draws one batch of particles from a mixture of
-multivariate normals, keeps the chain's current value as particle 1, gives every particle the weight
+**The particle step.** Each iteration, for each subject, `new_particle()` draws a batch of particles from a mixture
+of multivariate normals, keeps the chain's current value as particle 1, gives every particle the weight
 
     w(z) = exp( loglik(z) + logprior(z) - log q(z) )
 
-with `q` the mixture density, and selects one particle in proportion to `w`. With `q` fixed this is
-iterated sampling-importance-resampling (i-SIR, a conditional-SMC step with one time point) and it
-leaves the posterior invariant. But the mixture is not fixed: in every stage some components are
-centred on the current value `subj_mu` (preburn: both; burn: 2 of 3; adapt: 1 of 3; sample: 1 of 4,
-the "random walk" `N(subj_mu, epsilon^2 chains_var)`), and `q` is evaluated at the current value
-itself -- at the *peak* of those components. The current value's weight is therefore deflated by a
-factor that depends on where the chain is, and the kernel is no longer posterior-invariant.
+with `q` the mixture density, and selects one particle in proportion to `w`. With `q` fixed this is iterated
+sampling-importance-resampling (i-SIR; Andrieu, Lee & Vihola, 2018), and it leaves the posterior invariant. In the
+previous sampler `q` is not fixed: in every stage some components are centred on the current value (the "random
+walk" `N(x, epsilon^2 chains_var)`), and `q` is evaluated at the current value itself, at the *peak* of those
+components. The current value's weight is deflated by a factor that depends on where the chain is, and the kernel
+is no longer posterior-invariant.
 
-Two-particle sketch: with one candidate `z ~ N(x, S)` the move probability is
-`pi(z) N(x|x,S) / (pi(z) N(x|x,S) + pi(x) N(z|x,S))`, and since `N(x|x,S) >= N(z|x,S)` this exceeds
-the Barker probability `pi(z)/(pi(z) + pi(x))` by more the further `z` is from `x`. Detailed balance
-fails, and the effect does not vanish with more particles when the importance weights are
-degenerate -- which is exactly the high-dimensional, concentrated-posterior case.
+With one candidate `z ~ N(x, S)` the move probability is `pi(z) N(x|x,S) / (pi(z) N(x|x,S) + pi(x) N(z|x,S))`. Since
+`N(x|x,S) >= N(z|x,S)`, this exceeds the Barker probability `pi(z)/(pi(z) + pi(x))`, by more the further `z` is
+from `x`. Detailed balance fails, and more particles do not help when the importance weights are degenerate, which
+is the high-dimensional, concentrated-posterior case.
 
-## 3. Reproducing the bias on a Gaussian toy
+**The sample stage.** The previous sample stage re-estimates its proposals (`chains_var`, `chains_mu`, `eff_mu`,
+`eff_var`) from the chain's last 250 draws at every step, and keeps adapting its step size and mixing weights. A
+chain whose kernel depends on its recent past is not a Markov chain with the posterior as its stationary
+distribution. Where the posterior's scale does not move this is negligible. In a hierarchical funnel it is not: on
+a conjugate model with a known posterior (25 parameters x 20 subjects), chains started at the truth sink into the
+neck. For the weakly identified parameters the group SD has a median of 0.004, against 0.16 exact, with 94% of the
+draws in the neck against 26%.
 
-The function below is the sample-stage step with the same particle numbers (`50 sqrt(d)`), the
-same mixture weights (.05 prior, .3 random walk at the current value, .3 at a fixed mean, .35
-"efficient" proposal) and a target that is the likelihood `N(0, I_d)` times a `N(0, 100 I_d)`
-prior. `fix = TRUE` is the ensemble construction of section 4. Ten seconds per row.
+**Consequences.**
+
+- With 9 parameters the bias is a few percent, which is why simulation-based calibration on small models does not
+  show it.
+- With 25-35 parameters, converged single-subject fits have excess/k of 1.5-1.9 and SD ratios of 1.25-1.4 (up to
+  1.67).
+- With 29-35 parameters and at least 2000 trials, chains stick: move rate .01, Rhat 1.2-2, posterior means up to
+  18 posterior SDs from the truth.
+- The previous tuning made sticking worse:
+  - a `diag(.5)` fallback for an unusable chain covariance, 35 times too wide for a posterior SD of .02;
+  - step-size floors of .1, .4 and .6;
+  - shrinking the independence components on low acceptance, although for them low acceptance means too
+    *narrow*.
+- On the hard cases of section 5, the previous sampler reports Rhat 1.01-1.09 while being off by up to 46
+  standard errors from Stan's NUTS on the same posterior.
+
+## 2. The bias on a Gaussian toy
+
+The function below is the previous sample-stage step: the same particle numbers (`50 sqrt(d)`), the same mixture
+weights (.05 prior, .3 random walk at the current value, .3 at a fixed mean, .35 "efficient" proposal), and a target
+that is the likelihood `N(0, I_d)` times a `N(0, 100 I_d)` prior. `fix = TRUE` is the ensemble move of section 3.
+Ten seconds per row.
 
 ```{r}
 library(mvtnorm)
 step <- function(x, d, eps, n, fix = FALSE) {
   z0 <- rep(0, d); I <- diag(d); P <- diag(100, d)
-  # component 2 is the random walk: centred on x (as coded) or on an auxiliary centre c ~ N(x, S)
+  # component 2 is the random walk: centred on x (previous step) or on an auxiliary centre c ~ N(x, S)
   S2 <- eps^2 * I
   c2 <- if (fix) drop(rmvnorm(1, x, S2)) else x
   Mus <- list(z0, c2, z0, z0); Ss <- list(P, S2, eps^2 * I, eps^2 * I); mix <- c(.05, .3, .3, .35)
@@ -102,122 +104,150 @@ toy <- function(d, eps, fix = FALSE, iters = 1500, n = round(50 * sqrt(d))) {
 rbind(toy(25, .6), toy(25, .3), toy(25, 2), toy(9, .6), toy(35, .6), toy(25, .6, fix = TRUE))
 ```
 
-The chain "moves" every iteration but its variance is `eps^2`-ish, not the posterior's: narrower
-components pull it down, wider ones push it up, more so as `d` grows. (In a longer run of this toy,
-`rating-work/sampler/toy/`, the as-coded step gives 0.65 x the true variance at `eps = .6` -- the
-floor the sample-stage adaptation pinned epsilon at -- 0.20 at .3, 1.47 at 2, and 2.1 for the burn
-structure; the corrected step gives 0.98-1.02 everywhere.) At 9 parameters with well-scaled
-proposals the bias is a few per cent, which is why simulation-based calibration on small models
-passed and could not have caught it.
+The chain "moves" every iteration, but its variance follows `eps`, not the posterior. Narrower components pull it
+down and wider ones push it up, more so as `d` grows. In longer runs the previous step gives 0.65 times the true
+variance at `eps = .6`, 0.20 at .3 and 1.47 at 2; the ensemble move gives 0.98-1.02 everywhere.
 
-Three further things made real fits *stick* rather than just spread:
+## 3. The sampler
 
-- `create_chain_proposals()` fell back to `chains_var = diag(.5)` when the covariance of the recent
-  draws was not positive definite (a chain with few distinct draws) -- for a posterior with SD ~.02
-  that is 35x too wide, so the chain cannot move, the next covariance is singular again, and the
-  fallback persists.
-- epsilon floors of .1 / .4 / .6 (preburn / burn-adapt / sample).
-- The acceptance-driven epsilon update was also applied to the independence components
-  (`chains_mu`, `eff`). For those, low acceptance means the proposal is too *narrow*, so shrinking
-  it drove them to the floor; stuck fits ended with epsilon .6/.6/.6 and 94% of the mixture on an
-  "efficient" proposal that accepted 0.05% of its particles.
+### The particle step
 
-## 4. What changed (`dev-sampler`)
+`preburn` and `burn`, whose draws are discarded, use the previous step as a search: it is a fast stochastic
+hill-climb from prior-scale starting values, and a valid random-walk kernel is far slower at that. `adapt` and
+`sample`, whose draws build the proposals and the posterior, use an exact kernel. Each iteration runs ONE of two
+kernels, chosen with the mixture weights:
 
-**Kernel.** `preburn` and `burn`, whose draws are discarded, keep the old step: as a search it is a
-fast stochastic hill-climb (it follows the proposal), and a valid random-walk kernel cannot travel
-from prior-scale start points to a posterior with SD .02 in 35 dimensions in any reasonable time
-(two exact-everywhere variants burned in 10-20x slower). `adapt` and `sample`, whose draws build the
-proposals and the posterior, use an exact kernel: each iteration ONE of two kernels, chosen with the
-mixture weights.
+- *Local kernel* (the components centred on the current value): an ensemble move (Tjelmeland, 2004; Neal, 2011).
+  - Draw an auxiliary centre `c ~ N(x, S)`, and draw the particles from `N(c, S)`.
+  - Weight every particle, the current value included, by `pi(z) N(z | c, S) / q(z)`, where `q` is the proposal
+    density, which given `c` does not depend on the state.
+  - The step targets `pi(x) N(c | x, S)`, whose `x`-marginal is `pi`, so it is exact.
+- *Global kernel* (the prior, `N(chains_mu, chains_var)` or its conditional replacement below, `N(eff_mu,
+  eff_var)`): i-SIR, which is exact because none of these depends on the current value.
 
-- *Local kernel* (the components centred on the current value): an ensemble move (Tjelmeland,
-  2004; Neal, 2011). Draw an auxiliary centre `c ~ N(x, S)`, draw the particles from `N(c, S)`, and
-  weight every particle -- the current value included -- by `pi(z) N(z | c, S) / q(z)` where `q` is
-  the (now state-independent, given `c`) proposal density. The step targets the extended
-  distribution `pi(x) N(c | x, S)`, whose `x`-marginal is `pi`, so it is exact.
-- *Global kernel* (prior, `N(chains_mu, chains_var)`, `N(eff_mu, eff_var)`): the i-SIR step as
-  before, valid because none of these depends on the current value.
+Keeping the two kernels separate, rather than one batch with the ensemble correction, gives 4-6 times the
+effective sample size per iteration on the toy.
 
-Putting both in one batch with the ensemble correction is also exact, but the local factor
-`N(z | c, S)` then penalises the global candidates; on the toy the mixture of kernels has 4-6x the
-effective sample size per iteration (`rating-work/sampler/toy/isir_toy3.R`).
+### One fixed kernel in the sample stage
 
-**The sample stage runs one fixed kernel (corrected 2026-10-01).** The first version of this
-change (commit `002a5c6f`) stopped at the paragraph above, and an earlier version of this vignette
-called its adapt/sample kernel exact. That was true of each iteration and not of the stage. The
-sample stage kept re-choosing the kernel from the chain's own recent draws: `chains_var`,
-`chains_mu`, `eff_mu` and `eff_var` were re-estimated at every step from the last <= 250
-iterations, and epsilon and the mixing weights followed a window of acceptance counts. A chain
-whose kernel depends on its recent past is not a Markov chain with the posterior as its stationary
-distribution. Where the posterior's scale does not move under the adaptation the difference is
-negligible, which is why the single-subject grid and the SBC of section 6 passed. In a
-hierarchical funnel it is not. On a conjugate normal model with a known posterior
-(25 parameters x 20 subjects; `rating-work/sampler/hier/stageH1/REPORT.md`), chains started at the
-truth sank: for the weakly identified parameters the group SD had median 0.0036 against 0.159
-exact, with 94% of the draws in the funnel's neck against 26%. With the same kernel held fixed
-they did not sink.
+The sample stage runs one kernel, which is never changed once draws are kept:
 
-The sample-stage kernel is therefore built and tuned at the end of adapt and then left alone:
+- `adapt` runs until the draws the kernel will be built from have converged. For models with a group level it
+  waits until, over its last 250 iterations, the largest Rhat of any subject's parameter is below 1.2. That is
+  checked from 250 iterations on, and adapt gives up after three checks without improvement or at 1000 iterations.
+  `options(emc.adapt_converge = FALSE)` switches this off and keeps the older `min_unique` rule.
+- The sample-stage proposals are then built from those draws and stored in `emc[[1]]$sample_kernel`. Every step of
+  the sample stage, and every later call that adds samples, reuses them.
+- A final 100-iteration tail of `adapt` runs that kernel and tunes it (`tune_sample_kernel()`):
+  - the local step size is set to its average over the tail;
+  - the number of particles is set where the average effective sample size meets its target
+    (`2.5 sqrt(p)`, at least 25 particles).
+- In `sample` nothing adapts.
 
-- When adapt's stop criterion is met, the sample-stage proposals are made from the adapt draws and
-  stored in `emc[[1]]$sample_kernel`. Every step of the sample stage, and every later call that
-  adds samples, re-uses them.
-- One more step of 100 iterations is run with that kernel, labelled `adapt`, in which its local
-  epsilon, mixing weights and number of particles are adapted (`tune_sample_kernel()`). Epsilon is
-  then set to its average over that step.
-- In `sample` nothing adapts: `update_pm_settings()` is not called and `reset_pm_settings()`
-  leaves the settings alone.
+### Proposals that follow the group level
 
-**Proposals that follow the group level (2026-10-01).** The same report found a second fault. The
-local proposal was `N(c, epsilon^2 chains_var)` with one global scale. When the group variance of
-some parameters collapses, the subjects' conditional posterior becomes 100x narrower in those
-coordinates only, no single epsilon fits, and the step stops moving (move rate <= 0.001 with
-epsilon on its floor of 0.01): 0 of 36 chain x parameter pairs left a collapsed start in 22000
-iterations, against all 36 with an exact draw. The subject step conditions on the group level
-`(mu, Sigma)`, so its proposals may depend on it. For every `type` with a group level they now do:
+The subject step conditions on the group level `(mu, Sigma)`, so its proposals may depend on it. When a group
+variance collapses, the subject's conditional posterior becomes much narrower in those coordinates only, and no
+single step size fits. For every type with a group level:
 
-- `create_lik_prec()` estimates each subject's likelihood precision `L` (minus the Hessian of the
-  log-likelihood) and the linear term of the same quadratic approximation, by central differences
-  at the mean of the subject's recent draws (`lik_precision()`; `p^2 + p + 1` likelihood
-  evaluations, with each parameter's step searched for so that the log-likelihood drops by about
-  1). Moments of the draws cannot give this: when adapt runs in the neck the draws show the prior,
-  not the likelihood.
-- The local kernel's covariance is `epsilon^2 (L + Sigma^-1)^-1` at the current `Sigma`, in place
-  of `epsilon^2 chains_var`. Epsilon is then a relative scale that no longer has to track the
-  group level, and the 0.01 floor is not relied on.
-- The global kernel's `N(chains_mu, chains_var)` component is replaced by the Gaussian
-  approximation of the subject's conditional posterior at the current group level,
-  `N((L + Sigma^-1)^-1 (l + Sigma^-1 mu), (L + Sigma^-1)^-1)` with `l` the linear term.
+- `create_lik_prec()` estimates each subject's likelihood precision `L` (minus the Hessian of the log-likelihood),
+  and the linear term `l` of the same quadratic approximation, at the mean of the subject's recent draws:
+  - *by central differences* (`lik_precision()`), with each parameter's step searched for so that the
+    log-likelihood drops by about 1. The search brackets the step and bisects in log scale. A parameter whose step
+    never settles, as at a likelihood floored at a model bound such as the DDM's `sv` and `SZ`, gets no precision
+    and no gradient rather than a cliff read as a huge curvature;
+  - *from the draws* (`type = "standard"`): the draws' inverse covariance minus the window's mean group precision,
+    in the directions where that is clearly positive, with the finite differences (capped at what the draws allow)
+    elsewhere. One point's curvature is too narrow for a skewed posterior. The subtraction is right only if the
+    group precision is about constant over the window, so this version is used only where the largest coefficient
+    of variation of the group precision is below .5. In a funnel it is not, and the finite differences are kept.
+- The local kernel's covariance is `epsilon^2 (L + Sigma^-1)^-1` at the current `Sigma`, so the step size is a
+  relative scale that no longer has to track the group level.
+- The global kernel's `N(chains_mu, chains_var)` component is the Gaussian approximation of the subject's
+  conditional posterior at the current group level, `N((L + Sigma^-1)^-1 (l + Sigma^-1 mu), (L + Sigma^-1)^-1)`.
 - The local kernel keeps at least a quarter of the sample-stage iterations.
 
-`type = "single"` has no group level to follow and keeps `chains_var`.
+`type = "single"` has no group level and uses the chain covariance.
 
-**Tuning.** The local step's epsilon is adapted so that 3% of its particles beat the current value
-(on the toy this is where ESS per iteration is maximal in 9, 25 and 35 dimensions; the old 25-30%
-targets give steps 3-5x too small for the exact kernel); clamp [.01, 20] instead of the floors;
-independence components are used at the scale of their estimated covariance (epsilon 1); burn's
-`chains_var` epsilon, not its prior-variance one, is carried into adapt. In the exact kernels
-epsilon is updated only in the iterations that used the local kernel, from that iteration's own
-rate, with gain 0.1 and the update normalised by the target and clipped to [-1, 3]. (Updating it
-every iteration from the rate accumulated over a window made it overshoot: over subjects it ended
-anywhere between 0.01 and 5, which did not matter while it kept moving and does once it is
-frozen.) preburn and burn keep the windowed counts, which restart every `step_size` iterations
-(cumulative counts let epsilon run away). `update_epsilon_scale()` uses the square root of the
-variance ratio (epsilon scales SDs). The `diag(.5)` fallback is replaced by the mean of the other
-subjects' covariances, else the chain's previous one, else 0.1 x the prior variance diagonal.
-`get_conditionals_single()` uses all (<= 750) adapt/sample draws rather than a random 250.
+**Tuning.**
 
-Everything above is switched by `options(emc.sampler = "legacy")`, which restores the old kernel in
-every stage together with the old targets, floors, counts, fallback, 250-draw conditionals and the
-sample-stage adaptation.
+- The local step size targets 3% of particles beating the current value; on the toy that is where effective
+  sample size per iteration peaks in 9, 25 and 35 dimensions.
+- It is clamped to [.01, 20] and updated only in iterations that used the local kernel, from that iteration's own
+  rate.
+- Independence components are used at the scale of their estimated covariance (epsilon 1).
+- An unusable chain covariance is replaced by the mean of the other subjects' covariances, else the chain's
+  previous one, else 0.1 times the prior variance.
 
-## 5. Reproducing it in EMC2
+### The interweaving sweep (`type = "standard"`)
 
-`vignettes/data/build_sampler_validity.R` simulates one subject (about 500 trials) from a
-25-parameter LNR (`m, s ~ 0 + NWS:WF:lM, t0 ~ 1`, parameter values from a real participant), fits
-it with both samplers using `fit()` defaults, and computes the Laplace SDs. Two minutes on three
-cores; the results are cached.
+With few trials per weakly identified parameter, the alternation "subjects given the group level, group level given
+the subjects" mixes very slowly in the funnel, even with an exact subject step. On the conjugate model, one
+effective draw of a weak parameter's log group SD takes about 500 iterations. The remedy is interweaving, or
+non-centred reparameterisation (Yu & Meng, 2011; Papaspiliopoulos, Roberts & Sköld, 2007): after the group step,
+`scale_move_standard()` moves in a parameterisation in which the group scale and the subjects' deviations are not
+conditionally dependent. For each parameter `j`:
+
+- a **scale move** proposes a log-scale change `delta` and sets `alpha'_sj = mu_j + f (alpha_sj - mu_j)` for every
+  subject (`f = exp(delta)`), `Sigma' = D Sigma D` with `D = diag(1, .., f, .., 1)`, and the Huang-Wand auxiliary
+  `a'_j = a_j / f^2`, so that the prior's own hierarchy moves along (Huang & Wand, 2013). Its prior, group-density
+  and Jacobian part of the log acceptance ratio is `delta - (exp(2 delta) - 1) / (A_j^2 a_j)`;
+- a **location move** shifts `mu_j` and every subject's `alpha_sj` together by `e`. It runs only without a
+  group-level design.
+
+The moves are proposed on each subject's quadratic likelihood surrogate (`L`, `l` above), in random blocks of
+parameters. Each block's combined proposal is then accepted or rejected against the subjects' exact likelihoods,
+in one more likelihood evaluation per subject (delayed acceptance; Christen & Fox, 2005). The chain therefore
+targets the exact posterior whatever the surrogate's quality.
+
+Tuning, in `adapt` only; everything is frozen for `sample`:
+
+- *Step sizes* adapt by Robbins-Monro on the *realised* acceptance: the surrogate accepted and the block passed the
+  exact check. The target is `.3 x max(r, .35)`, where `r` is the running block acceptance (a move shares its
+  block's fate).
+- *Starting steps* are each move's conditional scale on the surrogate, where that is below the default.
+- *The number of blocks* adapts to keep the block acceptance in [.35, .75].
+- *A gate* drops, for the rest of the fit, any move whose expected squared jump per sweep is under a tenth of the
+  group-level Gibbs step's own, once the sweep is split into one block per parameter. It is decided from 300
+  sweeps on. With hundreds of subjects the surrogate's error adds up, so moves of well-identified parameters pass
+  only at tiny steps while each block costs one likelihood per subject.
+- *The exact check* is timed in-process and forked on its first calls, and the faster way is kept.
+
+The state is in `attr(samples, "scale_move")`. `options(emc.scale_move = FALSE)` turns the sweep off; the legacy
+sampler never runs it.
+
+### Rhat and the stop rules
+
+`gd_summary()`, `summary()`, the Rhat on plots and `fit()`'s stop rules all use one statistic, `split_rhat()`:
+each chain is halved, and Gelman & Rubin's (1992) potential scale reduction factor is taken over the half-chains
+(Gelman et al., 2013), with no degrees-of-freedom correction and no transform. coda's `gelman.diag()` point
+estimate multiplies by a correction that grows when the chains' variances differ, which is what one chain
+visiting a skewed posterior's shoulder does. Such a subject reads 1.05 on the split-Rhat and 1.15-1.2 on coda's
+estimate, and with thousands of subject-level entries the largest of them decides a fit.
+
+- `burn` stops when the *mean* Rhat of the selection is below 1.1; `sample` stops when the *largest* is, with at
+  least 1000 draws kept, checked every `step_size` draws for at most `max_tries` checks.
+- On a failed check, the first third of the stage's draws is dropped if the largest Rhat is lower without it.
+  This removes chains still arriving at the posterior. Chains that drift together have a low Rhat, so the
+  criterion alone would keep such a transient (section 5).
+- A check is one pass over the stored draws: half a second with 518 subjects.
+- `stop_criteria$gd_quantile` (e.g. `.99`, not the default) judges the subject level by that quantile of its
+  Rhats instead of the largest. Every other selected parameter, and the discard, still use the largest. With it,
+  the criterion does not tighten as subjects are added.
+
+### Other behaviour
+
+- If a draw of the group covariance is numerically singular, the group step is re-drawn up to 3 times before the
+  chain errors (`on_singular`; `list(max_retries = 0)` errors at once, and `on_exhausted = "carry_forward"` keeps
+  the previous group parameters).
+- On Windows the chains run in separate R processes; the `emc.*` options are copied to them.
+
+## 4. The bias in an EMC2 fit
+
+`vignettes/data/build_sampler_validity.R` simulates one subject (about 500 trials) from a 25-parameter LNR
+(`m, s ~ 0 + NWS:WF:lM, t0 ~ 1`, with parameter values from a real participant). It fits the data with both
+samplers using `fit()` defaults, and computes the Laplace SDs. It takes two minutes on three cores; the results
+are cached.
 
 ```{r}
 load("data/sampler-validity.RData")
@@ -240,472 +270,223 @@ abline(h = 1, lty = 2); axis(1, at = seq_len(nrow(r)), labels = FALSE)
 legend("topleft", c("legacy sampler", "current sampler"), fill = c("grey60", "#0072B2"), bty = "n")
 ```
 
-The legacy sampler reports Rhat ~1 and a move rate of 1.00 and is wrong by a third in every SD; the
-current sampler's honest move rate is about .8. The per-stage tuning state (`epsilon`, `mix`,
-`n_particles`) is in `attr(emc[[1]]$samples, "pm_settings")`:
+The legacy sampler reports Rhat of about 1 and a move rate of 1.00, while every posterior SD is 1.2-1.6 times too
+wide. The current sampler's SDs match the Laplace SDs, with an honest move rate of about .8. The tuning state is in
+`attr(emc[[1]]$samples, "pm_settings")`:
 
 ```{r}
 sapply(summaries, function(s) round(s$epsilon, 2))
 ```
 
-With the legacy sampler the independence components end at an epsilon above 1 (1.2-1.6 from run
-to run; wider than the posterior, which is where the over-dispersion comes from: the chain follows
-them); with the current one they are fixed at 1 and only the local step is scaled (about
-.4-.5 x `chains_var`).
+Under the legacy sampler the independence components end at a scale above 1, wider than the posterior, which is
+where the over-dispersion comes from: the chain follows them. Under the current sampler they are fixed at 1, and
+only the local step is scaled.
 
-To go further -- more parameters, more trials, `type = "standard"` -- change the design and
-`n_trials` in the build script; the full grid, its runner and per-stage snapshots of the tuning
-state are in `rating-work/sampler/grid/` (outside the package).
+## 5. The evidence
 
-## 6. Evidence that the current sampler is calibrated
+The scripts behind this section are available from the package maintainers.
 
-**Grid** (`rating-work/sampler/REPORT.md`, sections 1 and 5; 3 chains, `fit()` defaults, 1000 sample
-iterations). Single subject, excess/k and median SD/Laplace, legacy -> current:
+### Exact references
 
-| k | N = 500 | N = 2000 | N = 8000 |
-|---|---|---|---|
-| 9 | 1.00 / 1.04 -> 0.90 / 0.99 | 1.09 / 1.06 -> 0.95 / 0.99 | 1.09 / 1.06 -> 0.99 / 1.00 |
-| 25 | 1.68 / 1.34 -> 0.94 / 1.01 | 1.51 / 1.25 -> 0.97 / 0.99 | stuck -> 1.00 / 1.00 |
-| 29 | 1.92 / 1.39 -> 0.92 / 0.96 | stuck -> 0.98 / 0.97 | stuck -> 0.99 / 1.00 |
-| 35 | 1.92 / 1.38 -> 0.92 / 0.99 | stuck -> 0.92 / 0.92 | stuck -> 0.95 / 0.98 |
+- *Single subjects:* a grid of 9, 25 and 35 parameters x 500, 2000 and 8000 trials. With the current sampler,
+  excess/k is 0.90-1.00, the median SD ratio is 0.98-1.03 and Rhat is at most 1.09 in every cell. With the legacy
+  sampler excess/k is 1.5-1.9 and the SD ratios are 1.25-1.4 from 25 parameters up, and fits with at least 2000
+  trials and 29 or more parameters stick.
+- *A conjugate hierarchical model with a known posterior:* 25 parameters x 20 subjects, 12 of them weakly
+  identified, with the exact posterior from a Gibbs sampler of the full conditionals. Starting both from the truth
+  and from a collapsed state:
+  - the current sampler reproduces the group-SD quantiles (1-95%) to three decimals in every identifiability
+    class, and the share of draws in the funnel's neck (.25 against .24-.26);
+  - subject-level SD ratios are 0.997-1.003;
+  - the autocorrelation time of a weak parameter's log group SD is 10-16 iterations, against about 500 without the
+    sweep;
+  - the median first escape from a collapsed start is 28 iterations.
 
-("stuck" = burn never converged, sample-stage move rate .01.) Rhat <= 1.10 in every current-sampler
-cell, burn-in 100-300 iterations as before, and the 35-parameter x 8000-trial fit takes 22 minutes.
-Eight subjects with `type = "standard"`: every cell with >= 2000 trials per subject is calibrated
-(excess/k 0.91-1.02, SD ratio 0.89-0.99; legacy 1.27-1.64 and 1.09-1.23 at k >= 25). The
-8-subject x 500-trial cells with 25-35 parameters do not reach Rhat < 1.1 under `fit()` defaults
-with either sampler (see section 7).
+### Against Stan's NUTS
 
-**Simulation-based calibration.** The MTLNR SBC (8 single-subject cells x 500 replicates, one
-15-subject cell x 100; `SBC-archive/2026-09-30_dev-sampler_MTLNR-sbc-regression`) rerun with the
-current sampler: no KS p below .01, Fisher's combined p over the 68 parameter x cell tests .15 (the
-legacy run: .051), 95% coverage .92-.98 centred on nominal (legacy ran high, .93-.98), |std_bias|
-<= .17, hierarchical mu / Sigma ranks uniform; 3.5 h instead of 5.8 h.
+Nine hard cases were run in Stan (Carpenter et al., 2017; Hoffman & Gelman, 2014) on exactly EMC2's posterior: the
+same data, priors (with the Huang-Wand auxiliaries integrated out in closed form), bounds and per-trial likelihood
+floor. The Stan group level was checked against the exact reference above, and each Stan likelihood against
+`calc_ll_manager()`. EMC2 was run on the same `emc` objects, with five `fit()`s with defaults and 3-15 long runs
+(5000-10000 sample draws, no stop rule) per case, 3 chains each.
 
-**Real data.** The five Ratcliff-Starns models of `vignette("rating-models")`'s source paper
-(24-35 parameters x 11 subjects, ~7600 trials each) all converge in the standard 1000 sample
-iterations; EMC2's DIC ordering equals the paper's, EMC2 finds lower deviance minima than the
-paper's DE-MCMC fits did, and the parameter estimates correlate >= .98 with them.
+"Agrees" means every group mean, log group SD, group correlation and the parameters of three subjects are within
+Monte-Carlo error of Stan. ESS ratio is EMC2's effective draws per core-hour over Stan's, for the median
+group-level quantity and the worst one.
 
-**After the 2026-10-01 changes of section 4** (fixed sample-stage kernel, proposals that follow
-the group level; `rating-work/sampler/hier/stageH1b/REPORT.md`):
+| case | Stan's verdict | EMC2 long runs against Stan | ESS per core-hour, EMC2 / Stan: median; worst | EMC2's verdict |
+|---|---|---|---|---|
+| LNR funnel, 20 subjects x 200 trials, 25 parameters | stiff but sampled (~1000 leapfrogs per draw) | agrees (6 x 10000) | 2.6; 0.6 | right but slow; partly the posterior |
+| LNR funnel, 8 subjects x 500 trials | no problem | agrees (5 x 10000) | 0.52; 0.012 | right but slow |
+| simulated DDM, `sv` / `SZ` near the floor | no problem | agrees (5 x 10000) | 7.6; 0.15 | right but slow |
+| simulated DDM, `sv` / `SZ` inside | no problem, costly per gradient | agrees (5 x 5000) | 44; 4.1 | right but slow; cheaper than NUTS |
+| forstmann, `sv` | no problem; the `sv` plateau is real and crossed | agrees (5 x 10000) | 15; 0.020 | right but slow |
+| forstmann, `sv` + `SZ` | no problem; same plateau | agrees within a wide error (15 x 10000) | 97; 0.54 | right but very slow |
+| Eisenberg Simon (RDM, 518 subjects) | no problem | agrees (3 x 5000) | 0.51; 0.25 | right but slow |
+| simulated RDM, 300 subjects | at its tree-depth limit | agrees (3 x 5000) | 0.97; 0.33 | right but slow; NUTS works hard too |
+| simulated RDM, 300 subjects, correlated funnel | 32-50 effective draws of the funnel SDs | agrees within a very wide error (3 x 5000) | 0.54; 0.011 | hard for both |
 
-- *Conjugate model with a known posterior* (25 parameters x 20 subjects, 12 of them weakly
-  identified, 20000 sample iterations x 6 chains from the truth and 6 from a collapsed start).
-  The posterior of the weakly identified group SDs is reproduced from both starts: medians
-  0.146-0.170 against 0.159 exact, share of draws in the funnel's neck 0.18-0.27 against 0.18-0.26,
-  subject-level posterior SDs 0.97-1.01 x exact. With the group level held fixed the subject step
-  alone is exact at the truth and in the collapsed state (SD ratio 1.00, about 2 iterations per
-  effective draw; before the change it did not move in the collapsed state).
-- *The grid's single-subject cells* (9, 25 and 35 parameters x 500 / 2000 / 8000 trials), rerun:
-  excess/k 0.90-1.00, median SD/Laplace 0.98-1.03, Rhat <= 1.09. The 25-parameter cells take
-  1.3-1.5x as long, because the number of particles is now set once, at the end of adapt.
-- *A hierarchical cell with no funnel* (25 parameters x 20 subjects x 2000 trials): Rhat 1.02,
-  excess/k 1.03, as before.
+**Monte-Carlo error.** EMC2's chains carry offsets that last longer than a run, which the within-chain ESS cannot
+see, so a single run can look 5-8 ESS-based standard errors from Stan. The comparison therefore uses:
 
-**Tests.** The suite passes (1434); the three snapshot tests in `test-fit.R` that pin specific
-draws were re-recorded, as any change to the sampler requires.
+- the larger of the ESS-based and a chain-batch standard error;
+- the share of EMC2's draws beyond Stan's 5% and 95% points;
+- several independent long runs per case.
 
-## 7. The interweaving scale move (2026-10-02)
-
-Section 6 found what remained once the particle step itself was repaired: the centred alternation
-"subjects given the group level, group level given the subjects" mixes slowly in a funnel even
-with a perfect subject step. On the conjugate model of `rating-work/sampler/hier/stageH1/
-REPORT.md` one effective draw of a weak parameter's log group SD took about 500 iterations, and
-leaving a collapsed state took about 400; `fit()`'s 1000 sample iterations were not enough. The
-textbook remedy is interweaving / non-centred reparameterisation (Yu & Meng, 2011;
-Papaspiliopoulos, Roberts & Sk&ouml;ld, 2007): after the centred group step, move in a
-parameterisation where the group scale and the subjects' deviations are not conditionally
-dependent.
-
-`scale_move_standard()` (`R/variant_standard.R`; called from `run_stage()` in `R/sampling.R` after
-the group step, in `adapt` and `sample`, `type = "standard"` only -- `do_scale <- pmwgs$type ==
-"standard"`) does this per parameter `j`: a **scale move** proposes a log-scale change `delta`,
-`alpha'_sj = mu_j + f (alpha_sj - mu_j)` for every subject (`f = exp(delta)`), `Sigma'_jj` scaled
-by `f^2` and the Huang-Wand auxiliary variable `a_j` scaled by `1/f^2` (so the prior's own
-hierarchy moves with it), accepted against the prior/Jacobian ratio `delta - (e^{2 delta} - 1) /
-(A_j^2 a_j)` plus every subject's exact likelihood ratio; and, when there is no group-level design
-(`do_loc <- is.null(sampler$group_designs) && length(pars$tmu) == p`), a **location move**
-`mu'_j = mu_j + e`, `alpha'_sj = alpha_sj + e` for every subject, accepted the same way. Both run
-on H1b's quadratic likelihood surrogate (`lik_prec`, the finite-difference Hessian already built
-for the subject step) in `B` random parameter blocks of any size, each block's combined proposal
-accepted or rejected against the subjects' *exact* likelihoods in one more `calc_ll_manager` call
-per subject (delayed acceptance, so the move is exact whatever the surrogate's quality, not an
-approximation) -- `B x n_subjects` extra single-row likelihood evaluations per iteration, about
-0.1 ms each. The scale step size (Robbins-Monro, target .3 scaled as below) and `B` itself (kept where
-the per-block acceptance is in [.35, .75]) adapt during `adapt`, are averaged over its tail the
-same way the particle kernel's own tuning is (section 4's rule: nothing adapts once draws are
-kept), and are frozen for `sample`. The acceptance the step sizes adapt on is the *realised* one:
-a move counts only when the surrogate accepted it *and* its block then passed the exact check
-(`acc_real` in `attr(samples, "scale_move")`; `acc_in` still counts the surrogate's). Adapting on
-the surrogate's acceptance alone, as the first version did, tunes the step to the surrogate
-whatever its quality: on forstmann's DDM `sv`/`SZ` (below), where the surrogate was wrong by
-three orders of magnitude, its acceptance was a coin toss on the proposal's sign at any step, the
-step ran away to 6-11 log-SD units and the exact check rejected nearly every block. With the
-realised acceptance the exact check's rejections bound the step by what the exact likelihoods
-accept; where the surrogate is exact (a Gaussian likelihood) every block passes and nothing
-changes. Because a move shares the fate of its block, the Robbins-Monro target of the realised
-acceptance is `.3 x r`, with `r` a running block acceptance (`r_block`: exponentially weighted,
-weight .05 per sweep, starting at 1, frozen with the steps): a parameter whose moves are
-innocuous then keeps a surrogate acceptance near .3, where a fixed target of .3 through blocks
-that pass half the time pushed it to .6 and shrank every step to a quarter, which cost group-SD
-mixing on the grid's hardest cell; a parameter whose moves make blocks fail more than the
-average block still has its step shrunk. `r` enters the target no lower than .35, the block
-acceptance below which the sweep is split into more blocks, so that when blocks cannot be split
-further the target does not follow a collapsing block acceptance down (`test-scale-move.R`
-checks this case with a surrogate that is flat in every parameter;
-`rating-work/sampler/hier/stageH5b/REPORT.md` has the replicated comparison of the three
-rules). `options(emc.scale_move =
-FALSE)` turns the sweep off; the legacy sampler never runs it.
-
-**Validation** (`rating-work/sampler/hier/stageH2/REPORT.md`, conjugate cell `p25`, 25 parameters
-x 20 subjects). From both the truth and a collapsed start, group-SD quantiles (1-95%) equal the
-exact reference to three decimals in every identifiability class, and the subject-level posterior
-SD ratio is 0.997-1.003. The autocorrelation time of a weak parameter's log group SD falls from
-about 500 (section 6) to 10-16, of its group mean to 4-5; median first escape from a collapsed
-start falls from about 400 (exact) / 497 (the repaired particle step alone, section 6) to 28.5.
-Under `fit()` defaults the reproducer (`k25_n20_N200`, which used to stop at max tries) converges
-in 3 of 3 runs at the first check (1000-1200 sample iterations, alpha Rhat 1.05-1.09), at a
-measured cost of 1.20x per sample iteration -- at the plan's own 20% budget line.
-
-**Regression testing** (`rating-work/sampler/hier/stageH3/REPORT.md`) reran the package's grid,
-an SBC cell and two real datasets under the sweep. It passes on simulated data with known truth:
-11 of the grid's 12 `standard` cells and all 4 of section 6's funnelling cells meet Rhat < 1.1
-(the twelfth, `m35_standard_500`, was already the grid's hardest cell pre-sweep and fails only
-barely); the SBC cell it does not even touch (`diagonal-gamma`, where `do_scale` is `FALSE`) shows
-no regression either. Two things did not survive contact with real data, and are open issues
-(section 9), not resolved by this vignette:
-
-- On forstmann (19-subject DDM), the scale move's step size ran away to 6-11 log-SD units on the
-  weakly-identified `sv`/`SZ` parameters (every other parameter: 0.1-0.4) -- not a new failure
-  (the pre-sweep sampler already struggled there) but a worse one, because a step size adapted on
-  the surrogate's acceptance has nothing to stop it growing against a flat likelihood direction.
-  The runaway is fixed by adapting on the realised acceptance (above), but forstmann is not
-  (`rating-work/sampler/hier/stageH5/REPORT.md`): the step now shrinks instead, because the
-  surrogate for `sv`/`SZ` is wrong by three orders of magnitude. `lik_precision()`'s step search
-  oscillates between a step on the likelihood's flat stretch and one that straddles the DDM's
-  floor at its bounds (`sv`, `SZ` < .01), ending on either side, and reads the floor as a
-  curvature of 10^3-10^4 with a gradient to match. The same surrogate is the subject step's local
-  proposal, which is why `sv` already failed to converge there before the sweep existed. The
-  search now brackets its step and bisects, and gives a parameter whose step never settles a flat
-  surrogate (`test-lik-precision.R`); on forstmann `SZ` converges (1.03 at 5000 draws) and `sv`
-  goes from 5.3 to 1.2-1.7 at `fit()`'s limit and 1.18 at 5000 draws with every chain crossing the
-  whole of its posterior, every other parameter below 1.01, in half the time. What is left on `sv`
-  is the random walk of its group mean across a two-log-unit plateau where the likelihood is
-  indifferent to `sv` (ending at the model's floor at `sv` = .01): about 200 iterations per
-  traverse, so Rhat < 1.1 needs of the order of 10^4 draws. That is the model and prior, not the
-  sampler. Where the likelihood is quadratic (the conjugate model) the change is a no-op; on the
-  `k25` funnel cells the surrogate is entry-for-entry identical.
-- On the Eisenberg Simon data (518 subjects, no funnel present -- mu/sigma Rhat both fine), the
-  sweep makes subject-level (alpha) Rhat *worse* than the pre-sweep sampler (1.212 vs 1.098) at
-  4x the cost, with the block-acceptance diagnostic below its target window -- the quadratic
-  surrogate the delayed-acceptance step relies on may fit this model/N poorly.
-- The sweep's own ~20% cost estimate, measured on the `k25` reproducer, does not generalise: every
-  one of the grid's 12 `standard` cells exceeds it (1.56x-11.57x per sample iteration), including
-  9-parameter cells that never funnel. It stays close to ~20% only on cells that actually funnel.
-
-**Many subjects (2026-10-05; `rating-work/sampler/hier/stageH6/REPORT.md`, `stageH6b/REPORT.md`,
-`stageH6b/REPORT_partB.md`).** The Eisenberg Simon regression above (RDM, 518 subjects, 8 parameters)
-turned out not to be the sweep: with the sweep off it was the same (20 of 20 fits above 1.1 at
-`fit()`'s maximum tries, minimum subject-level ESS 14 per 1000 draws). The cause was section 4's fixed
-sample-stage kernel, built when `adapt` stopped on `min_unique` after about 100 iterations, from draws
-in which a few subjects' chains still sat apart; those subjects' kernels were poor for the rest of the
-fit and set its Rhat. The mean Rhat over a window (burn's criterion) does not show this; the largest
-does. Four changes, replicated five times per cell on Gadi:
-
-- *Converged adapt.* `adapt` also waits until the largest Rhat of alpha over the last 250 iterations
-  (the window the kernel is built from) is below 1.2, from 250 iterations on; it gives up after three
-  checks without a new minimum or at 1000 (`adapt_converged()`, `adapt_stop()` in `R/fitting.R`;
-  `options(emc.adapt_converge = FALSE)` switches it off). The efficient proposals are built from
-  that window.
-- *Likelihood precision from the draws* (`lik_precision_draws()`). The particle step's conditional
-  proposal used the finite-difference curvature at one point, two to three times too narrow for the
-  skewed posteriors of the worst subjects (`t0`, `B`). It now uses the window's draws: their inverse
-  covariance minus the window's mean group precision, in the directions where that is clearly
-  positive, and the finite differences (capped at what the draws allow) elsewhere. The subtraction
-  is only right if the group precision is about constant over the window, so this is used only
-  where the largest coefficient of variation of the group precision over the window is below .5
-  (`lik_prec_draws_cv`): .17-.33 on Eisenberg and on a simulated 300-subject cell, 8-20 for the worst
-  parameter of the ladder's funnel cells, where an earlier version that used it everywhere halved
-  the conditional proposal's acceptance and cost a third of the subject-level ESS.
-- *A gate on the sweep.* With hundreds of subjects the surrogate's error has the same sign in nearly
-  every subject and adds up, so moves of well-identified parameters pass the exact check only at
-  steps far below the posterior SD of what they move, while each block still costs one likelihood
-  per subject. A move is dropped for the rest of the fit when the sweep is already split into one
-  block per parameter and its expected squared jump per sweep is under a tenth of the group-level
-  Gibbs step's own (`scale_move_gate()`, decided from 300 adapt sweeps on). On Eisenberg it keeps
-  four scale and three location moves; on the ladder cells it never fires. The steps start at each
-  move's conditional scale on the surrogate.
-- *The exact check in-process.* The block's exact check forked one process per core; for cheap
-  likelihoods forking cost more than the likelihoods (0.26-0.34 s against 0.10-0.13 s per block on
-  Eisenberg). The first checks are timed both ways and the faster is kept (`check_serial` in
-  `attr(samples, "scale_move")`).
-
-Results with `fit()` defaults (five runs each): Eisenberg subject-level Rhat 1.10 [1.08, 1.16] (3 of 5
-below 1.1), ESS 5% quantile / minimum 211 / 48 per 1000 draws, 63 minutes (the ungated sweep took 150);
-against the Stan reference of `rating-work/sampler/stan/REPORT_refs.md` no group-level quantity is
-more than 4 Monte-Carlo SEs off (two between 3 and 4, on `B` and `t0`). The `k25` funnel cells and
-`m35_standard_500` mix as well as or better than before (conditional-proposal acceptance .29-.33
-against .14-.21, a third to a half as many particles) and run 2-4 times faster; `p25` reproduces the
-exact posterior. forstmann (DDM) is 1.3 times slower: its `sv` plateau keeps adapt's window Rhat at
-1.2-2.2, so adapt runs 600-1000 iterations.
-
-The earlier sampler that passed Eisenberg (`002a5c6f`, which kept re-estimating its proposals during
-sampling, section 4) did so with a biased posterior: against Stan it was off on 10 of 16 group means
-and log SDs (up to 7.5 Monte-Carlo SEs) and too narrow (SD ratios 0.84-1.00), and the subjects with
-heavy posterior shoulders (below) were under-sampled.
-
-### The stop rule and the Rhat it reads (2026-10-06)
-
-With the kernel fixed, a sample-stage stop rule only decides when to stop and which draws to keep, so
-any rule can be replayed exactly on a run that kept every draw. That was done for 41 candidate rules on
-40 runs of six data sets (Eisenberg, two small funnel cells, forstmann's full DDM, two simulated
-300-subject cells), each also with its own burn and adapt draws put back in front of the sample stage as
-a real transient. Three results shaped what `fit()` does now.
-
-1. *The discard is needed.* On a failed check `fit()` drops the first third of the stage's draws when the
-   largest Rhat is lower without it. Without that, a transient stays in: on Eisenberg 17 of 20 runs still
-   pass with 500 pre-sample draws kept (chains that drift together have a split-Rhat below 1.1), with an
-   error 1.6 times (subject level) and 2.5 times (group level) that of a stationary window, and 3-9 times
-   on the small funnel cells. Everything cheaper that was tried (a margin, a cap at half the draws, a
-   fixed warm-up fraction) removes a long transient less well, and a separate test for drift (batch means,
-   or Geweke's diagnostic pooled over chains) cannot tell a transient from slow mixing: it fires at
-   24-81% of the checks of the slowly mixing fits.
-2. *The statistic was the problem.* `coda::gelman.diag()`'s point estimate carries a degrees-of-freedom
-   correction that grows with the differences between the chains' variances. A subject with 3-5% of its
-   posterior in a shoulder (three of Eisenberg's 518 have one, in the Stan reference too) is visited there
-   by one chain at a time, for 50-300 draws every 300-900: its split-Rhat is 1.05 and coda's 1.15-1.2,
-   and the largest of 4144 values is what the criterion reads. The same rule on the split-Rhat stops on
-   its criterion in 18 of 20 replayed runs against 3, with the retained draws as accurate as a window of
-   the same length from the end of the run.
-3. *A check should cost nothing.* Through `gd_summary()` a check took 58-108 seconds on Eisenberg, more
-   than the 100 draws between two checks; from the stored array it takes half a second.
-
-So the rule is the old one on the split-Rhat (`?gd_summary`), which is also what `gd_summary()` and
-`summary()` now report, in `burn` as in `sample`. What it does not do: a pass says that the chains agree,
-not that there are enough effective draws (the smallest group-level effective size on Eisenberg at the
-stop is about 60; `stop_criteria$min_es` is the tool for that), and fits that mix slowly (forstmann's `sv`
-plateau, the 300-subject ridges) still end at the 20-check limit, correctly. `stop_criteria$gd_quantile`
-judges the subject level by a quantile of its Rhats (99%: at most 1 in 100 entries above the bound)
-instead of the largest, which keeps the criterion from tightening as subjects are added; it is an option,
-not the default.
-
-A note on the numbers. Every Rhat quoted before this subsection (sections 6-7) and the `fit()` Rhat
-columns of section 8 are coda's corrected estimate, read by the old rule, as `fit()` reported them at
-the time. The same chains read lower on the split-Rhat, by most for the largest values: on Eisenberg at
-1000 draws the largest of the 4144 subject-level values was 1.17 by coda against 1.05 by the split-Rhat
-(median of five runs; `rating-work/sampler/hier/stageH6c/REPORT_round2.md`, section 3). Under the rule as
-it now is (`rating-work/sampler/hier/stageH6d/REPORT_impl.md`, section 2; five runs per cell): Eisenberg
-stops on its criterion in 3 of 5 `fit()` runs (largest split-Rhat 1.09 [1.07, 1.21], a median 1061 draws
-kept, 37 minutes against 63, every group-level quantity within 2.3 Monte-Carlo SEs of Stan); the `k25`
-funnel cells and `m35_standard_500` pass in 5 of 5 (before: 4-5 and 3 of 5) in 0.5-0.65 of the time;
-forstmann passes in 1 of 5, as before.
-
-## 8. The sampler against Stan (2026-10-05)
-
-Sections 3-7 compare EMC2 with itself, with an exact Gibbs reference on a conjugate model, and with
-SBC. For the cases that gave trouble there is no exact answer, so Stan's NUTS was used as the gold
-standard on exactly EMC2's posterior: same data, priors (the Huang-Wand auxiliary variables integrated
-out in closed form), bounds and per-trial likelihood floor; the Stan group level checked against the
-exact Gibbs reference on the conjugate model `p25`, and each Stan likelihood against `calc_ll_manager`
-(`rating-work/sampler/stan/REPORT_refs.md`). EMC2 (`e9c820a9`: section 7's changes up to the many-subject
-ones, before the stop rule of section 7's last subsection) was then run on the same `emc` objects: per
-case five `fit()` runs with defaults and 3-15 long runs (5000-10000 sample draws, no stop rule), 3 chains
-each, with the legacy sampler on two cases and a `DDM_EPS = 1e-6` build on three
-(`rating-work/sampler/stan/REPORT_compare.md`; 109 jobs on NCI's Gadi). Every group mean, log group SD
-and group correlation, every parameter of three subjects (draws) and every subject parameter (summaries)
-were compared.
-
-**Verdicts.** "Agrees" = within Monte-Carlo error of Stan, judged as described below. The `fit()` column
-is coda's Rhat read by the old stop rule (see the note at the end of section 7). ESS ratio = EMC2's
-effective draws per core-hour over Stan's, for the median group-level quantity and the worst one.
-
-| case | Stan's verdict | EMC2 `fit()`: alpha Rhat at stop, median [range] of 5 (coda, old rule) | EMC2 long runs against Stan | ESS per core-hour, EMC2 / Stan: median; worst | EMC2's verdict |
-|---|---|---|---|---|---|
-| `p25` conjugate funnel | no problem; exact posterior recovered | exact (section 7) | -- | -- | right |
-| `k25_n20_N200` (LNR funnel) | stiff but sampled: ~1000 leapfrogs per draw | 1.14 [1.11, 1.18] | agrees (6 x 10000) | 2.6; 0.6 | right but slow; partly the posterior |
-| `k25_n8_N500` | no problem (Rhat <= 1.009) | 1.14 [1.13, 1.28] | agrees (5 x 10000) | 0.52; 0.012 (log SD of `t0`) | right but slow |
-| `ddm_floor` (simulated, `sv` / `SZ` near the floor) | no problem | 1.59 [1.21, 2.00] | agrees (5 x 10000) | 7.6; 0.15 | right but slow |
-| `ddm_in` (simulated, `sv` / `SZ` inside) | no problem, costly per gradient | 1.10 [1.07, 1.22] | agrees (5 x 5000) | 44; 4.1 | right but slow; cheaper than NUTS |
-| forstmann, `sv` | no problem; the `sv` plateau is real and crossed | 1.57 [1.33, 1.87] | agrees (5 x 10000) | 15; 0.020 (`mu_sv`) | right but slow |
-| forstmann, `sv` + `SZ` | no problem; same plateau | 1.42 [1.20, 1.84] | agrees within a wide error (15 x 10000; below) | 97; 0.54 | right but very slow |
-| Eisenberg (RDM, 518 subjects) | no problem: 4144 alphas Rhat <= 1.009 | 1.22 [1.09, 1.54] | agrees (3 x 5000) | 0.51; 0.25 (`mu_v`) | right but slow |
-| `many_plain` (simulated RDM, 300 subjects) | at its tree-depth limit | 1.14 [1.07, 1.23] | agrees (3 x 5000) | 0.97; 0.33 | right but slow; NUTS works hard too |
-| `many_C` (300 subjects, correlated funnel) | partly a posterior problem: 32-50 effective draws of the funnel SDs | 2.14 [1.48, 3.31] | agrees within a very wide error (3 x 5000) | 0.54; 0.011 | posterior hard for both |
-
-So EMC2 gets the right answer everywhere, and on six cases (`k25_n8_N500`, both simulated DDMs, both
-forstmann models, Eisenberg) it is slow where NUTS has no difficulty at all. It is not generally slower:
-per core-hour it is 8-97 times cheaper than NUTS on the typical group-level quantity of the DDMs, whose
-gradients are expensive, and comparable on LNR and RDM. What it lacks is mixing on a few group-level
-directions -- a funnel's neck, a likelihood plateau at a parameter's bound, a ridge along a weakly
-identified combination -- and those set `fit()`'s Rhat and the Monte-Carlo error that matters (on the
-slowest quantity, 0.011-0.6 of NUTS's rate on eight of nine cases). In long runs a chain enters a neck or
-a plateau and stays 50-5000 iterations; NUTS's longest stay below its own 5% point is 2-8 draws.
-
-**How Monte-Carlo error was judged.** A single run can look wrong: `ddm_in`'s first long run had
-`mu_v_Sright` and `mu_sv` 8-9 ESS-based standard errors from Stan, because each of its three chains sat at
-its own level for all 5000 draws, an offset the within-chain ESS cannot see. So the comparison uses (i) the
-larger of the ESS-based standard error and a chain-batch one (each chain a batch, so offsets between chains
-count), (ii) the share of EMC2's draws beyond Stan's 5% and 95% points, and (iii) several independent long
-runs per case. The calibration that settles whether a remaining difference is EMC2's error or a different
-posterior is EMC2 against itself: z-scores of the `fit()` runs against the long runs, built the same way. If
-EMC2 sampled a different posterior, EMC2-vs-EMC2 would be tighter than EMC2-vs-Stan. SD of the z-scores over
-every subject parameter:
+What settles whether a difference is EMC2's error or a different posterior is EMC2 against itself: z-scores of the
+`fit()` runs against the long runs, built the same way. SD of the z-scores over every subject parameter:
 
 | case (subject parameters) | `fit()` vs Stan | long vs Stan | `fit()` vs long |
 |---|---|---|---|
-| `k25_n20_N200` (500) | 1.21 | 1.48 | 1.36 |
-| `k25_n8_N500` (200) | 1.85 | 1.31 | 1.57 |
-| `ddm_floor` (90) | 0.91 | 0.84 | 0.96 |
-| `ddm_in` (90) | 1.13 | 1.18 | 1.07 |
+| LNR funnel, 20 subjects (500) | 1.21 | 1.48 | 1.36 |
+| LNR funnel, 8 subjects (200) | 1.85 | 1.31 | 1.57 |
+| DDM near the floor (90) | 0.91 | 0.84 | 0.96 |
+| DDM inside (90) | 1.13 | 1.18 | 1.07 |
 | forstmann `sv` (152) | 1.41 | 1.29 | 1.76 |
 | forstmann `sv` + `SZ` (171) | 0.93 | 1.48 | 1.30 |
 | Eisenberg (4144) | 1.19 | 1.45 | 1.40 |
-| `many_plain` (1800) | 0.99 | 1.46 | 1.32 |
-| `many_C` (2400) | 1.46 | 1.38 | 1.22 |
+| RDM, 300 subjects (1800) | 0.99 | 1.46 | 1.32 |
+| RDM, correlated funnel (2400) | 1.46 | 1.38 | 1.22 |
 
-The z-scores are 1.2-1.5 times too wide, and equally too wide between EMC2's own runs: the excess is EMC2's
-Monte-Carlo error being under-stated by its ESS (by about 1.5-2 in variance), not a different posterior. With
-chain-batch errors the group-level z-scores have SD near 1 against Stan, and the largest group-level |z| per
-case is 2.2-3.3 over 49-425 quantities. The literal criterion first planned (ESS-based |z| < 4 and SD ratio in
-[0.9, 1.1] on every quantity) is failed for that reason by every case but `ddm_floor` and `ddm_in`'s `fit()`
-runs.
+The z-scores are 1.2-1.5 times too wide, and just as wide between EMC2's own runs: EMC2's ESS understates its
+Monte-Carlo error by about 1.5-2 in variance, and the posterior is the same. With chain-batch errors, the largest
+group-level |z| per case is 2.2-3.3 over 49-425 quantities.
 
-**forstmann with `sv` + `SZ`: the hardest case for EMC2.** Group means agree, but in 2 of 15 long runs a
-chain moved onto a region where `SZ` sits at its lower bound for every subject (group mean -2.3 on the probit
-scale against the bound -2.33, log group SD -5 to -11) and stayed up to 8900 iterations. The region is real:
-the likelihood there is as high as at Stan's mode, so with `SZ` that small its value hardly matters and the
-group SD can collapse; Stan visits it too (0.8% of its draws), EMC2 4.6% with a run-level SE of 2.9%. It is not
-the DDM's precision (the log-likelihood at `DDM_EPS` 5e-3 and 1e-6 differs by under 1e-3 per subject there).
-Within Monte-Carlo error, but that error is set by whether a run happens to fall onto the plateau: 45 chains x
-10000 draws leave a 3% standard error on a 1% tail where NUTS needs four chains of 1000. EMC2 cannot pin the
-`SZ` group level of this model at any practical run length.
+**Where EMC2 is slow.** On six of the nine cases NUTS has no difficulty and EMC2 needs long runs. Per core-hour EMC2
+is 8-97 times cheaper than NUTS on the typical quantity of the DDMs, whose gradients are expensive. On the slowest
+quantity of eight of the nine cases it is 1.7-90 times slower: funnel necks, plateaus at a parameter's bound,
+ridges along weakly identified combinations. In long runs a chain enters a neck or a plateau and stays 50-5000
+iterations; NUTS's longest stay beyond its own 5% point is 2-8 draws. The clearest case is forstmann with `sv` +
+`SZ`:
 
-**The legacy sampler was wrong, with good Rhat.** `options(emc.sampler = "legacy")`, three `fit()` runs each:
+- a chain occasionally moves onto a region where `SZ` sits at its lower bound for every subject, and stays there
+  for thousands of iterations;
+- the region is real: the likelihood there is as high as at Stan's mode, and Stan visits it too (0.8% of its
+  draws);
+- EMC2's share is 4.6%, with a run-level SE of 2.9%. That is within Monte-Carlo error, but 45 chains x 10000 draws
+  don't pin that group level, where NUTS needs four chains of 1000.
+
+**The legacy sampler is wrong, with good Rhat.** `options(emc.sampler = "legacy")`, three `fit()` runs each:
 
 | | alpha Rhat at stop | group means / log SDs / correlations: largest \|z\| | subject parameters beyond \|z\| = 4 | SD ratios |
 |---|---|---|---|---|
 | Eisenberg | 1.01-1.02 | 26 / 46 / 26 | 2966 of 4144 | 0.53-2.46 |
 | forstmann, `sv` + `SZ` | 1.04-1.09 | 9.2 / 25 / 16 | 50 of 171 | 0.33-1.08 |
 
-It converges quickly and confidently to the wrong distribution (section 2's kernel is not a valid MCMC
-kernel), which is the strongest single argument for the changes since 2026-09-30, and a reminder that a
-good convergence diagnostic is not evidence of a correct answer.
+### Ordinary fits: forstmann with five standard models
 
-Three findings for the package came out of matching the target (none changes a posterior here; section 9):
-`fit()` stops with an error when a group covariance becomes numerically singular; the RDM's Wald survivor
-overflows for `2 B v / s^2 > 709.8`, which the sampler can reach; and the DDM's `DDM_EPS = 5e-3` changes no
-posterior, while `1e-6` costs nothing measurable at the level of a `fit()`.
+Hierarchical fits of `forstmann` (19 subjects) with LNR, LBA, RDM, the Wiener DDM (`sv`, `SZ`, `st0` at 0) and the
+full DDM (all three estimated):
 
-## 9. What is still open
+- speed emphasis affects the threshold only (for LNR, the log mean);
+- there is no rate bias, and response bias enters through `lR` (`Z` for the DDMs);
+- the LBA's `sv` and the RDM's `s` vary with `lM`, with the mismatch level fixed at 1, and the RDM has no
+  start-point variability.
 
-An earlier version of this section said that the hierarchical fits which do not converge
-(few trials per weakly identified parameter: 8-40 subjects x 200-500 trials x 25-35 parameters,
-alpha Rhat 1.4-1.9 under `fit()` defaults) were stuck in a funnel because of the group-level Gibbs
-step, not the particle kernel. That was wrong. On a conjugate model with a known posterior
-(`rating-work/sampler/hier/stageH1/REPORT.md`) EMC2's group step with an exact draw of the subject
-parameters reproduces the exact posterior, and the failure was the particle step: the sample
-stage's continued adaptation made chains sink into the funnel's neck from healthy states, and
-the local proposal froze once they were there (both repaired, section 4); what was left after
-that repair was the centred alternation's own slow mixing in the funnel, addressed by the
-interweaving sweep of section 7.
+Every fit is `fit()` with all defaults, five runs per model and sampler, on one 48-core machine. Times are medians.
 
-What remains, as of this writing:
+| model | converged by the default rule, current / legacy | minutes to stop, current / legacy | s per 100 sample iterations, current / legacy | posteriors |
+|---|---|---|---|---|
+| LNR | 5/5 / 5/5 | 1.9 / 2.1 | 5.4 / 8.2 | the same |
+| RDM | 5/5 / 5/5 | 2.7 / 3.6 | 6.7 / 15.8 | the same |
+| Wiener DDM | 5/5 / 5/5 | 2.3 / 2.3 | 6.0 / 9.7 | the same |
+| LBA | 2/5 / 5/5 | 7.4 / 5.7 | 15.8 / 23.9 | legacy too narrow |
+| full DDM | 4/5 / 5/5 | 55.5 / 58.6 | 96 / 201 | legacy differs in `SZ` |
 
-- **Slow group-level directions (section 8).** EMC2 is right on every case compared with Stan, but
-  slow on funnel necks, plateaus at a bound and ridges, where NUTS is not. On Eisenberg two runs in
-  five still end above 1.1 under the current rule. A few subjects (`s095` `B`, `s273` `t0`, `s084`
-  `v_lMd`) have 3-5% of their posterior mass in a shoulder several SDs from the mode (Stan: skewness
-  2.5-3.6; not the likelihood floor); a chain enters it every 300-900 draws and stays 50-300, so a
-  1000-2000 draw run either misses it or over-weights it, but pooled over 15 chains x 3000 draws every
-  build's shoulder mass equals Stan's (`stageH6c/REPORT_round2.md`): run length, not a bias. The group
-  means of `v` and `v_lMd` sit on a ridge (the matching accumulator's rate is identified, their
-  difference barely; autocorrelation time 45-100). Joint group-level moves along the slowest
-  directions (shift, rescale, shear, with partial non-centring) were prototyped and are exact
-  (`rating-work/sampler/hier/stageH6c/`, `h6c_candidate.patch`): they halve the ridge's
-  autocorrelation time on a simulated 300-subject cell, but on Eisenberg none is a gain per minute
-  (+15-62% time for a ridge 1.25-1.5 times faster), so they are set aside, not in the package.
-  forstmann's `sv` stays slow for the same kind of reason (its group mean on a likelihood plateau),
-  and with `sv` + `SZ` a plateau with `SZ` at its bound that EMC2 enters rarely and leaves after
-  thousands of iterations means EMC2 cannot pin that model's `SZ` group level (section 8). One
-  Eisenberg fit in 54 never left the likelihood floor after `preburn` (one chain with every
-  subject's `v_iMd` at its bound): open.
-- **Within-subject trade-offs (LBA).** On forstmann's LBA (`v ~ lM`, `sv ~ lM`, `B ~ E + lR`, `A`, `t0`;
-  19 subjects) `fit()` with its defaults stops at its 20-check limit in 3 of 5 runs, although the
-  posterior agrees with long runs (5000 draws, 7 minutes, Rhat 1.03-1.07) and the legacy sampler's is
-  20-33% too narrow for 18 subject parameters. Each failure is one subject whose parameters move together
-  along strong posterior correlations (`v` with `v_lMd` -.97, with `sv` .95, `B` with `v` .84 and `t0`
-  -.79): a chain drifts along that ridge for 100-300 iterations. More draws are the remedy; a move along
-  a subject's posterior correlations (the particle step's proposals are built from its draws, but still
-  mix slowly there) would be the sampler's.
-- **A singular group covariance.** 3 of the 90 default-build runs of section 8 (LNR and DDM cases)
-  ended with "group covariance became computationally singular" in the sample stage. `fit()` now
-  re-draws the group step up to 3 times by default (`on_singular`) before giving up; whether that is
-  always enough is not yet known (the three runs could not be reproduced: the parallel random-number
-  stream is not reproducible across runs).
-- **The RDM's Wald survivor overflows** (`pigt0()` drops the loser's term when `2 B v / s^2 > 709.8`).
-  Reached once in section 8 by the current sampler (a simulated subject, 745; Stan's maximum 587) and
-  by the legacy sampler on Eisenberg (1021). A log-scale evaluation removes it.
-- **EMC2's ESS is optimistic** by about 1.5-2 in variance (section 8), because chains carry offsets
-  that last longer than the within-chain autocorrelation the estimator sees; `stop_criteria$min_es`
-  inherits that.
-- **DDM precision.** `DDM_EPS = 5e-3` changes no posterior in section 8, and `1e-6` costs nothing
-  measurable at the level of a `fit()` (x1.17-1.20 per likelihood evaluation, diluted by the rest of
-  an iteration). Making 1e-6 the default is for the DDM's maintainers to decide; the start-point
-  integration's absolute tolerance, which cannot resolve densities near the floor, is a separate point.
-- **The sample kernel's local step size is often its last tuned value, not the tail's average.** In the
-  100-iteration tail that tunes the sample kernel the local kernel runs on 25-35 iterations; the first 20 uses
-  are warm-up and the average needs 10 more, so many subject-chains keep the last Robbins-Monro value (5 of 8
-  on a 4-subject test model, but 2-4% in the forstmann LBA fits below). The kernel is still fixed and exact,
-  so this costs efficiency, not correctness; a
-  longer tail or a shorter warm-up would change every fit, so it needs the conjugate exactness check and the
-  ladder rerun.
-- **The stop rule (section 7).** `max_tries` does not bind until 1000 draws are kept (the discard keeps
-  lowering the count: one Eisenberg run generated 3300 draws in 33 checks to keep 1029); a hard limit is
-  a one-line change with its own consequence (fewer than 1000 draws). `gd_quantile = .99` costs nothing
-  on the replays and stops the small funnel cells at 1200-1400 draws instead of the limit; whether it
-  becomes the default wants more designs replayed and a report at the stop of which entries were let
-  through. With burn ending sooner, forstmann's smallest group-level ESS was 32 against 46 (five runs
-  each, p = .10): read as run-to-run spread, worth a look if forstmann is refitted.
-- **The ~20% cost estimate is per-model-family, not general** (section 7): expect more overhead
-  than that on models that are not shaped like the `k25` reproducer, even where there is no
-  funnel.
-- **The location move only runs without a group-level design** (`do_loc`, section 7); with one,
-  only the scale move runs, so a funnel in the group means under a group design is not yet
-  addressed.
-- **The scale move is diagonal only** (`Sigma'_jj` scaled independently per parameter), and a
-  correlated collapse now has a reproducer: a simulated 300-subject RDM cell with a 2 x 2 design
-  (`stageH6b/many_cells.R`, `variant = "C"`), in which only `v_Cd + v_lMd:Cd / 2` is identified per
-  subject and the group SDs of the two parameters are not. Every build fails it (subject-level Rhat
-  1.5-2.6), the fixed-kernel builds worse than `002a5c6f`. Scaling one parameter's deviations moves
-  the identified combination, so this needs a joint (rotated) group-level move. The prototype above
-  with a shear brings it into agreement with Stan on all 24 group-level quantities but still not to
-  Rhat 1.1; NUTS itself gets only 32-50 effective draws of its funnel SDs (section 8: hard for both).
-  Not implemented.
-- **Only `type = "standard"` runs the sweep** (`do_scale`); `diagonal` and `blocked` share enough
-  of the code path that they probably only need the call site enabled, but this is unconfirmed.
-  `factor`, `infnt_factor` and `SEM` are untested for the move; `diagonal-gamma` was incidentally
-  regression-tested clean on everything *except* the move itself, which never runs for it.
-- **No sweep in burn**; `init()` still starts every chain in the neck (subjects bunched at the
-  group mean, group SD about 0.14 for every parameter), and `preburn`/`burn` keep the old search
-  step.
-- **References.** The exact reference is R-only for the conjugate model (`stageH1/exact_gibbs.R`);
-  the Stan references of section 8 cover LNR, RDM and DDM cases but no rating model (an MTLNR
-  reference was judged unnecessary: `m35_standard_500` shows the same slow-mixing signature as the
-  `k25` cells, which agree with Stan), and none for `type` other than `standard`.
-- **Dispersed starts** (as an alternative or supplement to fixing the mixing) have not been tried.
+- *Time to convergence is about the same.* Per sample iteration the current sampler is 1.5-2.4 times faster, because
+  one fixed kernel needs fewer particles than continual re-tuning. Its converged adapt stage takes most of that
+  back.
+- *LNR, RDM and the Wiener DDM give the same posteriors:* the largest group-level shift is .03 posterior SDs.
+- *LBA.* Against four long current-sampler runs (5000 draws, 7 minutes each, which agree with each other):
+  - the current sampler's default fits agree, including those that do not meet the stop rule;
+  - the legacy sampler's posterior SDs are 20-33% too small for 18 of 171 subject parameters (`A`, `t0` and `B`
+    of five subjects);
+  - the current sampler misses the rule within `fit()`'s limit in 3 of 5 runs. Each time it is one subject whose
+    parameters sit on strong posterior trade-offs (`v` with `v_lMd` -.97, with `sv` .95; `B` with `t0` -.79) and
+    drift along that ridge for a few hundred iterations. More draws are the remedy.
+- *Full DDM.* The two samplers differ in `SZ`: the group means are .46 posterior SD apart, and the legacy sampler's
+  spread of the group SD of `SZ` is 2.5 times narrower. That is the signature of the Stan comparison above, where
+  the legacy sampler is the one that is wrong.
+
+### The stop rule
+
+With the sample-stage kernel fixed, a stop rule only decides where to stop and which draws to keep, so rules can be
+compared exactly on runs that kept every draw. 41 candidate rules were compared on 40 runs of six data sets
+(Eisenberg, two LNR funnel models, forstmann's full DDM, two simulated 300-subject RDMs). Each run was also
+replayed with its own burn and adapt draws put in front as a real transient.
+
+- *The statistic.* On the split-Rhat, the rule stops on its criterion in 18 of 20 Eisenberg runs, after a median
+  1380 draws. On coda's estimate it stops in 3 of 20, at the 2000-draw limit. The retained draws are as accurate as
+  a window of the same length from the end of the run.
+- *The discard is needed.* Without it a transient stays in, and the fit still passes: chains that drift together
+  have a split-Rhat below 1.1. On Eisenberg the error of the retained draws is 1.6 (subject level) to 2.5 (group
+  level) times a stationary window's, and 3-9 times on the small funnel models. With the discard, every case is back
+  to a stationary window.
+- *Nothing cheaper is as safe.* A margin, a cap at half the draws and a fixed warm-up fraction each remove a long
+  transient less well. A test for drift (batch means, or Geweke's diagnostic pooled over chains) cannot tell a
+  transient from slow mixing, and fires at 24-81% of the checks of slowly mixing fits.
+- *In `fit()`*, 3 of 5 Eisenberg runs stop on the criterion, in 37 minutes, with every group-level quantity within
+  2.3 Monte-Carlo SEs of Stan.
+- *`gd_quantile = .99`* loses nothing on the transient test, and stops the small funnel models at 1200-1400 draws
+  (4-5 of 5 runs) instead of at the limit. It lets 1-5 subject-level entries stand at 1.15-1.35 at the stop.
+
+## 6. What is still open
+
+- **Slow directions.** The current sampler is right but slow along group-level ridges, in funnel necks, on
+  plateaus at a bound (forstmann's `SZ`), and along strong within-subject trade-offs (LBA); more draws are the
+  remedy. Moves along these directions would be the sampler's remedy. Joint group-level moves along the slowest
+  directions (shift, rescale, shear) are exact, and halve a simulated ridge's autocorrelation time, but they cost
+  as much time as they save on real data, so they are not in the package.
+- **Optimistic ESS.** EMC2's ESS understates Monte-Carlo error by about 1.5-2 in variance, and
+  `stop_criteria$min_es` inherits that.
+- **Stop-rule details.** `max_tries` does not bind until 1000 draws are kept. Whether `gd_quantile = .99` should be
+  the default needs more designs.
+- **The sample kernel's step size on small models.** The local step size is averaged over the 100-iteration tail
+  only after 20 warm-up uses, and needs 10 more. On a 4-subject model many subject-chains keep their last value
+  instead; on forstmann's LBA 96-100% are averaged. This costs efficiency, not correctness.
+- **Singular group covariances.** Whether 3 re-draws are always enough is not known.
+- **Scope of the sweep.** It runs for `type = "standard"` only, and its location move only without a group-level
+  design. There is no sweep in `burn`, where `init()` starts every chain near the funnel's neck. Dispersed
+  starting values have not been tried.
+- **Found while matching Stan's target, outside the sampler:**
+  - the RDM's Wald survivor `pigt0()` drops the loser's term when `2 B v / s^2 > 709.8`, a region the sampler can
+    reach;
+  - the DDM's precision constant `DDM_EPS = 5e-3` changes no posterior here, and `1e-6` costs nothing measurable at
+    the level of a `fit()`;
+  - models with nuisance parameters cannot currently be fitted end to end.
 
 ## References
 
-Neal, R. M. (2011). MCMC using ensembles of states for problems with fast and slow variables such
-as Gaussian process regression. arXiv:1101.0387.
+Andrieu, C., Lee, A., & Vihola, M. (2018). Uniform ergodicity of the iterated conditional SMC and geometric
+ergodicity of particle Gibbs samplers. Bernoulli, 24(2), 842-872.
 
-Papaspiliopoulos, O., Roberts, G. O., & Sk&ouml;ld, M. (2007). A general framework for the
-parametrization of hierarchical models. Statistical Science, 22(1), 59-73.
+Carpenter, B., Gelman, A., Hoffman, M. D., Lee, D., Goodrich, B., Betancourt, M., Brubaker, M., Guo, J., Li, P., &
+Riddell, A. (2017). Stan: A probabilistic programming language. Journal of Statistical Software, 76(1), 1-32.
 
-Tjelmeland, H. (2004). Using all Metropolis-Hastings proposals to estimate mean values. Statistics
-No. 4/2004, Norwegian University of Science and Technology.
+Christen, J. A., & Fox, C. (2005). Markov chain Monte Carlo using an approximation. Journal of Computational and
+Graphical Statistics, 14(4), 795-810.
 
-Yu, Y., & Meng, X.-L. (2011). To center or not to center: That is not the question -- an
-ancillarity-sufficiency interweaving strategy (ASIS) for boosting MCMC efficiency. Journal of
-Computational and Graphical Statistics, 20(3), 531-570.
+Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). Bayesian data analysis
+(3rd ed.). CRC Press.
+
+Gelman, A., & Rubin, D. B. (1992). Inference from iterative simulation using multiple sequences. Statistical
+Science, 7(4), 457-472.
+
+Hoffman, M. D., & Gelman, A. (2014). The No-U-Turn sampler: Adaptively setting path lengths in Hamiltonian Monte
+Carlo. Journal of Machine Learning Research, 15, 1593-1623.
+
+Huang, A., & Wand, M. P. (2013). Simple marginally noninformative prior distributions for covariance matrices.
+Bayesian Analysis, 8(2), 439-452.
+
+Neal, R. M. (2011). MCMC using ensembles of states for problems with fast and slow variables such as Gaussian
+process regression. arXiv:1101.0387.
+
+Papaspiliopoulos, O., Roberts, G. O., & Sk&ouml;ld, M. (2007). A general framework for the parametrization of
+hierarchical models. Statistical Science, 22(1), 59-73.
+
+Tjelmeland, H. (2004). Using all Metropolis-Hastings proposals to estimate mean values. Statistics No. 4/2004,
+Norwegian University of Science and Technology.
+
+Yu, Y., & Meng, X.-L. (2011). To center or not to center: That is not the question -- an ancillarity-sufficiency
+interweaving strategy (ASIS) for boosting MCMC efficiency. Journal of Computational and Graphical Statistics, 20(3),
+531-570.
