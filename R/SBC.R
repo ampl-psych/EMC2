@@ -1040,7 +1040,7 @@ get_gamma <- function (N, K, conf_level = 0.95)
     N_tilde <- rep(N - x1, each = length(x2))
     p_int <- rep(p_int, each = length(x2))
     x_diff <- outer(x2, x1, "-")
-    p_x2_int <- p_int * dbinom(x_diff, N_tilde, z_tilde)
+    p_x2_int <- p_int * stats::dbinom(x_diff, N_tilde, z_tilde)
     list(p_int = rowSums(p_x2_int), x1 = x2)
   }
   coverage_minus_conf <- function(gamma, conf_level, N, K) {
@@ -1063,14 +1063,18 @@ get_gamma <- function (N, K, conf_level = 0.95)
   f_lo <- coverage_minus_conf(lo, conf_level, N, K)
   f_hi <- coverage_minus_conf(hi, conf_level, N, K)
   if (is.finite(f_lo) && is.finite(f_hi) && f_lo > 0 && f_hi < 0) {
-    uniroot(coverage_minus_conf, c(lo, hi), conf_level = conf_level, N = N, K = K,
-            tol = .Machine$double.eps^0.5)$root
+    stats::uniroot(
+      coverage_minus_conf, c(lo, hi), conf_level = conf_level, N = N, K = K,
+      tol = .Machine$double.eps^0.5
+    )$root
   } else {
     # defensive fallback for an N/K/conf_level combination where the endpoints checked above
     # don't bracket a root (not observed in testing, but keeps the old behaviour rather than
     # erroring outright)
-    optimize(function(gamma) abs(coverage_minus_conf(gamma, conf_level, N, K)),
-             c(0, 1 - conf_level))$minimum
+    stats::optimize(
+      function(gamma) abs(coverage_minus_conf(gamma, conf_level, N, K)),
+      c(0, 1 - conf_level)
+    )$minimum
   }
 }
 
@@ -1085,9 +1089,9 @@ get_lims <- function (N, K, gamma)
 }
 
 make_smooth <- function(x, y, N = 1000){
-  lo <- smooth.spline(x, y, spar=0.5)
+  lo <- stats::smooth.spline(x, y, spar=0.5)
   xl <- seq(0, 1, 1/N)
-  return(predict(lo,xl)$y)
+  return(stats::predict(lo,xl)$y)
 }
 
 #' Plot the ECDF Difference in SBC Ranks
