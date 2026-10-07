@@ -132,7 +132,7 @@ struct TrendPlan {
 
   // For updating in incremental data simulation
   void enable_incremental_updates() { incremental_mutable = true; }
-  void patch_data_rows(const Rcpp::DataFrame& data, int row_start, int row_end);
+  void patch_data_rows(const Rcpp::DataFrame& data, int row_start, int row_end, int src_row_start=0, int src_row_end=-1);
 
   // Returns a LogicalVector (Rcpp boundary — used by make_pipeline_cache)
   Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const;

@@ -107,6 +107,14 @@ struct SubjectPipeline {
   bool has_trend() const { return trend_runtime != nullptr; }
 };
 
+static std::unique_ptr<SubjectPipeline> build_subject_pipeline(
+    Rcpp::NumericMatrix                pars,
+    const Rcpp::List&                  designs,
+    const Rcpp::List&                  transform,
+    const Rcpp::DataFrame&             data,
+    const Rcpp::NumericVector&         constants,
+    const Rcpp::List&                  pretransform,
+    const Rcpp::Nullable<Rcpp::List>&  trend);
 
 SEXP create_subject_pipeline(
     Rcpp::NumericMatrix                pars,
@@ -129,5 +137,30 @@ Rcpp::NumericMatrix get_subject_pipeline_result(SEXP xptr, int row_start, int ro
 Rcpp::NumericMatrix get_subject_pipeline_covariates(
     SEXP xptr,
     Rcpp::IntegerVector kernel_output_codes = Rcpp::IntegerVector::create(1));
+
+// group
+struct GroupPipeline {
+  std::vector<std::unique_ptr<SubjectPipeline>> pipelines;
+  int n_subjects = 0;
+};
+
+SEXP create_group_pipeline(
+    const Rcpp::NumericMatrix&         pars,          // n_subjects x n_params, rows ordered as subject levels
+    const Rcpp::List&                  designs_list,  // per-subject full-length designs
+    const Rcpp::List&                  transform,
+    const Rcpp::List&                  data_list,     // per-subject dadms
+    const Rcpp::NumericVector&         constants,
+    const Rcpp::List&                  pretransform,
+    const Rcpp::Nullable<Rcpp::List>&  trend);
+
+void step_group_pipeline(
+    SEXP                       xptr,
+    const Rcpp::List&          designs_ctx,
+    const Rcpp::DataFrame&     new_data,
+    const Rcpp::IntegerVector& row_start,
+    const Rcpp::IntegerVector& row_end);
+
+
+static Rcpp::NumericMatrix rbind_subject_matrices(const std::vector<Rcpp::NumericMatrix>& mats, const char* who);
 
 #endif

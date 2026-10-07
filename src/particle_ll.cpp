@@ -1370,23 +1370,19 @@ void omp_diagnostics(int n_threads = -1) {
 
 
 // For persistent parameter mapping pipelines
-
-// [[Rcpp::export]]
-SEXP create_subject_pipeline(
+static std::unique_ptr<SubjectPipeline> build_subject_pipeline(
     Rcpp::NumericMatrix                pars,
     const Rcpp::List&                  designs,
     const Rcpp::List&                  transform,
     const Rcpp::DataFrame&             data,
     const Rcpp::NumericVector&         constants,
     const Rcpp::List&                  pretransform,
-    const Rcpp::Nullable<Rcpp::List>& trend)
+    const Rcpp::Nullable<Rcpp::List>&  trend)
 {
   auto ctx = std::make_unique<SubjectPipeline>();
 
-  // Build ParamTable from pars + designs (existing factory function)
   PipelineContext pctx = make_pipeline_context(
-    pars, data, constants, designs,
-    transform, pretransform, trend);
+    pars, data, constants, designs, transform, pretransform, trend);
 
   ctx->param_table     = std::move(pctx.param_table);
   ctx->transform_specs = std::move(pctx.transform_specs);
@@ -1396,20 +1392,30 @@ SEXP create_subject_pipeline(
   if (pctx.trend_runtime) {
     ctx->trend_plan    = std::move(pctx.trend_plan);
     ctx->trend_runtime = std::move(pctx.trend_runtime);
-    ctx->trend_plan->enable_incremental_updates();     // permit patch_data_rows
+    ctx->trend_plan->enable_incremental_updates();
     trend_rt_ptr       = ctx->trend_runtime.get();
   }
 
   ctx->cache = make_pipeline_cache(ctx->param_table, designs,
-                                   ctx->transform_specs,
-                                   trend_rt_ptr,
+                                   ctx->transform_specs, trend_rt_ptr,
                                    /*compute_col_is_constant=*/false);
-  // Store particle values and column mapping for incremental reuse
+
   ctx->pm_col_to_base_idx = pctx.pm_col_to_base_idx;
   ctx->particle_values.resize(pars.ncol());
-  for (int j = 0; j < pars.ncol(); ++j)
-    ctx->particle_values[j] = pars(0,j);
+  for (int j = 0; j < pars.ncol(); ++j) ctx->particle_values[j] = pars(0, j);
 
+  return ctx;
+}
+
+// [[Rcpp::export]]
+SEXP create_subject_pipeline(Rcpp::NumericMatrix pars, const Rcpp::List& designs,
+                             const Rcpp::List& transform, const Rcpp::DataFrame& data,
+                             const Rcpp::NumericVector& constants,
+                             const Rcpp::List& pretransform,
+                             const Rcpp::Nullable<Rcpp::List>& trend)
+{
+  auto ctx = build_subject_pipeline(pars, designs, transform, data,
+                                    constants, pretransform, trend);
   return Rcpp::XPtr<SubjectPipeline>(ctx.release(), true);
 }
 
@@ -1471,37 +1477,183 @@ Rcpp::NumericMatrix get_subject_pipeline_covariates(SEXP xptr,Rcpp::IntegerVecto
   return get_covariate_matrix(sp->param_table, tr, kernel_codes);
 }
 
-// // [[Rcpp::export]]
-// void step_subject_pipeline(Rcpp::XPtr<SubjectPipeline> ctx_ptr,
-//                            Rcpp::NumericMatrix new_pars,
-//                            int n_new)
-// {
-//   SubjectPipeline& ctx = *ctx_ptr;
-//
-//   if (ctx.is_complete())
-//     Rcpp::stop("step_subject_pipeline: pipeline already complete");
-//
-//   const int row_start = ctx.row_cursor;
-//   const int row_end   = row_start + n_new;
-//
-//   if (row_end > ctx.n_trials)
-//     Rcpp::stop("step_subject_pipeline: row_end %d exceeds n_trials %d",
-//                row_end, ctx.n_trials);
-//
-//   // 1) Patch the new parameter rows into ParamTable
-//   //    new_pars is n_new x n_params, column-major
-//   // ctx.param_table.patch_rows(row_start, row_end, new_pars);
-//
-//   // 2) Patch design matrix rows (if designs are updated per trial)
-//   //    For now: designs are fixed at construction, no patch needed here
-//
-//   // 3) Run the pipeline for this row range
-//   run_pars_pipeline(ctx.param_table,
-//                     ctx.trend_runtime.get(),
-//                     ctx.cache,
-//                     row_start, row_end);
-//
-//   ctx.row_cursor = row_end;
-// }
+// Group
+// [[Rcpp::export]]
+SEXP create_group_pipeline(
+    const Rcpp::NumericMatrix&         pars,          // n_subjects x n_params, rows ordered as subject levels
+    const Rcpp::List&                  designs_list,  // per-subject full-length designs
+    const Rcpp::List&                  transform,
+    const Rcpp::List&                  data_list,     // per-subject dadms
+    const Rcpp::NumericVector&         constants,
+    const Rcpp::List&                  pretransform,
+    const Rcpp::Nullable<Rcpp::List>&  trend)
+{
+  const int S = pars.nrow();
+  if (designs_list.size() != S || data_list.size() != S)
+    Rcpp::stop("create_group_pipeline: pars, designs_list and data_list must have the same length");
+
+  auto gp = std::make_unique<GroupPipeline>();
+  gp->n_subjects = S;
+  gp->pipelines.reserve(S);
+
+  SEXP pdn = pars.attr("dimnames");   // keep colnames for column mapping
+
+  for (int s = 0; s < S; ++s) {
+    Rcpp::NumericMatrix subj_pars(1, pars.ncol());
+    for (int j = 0; j < pars.ncol(); ++j) subj_pars(0, j) = pars(s, j);
+    if (!Rf_isNull(pdn)) {
+      Rcpp::List dn(pdn);
+      subj_pars.attr("dimnames") = Rcpp::List::create(R_NilValue, dn[1]);
+    }
+
+    gp->pipelines.push_back(build_subject_pipeline(
+        subj_pars,
+        Rcpp::as<Rcpp::List>(designs_list[s]),
+        transform,
+        Rcpp::as<Rcpp::DataFrame>(data_list[s]),
+        constants, pretransform, trend));
+  }
+  return Rcpp::XPtr<GroupPipeline>(gp.release(), true);
+}
+
+// [[Rcpp::export]]
+void step_group_pipeline(
+    SEXP                       xptr,
+    const Rcpp::List&          designs_ctx, // one NumericMatrix (or NULL) per design_plan entry, nrow == new_data.nrows()
+    const Rcpp::DataFrame&     new_data,           // full dadm_ctx, all subjects
+    const Rcpp::IntegerVector& row_start,          // per subject, dest, 0-based, in the subject's own pipeline
+    const Rcpp::IntegerVector& row_end)            // per subject, dest, exclusive
+{
+  Rcpp::XPtr<GroupPipeline> gp(xptr);
+  const int S = gp->n_subjects;
+
+  if (row_start.size() != S || row_end.size() != S)
+    Rcpp::stop("step_group_pipeline: argument lengths must equal n_subjects (%d)", S);
+
+  // --- source ranges per subject within new_data (subjects must be contiguous blocks) ---
+  Rcpp::IntegerVector subj_col = new_data["subjects"];   // factor codes, 1-based
+  std::vector<int> src_start(S, -1), src_end(S, -1);
+  for (int r = 0; r < subj_col.size(); ++r) {
+    const int s = subj_col[r] - 1;
+    if (s < 0 || s >= S) Rcpp::stop("step_group_pipeline: subject code out of range");
+    if (src_start[s] == -1) src_start[s] = r;
+    else if (src_end[s] != r) Rcpp::stop("step_group_pipeline: rows of subject %d are not contiguous", s + 1);
+    src_end[s] = r + 1;
+  }
+
+  const int n_ctx = new_data.nrows();
+  for (int i = 0; i < designs_ctx.size(); ++i)
+    if (!Rf_isNull(designs_ctx[i]) && Rcpp::NumericMatrix(designs_ctx[i]).nrow() != n_ctx)
+      Rcpp::stop("step_group_pipeline: design %d has %d rows, expected %d",
+                 i + 1, Rcpp::NumericMatrix(designs_ctx[i]).nrow(), n_ctx);
+
+
+  for (int s = 0; s < S; ++s) {
+    const int rs = row_start[s], re = row_end[s];
+    if (re == rs) {                       // subject has no rows in this context
+      if (src_start[s] != -1) Rcpp::stop("step_group_pipeline: subject %d has data rows but empty range", s + 1);
+      continue;
+    }
+    if (src_start[s] == -1 || src_end[s] - src_start[s] != re - rs)
+      Rcpp::stop("step_group_pipeline: subject %d src rows (%d) != dest range (%d)",
+                 s + 1, src_start[s] == -1 ? 0 : src_end[s] - src_start[s], re - rs);
+
+    SubjectPipeline* sp = gp->pipelines[s].get();
+    TrendRuntime* tr = sp->has_trend() ? sp->trend_runtime.get() : nullptr;
+
+    // 1) reset + refill from particle
+    sp->param_table.reset_rows(rs, re);
+    sp->param_table.fill_rows_from_particle(sp->particle_values, sp->pm_col_to_base_idx, rs, re);
+
+    // 2) patch designs block by block (one block per context trial)
+    sp->param_table.patch_design_rows(designs_ctx, rs, re, src_start[s], src_end[s]);
+
+    // 3) patch data rows via src offsets into the full-length dadm_ctx
+    if (sp->trend_plan) {
+      sp->trend_plan->patch_data_rows(new_data, rs, re, src_start[s], src_end[s]);
+      sp->trend_runtime->sync_data_rows_from_plan(rs, re);
+    }
+
+    // 4) run pipeline
+    run_pars_pipeline(sp->param_table, tr, sp->cache, rs, re);
+  }
+}
+
+// Stack per-subject matrices (same columns) into one matrix; empty ones are skipped.
+static Rcpp::NumericMatrix rbind_subject_matrices(
+    const std::vector<Rcpp::NumericMatrix>& mats, const char* who)
+{
+  int first = -1, ncol = 0, nrow_tot = 0;
+  for (int k = 0; k < (int)mats.size(); ++k) {
+    if (mats[k].nrow() == 0) continue;
+    if (first < 0) { first = k; ncol = mats[k].ncol(); }
+    else if (mats[k].ncol() != ncol)
+      Rcpp::stop("%s: subject %d has %d columns, expected %d", who, k + 1, mats[k].ncol(), ncol);
+    nrow_tot += mats[k].nrow();
+  }
+  if (first < 0) return Rcpp::NumericMatrix(0, 0);
+
+  Rcpp::NumericMatrix out(nrow_tot, ncol);
+  int off = 0;
+  for (int k = 0; k < (int)mats.size(); ++k) {
+    const Rcpp::NumericMatrix& m = mats[k];
+    const int nr = m.nrow();
+    if (nr == 0) continue;
+    for (int j = 0; j < ncol; ++j)
+      std::copy(m.begin() + (std::size_t)j * nr,
+                m.begin() + (std::size_t)(j + 1) * nr,
+                out.begin() + (std::size_t)j * nrow_tot + off);
+    off += nr;
+  }
+
+  // column names from the first non-empty subject
+  SEXP dn = Rf_getAttrib(mats[first], R_DimNamesSymbol);
+  if (!Rf_isNull(dn)) {
+    Rcpp::List dnl(dn);
+    if (!Rf_isNull(dnl[1])) Rcpp::colnames(out) = Rcpp::CharacterVector(dnl[1]);
+  }
+  return out;
+}
+
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_group_pipeline_covariates(SEXP xptr, Rcpp::IntegerVector kernel_output_codes)
+{
+  Rcpp::XPtr<GroupPipeline> gp(xptr);
+  const int S = gp->n_subjects;
+  std::vector<int> kernel_codes(kernel_output_codes.begin(), kernel_output_codes.end());
+
+  std::vector<Rcpp::NumericMatrix> mats;
+  mats.reserve(S);
+  for (int s = 0; s < S; ++s) {
+    SubjectPipeline* sp = gp->pipelines[s].get();
+    TrendRuntime* tr = sp->has_trend() ? sp->trend_runtime.get() : nullptr;
+    if (!tr) Rcpp::stop("get_group_pipeline_covariates: subject %d has no trend", s + 1);
+    mats.push_back(get_covariate_matrix(sp->param_table, tr, kernel_codes));
+  }
+  return rbind_subject_matrices(mats, "get_group_pipeline_covariates");
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_group_pipeline_result(
+    SEXP xptr,
+    const Rcpp::IntegerVector& row_start,
+    const Rcpp::IntegerVector& row_end)
+{
+  Rcpp::XPtr<GroupPipeline> gp(xptr);
+  const int S = gp->n_subjects;
+  if (row_start.size() != S || row_end.size() != S)
+    Rcpp::stop("get_group_pipeline_result: row_start/row_end must have length n_subjects (%d)", S);
+
+  std::vector<Rcpp::NumericMatrix> parts;
+  parts.reserve(S);
+  for (int s = 0; s < S; ++s) {
+    if (row_end[s] == row_start[s]) continue;          // inactive subject
+    parts.push_back(gp->pipelines[s]->param_table.materialize(row_start[s], row_end[s]));
+  }
+  return rbind_subject_matrices(parts, "get_group_pipeline_result");
+}
+
+
 
 

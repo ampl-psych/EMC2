@@ -1484,11 +1484,430 @@ make_cache_key <- function(key_cols, dadm_slice) {
   key
 }
 
+# make_data_unconditional <- function(data, pars, design, model,
+#                                              return_trialwise_parameters,
+#                                              kernel_output_codes = c(1L),
+#                                              optionals = NULL,
+#                                              n_context_trials = 1L) {
+#   model_fun  <- model
+#   model_list <- model()
+#   includeColumns <- colnames(data)
+#
+#   if (!is.null(design$Ffunctions)) {
+#     ssd_fun <- vapply(design$Ffunctions, inherits, logical(1), "emc_ssd_function")
+#     includeColumns <- unique(c(includeColumns, names(design$Ffunctions)[ssd_fun]))
+#   }
+#
+#   # -----------------------------------------------------------------------
+#   # Step 1: Build dadm_full once
+#   # -----------------------------------------------------------------------
+#   dadm_full <- design_model(
+#     add_accumulators(data, design$matchfun, simulate = FALSE,
+#                      type = model_list$type, Fcovariates = design$Fcovariates),
+#     design, model_fun, add_acc = FALSE, compress = FALSE,
+#     verbose = FALSE, rt_check = FALSE, compress_dms = FALSE
+#   )
+#   if (!"R"  %in% names(dadm_full)) dadm_full$R  <- NA
+#   if (!"rt" %in% names(dadm_full)) dadm_full$rt <- NA
+#
+#   if (is.null(names(design$Flist))) {
+#     names(design$Flist) <- sapply(design$Flist, function(f)
+#       as.character(stats::terms(f)[[2]])
+#     )
+#   }
+#
+#   n_acc <- sum(dadm_full$trials == dadm_full$trials[1] &
+#                dadm_full$subjects == dadm_full$subjects[1])
+#
+#   # -----------------------------------------------------------------------
+#   # Step 2: Design cache setup (identical to original)
+#   # -----------------------------------------------------------------------
+#   factor_cols <- setdiff(names(design$Ffactors), "subjects")
+#   p_types     <- names(design$Flist)
+#
+#   ffun_cols       <- character(0)
+#   has_ffunctions  <- !is.null(design$Ffunctions)
+#   has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
+#   if (has_ffunctions) {
+#     ffunctions      <- design$Ffunctions
+#     ffunctions_pre  <- ffunctions[sapply(ffunctions, function(x) isTRUE(attr(x, "pretrial")))]
+#     ffunctions_post <- ffunctions[sapply(ffunctions, function(x) !isTRUE(attr(x, "pretrial")))]
+#     has_ffunctions_pre  <- length(ffunctions_pre) > 0
+#     has_ffunctions_post <- length(ffunctions_post) > 0
+#
+#     # Pre-trial Ffunctions: identify returned type, output columns, then clear them.
+#     for(i in names(ffunctions_pre)) {
+#       output <- ffunctions_pre[[i]](dadm_full)
+#       if(is.matrix(output)) {
+#         attr(ffunctions_pre[[i]], "output_type") <- "matrix"
+#         out_names <- colnames(output)
+#         if(is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
+#       } else if(is.list(output)) {
+#         attr(ffunctions_pre[[i]], "output_type") <- "list"
+#         out_names <- names(output)
+#         if(is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
+#       } else {
+#         attr(ffunctions_pre[[i]], "output_type") <- "vector"
+#         out_names <- i
+#       }
+#       attr(ffunctions_pre[[i]], "output_column_names") <- out_names
+#       ffun_cols <- c(ffun_cols, out_names)
+#       for(col in out_names) {
+#         dadm_full[[col]][] <- NA
+#       }
+#     }
+#     for (i in names(ffunctions_post)) {
+#       output <- ffunctions_post[[i]](dadm_full)
+#       if(is.matrix(output)) {
+#         attr(ffunctions_post[[i]], "output_type") <- "matrix"
+#         out_names <- colnames(output)
+#         if(is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
+#       } else if(is.list(output)) {
+#         attr(ffunctions_post[[i]], "output_type") <- "list"
+#         out_names <- names(output)
+#         if(is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
+#       } else {
+#         attr(ffunctions_post[[i]], "output_type") <- "vector"
+#         out_names <- i
+#       }
+#       attr(ffunctions_post[[i]], "output_column_names") <- out_names
+#       ffun_cols <- c(ffun_cols, out_names)
+#       # This is perhaps confusing, but we cannot set the output of post-trial functions to NA, since a pre-trial function may need this to run...
+#       # This probably deserves a bit more thinking.
+#       # for(col in out_names) {
+#       #   dadm_full[[col]][] <- NA
+#       # }
+#     }
+#   }
+#
+#   formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
+#   key_cols <- union(factor_cols, intersect(ffun_cols, formula_vars))
+#
+#   pnames <- names(design$Flist)
+#   if (!is.list(design$Clist[[1]])) {
+#     design$Clist <- stats::setNames(
+#       lapply(seq_along(pnames), function(x) design$Clist),
+#       pnames
+#     )
+#   } else {
+#     missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
+#     if (length(missing_p_types) > 0) {
+#       nok <- length(design$Clist)
+#       for (i in seq_along(missing_p_types)) {
+#         design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+#         names(design$Clist)[nok + i] <- missing_p_types[i]
+#       }
+#     }
+#   }
+#   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
+#
+#   make_designs_cached <- local({
+#     cache <- list()
+#     function(dadm_slice, key) {
+#       if (is.null(cache[[key]])) {
+#         out <- lapply(
+#           stats::setNames(p_types, p_types),
+#           function(x) make_dm(design$Flist[[x]], da = dadm_slice,
+#                               Fcovariates = design$Fcovariates,
+#                               compress_dms = FALSE)
+#         )
+#         if(!is.null(design$parameter_design)) {
+#           parsed <- parse_parameter_design(design$parameter_design, out)
+#           out <- expand_parameter_design(parsed, out)
+#         }
+#         cache[[key]] <<- out
+#       }
+#       cache[[key]]
+#     }
+#   })
+#
+#   trend     <- model_list$trend
+#   has_trend <- !is.null(trend)
+#
+#   bases_with_coding <- if(has_trend) {
+#     Filter(function(b) !is.null(b$coding), trend$bases)
+#   } else list()
+#   has_covariate_coding <- length(bases_with_coding) > 0
+#
+#   # -----------------------------------------------------------------------
+#   # Step 3: Per-subject loop
+#   # -----------------------------------------------------------------------
+#   trialwise_parameters <- NULL
+#   subj_levels <- levels(dadm_full$subjects)
+#   constants   <- attr(dadm_full, "constants")
+#   if (is.null(constants)) constants <- NA
+#
+#   for (subj in subj_levels) {
+#     sub_trialwise_parameters <- NULL
+#     subj_mask <- dadm_full$subjects == subj
+#     if (!any(subj_mask)) next
+#     subj_rows <- which(subj_mask)
+#
+#     dadm_subj   <- dadm_full[subj_rows, , drop = FALSE]
+#     trial_vals  <- sort(unique(dadm_subj$trials))
+#     n_rows_subj <- nrow(dadm_subj)
+#
+#     idx_by_trial <- split(seq_len(n_rows_subj), dadm_subj$trials)
+#
+#     get_context_idx <- function(j) {
+#       if (j == 1L || n_context_trials == 0L) return(idx_by_trial[[j]])
+#       lookback <- seq(max(1L, j - n_context_trials), j - 1L)
+#       c(unlist(idx_by_trial[lookback], use.names = FALSE), idx_by_trial[[j]])
+#     }
+#
+#     particle_matrix <- matrix(as.numeric(pars[which(subj == subj_levels), , drop = FALSE]), nrow = 1)
+#     colnames(particle_matrix) <- colnames(pars)
+#
+#     designs_prefix <- lapply(attr(dadm_full, "designs"), function(m) {
+#       out <- m[subj_rows, , drop = FALSE]
+#       attr(out, "parameter_design") <- attr(m, "parameter_design")
+#       out[] <- 0
+#       out
+#     })
+#
+#     if (has_covariate_coding) {
+#       # run covariate coding on a single trial to get returned dimensions
+#       idx_t1  <- idx_by_trial[[1]]
+#       dadm_t1 <- dadm_subj[idx_t1, , drop = FALSE]
+#       covariate_coding_prefix <- list()
+#       for (base in bases_with_coding) {
+#         kernel    <- trend$kernels[[base$kernel_id]]
+#         cov_names <- kernel$cov_names
+#         for (map_name in names(base$coding)) {
+#           trial1_result <- base$coding[[map_name]](dadm = dadm_t1, cov_names)
+#           if (is.null(dim(trial1_result))) trial1_result <- matrix(trial1_result, nrow = 1, dimnames = list(NULL, names(trial1_result)))
+#           covariate_coding_prefix[[map_name]] <- matrix(
+#             0, nrow = n_rows_subj, ncol = ncol(trial1_result),
+#             dimnames = list(NULL, colnames(trial1_result))
+#           )
+#         }
+#       }
+#     }
+#
+#     dadm_subj_df <- as.list(dadm_subj)
+#     class(dadm_subj_df) <- "data.frame"
+#     attr(dadm_subj_df, "row.names") <- .set_row_names(n_rows_subj)
+#
+#     if(has_covariate_coding) attr(dadm_subj_df, "covariate_coding") <- covariate_coding_prefix
+#
+#     R_col  <- match("R",  names(dadm_subj_df))
+#     rt_col <- match("rt", names(dadm_subj_df))
+#
+#     # -----------------------------------------------------------------------
+#     # Build subject pipeline — one per subject
+#     # -----------------------------------------------------------------------
+#     sp <- create_subject_pipeline(pars = particle_matrix, designs = designs_prefix,
+#                                   transform = model_list$transform, data = dadm_subj_df,
+#                                   constants = constants, pretransform = model_list$pre_transform,
+#                                   trend = model_list$trend)
+#     dadm_previous <- NULL
+#
+#     for (j in seq_along(trial_vals)) {
+#       current_trial        <- trial_vals[j]
+#       idx_curr             <- idx_by_trial[[as.character(current_trial)]]
+#       idx_ctx              <- get_context_idx(j)
+#       is_last_trial        <- j == length(trial_vals)
+#       tmp_return_trialwise <- is_last_trial && return_trialwise_parameters
+#
+#       # 1. Materialise current trial slice
+#       dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
+#       class(dadm_current) <- "data.frame"
+#       attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+#
+#       # 2. ffunctions_pre
+#       dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+#       class(dadm_ctx) <- "data.frame"
+#       attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+#       ctx_curr_idx <- seq.int(length(idx_ctx)-length(idx_curr)+1, length(idx_ctx))
+#
+#       if (has_ffunctions_pre) {
+#         # Positions of the current trial within dadm_ctx.
+#         for(i in names(ffunctions_pre)) {
+#           result_full <- ffunctions_pre[[i]](dadm_ctx)
+#           output_type <- attr(ffunctions_pre[[i]], "output_type")
+#           # out_names   <- attr(ffunctions_pre[[i]], "output_column_names")
+#
+#           if(output_type == "list") {
+#             out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+#             for(col in out_names) {
+#               result_curr <- result_full[[col]][ctx_curr_idx]
+#               dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
+#               dadm_current[[col]]           <- result_curr
+#               dadm_subj_df[[col]][idx_curr] <- result_curr
+#             }
+#           } else if(output_type == "matrix") {
+#             out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+#             result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
+#             dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
+#             dadm_current[,out_names]         <- result_curr
+#             for(col in out_names) {
+#               dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
+#             }
+#           } else {
+#             result_curr                   <- result_full[ctx_curr_idx]
+#             dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
+#             dadm_current[[i]]             <- result_curr
+#             dadm_subj_df[[i]][idx_curr]   <- result_curr
+#           }
+#         }
+#       }
+#
+#       # 3. Designs for current trial
+#       key <- make_cache_key(key_cols, dadm_slice=dadm_current)
+#       designs_current <- make_designs_cached(dadm_current, key)
+#
+#       # Designs for previous trial (if existing)
+#       if(j > 1L && n_context_trials > 0L) {
+#         key <- make_cache_key(key_cols, dadm_previous)
+#         designs_previous <- make_designs_cached(dadm_slice = dadm_previous, key = key)
+#         designs_ctx <- stack_designs(designs_previous,designs_current)
+#       } else {
+#         designs_ctx <- designs_current
+#       }
+#
+#       # 5. Covariate coding
+#       if (has_covariate_coding) {
+#         covariate_coding_ctx <- list()
+#
+#         for(base in bases_with_coding) {
+#           kernel    <- trend$kernels[[base$kernel_id]]
+#           cov_names <- kernel$cov_names
+#           for(scheme_name in names(base$coding)) {
+#             result <- base$coding[[scheme_name]](dadm = dadm_ctx, cov_names)
+#             if(is.null(dim(result))) {
+#               result <- matrix(result, nrow = 1)
+#             } else {
+#               result <- as.matrix(result)
+#             }
+#             covariate_coding_ctx[[scheme_name]] <- result
+#           }
+#         }
+#         attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
+#       }
+#
+#       # 6. Step pipeline — patch designs + data, run rows [idx_curr)
+#       row_start <- idx_ctx[1]-1L   # 0-based
+#       row_end   <- idx_curr[length(idx_curr)]  # exclusive
+#
+#       step_subject_pipeline(xptr = sp, new_designs = designs_ctx,  # only pass context
+#         new_data = dadm_ctx,     # only pass context
+#         row_start = row_start, row_end = row_end)
+#
+#       # 7. Extract pm for current trial rows only
+#       # NB: only request current trial - note idx_curr[1]-1, not idx_ctx[1]
+#       pm <- get_subject_pipeline_result(sp, row_start=idx_curr[1L]-1L, row_end=idx_curr[length(idx_curr)])
+#
+#       # 8. Ttransform + bounds
+#       pr <- model_list$Ttransform(pm, dadm_current)
+#       if (!is.null(optionals$nobound)) {
+#         attr(pr, "ok") <- rep(TRUE, nrow(pr))
+#       } else {
+#         pr <- fix_bound(pr, model_list$bound, dadm_current$lR,
+#                         fix = !is.null(optionals$shrink2bound))
+#       }
+#
+#       # 9. Simulate R and rt
+#       if (any(names(dadm_current) == "RACE")) {
+#         Rrt <- RACE_rfun(dadm_current, pr, model_fun)
+#       } else {
+#         Rrt <- model_list$rfun(dadm_current, pr)
+#       }
+#
+#       dadm_subj_df[[R_col]][idx_curr]  <- Rrt[, "R"]
+#       if("rt" %in% colnames(Rrt)) dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
+#
+#       # 10. ffunctions_post
+#       if (has_ffunctions_post) {
+#         # materalize the context again
+#         dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+#         class(dadm_ctx) <- "data.frame"
+#         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+#
+#         for (i in names(ffunctions_post)) {
+#           result_full <- ffunctions_post[[i]](dadm_ctx)
+#           output_type <- attr(ffunctions_post[[i]], "output_type")
+#           #out_names   <- attr(ffunctions_post[[i]], "output_column_names")
+#           # *still* need to write to dadm_ctx, since the last function's output might be needed for the next function
+#           # writing to dadm_current make creating dadm_previous easier/faster than another materalisation
+#
+#           if(output_type == "list") {
+#             out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+#             for(col in out_names) {
+#               result_curr <- result_full[[col]][ctx_curr_idx]
+#               dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
+#               dadm_current[[col]]           <- result_curr
+#               dadm_subj_df[[col]][idx_curr] <- result_curr
+#             }
+#           } else if(output_type == "matrix") {
+#             out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
+#             result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
+#             dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
+#             dadm_current[,out_names]         <- result_curr
+#             for(col in out_names) {
+#               dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
+#             }
+#           } else {
+#             result_curr                   <- result_full[ctx_curr_idx]
+#             dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
+#             dadm_current[[i]]             <- result_curr
+#             dadm_subj_df[[i]][idx_curr]   <- result_curr
+#           }
+#         }
+#
+#       }
+#       dadm_previous <- dadm_current
+#
+#       # 11. Trialwise parameters on last trial
+#       if (tmp_return_trialwise) {
+#         covariates <- get_subject_pipeline_covariates(sp, kernel_output_codes = as.integer(kernel_output_codes))
+#         pm_full <- get_subject_pipeline_result(sp)
+#
+#         sub_trialwise_parameters <- as.data.frame(cbind(pm_full, covariates))
+#         sub_trialwise_parameters$subject <- subj
+#         sub_trialwise_parameters$trial   <- rep(trial_vals, each = n_acc)
+#       }
+#     }
+#
+#     if(return_trialwise_parameters) trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
+#
+#     missing_in_full <- setdiff(names(dadm_subj_df), names(dadm_full))
+#     if(length(missing_in_full)) for (nm in missing_in_full) dadm_full[[nm]] <- NA
+#     dadm_full[subj_rows, names(dadm_subj_df)] <- dadm_subj_df
+#   }
+#
+#   # -----------------------------------------------------------------------
+#   # Step 4: Trim output
+#   # -----------------------------------------------------------------------
+#   if (n_acc > 1) {
+#     first_lR  <- levels(dadm_full$lR)[1]
+#     dadm_full <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
+#   }
+#   if (!is.na(rt_col)) {
+#     dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
+#   } else {
+#     dadm_full <- dadm_full[, unique(c(includeColumns, "R")), drop = FALSE]
+#   }
+#   dadm_full <- dadm_full[, !colnames(dadm_full) %in% c("lR", "lM"), drop = FALSE]
+#
+#   list(data = dadm_full, trialwise_parameters = trialwise_parameters)
+# }
+
+# Vectorised across subjects
+sub_design_rows <- function(designs, isin)
+  lapply(designs, function(x) {
+    out <- x[isin, , drop = FALSE]
+    attr(out, "expand") <- attr(x, "expand")[isin]
+    # preserve any other attributes
+    for (a in setdiff(names(attributes(x)), c("dim", "dimnames", "expand")))
+      attr(out, a) <- attr(x, a)
+    out
+  })
+
 make_data_unconditional <- function(data, pars, design, model,
-                                             return_trialwise_parameters,
-                                             kernel_output_codes = c(1L),
-                                             optionals = NULL,
-                                             n_context_trials = 1L) {
+                                            return_trialwise_parameters,
+                                            kernel_output_codes = c(1L),
+                                            optionals = NULL,
+                                            n_context_trials = 1L) {
   model_fun  <- model
   model_list <- model()
   includeColumns <- colnames(data)
@@ -1507,26 +1926,38 @@ make_data_unconditional <- function(data, pars, design, model,
     design, model_fun, add_acc = FALSE, compress = FALSE,
     verbose = FALSE, rt_check = FALSE, compress_dms = FALSE
   )
-  if (!"R"  %in% names(dadm_full)) dadm_full$R  <- NA
-  if (!"rt" %in% names(dadm_full)) dadm_full$rt <- NA
+  if (!"R" %in% names(dadm_full)) dadm_full$R <- factor(rep(NA_character_, nrow(dadm_full)), levels = levels(dadm_full$lR))
+  if (!"rt" %in% names(dadm_full)) dadm_full$rt <- NA_real_
 
+  trial_idx <- as.integer(ave(
+    as.numeric(dadm_full$trials), dadm_full$subjects,
+    FUN = function(t) match(t, sort(unique(t)))
+  ))
+
+  # checks
+  rpt <- table(dadm_full$subjects, trial_idx)
+  if(length(unique(rpt[rpt > 0])) != 1L) stop("Unbalanced design: rows per trial differ across subjects/trials")
+  n_acc <- unique(rpt[rpt > 0])
+
+  subj_levels <- levels(dadm_full$subjects)
+  S           <- length(subj_levels)
+  constants   <- attr(dadm_full, "constants")
+  if (is.null(constants)) constants <- NA
+
+  # -----------------------------------------------------------------------
+  # Step 2: Ffunction setup
+  # -----------------------------------------------------------------------
   if (is.null(names(design$Flist))) {
     names(design$Flist) <- sapply(design$Flist, function(f)
       as.character(stats::terms(f)[[2]])
     )
   }
 
-  n_acc <- sum(dadm_full$trials == dadm_full$trials[1] &
-               dadm_full$subjects == dadm_full$subjects[1])
-
-  # -----------------------------------------------------------------------
-  # Step 2: Design cache setup (identical to original)
-  # -----------------------------------------------------------------------
   factor_cols <- setdiff(names(design$Ffactors), "subjects")
   p_types     <- names(design$Flist)
 
-  ffun_cols       <- character(0)
-  has_ffunctions  <- !is.null(design$Ffunctions)
+  ffun_cols          <- character(0)
+  has_ffunctions     <- !is.null(design$Ffunctions)
   has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
   if (has_ffunctions) {
     ffunctions      <- design$Ffunctions
@@ -1535,60 +1966,54 @@ make_data_unconditional <- function(data, pars, design, model,
     has_ffunctions_pre  <- length(ffunctions_pre) > 0
     has_ffunctions_post <- length(ffunctions_post) > 0
 
-    # Pre-trial Ffunctions: identify returned type, output columns, then clear them.
-    for(i in names(ffunctions_pre)) {
+    for (i in names(ffunctions_pre)) {
       output <- ffunctions_pre[[i]](dadm_full)
-      if(is.matrix(output)) {
+      if (is.matrix(output)) {
         attr(ffunctions_pre[[i]], "output_type") <- "matrix"
         out_names <- colnames(output)
-        if(is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
-      } else if(is.list(output)) {
+        if (is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
+      } else if (is.list(output)) {
         attr(ffunctions_pre[[i]], "output_type") <- "list"
         out_names <- names(output)
-        if(is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
+        if (is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
       } else {
         attr(ffunctions_pre[[i]], "output_type") <- "vector"
         out_names <- i
       }
       attr(ffunctions_pre[[i]], "output_column_names") <- out_names
       ffun_cols <- c(ffun_cols, out_names)
-      for(col in out_names) {
-        dadm_full[[col]][] <- NA
-      }
+      for (col in out_names) dadm_full[[col]][] <- NA
     }
     for (i in names(ffunctions_post)) {
       output <- ffunctions_post[[i]](dadm_full)
-      if(is.matrix(output)) {
+      if (is.matrix(output)) {
         attr(ffunctions_post[[i]], "output_type") <- "matrix"
         out_names <- colnames(output)
-        if(is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
-      } else if(is.list(output)) {
+        if (is.null(out_names)) stop("Matrix output from Ffunction '", i, "' must have column names.")
+      } else if (is.list(output)) {
         attr(ffunctions_post[[i]], "output_type") <- "list"
         out_names <- names(output)
-        if(is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
+        if (is.null(out_names)) stop("List output from Ffunction '", i, "' must have named elements.")
       } else {
         attr(ffunctions_post[[i]], "output_type") <- "vector"
         out_names <- i
       }
       attr(ffunctions_post[[i]], "output_column_names") <- out_names
       ffun_cols <- c(ffun_cols, out_names)
-      # This is perhaps confusing, but we cannot set the output of post-trial functions to NA, since a pre-trial function may need this to run...
-      # This probably deserves a bit more thinking.
-      # for(col in out_names) {
-      #   dadm_full[[col]][] <- NA
-      # }
     }
   }
 
+  # formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
+  # key_cols     <- union(factor_cols, intersect(ffun_cols, formula_vars))
   formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
-  key_cols <- union(factor_cols, intersect(ffun_cols, formula_vars))
+  not_in_data <- setdiff(formula_vars, names(dadm_full))
+  if(length(not_in_data)>0) stop("Formula variables not in dadm_full: ", paste(not_in_data, collapse = ", "))
+  key_cols <- formula_vars
 
   pnames <- names(design$Flist)
   if (!is.list(design$Clist[[1]])) {
     design$Clist <- stats::setNames(
-      lapply(seq_along(pnames), function(x) design$Clist),
-      pnames
-    )
+      lapply(seq_along(pnames), function(x) design$Clist), pnames)
   } else {
     missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
     if (length(missing_p_types) > 0) {
@@ -1601,282 +2026,262 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
+  # -----------------------------------------------------------------------
+  # Step 3: Set-up design matrix cache
+  # -----------------------------------------------------------------------
+  make_keys <- function(dat, key_cols) {
+    if (length(key_cols) == 0L) return(rep("intercept_only", nrow(dat)))
+    do.call(paste, c(
+      lapply(key_cols, function(col) {
+        v <- dat[[col]]
+        if (anyNA(v)) stop(sprintf("Column '%s' is NA in key computation", col))
+        if (is.logical(v) || is.factor(v)) as.character(as.integer(v))
+        else as.character(v)
+      }),
+      list(sep = "_")
+    ))
+  }
+
   make_designs_cached <- local({
     cache <- list()
-    function(dadm_slice, key) {
-      if (is.null(cache[[key]])) {
-        out <- lapply(
-          stats::setNames(p_types, p_types),
-          function(x) make_dm(design$Flist[[x]], da = dadm_slice,
-                              Fcovariates = design$Fcovariates,
-                              compress_dms = FALSE)
-        )
-        if(!is.null(design$parameter_design)) {
-          parsed <- parse_parameter_design(design$parameter_design, out)
-          out <- expand_parameter_design(parsed, out)
-        }
-        cache[[key]] <<- out
+
+    build_one <- function(row_df) {
+      out <- lapply(
+        stats::setNames(p_types, p_types),
+        function(x) make_dm(design$Flist[[x]], da = row_df,
+                            Fcovariates = design$Fcovariates,
+                            compress_dms = FALSE)
+      )
+      if (!is.null(design$parameter_design)) {
+        parsed <- parse_parameter_design(design$parameter_design, out)
+        out    <- expand_parameter_design(parsed, out)
       }
-      cache[[key]]
+      out
+    }
+
+    function(keys, dat) {
+      ukeys <- unique(keys)
+      miss  <- ukeys[!ukeys %in% names(cache)]
+      if (length(miss)) {
+        first <- match(miss, keys)                      # one row per missing key
+        for (k in seq_along(miss))
+          cache[[miss[k]]] <<- build_one(dat[first[k], , drop = FALSE])
+      }
+
+      row_map <- match(keys, ukeys)
+      stats::setNames(lapply(p_types, function(p) {
+        stacked <- do.call(rbind, lapply(cache[ukeys], `[[`, p))
+        out     <- stacked[row_map, , drop = FALSE]
+        attr(out, "parameter_design") <- attr(cache[[ukeys[1L]]][[p]], "parameter_design")
+        out
+      }), p_types)
     }
   })
 
+  # -----------------------------------------------------------------------
+  # Step 4: Build per-subject structures for GroupPipeline
+  # -----------------------------------------------------------------------
+  dadm_list <- dm_list(dadm_full)
+
+  # Global indices for subjects
+  by_subj <- lapply(subj_levels, function(s) which(dadm_full$subjects == s))
+  names(by_subj) <- subj_levels
+  data_list    <- dadm_list[subj_levels]
+
+  # designs_list: build independently with correct row subsetting. dm_list() doesn't subset rows because it assumes compressed dadms...
+  full_designs <- attr(dadm_full, "designs")
+  designs_list <- lapply(subj_levels, function(s) {
+    isin <- dadm_full$subjects == s
+    sub_design_rows(full_designs, isin)
+  })
+
+  gp <- create_group_pipeline(
+    pars         = pars,
+    designs_list = designs_list,
+    transform    = model_list$transform,
+    data_list    = data_list,
+    constants    = constants,
+    pretransform = model_list$pre_transform,
+    trend        = model_list$trend
+  )
+
+  # Subject positions within dadm_full
+  subj_int  <- as.integer(dadm_full$subjects)
+  local_pos <- integer(nrow(dadm_full))
+  for(s in seq_len(S)) local_pos[by_subj[[s]]] <- seq_along(by_subj[[s]]) - 1L
+  if (is.unsorted(subj_int * (max(trial_idx) + 1) + trial_idx)) stop("dadm_full must be ordered by subject, then trial")
+
+  # -----------------------------------------------------------------------
+  # Step 5: bookkeeping
+  # -----------------------------------------------------------------------
   trend     <- model_list$trend
   has_trend <- !is.null(trend)
-
-  bases_with_coding <- if(has_trend) {
-    Filter(function(b) !is.null(b$coding), trend$bases)
-  } else list()
+  bases_with_coding    <- if (has_trend) Filter(function(b) !is.null(b$coding), trend$bases) else list()
   has_covariate_coding <- length(bases_with_coding) > 0
 
-  # -----------------------------------------------------------------------
-  # Step 3: Per-subject loop
-  # -----------------------------------------------------------------------
-  trialwise_parameters <- NULL
-  subj_levels <- levels(dadm_full$subjects)
-  constants   <- attr(dadm_full, "constants")
-  if (is.null(constants)) constants <- NA
+  R_col  <- match("R",  names(dadm_full))
+  rt_col <- match("rt", names(dadm_full))
 
-  for (subj in subj_levels) {
-    sub_trialwise_parameters <- NULL
-    subj_mask <- dadm_full$subjects == subj
-    if (!any(subj_mask)) next
-    subj_rows <- which(subj_mask)
+  # Step 6: loop
+  trial_vals <- sort(unique(trial_idx))
+  n_trials   <- max(trial_idx)
+  for (j in seq_len(n_trials)) {
+    # indices
+    current_trial   <- trial_vals[j]
+    current_trial_idx <- trial_idx == current_trial
+    context_start_trial <- trial_vals[max(1L, j-n_context_trials)]
+    active_subjects <- unique(subj_int[current_trial_idx])
+    context_trial_idx <- trial_idx >= context_start_trial &
+      trial_idx <= current_trial &
+      subj_int %in% active_subjects
 
-    dadm_subj   <- dadm_full[subj_rows, , drop = FALSE]
-    trial_vals  <- sort(unique(dadm_subj$trials))
-    n_rows_subj <- nrow(dadm_subj)
+    # ---- Materialise dadm_ctx ------------------------------
+    dadm_ctx <- lapply(dadm_full, `[`, context_trial_idx)
+    class(dadm_ctx) <- "data.frame"
+    attr(dadm_ctx, "row.names") <- .set_row_names(sum(context_trial_idx))
 
-    idx_by_trial <- split(seq_len(n_rows_subj), dadm_subj$trials)
+    context_current_idx <- trial_idx[context_trial_idx] == current_trial
 
-    get_context_idx <- function(j) {
-      if (j == 1L || n_context_trials == 0L) return(idx_by_trial[[j]])
-      lookback <- seq(max(1L, j - n_context_trials), j - 1L)
-      c(unlist(idx_by_trial[lookback], use.names = FALSE), idx_by_trial[[j]])
+    # Subject row indices
+    ctx_pos  <- which(context_trial_idx)
+    ctx_subj <- subj_int[ctx_pos]
+    ctx_loc  <- local_pos[ctx_pos]
+    n_s            <- tabulate(ctx_subj, nbins = S)
+    first          <- match(seq_len(S), ctx_subj) # NA for inactive subjects
+    row_start_subj <- as.integer(ifelse(is.na(first), 0L, ctx_loc[first]))
+    row_end_subj   <- row_start_subj + n_s
+    stopifnot(all(diff(ctx_loc)[diff(ctx_subj) == 0L] == 1L))
+
+    # ---- ffunctions_pre ---------------------------------------------------
+    if (has_ffunctions_pre) {
+      for (i in names(ffunctions_pre)) {
+        result_full <- ffunctions_pre[[i]](dadm_ctx)
+        output_type <- attr(ffunctions_pre[[i]], "output_type")
+
+        if (output_type == "list") {
+          for (col in names(result_full)) {
+            result_curr <- result_full[[col]][context_current_idx]
+            dadm_ctx[[col]][context_current_idx]<- result_curr
+            dadm_full[[col]][current_trial_idx] <- result_curr
+          }
+        } else if (output_type == "matrix") {
+          for (col in colnames(result_full)) {
+            result_curr <- result_full[context_current_idx, col]
+            dadm_ctx[[col]][context_current_idx]<- result_curr
+            dadm_full[[col]][current_trial_idx] <- result_curr
+          }
+        } else {
+          result_curr <- result_full[context_current_idx]
+          dadm_ctx[[i]][context_current_idx] <- result_curr
+          dadm_full[[i]][current_trial_idx] <- result_curr
+        }
+      }
     }
 
-    particle_matrix <- matrix(as.numeric(pars[which(subj == subj_levels), , drop = FALSE]), nrow = 1)
-    colnames(particle_matrix) <- colnames(pars)
+    # ---- Retrieve designs for all context rows, per subject ---------------
+    keys_ctx    <- make_keys(dadm_ctx, key_cols)
+    designs_ctx <- make_designs_cached(keys_ctx, dadm_ctx)   # nrow(dadm_ctx) rows per p_type
 
-    designs_prefix <- lapply(attr(dadm_full, "designs"), function(m) {
-      out <- m[subj_rows, , drop = FALSE]
-      attr(out, "parameter_design") <- attr(m, "parameter_design")
-      out[] <- 0
-      out
-    })
-
+    # ---- Covariate coding -------------------------------------------------
     if (has_covariate_coding) {
-      # run covariate coding on a single trial to get returned dimensions
-      idx_t1  <- idx_by_trial[[1]]
-      dadm_t1 <- dadm_subj[idx_t1, , drop = FALSE]
-      covariate_coding_prefix <- list()
+      covariate_coding_ctx <- list()
       for (base in bases_with_coding) {
         kernel    <- trend$kernels[[base$kernel_id]]
         cov_names <- kernel$cov_names
-        for (map_name in names(base$coding)) {
-          trial1_result <- base$coding[[map_name]](dadm = dadm_t1, cov_names)
-          if (is.null(dim(trial1_result))) trial1_result <- matrix(trial1_result, nrow = 1, dimnames = list(NULL, names(trial1_result)))
-          covariate_coding_prefix[[map_name]] <- matrix(
-            0, nrow = n_rows_subj, ncol = ncol(trial1_result),
-            dimnames = list(NULL, colnames(trial1_result))
-          )
+        for (scheme_name in names(base$coding)) {
+          result <- base$coding[[scheme_name]](dadm = dadm_ctx, cov_names)
+          if (is.null(dim(result))) result <- as.matrix(result)
+          covariate_coding_ctx[[scheme_name]] <- result
         }
       }
+      attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
     }
 
-    dadm_subj_df <- as.list(dadm_subj)
-    class(dadm_subj_df) <- "data.frame"
-    attr(dadm_subj_df, "row.names") <- .set_row_names(n_rows_subj)
+    # ---- Step group pipeline ----------------------------------------------
+    step_group_pipeline(
+      xptr               = gp,
+      designs_ctx        = designs_ctx,
+      new_data           = dadm_ctx,
+      row_start          = row_start_subj,
+      row_end            = row_end_subj
+    )
 
-    if(has_covariate_coding) attr(dadm_subj_df, "covariate_coding") <- covariate_coding_prefix
+    # ---- Extract pm, Ttransform, bounds, rfun — all subjects --------------
+    row_ce_subj <- row_end_subj
+    row_cs_subj <- row_end_subj - n_acc * (n_s > 0)   # inactive subjects stay (0, 0)
+    pm_all <- get_group_pipeline_result(gp, row_start = row_cs_subj, row_end = row_ce_subj)
 
-    R_col  <- match("R",  names(dadm_subj_df))
-    rt_col <- match("rt", names(dadm_subj_df))
+    pr <- model_list$Ttransform(pm_all, dadm_ctx[context_current_idx, , drop = FALSE])
+    if (!is.null(optionals$nobound)) {
+      attr(pr, "ok") <- rep(TRUE, nrow(pr))
+    } else {
+      pr <- fix_bound(pr, model_list$bound, dadm_ctx$lR[context_current_idx],
+                      fix = !is.null(optionals$shrink2bound))
+    }
 
-    # -----------------------------------------------------------------------
-    # Build subject pipeline — one per subject
-    # -----------------------------------------------------------------------
-    sp <- create_subject_pipeline(pars = particle_matrix, designs = designs_prefix,
-                                  transform = model_list$transform, data = dadm_subj_df,
-                                  constants = constants, pretransform = model_list$pre_transform,
-                                  trend = model_list$trend)
-    dadm_previous <- NULL
+    ## TODO - THE RACE FUNCTIONALITY IS NOW BROKEN. NEEDS TO BE ADAPTED TO MISSINGNESS=0!!
+    if (any(names(dadm_ctx) == "RACE")) {
+      Rrt <- RACE_rfun(dadm_ctx[context_current_idx, , drop = FALSE], pr, model_fun)
+    } else {
+      Rrt <- model_list$rfun(dadm_ctx[context_current_idx, , drop = FALSE], pr)
+    }
 
-    for (j in seq_along(trial_vals)) {
-      current_trial        <- trial_vals[j]
-      idx_curr             <- idx_by_trial[[as.character(current_trial)]]
-      idx_ctx              <- get_context_idx(j)
-      is_last_trial        <- j == length(trial_vals)
-      tmp_return_trialwise <- is_last_trial && return_trialwise_parameters
+    stopifnot(nrow(Rrt) * n_acc == sum(context_current_idx))
+    dadm_full[[R_col]][current_trial_idx] <- rep(Rrt[, "R"], each = n_acc)
+    if ("rt" %in% colnames(Rrt)) dadm_full[[rt_col]][current_trial_idx] <- rep(Rrt[, "rt"], each = n_acc)
 
-      # 1. Materialise current trial slice
-      dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
-      class(dadm_current) <- "data.frame"
-      attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
-
-      # 2. ffunctions_pre
-      dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+    # ---- ffunctions_post --------------------------------------------------
+    if (has_ffunctions_post) {
+      # re-materialise dadm_ctx with updated R/rt
+      dadm_ctx <- lapply(dadm_full, `[`, context_trial_idx)
       class(dadm_ctx) <- "data.frame"
-      attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
-      ctx_curr_idx <- seq.int(length(idx_ctx)-length(idx_curr)+1, length(idx_ctx))
+      attr(dadm_ctx, "row.names") <- .set_row_names(sum(context_trial_idx))
 
-      if (has_ffunctions_pre) {
-        # Positions of the current trial within dadm_ctx.
-        for(i in names(ffunctions_pre)) {
-          result_full <- ffunctions_pre[[i]](dadm_ctx)
-          output_type <- attr(ffunctions_pre[[i]], "output_type")
-          # out_names   <- attr(ffunctions_pre[[i]], "output_column_names")
+      for (i in names(ffunctions_post)) {
+        result_full <- ffunctions_post[[i]](dadm_ctx)
+        output_type <- attr(ffunctions_post[[i]], "output_type")
 
-          if(output_type == "list") {
-            out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
-            for(col in out_names) {
-              result_curr <- result_full[[col]][ctx_curr_idx]
-              dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
-              dadm_current[[col]]           <- result_curr
-              dadm_subj_df[[col]][idx_curr] <- result_curr
-            }
-          } else if(output_type == "matrix") {
-            out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
-            result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
-            dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
-            dadm_current[,out_names]         <- result_curr
-            for(col in out_names) {
-              dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
-            }
-          } else {
-            result_curr                   <- result_full[ctx_curr_idx]
-            dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
-            dadm_current[[i]]             <- result_curr
-            dadm_subj_df[[i]][idx_curr]   <- result_curr
+        if (output_type == "list") {
+          for (col in names(result_full)) {
+            result_curr <- result_full[[col]][context_current_idx]
+            dadm_ctx[[col]][context_current_idx]<- result_curr
+            dadm_full[[col]][current_trial_idx] <- result_curr
           }
-        }
-      }
-
-      # 3. Designs for current trial
-      key <- make_cache_key(key_cols, dadm_slice=dadm_current)
-      designs_current <- make_designs_cached(dadm_current, key)
-
-      # Designs for previous trial (if existing)
-      if(j > 1L && n_context_trials > 0L) {
-        key <- make_cache_key(key_cols, dadm_previous)
-        designs_previous <- make_designs_cached(dadm_slice = dadm_previous, key = key)
-        designs_ctx <- stack_designs(designs_previous,designs_current)
-      } else {
-        designs_ctx <- designs_current
-      }
-
-      # 5. Covariate coding
-      if (has_covariate_coding) {
-        covariate_coding_ctx <- list()
-
-        for(base in bases_with_coding) {
-          kernel    <- trend$kernels[[base$kernel_id]]
-          cov_names <- kernel$cov_names
-          for(scheme_name in names(base$coding)) {
-            result <- base$coding[[scheme_name]](dadm = dadm_ctx, cov_names)
-            if(is.null(dim(result))) {
-              result <- matrix(result, nrow = 1)
-            } else {
-              result <- as.matrix(result)
-            }
-            covariate_coding_ctx[[scheme_name]] <- result
+        } else if (output_type == "matrix") {
+          for (col in colnames(result_full)) {
+            result_curr <- result_full[context_current_idx, col]
+            dadm_ctx[[col]][context_current_idx]<- result_curr
+            dadm_full[[col]][current_trial_idx] <- result_curr
           }
+        } else {
+          result_curr <- result_full[context_current_idx]
+          dadm_ctx[[i]][context_current_idx] <- result_curr
+          dadm_full[[i]][current_trial_idx] <- result_curr
         }
-        attr(dadm_ctx, "covariate_coding") <- covariate_coding_ctx
-      }
-
-      # 6. Step pipeline — patch designs + data, run rows [idx_curr)
-      row_start <- idx_ctx[1]-1L   # 0-based
-      row_end   <- idx_curr[length(idx_curr)]  # exclusive
-
-      step_subject_pipeline(xptr = sp, new_designs = designs_ctx,  # only pass context
-        new_data = dadm_ctx,     # only pass context
-        row_start = row_start, row_end = row_end)
-
-      # 7. Extract pm for current trial rows only
-      # NB: only request current trial - note idx_curr[1]-1, not idx_ctx[1]
-      pm <- get_subject_pipeline_result(sp, row_start=idx_curr[1L]-1L, row_end=idx_curr[length(idx_curr)])
-
-      # 8. Ttransform + bounds
-      pr <- model_list$Ttransform(pm, dadm_current)
-      if (!is.null(optionals$nobound)) {
-        attr(pr, "ok") <- rep(TRUE, nrow(pr))
-      } else {
-        pr <- fix_bound(pr, model_list$bound, dadm_current$lR,
-                        fix = !is.null(optionals$shrink2bound))
-      }
-
-      # 9. Simulate R and rt
-      if (any(names(dadm_current) == "RACE")) {
-        Rrt <- RACE_rfun(dadm_current, pr, model_fun)
-      } else {
-        Rrt <- model_list$rfun(dadm_current, pr)
-      }
-
-      dadm_subj_df[[R_col]][idx_curr]  <- Rrt[, "R"]
-      if("rt" %in% colnames(Rrt)) dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
-
-      # 10. ffunctions_post
-      if (has_ffunctions_post) {
-        # materalize the context again
-        dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
-        class(dadm_ctx) <- "data.frame"
-        attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
-
-        for (i in names(ffunctions_post)) {
-          result_full <- ffunctions_post[[i]](dadm_ctx)
-          output_type <- attr(ffunctions_post[[i]], "output_type")
-          #out_names   <- attr(ffunctions_post[[i]], "output_column_names")
-          # *still* need to write to dadm_ctx, since the last function's output might be needed for the next function
-          # writing to dadm_current make creating dadm_previous easier/faster than another materalisation
-
-          if(output_type == "list") {
-            out_names <- names(result_full)  # cannot assume it always returns all out names due to R's automated dropping
-            for(col in out_names) {
-              result_curr <- result_full[[col]][ctx_curr_idx]
-              dadm_ctx[[col]][ctx_curr_idx] <- result_curr  # Don't overwrite earlier rows!!
-              dadm_current[[col]]           <- result_curr
-              dadm_subj_df[[col]][idx_curr] <- result_curr
-            }
-          } else if(output_type == "matrix") {
-            out_names <- colnames(result_full)  # cannot assume it always returns all out names due to R's automated dropping
-            result_curr <- result_full[ctx_curr_idx, ,drop=FALSE]
-            dadm_ctx[ctx_curr_idx,out_names] <- result_curr  # Don't overwrite earlier rows!!
-            dadm_current[,out_names]         <- result_curr
-            for(col in out_names) {
-              dadm_subj_df[[col]][idx_curr] <- result_full[,col][ctx_curr_idx]
-            }
-          } else {
-            result_curr                   <- result_full[ctx_curr_idx]
-            dadm_ctx[[i]][ctx_curr_idx]   <- result_curr   # Don't overwrite earlier rows!!
-            dadm_current[[i]]             <- result_curr
-            dadm_subj_df[[i]][idx_curr]   <- result_curr
-          }
-        }
-
-      }
-      dadm_previous <- dadm_current
-
-      # 11. Trialwise parameters on last trial
-      if (tmp_return_trialwise) {
-        covariates <- get_subject_pipeline_covariates(sp, kernel_output_codes = as.integer(kernel_output_codes))
-        pm_full <- get_subject_pipeline_result(sp)
-
-        sub_trialwise_parameters <- as.data.frame(cbind(pm_full, covariates))
-        sub_trialwise_parameters$subject <- subj
-        sub_trialwise_parameters$trial   <- rep(trial_vals, each = n_acc)
       }
     }
+  }
 
-    if(return_trialwise_parameters) trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
-
-    missing_in_full <- setdiff(names(dadm_subj_df), names(dadm_full))
-    if(length(missing_in_full)) for (nm in missing_in_full) dadm_full[[nm]] <- NA
-    dadm_full[subj_rows, names(dadm_subj_df)] <- dadm_subj_df
+  if(return_trialwise_parameters) {
+    pm_full <- get_group_pipeline_result(gp, rep(0L, S), rep(-1L, S))   # -1 = end, as in the subject version
+    stopifnot(nrow(pm_full) == nrow(dadm_full))
+    trialwise_parameters <- data.frame(
+      pm_full,
+      subject = as.character(dadm_full$subjects),
+      trial   = dadm_full$trials,
+      check.names = FALSE
+    )
+    if (has_trend) {
+      cov_full <- get_group_pipeline_covariates(gp, kernel_output_codes)
+      stopifnot(nrow(cov_full) == nrow(dadm_full))
+      trialwise_parameters <- cbind(trialwise_parameters, cov_full)
+    }
+  } else {
+    trialwise_parameters <- NULL
   }
 
   # -----------------------------------------------------------------------
-  # Step 4: Trim output
+  # Step 6: Trim output
   # -----------------------------------------------------------------------
   if (n_acc > 1) {
     first_lR  <- levels(dadm_full$lR)[1]
@@ -1891,7 +2296,6 @@ make_data_unconditional <- function(data, pars, design, model,
 
   list(data = dadm_full, trialwise_parameters = trialwise_parameters)
 }
-
 
 #' Apply a kernel implied in an emc object
 #'

@@ -571,6 +571,62 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// create_group_pipeline
+SEXP create_group_pipeline(const Rcpp::NumericMatrix& pars, const Rcpp::List& designs_list, const Rcpp::List& transform, const Rcpp::List& data_list, const Rcpp::NumericVector& constants, const Rcpp::List& pretransform, const Rcpp::Nullable<Rcpp::List>& trend);
+RcppExport SEXP _EMC2_create_group_pipeline(SEXP parsSEXP, SEXP designs_listSEXP, SEXP transformSEXP, SEXP data_listSEXP, SEXP constantsSEXP, SEXP pretransformSEXP, SEXP trendSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type designs_list(designs_listSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type transform(transformSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type data_list(data_listSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type pretransform(pretransformSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::Nullable<Rcpp::List>& >::type trend(trendSEXP);
+    rcpp_result_gen = Rcpp::wrap(create_group_pipeline(pars, designs_list, transform, data_list, constants, pretransform, trend));
+    return rcpp_result_gen;
+END_RCPP
+}
+// step_group_pipeline
+void step_group_pipeline(SEXP xptr, const Rcpp::List& designs_ctx, const Rcpp::DataFrame& new_data, const Rcpp::IntegerVector& row_start, const Rcpp::IntegerVector& row_end);
+RcppExport SEXP _EMC2_step_group_pipeline(SEXP xptrSEXP, SEXP designs_ctxSEXP, SEXP new_dataSEXP, SEXP row_startSEXP, SEXP row_endSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type designs_ctx(designs_ctxSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::DataFrame& >::type new_data(new_dataSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_start(row_startSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_end(row_endSEXP);
+    step_group_pipeline(xptr, designs_ctx, new_data, row_start, row_end);
+    return R_NilValue;
+END_RCPP
+}
+// get_group_pipeline_covariates
+Rcpp::NumericMatrix get_group_pipeline_covariates(SEXP xptr, Rcpp::IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_get_group_pipeline_covariates(SEXP xptrSEXP, SEXP kernel_output_codesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_group_pipeline_covariates(xptr, kernel_output_codes));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_group_pipeline_result
+Rcpp::NumericMatrix get_group_pipeline_result(SEXP xptr, const Rcpp::IntegerVector& row_start, const Rcpp::IntegerVector& row_end);
+RcppExport SEXP _EMC2_get_group_pipeline_result(SEXP xptrSEXP, SEXP row_startSEXP, SEXP row_endSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xptr(xptrSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_start(row_startSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::IntegerVector& >::type row_end(row_endSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_group_pipeline_result(xptr, row_start, row_end));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rCDM
 DataFrame rCDM(NumericMatrix pars, Nullable<LogicalVector> ok, double dt, int max_steps);
 RcppExport SEXP _EMC2_rCDM(SEXP parsSEXP, SEXP okSEXP, SEXP dtSEXP, SEXP max_stepsSEXP) {
@@ -689,6 +745,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_step_subject_pipeline", (DL_FUNC) &_EMC2_step_subject_pipeline, 5},
     {"_EMC2_get_subject_pipeline_result", (DL_FUNC) &_EMC2_get_subject_pipeline_result, 3},
     {"_EMC2_get_subject_pipeline_covariates", (DL_FUNC) &_EMC2_get_subject_pipeline_covariates, 2},
+    {"_EMC2_create_group_pipeline", (DL_FUNC) &_EMC2_create_group_pipeline, 7},
+    {"_EMC2_step_group_pipeline", (DL_FUNC) &_EMC2_step_group_pipeline, 5},
+    {"_EMC2_get_group_pipeline_covariates", (DL_FUNC) &_EMC2_get_group_pipeline_covariates, 2},
+    {"_EMC2_get_group_pipeline_result", (DL_FUNC) &_EMC2_get_group_pipeline_result, 3},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
     {"_EMC2_rSDM", (DL_FUNC) &_EMC2_rSDM, 4},
     {"_EMC2_rPSDM", (DL_FUNC) &_EMC2_rPSDM, 4},

@@ -463,19 +463,21 @@ Rcpp::LogicalVector TrendPlan::premap_design_mask(const Rcpp::List& designs) con
 
 void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                                 int row_start,
-                                int row_end)
+                                int row_end,
+                                int src_row_start,
+                                int src_row_end)
 {
   if (!incremental_mutable) Rcpp::stop("TrendPlan::patch_data_rows called on an immutable TrendPlan");
 
-  const int n_full = data.nrows();
-  // if (row_start < 0 || row_end <= row_start || row_end > n_full)
-  //   Rcpp::stop("TrendPlan::patch_data_rows: invalid row range [%d, %d) for data with %d rows",
-  //              row_start, row_end, n_full);
-
+  const int effective_src_end = (src_row_end == -1) ? data.nrows() : src_row_end;
   const int T = row_end - row_start;
-  if (data.nrows() != T) {
-    Rcpp::stop("TrendPlan::patch_data_rows: data has %d rows; expected %d for patch range [%d, %d)", data.nrows(),T,row_start,row_end);
-  }
+  const int T_src = effective_src_end - src_row_start;
+
+  if (T_src != T)
+    Rcpp::stop("TrendPlan::patch_data_rows: src range [%d, %d) has %d rows; "
+                 "expected %d for patch range [%d, %d)",
+                 src_row_start, effective_src_end, T_src, T, row_start, row_end);
+
 
   // covariate_coding attribute
   Rcpp::List data_covcoding;
@@ -502,12 +504,12 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
       double* dst = ks.kernel_input.colptr(c) + row_start;
 
       if (TYPEOF(col) == REALSXP) {
-        std::copy(REAL(col), REAL(col) + T, dst);
+        std::copy(REAL(col) + src_row_start, REAL(col) + effective_src_end, dst);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* src = INTEGER(col);
+        const int* src = INTEGER(col) + src_row_start;
         for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[r]);
       } else if (TYPEOF(col) == LGLSXP) {
-        const int* src = LOGICAL(col);
+        const int* src = LOGICAL(col) + src_row_start;
         for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[r]);
       } else {
         Rcpp::stop("patch_data_rows: covariate '%s' must be numeric, integer, or logical", cn);
@@ -521,7 +523,7 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
       SEXP at_col = data[ks.at.c_str()];
       if (!Rf_inherits(at_col, "factor"))
         Rcpp::stop("patch_data_rows: 'at' column '%s' must be a factor", ks.at.c_str());
-      const int* f = INTEGER(at_col);
+      const int* f = INTEGER(at_col) + src_row_start;
       for (int r = 0; r < T; ++r) {
         ks.at_mask[row_start + r] = (f[r] == 1) ? 1 : 0;
         }
@@ -534,10 +536,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    ks.q_reset_col_name.c_str());
       SEXP col = data[ks.q_reset_col_name.c_str()];
       if (TYPEOF(col) == LGLSXP) {
-        const int* p = LOGICAL(col);
+        const int* p = LOGICAL(col)+ src_row_start;
         std::copy(p, p + T, ks.q_reset_col.data() + row_start);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* p = INTEGER(col);
+        const int* p = INTEGER(col)+ src_row_start;
         std::copy(p, p + T, ks.q_reset_col.data() + row_start);
       } else {
         Rcpp::stop("patch_data_rows: q_reset_column '%s' must be logical or integer",
@@ -552,10 +554,10 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    ks.belief_reset_col_name.c_str());
       SEXP col = data[ks.belief_reset_col_name.c_str()];
       if (TYPEOF(col) == LGLSXP) {
-        const int* p = LOGICAL(col);
+        const int* p = LOGICAL(col)+ src_row_start;
         std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
       } else if (TYPEOF(col) == INTSXP) {
-        const int* p = INTEGER(col);
+        const int* p = INTEGER(col)+ src_row_start;
         std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
       } else {
         Rcpp::stop("patch_data_rows: belief_reset_column '%s' must be logical or integer",
@@ -586,7 +588,7 @@ void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
                    bs.covariate_coding_name.c_str());
 
       SEXP mat_sexp = data_covcoding[idx];
-      const double* src = REAL(mat_sexp);
+      const double* src = REAL(mat_sexp) + src_row_start;
       const int src_nrow = Rf_nrows(mat_sexp);
       const int ncol     = Rf_ncols(mat_sexp);
       Mat& dst_mat = bs.covariate_coding[0];

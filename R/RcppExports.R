@@ -137,6 +137,22 @@ get_subject_pipeline_covariates <- function(xptr, kernel_output_codes) {
     .Call(`_EMC2_get_subject_pipeline_covariates`, xptr, kernel_output_codes)
 }
 
+create_group_pipeline <- function(pars, designs_list, transform, data_list, constants, pretransform, trend) {
+    .Call(`_EMC2_create_group_pipeline`, pars, designs_list, transform, data_list, constants, pretransform, trend)
+}
+
+step_group_pipeline <- function(xptr, designs_ctx, new_data, row_start, row_end) {
+    invisible(.Call(`_EMC2_step_group_pipeline`, xptr, designs_ctx, new_data, row_start, row_end))
+}
+
+get_group_pipeline_covariates <- function(xptr, kernel_output_codes) {
+    .Call(`_EMC2_get_group_pipeline_covariates`, xptr, kernel_output_codes)
+}
+
+get_group_pipeline_result <- function(xptr, row_start, row_end) {
+    .Call(`_EMC2_get_group_pipeline_result`, xptr, row_start, row_end)
+}
+
 rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
     .Call(`_EMC2_rCDM`, pars, ok, dt, max_steps)
 }

@@ -31,12 +31,13 @@ struct DesignEntry {
   void patch_rows(int row_start,
                   int row_end,
                   const double* src,
-                  int src_nrow) {
+                  int src_nrow,
+                  int src_row_start) {
     const int n_new = row_end - row_start;
 
     for (int col = 0; col < dm_ncol; ++col) {
       double*       dst_col = dm_data.colptr(col) + row_start;
-      const double* src_col = src + col * src_nrow;   // src is a slice, not full sized
+      const double* src_col = src + col * src_nrow + src_row_start;   // src is a slice, not full sized
 
       std::copy(src_col, src_col + n_new, dst_col);
     }
@@ -295,13 +296,16 @@ struct ParamTable {
 
   void patch_design_rows(const Rcpp::List& designs,
                          int row_start,
-                         int row_end)
+                         int row_end,
+                         int src_row_start=0,
+                         int src_row_end=-1)
   {
     if (row_start < 0 || row_end < row_start || row_end > n_trials)
       Rcpp::stop("ParamTable::patch_design_rows: invalid row range");
 
     if ((int)designs.size() != (int)design_plan.size())
       Rcpp::stop("ParamTable::patch_design_rows: designs has wrong length");
+    const int n_patch = row_end - row_start;
 
     for (int i = 0; i < (int)design_plan.size(); ++i) {
       DesignEntry& entry = design_plan[i];
@@ -313,18 +317,20 @@ struct ParamTable {
         Rcpp::stop("ParamTable::patch_design_rows: design %d was non-NULL at setup but is NULL during update", i);
 
       Rcpp::NumericMatrix dm = designs[i];
+      const int effective_src_end = (src_row_end == -1) ? dm.nrow() : src_row_end;
+      const int n_src = effective_src_end - src_row_start;
 
-      const int n_patch = row_end - row_start;
 
-      if (dm.nrow() != n_patch) {
-        Rcpp::stop("ParamTable::patch_design_rows: design %d has %d rows; expected %d "
-          "for patch range [%d, %d)",i,dm.nrow(),n_patch,row_start,row_end);
-      }
+      if (n_src != n_patch)
+        Rcpp::stop("ParamTable::patch_design_rows: design %d src range [%d, %d) has %d rows; "
+                     "expected %d for patch range [%d, %d)",
+                     i, src_row_start, effective_src_end, n_src, n_patch, row_start, row_end);
+
       if (dm.ncol() != entry.dm_ncol)
-        Rcpp::stop("ParamTable::patch_design_rows: design %d has a changed column count",i);
+        Rcpp::stop("ParamTable::patch_design_rows: design %d has a changed column count", i);
 
-      entry.patch_rows(row_start, row_end, dm.begin(), dm.nrow());
-    }
+      entry.patch_rows(row_start, row_end, dm.begin(), dm.nrow(), src_row_start);
+      }
   }
 
   // ---------------------------------------------------------------------------
