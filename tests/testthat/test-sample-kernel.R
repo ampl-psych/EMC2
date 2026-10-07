@@ -24,7 +24,7 @@ conj_fit <- local({
 test_that("conditional_proposal combines the likelihood's quadratic form with the group level", {
   ybar <- unname(conj_ybar[1, ])
   lik <- list(prec = diag(conj_T), lin = conj_T * ybar)
-  cond <- EMC2:::conditional_proposal(lik, diag(1 / .09, 4), setNames(rep(0, 4), conj_pars))
+  cond <- conditional_proposal(lik, diag(1 / .09, 4), setNames(rep(0, 4), conj_pars))
   expect_equal(diag(cond$var), 1 / (conj_T + 1 / .09), tolerance = 1e-6)
   expect_equal(unname(cond$mu), conj_T * ybar / (conj_T + 1 / .09), tolerance = 1e-6)
 })
@@ -39,8 +39,8 @@ test_that("the sample-stage kernel is fixed", {
   expect_equal(unname(kernel$lik_prec[[1]]$prec), diag(conj_T), tolerance = 1e-6)
   # adapt waited for the draws the kernel is built from, then ran the tail that tunes it (stored as
   # adapt); every adapt draw precedes the kept ones
-  expect_gte(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$min + 100)
-  expect_lte(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$max + 120)
+  expect_gte(chain_n(emc)[1, "adapt"], adapt_converge$min + 100)
+  expect_lte(chain_n(emc)[1, "adapt"], adapt_converge$max + 120)
   st <- emc[[1]]$samples$stage[seq_len(emc[[1]]$samples$idx)]
   expect_lt(max(which(st == "adapt")), min(which(st == "sample")))
   expect_equal(sum(st == "sample"), 20)
@@ -70,7 +70,7 @@ test_that("adapt's convergence rule can be switched off", {
   emc <- fit(conj_emc, cores_for_chains = 1, stop_criteria = conj_stop, verbose = FALSE,
              particle_factor = 20, step_size = 20)
   # min_unique alone: far fewer adapt iterations than adapt_converge$min, plus the tail
-  expect_lt(chain_n(emc)[1, "adapt"], EMC2:::adapt_converge$min)
+  expect_lt(chain_n(emc)[1, "adapt"], adapt_converge$min)
   expect_length(emc[[1]]$sample_kernel$chains, 2)
 })
 
@@ -87,17 +87,16 @@ test_that("the legacy sampler builds no fixed kernel and runs no sweep", {
 })
 
 test_that("adapt_stop: converged, stalled, at the limit, or carry on", {
-  stop_rule <- EMC2:::adapt_stop
-  expect_equal(stop_rule(c(1.35, 1.12), 400), "converged")
-  expect_equal(stop_rule(c(1.5, 1.4, 1.3, 1.25), 600), "")              # still improving
+  expect_equal(adapt_stop(c(1.35, 1.12), 400), "converged")
+  expect_equal(adapt_stop(c(1.5, 1.4, 1.3, 1.25), 600), "")              # still improving
   # no new minimum after the second check
-  expect_equal(stop_rule(c(1.658, 1.657, 2.327), 500), "")
-  expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260), 600), "")
-  expect_equal(stop_rule(c(1.658, 1.657, 2.327, 2.260, 2.273), 700), "stalled")
+  expect_equal(adapt_stop(c(1.658, 1.657, 2.327), 500), "")
+  expect_equal(adapt_stop(c(1.658, 1.657, 2.327, 2.260), 600), "")
+  expect_equal(adapt_stop(c(1.658, 1.657, 2.327, 2.260, 2.273), 700), "stalled")
   # a new minimum restarts the count; a tie with the best is no improvement
-  expect_equal(stop_rule(c(2, 1.9, 1.95, 1.96, 1.8, 1.85), 800), "")
-  expect_equal(stop_rule(c(1.5, 1.5, 1.6, 1.5), 600), "stalled")
-  expect_equal(stop_rule(c(1.5, 1.4, 1.3, 1.25), EMC2:::adapt_converge$max), "limit")
+  expect_equal(adapt_stop(c(2, 1.9, 1.95, 1.96, 1.8, 1.85), 800), "")
+  expect_equal(adapt_stop(c(1.5, 1.5, 1.6, 1.5), 600), "stalled")
+  expect_equal(adapt_stop(c(1.5, 1.4, 1.3, 1.25), adapt_converge$max), "limit")
 })
 
 test_that("the draw-based likelihood precision is used only where the group level is stable over the window", {
@@ -111,15 +110,15 @@ test_that("the draw-based likelihood precision is used only where the group leve
     })
   }
   # a stable group level (SD of the log group SD .07): CV of the precision about .14; a funnel (SD 1): far above
-  cv_stable <- EMC2:::group_precision_cv(mock(.07), 1:250)
-  cv_funnel <- EMC2:::group_precision_cv(mock(1), 1:250)
+  cv_stable <- group_precision_cv(mock(.07), 1:250)
+  cv_funnel <- group_precision_cv(mock(1), 1:250)
   expect_lt(cv_stable, .25); expect_gt(cv_stable, .1)
   expect_gt(cv_funnel, 2)
   # the funnel-like window gets no draw-based precision, whatever else it has
-  expect_null(EMC2:::window_group_level(mock(1), 1:250, 750))
+  expect_null(window_group_level(mock(1), 1:250, 750))
   # not computable (a zero variance): Inf, so no draw-based precision either
   bad <- mock(.07); bad[[2]]$samples$theta_var[1, 1, 5] <- 0
-  expect_identical(EMC2:::group_precision_cv(bad, 1:250), Inf)
+  expect_identical(group_precision_cv(bad, 1:250), Inf)
 })
 
 test_that("adapt_converged reads the window the kernel is built from", {
@@ -127,26 +126,26 @@ test_that("adapt_converged reads the window the kernel is built from", {
   skip_on_os("windows")
   emc <- conj_fit()
   class(emc) <- "emc"
-  emc <- EMC2:::restore_duplicates(emc)
+  emc <- restore_duplicates(emc)
   # too few adapt iterations: not yet; at the limit: stop whatever the draws say
-  expect_false(as.vector(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$min - 1)))
-  expect_true(as.vector(EMC2:::adapt_converged(emc, EMC2:::adapt_converge$max)))
-  r <- EMC2:::window_rhat(emc, EMC2:::kernel_window)
+  expect_false(as.vector(adapt_converged(emc, adapt_converge$min - 1)))
+  expect_true(as.vector(adapt_converged(emc, adapt_converge$max)))
+  r <- window_rhat(emc, kernel_window)
   expect_equal(dim(r), c(4, 4))
-  a <- EMC2:::adapt_converged(emc, 300)
-  expect_identical(as.vector(a), max(r) < EMC2:::adapt_converge$rhat)
+  a <- adapt_converged(emc, 300)
+  expect_identical(as.vector(a), max(r) < adapt_converge$rhat)
   expect_equal(attr(a, "rhat"), max(r))
   # the history of earlier checks is carried and extended
-  expect_equal(attr(EMC2:::adapt_converged(emc, 300, history = c(2, 1.5)), "rhat"), c(2, 1.5, max(r)))
+  expect_equal(attr(adapt_converged(emc, 300, history = c(2, 1.5)), "rhat"), c(2, 1.5, max(r)))
   # chains that sit apart in one subject's parameter: not converged
   bad <- emc
   bad[[1]]$samples$alpha[2, 3, ] <- bad[[1]]$samples$alpha[2, 3, ] + 10
-  expect_gt(EMC2:::window_rhat(bad, EMC2:::kernel_window)[2, 3], 3)
-  expect_false(as.vector(EMC2:::adapt_converged(bad, 300)))
+  expect_gt(window_rhat(bad, kernel_window)[2, 3], 3)
+  expect_false(as.vector(adapt_converged(bad, 300)))
   # ... unless the window Rhat has stopped improving: no new minimum in adapt_converge$stall checks
-  expect_true(as.vector(EMC2:::adapt_converged(bad, 600, history = c(1.5, 4, 4, 4)[seq_len(EMC2:::adapt_converge$stall)])))
+  expect_true(as.vector(adapt_converged(bad, 600, history = c(1.5, 4, 4, 4)[seq_len(adapt_converge$stall)])))
   # the legacy sampler and single-subject fits keep the old rule
-  withr::with_options(list(emc.sampler = "legacy"), expect_true(EMC2:::adapt_converged(bad, 10)))
+  withr::with_options(list(emc.sampler = "legacy"), expect_true(adapt_converged(bad, 10)))
 })
 
 # Draws from the exact conditional posterior of one subject of the conjugate
@@ -165,18 +164,18 @@ test_that("lik_precision_draws: the draws' estimate where the likelihood shows, 
   # (a) group SD .3: the likelihood dominates in a and b (T / P = 18, 1.8), the prior in c and d (.45, .18)
   P <- diag(1 / .09, 4)
   X <- post_draws(conj_T, ybar, P, mu, 3000)
-  out <- EMC2:::lik_precision_draws(X, P, mu, fd, n_chains = 3)
+  out <- lik_precision_draws(X, P, mu, fd, n_chains = 3)
   expect_equal(out$n_draws, 2); expect_equal(out$n_capped, 0)
   expect_equal(unname(diag(out$prec)), conj_T, tolerance = .15)
   expect_lt(max(abs(out$prec[upper.tri(out$prec)]) / sqrt(outer(conj_T, conj_T))[upper.tri(out$prec)]), .15)
-  cond <- EMC2:::conditional_proposal(out, P, mu)
+  cond <- conditional_proposal(out, P, mu)
   expect_lt(max(abs(cond$mu - rowMeans(X)) / apply(X, 1, sd)), .05)
   expect_equal(unname(diag(cond$var)), unname(apply(X, 1, var)), tolerance = .1)
   # (b) a collapsed group level (group SD .01): the draws show the prior only, every direction is the
   # finite differences', exactly
   P <- diag(1e4, 4)
   X <- post_draws(conj_T, ybar, P, mu, 3000)
-  out <- EMC2:::lik_precision_draws(X, P, mu, fd, n_chains = 3)
+  out <- lik_precision_draws(X, P, mu, fd, n_chains = 3)
   expect_equal(out$n_draws, 0); expect_equal(out$n_capped, 0)
   expect_equal(out$prec, fd$prec, tolerance = 1e-8)
   expect_equal(out$lin, fd$lin, tolerance = 1e-8)
@@ -186,20 +185,20 @@ test_that("lik_precision_draws: the draws' estimate where the likelihood shows, 
   P <- diag(1 / .09, 4)
   X <- post_draws(conj_T, ybar, P, mu, 3000)
   bad <- fd; bad$prec["d", "d"] <- 2000; bad$lin["d"] <- 2000 * 5
-  out <- EMC2:::lik_precision_draws(X, P, mu, bad, n_chains = 3)
+  out <- lik_precision_draws(X, P, mu, bad, n_chains = 3)
   expect_equal(out$n_capped, 1)
   expect_equal(unname(out$prec["d", "d"]), .5 / .09, tolerance = .05)
-  cond <- EMC2:::conditional_proposal(out, P, mu)
+  cond <- conditional_proposal(out, P, mu)
   expect_lt(max(abs(cond$mu - rowMeans(X)) / apply(X, 1, sd)), .05)
   # the finite-difference quadratic's cross terms with the directions taken from the draws go into its
   # linear term: with a strong a-c cross term the conditional mean is still at the draws' mean
   Lc <- diag(conj_T); Lc[1, 3] <- Lc[3, 1] <- 25; dimnames(Lc) <- list(conj_pars, conj_pars)
   set.seed(6); S <- solve(Lc + P); m <- drop(S %*% (Lc %*% ybar + P %*% mu))
   X <- t(mvtnorm::rmvnorm(3000, m, S)); rownames(X) <- conj_pars
-  out <- EMC2:::lik_precision_draws(X, P, mu, list(prec = Lc, lin = setNames(drop(Lc %*% ybar), conj_pars)), n_chains = 3)
+  out <- lik_precision_draws(X, P, mu, list(prec = Lc, lin = setNames(drop(Lc %*% ybar), conj_pars)), n_chains = 3)
   expect_lt(out$n_draws, 4)
-  cond <- EMC2:::conditional_proposal(out, P, mu)
+  cond <- conditional_proposal(out, P, mu)
   expect_lt(max(abs(cond$mu - rowMeans(X)) / apply(X, 1, sd)), .1)
   # (d) too few distinct draws: no estimate
-  expect_null(EMC2:::lik_precision_draws(X[, rep(1:10, 30)], P, mu, fd, n_chains = 3))
+  expect_null(lik_precision_draws(X[, rep(1:10, 30)], P, mu, fd, n_chains = 3))
 })
