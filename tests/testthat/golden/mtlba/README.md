@@ -113,3 +113,17 @@ To rebuild (from this directory, in this order; base R + mvtnorm + msm; at most 
 
 The converted real data (don't-know Experiments 1 and 2, r94 unfiltered with per-participant
 1st/99th RT percentiles) are outside the package, in `rating-work/mtlba/stageM0/data/`.
+
+## dmc_p3_density.rds (Stage M7c, 2026-10-07)
+
+The manuscript's DMC model `MTRp3` (the MTLBA's default convention: drift pair conditioned on
+not both negative, lowest threshold free below A, per-accumulator confidence guessing) from the
+manuscript's own DMC code (`rating-work/mtlba/stageM4/dmc_copy`, model `MTRp3_censor.R`,
+`n1PDFMTRp3` / the censoring integrals of `n1PDFMTRp3.CENSOR`), with its 5-point Simpson rule
+over the winner's start point replaced by 4 panels x 16 Gauss-Legendre nodes
+(`stageM4/dists_quad.R`), so the values are accurate to ~1e-12. Three parameter sets (the
+posterior means of DMC's r94 subject-1 fits without and with guessing, rounded, and an
+uncorrelated set with both lowest thresholds below A), both response orders, three ratings,
+eight rts (144 densities), and 12 censored masses (`integrate()` at rel.tol 1e-10). Generator:
+`make_dmc_p3_density.R`. The suite compares `dMTLBA(drifts = "any")` and the stopping-time terms
+with it (relative 1e-8 in the body: the two quadratures).

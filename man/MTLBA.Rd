@@ -9,7 +9,9 @@ MTLBA(
   dont_know = FALSE,
   rule = "BE",
   guess = "accumulator",
-  gb_constraint = "none"
+  gb_constraint = "none",
+  drifts = "any",
+  lowest_threshold = "auto"
 )
 }
 \arguments{
@@ -28,6 +30,15 @@ count).}
 \code{"own"} / \code{"max"}: the guess threshold moves towards the choice threshold
 as the trigger probability (the accumulator's own, or the larger of the
 two) approaches 1. See Details.}
+
+\item{drifts}{Drift convention, \code{"any"} (the drift pair is conditioned on
+not both drifts being negative; the default) or \code{"positive"} (both
+drifts truncated to be positive). See Details.}
+
+\item{lowest_threshold}{\code{"auto"} (the default: \code{"free"} under \code{rule = "BE"},
+\code{"above_A"} under \code{rule = "TC"}), \code{"free"} (the lowest confidence
+threshold may lie below \code{A}; balance of evidence only) or \code{"above_A"}.
+See Details.}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample.
@@ -36,9 +47,15 @@ A model list with all the necessary functions for EMC2 to sample.
 Model file for the multiple-threshold LBA (MTLBA), a model of choice,
 response time and a rating (e.g. confidence). Two LBA accumulators race;
 each has, besides its choice threshold \code{b = A + B}, \code{n_ratings - 1}
-confidence thresholds between \code{A} and \code{b}. The two drift rates are normal,
-truncated to be both positive, and may be correlated (\code{rho}); with
-\code{rho = 0} (the default) and one rating the model is the standard \code{\link[=LBA]{LBA()}}.
+confidence thresholds below \code{b}. The two drift rates are (bivariate) normal
+and may be correlated (\code{rho}). By default the model is the one of its
+source paper (the DMC model \code{MTRp3}): the drifts are conditioned only on
+not both being negative (\code{drifts = "any"}), and under the balance-of-evidence
+rule the lowest confidence threshold may lie below \code{A}
+(\code{lowest_threshold = "free"}). The alternative \code{drifts = "positive"}
+(both drifts truncated to be positive) with \code{lowest_threshold = "above_A"}
+is the model in which, with \code{rho = 0} and one rating, each accumulator is
+the standard \code{\link[=LBA]{LBA()}}.
 }
 \details{
 The data need a factor \code{R} with two levels, \code{rt}, and a numeric column \code{RR}
@@ -60,9 +77,35 @@ holding the rating, an integer from 1 (lowest) to \code{n_ratings} (highest).\ta
 
 
 Confidence thresholds are \code{T_j = A + B * d_j} with proportions
-\verb{d_\{K-k\} = exp(-(c1 + ... + ck))}, so \verb{A < T_1 < ... < T_\{K-1\} < b}. The
-natural-scale proportions \verb{d1 .. d\{K-1\}} are reported with
-\code{add_recalculated = TRUE}.
+\verb{d_\{K-k\} = exp(-(c1 + ... + ck))}, so \verb{A < T_1 < ... < T_\{K-1\} < b}. With
+\code{lowest_threshold = "free"} the lowest threshold is instead
+\verb{T_1 = T_2 * exp(-c_\{K-1\})}: the last criterion scales the absolute
+threshold rather than its proportion above \code{A} (the two agree when
+\code{A = 0}), so \code{T_1} lies anywhere in \verb{(0, T_2)}, below \code{A} when the
+reported proportion \code{d1} is negative. The natural-scale proportions
+\verb{d1 .. d\{K-1\}} are reported with \code{add_recalculated = TRUE}.
+
+Drift convention (\code{drifts}):
+\itemize{
+\item \code{"any"} (the default, the source paper's model): the drift pair is
+bivariate normal conditioned on not both drifts being negative (on such
+a trial no accumulator would ever finish), so the likelihood is divided
+by \code{1 - P(both < 0)}. A losing accumulator may have a negative drift and
+end below its start point, which is what makes a lowest threshold below
+\code{A} informative: the two options are meant to be used together, and on
+the paper's data they fit far better together than either alone.
+\item \code{"positive"}: both drifts are truncated to be positive, the likelihood
+divided by \code{P(both > 0)}; with \code{rho = 0} this is the \code{\link[=LBA]{LBA()}} convention
+for each accumulator. With \code{lowest_threshold = "free"} the band below
+\code{A} uses the positive-drift probabilities.
+}
+
+\code{lowest_threshold}: \code{"above_A"} keeps every confidence threshold above \code{A},
+\code{"free"} lets the lowest one lie below \code{A} as described above, and
+\code{"auto"} (the default) resolves to \code{"free"} under \code{rule = "BE"} and to
+\code{"above_A"} under \code{rule = "TC"}: under threshold counting a threshold below
+the start point would be crossed at time zero, so \code{"free"} is refused
+there. \code{"free"} makes no difference with \code{n_ratings = 1}.
 
 Two stopping rules:
 \itemize{
@@ -147,8 +190,11 @@ retained (\code{LCresponse}/\code{UCresponse = TRUE}) and missing responses that
 are not censored (contamination) are not supported.
 }
 \examples{
-# three ratings, balance of evidence
+# three ratings, balance of evidence (the source paper's model)
 MTLBA3 <- function() MTLBA(n_ratings = 3)
+# the same with both drifts positive and every threshold above A
+MTLBA3p <- function() MTLBA(n_ratings = 3, drifts = "positive",
+                            lowest_threshold = "above_A")
 # two ratings plus don't know, threshold count
 MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
 # confidence guessing, more often on one accumulator than on the other

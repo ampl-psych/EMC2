@@ -4,6 +4,17 @@
 # kernel, plus 1e6-trial simulator summaries. Closed forms there are accurate
 # absolutely, not relatively, in the far tail (density < 1e-8), so parity is
 # absolute everywhere and relative only in the body.
+#
+# Two drift conventions and two placements of the lowest threshold exist since
+# Stage M7c. The DEFAULTS are the source paper's DMC model: drifts = "any" (the
+# drift pair conditioned on not both negative) and lowest_threshold = "auto"
+# (free below A under balance of evidence). Every test up to the section
+# "Stage M7c" exercises the earlier model and says so by passing
+# drifts = "positive" (and lowest_threshold = "above_A" to MTLBA()) explicitly:
+# both drifts truncated positive, every threshold above A, which is the model the
+# golden fixtures (DK paper, BETE) describe and the model the Stage G SBC runs
+# validated. The Stage M7c section tests the defaults (against the DMC code's
+# values in golden/mtlba/dmc_p3_density.rds, mass, simulator and C++ parity).
 
 golden_mtlba <- function(f) readRDS(test_path("golden", "mtlba", f))
 
@@ -46,7 +57,7 @@ ref_logband <- function(t, A, v, sv, lo, hi) {
 mtlba_f <- function(R, RR, K, rule, dk, st, quad = EMC2:::mtlba_quad_rule())
   function(rt) EMC2:::dMTLBA(rt, rep(R, length(rt)), rep(RR, length(rt)),
                              mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho),
-                             K, rule, dk, quad = quad)
+                             K, rule, dk, quad = quad, drifts = "positive")
 
 mtlba_prob <- function(R, RR, K, rule, dk, st, upper = Inf) {
   t0 <- min(st$t0)
@@ -204,7 +215,7 @@ test_that("non-finite parameters give -Inf, not an error", {
     pars <- mtlba_pars(3, st$v, st$sv, st$A, st$b, st$t0, st$d)
     pars[2, names(bad)] <- bad
     for (rule in c("BE", "TC")) {
-      ld <- EMC2:::dMTLBA(rep(.7, 3), c(1, 2, 1), c(3, 2, 1), pars, 3, rule, log = TRUE)
+      ld <- EMC2:::dMTLBA(rep(.7, 3), c(1, 2, 1), c(3, 2, 1), pars, 3, rule, log = TRUE, drifts = "positive")
       expect_true(!anyNA(ld) && all(is.finite(ld[2:3])))
     }
   }
@@ -251,7 +262,7 @@ test_that("rMTLBA agrees with the density (BE, TC, don't know)", {
   lR <- factor(rep(c("a", "b"), n))
   for (rule in c("BE", "TC")) for (dk in c(FALSE, TRUE)) {
     set.seed(if (rule == "BE") 31 else 32)
-    sim <- EMC2:::rMTLBA(lR, mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d), 3, rule, dk)
+    sim <- EMC2:::rMTLBA(lR, mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d), 3, rule, dk, drifts = "positive")
     expect_true(all(sim$RR %in% 1:3) && !anyNA(sim$R))
     if (dk) expect_true(all(sim$R[sim$RR == 1] == "a"))
     rsp <- mtlba_responses(3, dk)
@@ -272,7 +283,7 @@ mtlba_design <- function(K = 3, rule = "BE", dk = FALSE, rlev = c("left", "right
   crit <- if (K > 1) paste0("c", seq_len(K - 1)) else character(0)
   form <- c(list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1),
             lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
-  mod <- local({ k <- K; r <- rule; d <- dk; function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+  mod <- local({ k <- K; r <- rule; d <- dk; function() MTLBA(n_ratings = k, dont_know = d, rule = r, drifts = "positive", lowest_threshold = "above_A") })
   design(factors = list(subjects = 1, S = rlev), Rlevels = rlev, model = mod,
          matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE, ...)
 }
@@ -299,14 +310,14 @@ test_that("K = 1 equals the LBA log-likelihood (BE and TC)", {
   for (rule in c("BE", "TC")) {
     mt <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
-      model = local({ r <- rule; function() MTLBA(1, rule = r) }),
+      model = local({ r <- rule; function() MTLBA(1, rule = r, drifts = "positive", lowest_threshold = "above_A") }),
       matchfun = function(d) d$S == d$lR,
       formula = list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1), report_p_vector = FALSE))
     d_mt <- EMC2:::design_model(dat, mt, compress = FALSE, verbose = FALSE)
     ll <- EMC2:::calc_ll_manager(props, d_mt, mt$model)
     tw <- sapply(seq_len(nrow(props)), function(k)
       EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(props[k, ], d_mt, mt$model()), d_mt, 1,
-                            rule, FALSE))
+                            rule, FALSE, drifts = "positive"))
     expect_equal(as.vector(ll), colSums(tw), tolerance = 1e-12)
     # identical where EMC2's LBA is well conditioned ...
     tl <- matrix(tw_lba, ncol = nrow(props))
@@ -358,7 +369,7 @@ test_that("likelihood: compression on and off agree with the direct density", {
     pars[, "v"] <- v
     rt <- floor(dat$rt / res) * res
     direct <- sum(pmax(log(1e-10), EMC2:::dMTLBA(rt, as.integer(dat$R), dat$RR, pars, K, rule, dk,
-                                                  log = TRUE)))
+                                                  log = TRUE, drifts = "positive")))
     expect_equal(as.vector(llc), direct, tolerance = 1e-10)
   }
 })
@@ -454,7 +465,7 @@ test_that("C++ likelihood equals the R reference (K = 1 .. 4, BE/TC, don't know,
     form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ lR),
               lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
     mod <- local({ k <- K; r <- rule; d <- dk
-      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r, drifts = "positive", lowest_threshold = "above_A") })
     des <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
       model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
@@ -490,7 +501,7 @@ test_that("C++ likelihood equals the R reference (K = 1 .. 4, BE/TC, don't know,
       llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
       expect_lt(mtlba_err(llc, llr), 1e-12)
       twr <- apply(props, 1, function(pv)
-        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk, drifts = "positive"))
       twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
       expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-11)
       n_ext <- nrow(props) - 0:3
@@ -697,7 +708,7 @@ test_that("C++ equals the R reference with censoring and truncation (OpenMP = se
     form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1),
               lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
     mod <- local({ k <- K; r <- rule; d <- dk
-      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r, drifts = "positive", lowest_threshold = "above_A") })
     des <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
       model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
@@ -729,7 +740,7 @@ test_that("C++ equals the R reference with censoring and truncation (OpenMP = se
       llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
       expect_lt(mtlba_err(llc, llr), 1e-10)
       twr <- apply(props, 1, function(pv)
-        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk, drifts = "positive"))
       twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
       expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-10)
       expect_true(all(is.finite(llc)))
@@ -753,7 +764,7 @@ test_that("censoring refusals: retained response, unequal t0, contamination", {
   # t0 by accumulator is fine without censoring but refused with it (R and C++)
   dt0 <- suppressMessages(design(
     factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
-    model = function() MTLBA(n_ratings = 2), matchfun = function(d) d$S == d$lR,
+    model = function() MTLBA(n_ratings = 2, drifts = "positive", lowest_threshold = "above_A"), matchfun = function(d) d$S == d$lR,
     formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ lR, c1 ~ lR), report_p_vector = FALSE))
   p0 <- c(p, t0_lRright = .1)
   dat <- make_data(p0, dt0, n_trials = 50)
@@ -773,7 +784,7 @@ test_that("truncation normaliser cache: many distinct parameter rows (covariate)
   for (rule in c("BE", "TC")) {
     des <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
-      covariates = "x", model = local({ r <- rule; function() MTLBA(n_ratings = 3, rule = r) }),
+      covariates = "x", model = local({ r <- rule; function() MTLBA(n_ratings = 3, rule = r, drifts = "positive", lowest_threshold = "above_A") }),
       matchfun = function(d) d$S == d$lR,
       formula = list(v ~ lM + x, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ lR, c2 ~ lR), report_p_vector = FALSE))
     p <- c(v = 1, v_lMTRUE = 1.5, v_x = .3, B = log(1), A = log(.5), t0 = log(.25),
@@ -787,7 +798,7 @@ test_that("truncation normaliser cache: many distinct parameter rows (covariate)
     pm <- rbind(p, p + .05)
     llc <- EMC2:::calc_ll_manager(pm, dadm, des$model, return_trialwise = TRUE)
     llr <- apply(pm, 1, function(pv)
-      EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, 3, rule, FALSE))
+      EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, 3, rule, FALSE, drifts = "positive"))
     expect_lt(mtlba_err(as.vector(llc), as.vector(llr)), 1e-10)
     expect_identical(mtlba_omp(EMC2:::calc_ll_manager(pm, dadm, des$model, return_trialwise = TRUE)),
                      llc)
@@ -937,7 +948,7 @@ test_that("rMTLBA agrees with the correlated density (rho = -.8, -.4, .4, .8)", 
     dk <- rule == "TC" && rho > 0
     st$rho <- rho
     set.seed(round(100 + 10 * rho) + (rule == "TC"))
-    sim <- EMC2:::rMTLBA(lR, mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, rho), 3, rule, dk)
+    sim <- EMC2:::rMTLBA(lR, mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, rho), 3, rule, dk, drifts = "positive")
     expect_true(all(sim$RR %in% 1:3) && !anyNA(sim$R) && all(is.finite(sim$rt)))
     rsp <- mtlba_responses(3, dk)
     for (i in seq_len(nrow(rsp))) {
@@ -968,7 +979,7 @@ test_that("correlated model: design, simulation and the R likelihood through EMC
     K <- if (dk) 2 else 3
     crit <- paste0("c", seq_len(K - 1))
     mod <- local({ k <- K; r <- rule; d <- dk
-      function() { m <- MTLBA(n_ratings = k, dont_know = d, rule = r); m$c_name <- NULL; m } })
+      function() { m <- MTLBA(n_ratings = k, dont_know = d, rule = r, drifts = "positive", lowest_threshold = "above_A"); m$c_name <- NULL; m } })
     des <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
       model = mod, matchfun = function(d) d$S == d$lR,
@@ -998,7 +1009,7 @@ test_that("correlated model: design, simulation and the R likelihood through EMC
     pars <- cbind(pars, rho = rep(ifelse(m1, -.6, .3), each = 2))
     rt <- floor(dat$rt / res) * res
     direct <- sum(pmax(log(1e-10), EMC2:::dMTLBA(rt, as.integer(dat$R), dat$RR, pars, K, rule, dk,
-                                                  log = TRUE)))
+                                                  log = TRUE, drifts = "positive")))
     expect_equal(as.vector(llc), direct, tolerance = 1e-10)
     # censoring and truncation evaluate, and differ from the uncorrelated value
     cd <- make_data(p, des, n_trials = 150, TC = list(LC = .5, UC = 1.8, LT = .3, UT = 4))
@@ -1017,7 +1028,7 @@ test_that("C++ correlated likelihood equals the R reference (K = 1 .. 3, BE/TC, 
     form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1, rho ~ S),
               lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR"))))
     mod <- local({ k <- K; r <- rule; d <- dk
-      function() MTLBA(n_ratings = k, dont_know = d, rule = r) })
+      function() MTLBA(n_ratings = k, dont_know = d, rule = r, drifts = "positive", lowest_threshold = "above_A") })
     des <- suppressMessages(design(
       factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
       model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
@@ -1060,7 +1071,7 @@ test_that("C++ correlated likelihood equals the R reference (K = 1 .. 3, BE/TC, 
       llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
       expect_lt(mtlba_err(llc, llr), 1e-11)
       twr <- apply(props, 1, function(pv)
-        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk))
+        EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk, drifts = "positive"))
       twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
       expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-10)
       expect_true(all(is.finite(llc)))
@@ -1077,7 +1088,7 @@ test_that("C++ correlated likelihood equals the R reference (K = 1 .. 3, BE/TC, 
 test_that("compiled correlated likelihood joins the uncorrelated one as rho -> 0", {
   des <- suppressMessages(design(
     factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
-    model = function() MTLBA(3, rule = "TC"), matchfun = function(d) d$S == d$lR,
+    model = function() MTLBA(3, rule = "TC", drifts = "positive", lowest_threshold = "above_A"), matchfun = function(d) d$S == d$lR,
     formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ 1), report_p_vector = FALSE))
   p <- c(v = 1, v_lMTRUE = 1.5, B = 0, A = log(.5), t0 = log(.25), rho = 0, c1 = log(.6),
          c1_lRright = .1, c2 = log(.4))
@@ -1165,7 +1176,7 @@ mtlba_gset <- function(K, rho = 0) {
 mtlba_gf <- function(R, RR, K, rule, dk, st, guess, gp, gB, pg)
   function(rt) EMC2:::dMTLBA(rt, rep(R, length(rt)), rep(RR, length(rt)),
     mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho),
-                     K, gp, gB, pg), K, rule, dk, guess = guess)
+                     K, gp, gB, pg), K, rule, dk, guess = guess, drifts = "positive")
 mtlba_gint <- function(f, t0, upper = Inf, mult = function(t) 1) {
   brk <- t0 + c(0, .05, .1, .2, .35, .5, .8, 1.2, 2, 3.5, 6, 15, Inf)
   brk <- unique(c(brk[brk < upper], upper))
@@ -1263,7 +1274,7 @@ test_that("guessing: rMTLBA agrees with the density (both modes, BE/TC, don't kn
     pf <- sapply(seq_len(nrow(rsp)), function(i) mtlba_gint(f(i), st$t0, upper = .6))
     sim <- EMC2:::rMTLBA(factor(rep(1:2, n)),
       mtlba_guess_cols(mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, gp, gB, pg),
-      K, rule, dk, guess = guess)
+      K, rule, dk, guess = guess, drifts = "positive")
     is_r <- function(i) as.integer(sim$R) == rsp[i, 1] & sim$RR == rsp[i, 2]
     obs <- sapply(seq_len(nrow(rsp)), function(i) mean(is_r(i)))
     obf <- sapply(seq_len(nrow(rsp)), function(i) mean(is_r(i) & sim$rt < .6))
@@ -1308,7 +1319,7 @@ mtlba_gdesign <- function(K, rule, dk, guess, corr = FALSE, gbc = "none") {
             if (corr) list(rho ~ 1),
             lapply(c(crit, pg), function(cn) stats::as.formula(paste(cn, "~ lR"))))
   mod <- local({ k <- K; r <- rule; d <- dk; g <- guess; cc <- gbc
-    function() MTLBA(n_ratings = k, dont_know = d, rule = r, guess = g, gb_constraint = cc) })
+    function() MTLBA(n_ratings = k, dont_know = d, rule = r, guess = g, gb_constraint = cc, drifts = "positive", lowest_threshold = "above_A") })
   des <- suppressMessages(design(
     factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
     model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
@@ -1351,7 +1362,7 @@ test_that("guessing: C++ likelihood equals the R reference (BE/TC, don't know, r
       expect_lt(mtlba_err(llc, llr), 1e-12)
       twr <- apply(props, 1, function(pv)
         EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk,
-                              guess = guess))
+                              guess = guess, drifts = "positive"))
       twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
       expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-11)
       expect_true(all(is.finite(llc)))
@@ -1372,7 +1383,7 @@ test_that("guessing: defaults, design checks and simulation through EMC2", {
   # the trial-level trigger cannot depend on the accumulator; the per-accumulator one can
   mk <- function(guess, f) suppressMessages(design(
     factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
-    model = local({ g <- guess; function() MTLBA(2, guess = g) }),
+    model = local({ g <- guess; function() MTLBA(2, guess = g, drifts = "positive", lowest_threshold = "above_A") }),
     formula = list(v ~ 1, f), report_p_vector = FALSE))
   expect_error(mk("trial", gp ~ lR), "trial-level")
   expect_no_error(mk("accumulator", gp ~ lR))
@@ -1408,9 +1419,9 @@ test_that("guessing: gb_constraint moves the guess threshold to b with the trigg
         p <- mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, g, gB, pg)
         p0 <- mtlba_guess_cols(mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho), K, g,
                                gB + gc^2 * (1 - gB), pg)
-        con <- EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess, gb_constraint = gbc)
-        expect_identical(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p0, K, rule, guess = guess))
-        expect_false(isTRUE(all.equal(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess))))
+        con <- EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess, gb_constraint = gbc, drifts = "positive")
+        expect_identical(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p0, K, rule, guess = guess, drifts = "positive"))
+        expect_false(isTRUE(all.equal(con, EMC2:::dMTLBA(rt, rep(R, 4), rep(RR, 4), p, K, rule, guess = guess, drifts = "positive"))))
       }
     }
   }
@@ -1439,4 +1450,333 @@ test_that("guessing: gb_constraint moves the guess threshold to b with the trigg
     expect_gt(EMC2:::calc_ll_manager(t(p), dadm, des$model),
               EMC2:::calc_ll_manager(t(p), dadm0, gd$design$model))
   }
+})
+
+# ---- Stage M7c: the drift convention and the lowest threshold (the DMC defaults) ----
+
+# density function of rt for one response under a given drift convention (st$d may put
+# the lowest threshold below A: a negative d1)
+mtlba_fd <- function(R, RR, K, rule, dk, st, drifts, guess = NULL)
+  function(rt) {
+    p <- mtlba_pars(length(rt), st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho)
+    if (!is.null(guess)) p <- mtlba_guess_cols(p, K, guess$gp, guess$gB, guess$pg)
+    EMC2:::dMTLBA(rt, rep(R, length(rt)), rep(RR, length(rt)), p, K, rule, dk, drifts = drifts,
+                  guess = "accumulator")
+  }
+# total probability of one response, to TMAX (the LBA tail is heavy; the rest comes from
+# the survivor in the tests that need it)
+mtlba_probd <- function(f, t0, upper = 60) {
+  brk <- t0 + c(0, .05, .1, .2, .35, .5, .8, 1.2, 2, 3.5, 6, 15, 40, Inf)
+  brk <- unique(c(brk[brk < upper], upper))
+  sum(sapply(seq_len(length(brk) - 1), function(i) {
+    r <- tryCatch(stats::integrate(f, brk[i], brk[i + 1], subdivisions = 2000L, rel.tol = 1e-10, abs.tol = 0)$value,
+                  error = function(e) NULL)
+    if (is.null(r)) r <- stats::integrate(f, brk[i], brk[i + 1], subdivisions = 5000L, rel.tol = 1e-8, abs.tol = 1e-13)$value
+    r
+  }))
+}
+# a set with the lowest threshold below A on both accumulators (K = 3) and rho
+mtlba_free_set <- function(rho = 0, K = 3)
+  list(v = c(1.6, .4), sv = c(.8, 1.1), A = c(.6, .5), b = c(1.5, 1.3), t0 = .2,
+       d = if (K == 3) rbind(c(-.4, .6), c(-.6, .5)) else if (K == 2) rbind(-.4, -.6) else NULL,
+       rho = if (rho != 0) rho else NULL)
+
+test_that("M7c factory: defaults, auto resolution, refusal, the free threshold's mapping", {
+  m <- MTLBA(3)
+  expect_equal(c(m$drifts, m$lowest_threshold), c("any", "free"))
+  expect_equal(unname(m$c_options[c("drifts_any", "free_lowest")]), c(1, 1))
+  expect_equal(MTLBA(3, rule = "TC")$lowest_threshold, "above_A")
+  expect_equal(unname(MTLBA(3, rule = "TC")$c_options["free_lowest"]), 0)
+  expect_equal(unname(MTLBA(1)$c_options["free_lowest"]), 0)
+  expect_error(MTLBA(3, rule = "TC", lowest_threshold = "free"), "rule = \"BE\"")
+  expect_error(MTLBA(3, drifts = "XX"))
+  mp <- MTLBA(3, drifts = "positive", lowest_threshold = "above_A")
+  expect_equal(unname(mp$c_options[c("drifts_any", "free_lowest")]), c(0, 0))
+  # the lowest threshold is T_1 = T_2 exp(-c_{K-1}) (K = 3, and K = 2 where T_2 = b),
+  # reported as the proportion d1 of B above A, negative below A; above_A keeps d1 in (0, 1)
+  for (K in 2:3) {
+    crit <- paste0("c", seq_len(K - 1))
+    mk <- function(lw) suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = local({ k <- K; l <- lw; function() MTLBA(k, lowest_threshold = l) }),
+      matchfun = function(d) d$S == d$lR,
+      formula = c(list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1), lapply(crit, function(cn) stats::as.formula(paste(cn, "~ lR")))),
+      report_p_vector = FALSE))
+    p <- c(v = 1, v_lMTRUE = 1.5, B = log(1), A = log(.5), t0 = log(.25))
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+    p[crit[K - 1]] <- log(1.2)
+    set.seed(7000 + K)
+    dat <- make_data(p, mk("free"), n_trials = 20)
+    for (lw in c("free", "above_A")) {
+      des <- mk(lw)
+      dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+      pm <- EMC2:::get_pars_matrix_oo(p, dadm, des$model())
+      A <- pm[, "A"]; b <- pm[, "b"]
+      T2 <- if (K == 3) A + (b - A) * pm[, "d2"] else b
+      T1 <- A + (b - A) * pm[, "d1"]
+      cK <- pm[, crit[K - 1]]
+      if (lw == "free") {
+        expect_equal(T1, T2 * exp(-cK), tolerance = 1e-12)
+        expect_true(all(T1 < A))
+      } else {
+        expect_equal(T1 - A, (T2 - A) * exp(-cK), tolerance = 1e-12)
+        expect_true(all(T1 > A))
+      }
+    }
+  }
+})
+
+test_that("M7c: density, censored masses and guessing match the DMC code (golden dmc_p3_density)", {
+  g <- golden_mtlba("dmc_p3_density.rds")
+  pars_of <- function(s, o, n) {
+    A <- s$A[o]; b <- s$b[o]
+    p <- cbind(v = s$mean_v[o], sv = s$sd_v[o], A = A, b = b, t0 = s$t0, rho = s$corr_v,
+               d1 = (s$d1[o] - A) / (b - A), d2 = (s$d2[o] - A) / (b - A))
+    if (any(s$pf > 0)) {
+      pg1 <- (1 - s$p2[o]) * (1 - s$p3[o])
+      p <- cbind(p, gp = s$pf[o], gB = (s$fb[o] - A) / (b - A), pg1 = pg1, pg2 = s$p2[o] / (1 - pg1))
+    }
+    p[rep(1:2, n), , drop = FALSE]
+  }
+  cells <- g$cells
+  ours <- numeric(nrow(cells))
+  for (i in seq_len(nrow(cells))) {
+    x <- cells[i, ]; s <- g$sets[[x$set]]
+    o <- if (x$order == "n1") 1:2 else 2:1
+    ours[i] <- EMC2:::dMTLBA(x$rt, 1L, x$r2, pars_of(s, o, 1), 3, "BE", drifts = "any",
+                             guess = "accumulator")
+  }
+  # DMC's start-point quadrature (4 x 16 nodes) against our adaptive drift quadrature, and
+  # closed forms at rho = 0: relative parity in the body, absolute in the tail
+  body <- cells$dens > 1e-8
+  expect_gt(sum(body), 100)
+  expect_lt(max(abs(ours[body] / cells$dens[body] - 1)), 1e-8)
+  expect_lt(max(abs(ours - cells$dens)), 1e-12)
+  # the DMC model's lowest thresholds are below A (the m5 and m1 sets) and the guessing set
+  # (m1) has triggers on both accumulators: these cells differ from the positive-drift model
+  alt <- sapply(seq_len(nrow(cells)), function(i) {
+    x <- cells[i, ]; s <- g$sets[[x$set]]; o <- if (x$order == "n1") 1:2 else 2:1
+    EMC2:::dMTLBA(x$rt, 1L, x$r2, pars_of(s, o, 1), 3, "BE", drifts = "positive", guess = "accumulator")
+  })
+  expect_gt(max(abs(alt - cells$dens) / pmax(cells$dens, 1e-8)), .05)
+  # censored masses: P(t0 < rt < CF) and P(rt > CS) from the stopping-time terms
+  for (i in seq_len(nrow(g$cens))) {
+    x <- g$cens[i, ]; s <- g$sets[[x$set]]
+    p <- pars_of(s, 1:2, 1)
+    Tm <- EMC2:::mtlba_thresholds(p, 3)
+    G <- EMC2:::mtlba_guess_pars(p, 3, "accumulator", "none")
+    st <- EMC2:::mtlba_logstop_guess(x$bound - s$t0, p, Tm, 1L, 2L, 3, "BE", G, "accumulator", FALSE)
+    ours <- if (x$kind == "fast") exp(st$P) else exp(st$S)
+    expect_equal(ours, x$mass, tolerance = 1e-8)
+  }
+})
+
+test_that("M7c: the untruncated band and the positive-drift band below A agree with brute force", {
+  # P(lo < e < hi [, v > 0]) for e = U(0, A) + v t by integration over the start point
+  brute <- function(t, A, v, sv, lo, hi, lowest, pos) {
+    f <- function(s) { up <- (hi - s) / t; lw <- if (lowest) -Inf else (lo - s) / t
+      if (pos) lw <- pmax(lw, 0); pmax(0, stats::pnorm(up, v, sv) - stats::pnorm(lw, v, sv)) }
+    # the integrand has kinks where a limit crosses the start point or zero: integrate between them
+    brk <- sort(unique(c(0, A, c(lo, hi)[c(lo, hi) > 0 & c(lo, hi) < A])))
+    sum(sapply(seq_len(length(brk) - 1), function(i)
+      stats::integrate(f, brk[i], brk[i + 1], rel.tol = 1e-13, subdivisions = 5000L)$value)) / A
+  }
+  set.seed(77)
+  n <- 150
+  t <- runif(n, .05, 3); A <- runif(n, .05, 1); v <- runif(n, -2.5, 3); sv <- runif(n, .3, 1.5)
+  hi <- A * runif(n, .05, 2.5); lo <- hi * runif(n, 0, .95); lowest <- runif(n) < .4
+  for (pos in c(FALSE, TRUE)) {
+    ours <- exp(EMC2:::mtlba_logband(t, A, v, sv, lo, hi, lowest, normalise = FALSE, pos = pos))
+    ref <- mapply(brute, t, A, v, sv, lo, hi, lowest, MoreArgs = list(pos = pos))
+    expect_lt(max(abs(ours - ref) / pmax(ref, 1e-6)), 1e-8)
+    expect_lt(max(abs(ours - ref)), 1e-13)
+  }
+  # Hp + Sp = Phi(v / sv) for any y, and the narrow-band route joins the closed form
+  y <- c(1e-6, 1e-3, .05, .2, .4, .49999, .5, .6)
+  o <- EMC2:::mtlba_logHSp(y, rep(.7, 8), rep(.5, 8), rep(.8, 8), rep(1, 8))
+  expect_lt(max(abs(exp(o$H) + exp(o$S) - pnorm(.8))), 1e-14)
+  z <- .1 / max(1, abs((.0499 - .7 * .8) / .7)) * .7   # y at the switch dz max(1, |z1|) = .1
+  lo_ <- EMC2:::mtlba_logHSp(z * (1 - 1e-9), .7, .5, .8, 1)$H
+  hi_ <- EMC2:::mtlba_logHSp(z * (1 + 1e-9), .7, .5, .8, 1)$H
+  expect_lt(abs(lo_ - hi_), 1e-8)
+  # P(not both < 0) against mvtnorm
+  expect_equal(exp(EMC2:::mtlba_lognotneg(.5, 1, -.3, 1.5, -.6)),
+               1 - mvtnorm::pmvnorm(upper = c(0, 0), mean = c(.5, -.3),
+                                    sigma = matrix(c(1, -.6 * 1.5, -.6 * 1.5, 1.5^2), 2))[1],
+               tolerance = 1e-12)
+})
+
+test_that("M7c: densities integrate to 1 under every option (any / positive, free / above A, rho, DK, guessing)", {
+  guess <- list(gp = c(.35, .15), gB = c(.45, .7), pg = rbind(c(.5, .3), c(.2, .6)))
+  for (drifts in c("any", "positive")) for (free in c(TRUE, FALSE)) for (rho in c(0, -.6))
+    for (rule in c("BE", "TC")) for (dk in c(FALSE, TRUE)) for (gs in c(FALSE, TRUE)) {
+    if (free && rule == "TC") next
+    if (rule == "TC" && rho != 0) next
+    if (gs && (dk || rho != 0)) next
+    st <- mtlba_free_set(rho)
+    if (!free) st$d <- rbind(c(.3, .6), c(.2, .5))
+    rsp <- mtlba_responses(3, dk)
+    mass <- sum(apply(rsp, 1, function(r) mtlba_probd(mtlba_fd(r[1], r[2], 3, rule, dk, st, drifts,
+                                                                if (gs) guess), st$t0)))
+    # the mass beyond 60 s from the survivor
+    p <- mtlba_pars(1, st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho)
+    if (gs) p <- mtlba_guess_cols(p, 3, guess$gp, guess$gB, guess$pg)
+    G <- EMC2:::mtlba_guess_pars(p, 3, "accumulator", "none")
+    tail <- exp(EMC2:::mtlba_logstop_guess(60 - st$t0, p, EMC2:::mtlba_thresholds(p, 3), 1L, 2L, 3, rule,
+                                           G, "accumulator", drifts == "positive")$S)
+    expect_equal(mass + tail, 1, tolerance = 1e-7)
+  }
+  # K = 2 with the free threshold, and K = 1 is the same under both placements
+  for (drifts in c("any", "positive")) {
+    st <- mtlba_free_set(-.5, 2)
+    mass <- sum(apply(mtlba_responses(2, FALSE), 1, function(r) mtlba_probd(mtlba_fd(r[1], r[2], 2, "BE", FALSE, st, drifts), st$t0)))
+    p <- mtlba_pars(1, st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho)
+    tail <- exp(EMC2:::mtlba_logstop_any(60 - st$t0, p, EMC2:::mtlba_thresholds(p, 2), 1L, 2L, 2, "BE", drifts == "positive")$S)
+    expect_equal(mass + tail, 1, tolerance = 1e-7)
+  }
+})
+
+test_that("M7c: censored + observed mass is 1 and the survivor is the integrated density under any drifts", {
+  LC <- .45; UC <- 1.6; LT <- .3; UT <- 2.5
+  for (rho in c(0, -.7)) for (rule in c("BE", "TC")) for (K in c(1, 3)) for (free in c(FALSE, K == 3 && rule == "BE")) {
+    p <- mtlba_trial_pars(K)
+    if (free) p[, "d1"] <- c(-.3, -.5)
+    if (rho != 0) p <- cbind(p, rho = rho)
+    rsp <- mtlba_responses(K, FALSE)
+    dens <- function(rt, R, RR, bnd = mtlba_bnd()) {
+      n <- length(rt)
+      exp(EMC2:::mtlba_logdens_missing(rt, rep(R, n), rep(RR, n), p[rep(1:2, n), ], K, rule, FALSE,
+                                       lapply(bnd, rep_len, n), pos = FALSE))
+    }
+    cens <- function(m, bnd = mtlba_bnd(m, LC = LC, UC = UC))
+      exp(EMC2:::mtlba_logdens_missing(NA, NA, NA, p, K, rule, FALSE, bnd, pos = FALSE))
+    obs <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LC, UC, R = R, RR = RR, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(obs + cens(1L) + cens(2L), 1, tolerance = 1e-8)
+    tb <- mtlba_bnd(LT = LT, UT = UT)
+    tr <- sum(mapply(function(R, RR)
+      stats::integrate(dens, LT, UT, R = R, RR = RR, bnd = tb, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(tr, 1, tolerance = 1e-8)
+    Tm <- EMC2:::mtlba_thresholds(p, K)
+    st <- EMC2:::mtlba_logstop_any(c(.7, Inf, 0), p[rep(1:2, 3), ], Tm[rep(1:2, 3), ], c(1, 3, 5), c(2, 4, 6), K, rule, FALSE)
+    expect_equal(exp(st$P[1]) + exp(st$S[1]), 1, tolerance = 1e-12)
+    below <- sum(mapply(function(R, RR)
+      stats::integrate(dens, .2, .9, R = R, RR = RR, rel.tol = 1e-10)$value, rsp[, "R"], rsp[, "RR"]))
+    expect_equal(exp(st$P[1]), below, tolerance = 1e-8)
+  }
+  # rho -> 0: the correlated stop terms join the closed form under any drifts
+  for (rule in c("BE", "TC")) {
+    p <- mtlba_trial_pars(3); Tm <- EMC2:::mtlba_thresholds(p, 3)
+    cf <- EMC2:::mtlba_logstop(.7, p, Tm, 1, 2, 3, rule, pos = FALSE)
+    q <- EMC2:::mtlba_stop_rho1(.7, p[1, "A"], p[1, "v"], p[1, "sv"], Tm[1, -1], p[2, "A"], p[2, "v"],
+                                p[2, "sv"], Tm[2, -1], 1e-9, 3, rule, pos = FALSE)
+    expect_equal(q, c(cf$P, cf$S), tolerance = 1e-7)
+  }
+})
+
+test_that("M7c: rMTLBA agrees with the density under the defaults (any drifts, free threshold; rho 0 and -.7)", {
+  n <- 1e5
+  qp <- c(.1, .5, .9)
+  for (rho in c(0, -.7)) for (drifts in c("any", "positive")) {
+    st <- mtlba_free_set(rho)
+    set.seed(500 + 10 * (rho != 0) + (drifts == "any"))
+    sim <- EMC2:::rMTLBA(factor(rep(1:2, n)), mtlba_pars(n, st$v, st$sv, st$A, st$b, st$t0, st$d, st$rho),
+                         3, "BE", FALSE, drifts = drifts)
+    expect_true(all(sim$RR %in% 1:3) && !anyNA(sim$R) && all(is.finite(sim$rt)))
+    rsp <- mtlba_responses(3, FALSE)
+    pr <- apply(rsp, 1, function(r) mtlba_probd(mtlba_fd(r[1], r[2], 3, "BE", FALSE, st, drifts), st$t0, 200))
+    obs <- apply(rsp, 1, function(r) mean(as.integer(sim$R) == r[1] & sim$RR == r[2]))
+    expect_lt(max(abs(obs - pr) / sqrt(pr * (1 - pr) / n)), 4.5)
+    w <- which.max(pr); r <- rsp[w, ]
+    x <- sim$rt[as.integer(sim$R) == r[1] & sim$RR == r[2]]
+    Fq <- sapply(stats::quantile(x, qp), function(u) mtlba_probd(mtlba_fd(r[1], r[2], 3, "BE", FALSE, st, drifts), st$t0, u)) / pr[w]
+    expect_lt(max(abs(Fq - qp)), 4.5 * .5 / sqrt(pr[w] * n))
+  }
+  # the drift sampler under "any": no pair with both drifts negative, the right rejection rate
+  set.seed(96)
+  dr <- EMC2:::mtlba_rdrift_any(rep(-.5, 2e5), rep(1, 2e5), rep(-.2, 2e5), rep(1.5, 2e5), rep(-.7, 2e5))
+  expect_true(all(dr$v1 > 0 | dr$v2 > 0))
+  pn <- exp(EMC2:::mtlba_lognotneg(-.5, 1, -.2, 1.5, -.7))
+  expect_lt(abs(mean(dr$v1 > 0) - stats::integrate(function(x) dnorm(x, -.5, 1), 0, Inf)$value / pn),
+            4.5 * sqrt(.25 / 2e5))
+})
+
+test_that("M7c: C++ equals the R reference under every option setting (OpenMP identical)", {
+  for (drifts in c("any", "positive")) for (lowest in c("free", "above_A")) for (rule in c("BE", "TC"))
+    for (corr in c(FALSE, TRUE)) for (gs in c(FALSE, TRUE)) for (cens in c(FALSE, TRUE)) {
+    if (lowest == "free" && rule == "TC") next
+    if (corr && gs && cens) next
+    K <- 3; dk <- gs && !corr
+    crit <- paste0("c", 1:2); pg <- if (gs) paste0("pg", 1:2) else character(0)
+    form <- c(list(v ~ lM, sv ~ lM, B ~ lR, A ~ 1, t0 ~ 1), if (corr) list(rho ~ S),
+              if (gs) list(gB ~ lR, gp ~ lR), lapply(c(crit, pg), function(cn) stats::as.formula(paste(cn, "~ lR"))))
+    mod <- local({ r <- rule; d <- dk; dr <- drifts; lw <- lowest
+      function() MTLBA(n_ratings = 3, dont_know = d, rule = r, drifts = dr, lowest_threshold = lw) })
+    des <- suppressMessages(design(
+      factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+      model = mod, matchfun = function(d) d$S == d$lR, formula = form, report_p_vector = FALSE))
+    p <- sampled_pars(des, doMap = FALSE); p[] <- 0
+    p[c("v", "v_lMTRUE", "sv", "sv_lMTRUE", "B", "B_lRright", "A", "t0")] <- c(1, 1.5, 0, log(.7), log(1), .2, log(.5), log(.25))
+    if (corr) p[c("rho", "rho_Sright")] <- c(qnorm((1 - .5) / 2), qnorm((1 + .8) / 2) - qnorm((1 - .5) / 2))
+    if (gs) p[c("gB", "gB_lRright", "gp", "gp_lRright")] <- c(qnorm(.5), .3, qnorm(.25), -.4)
+    for (cn in crit) p[c(cn, paste0(cn, "_lRright"))] <- c(log(.6), .15)
+    if (lowest == "free") p["c2"] <- log(1.2)        # T_1 below A
+    for (cn in pg) p[c(cn, paste0(cn, "_lRright"))] <- c(qnorm(.45), .3)
+    set.seed(800 + 100 * corr + 10 * gs + cens)
+    dat <- make_data(p, des, n_trials = if (corr) 40 else 100)
+    if (cens) {
+      dat <- make_missing(dat, LC = .45, UC = 1.6, LT = .3, UT = 4)
+      dat$missingness[1:2] <- 3L; dat$R[1:2] <- NA; dat$RR[1:2] <- NA; dat$rt[1:2] <- NA
+    }
+    props <- rbind(p, mvtnorm::rmvnorm(if (corr) 4 else 10, p, diag(length(p)) * .3))
+    colnames(props) <- names(p)
+    ext <- matrix(p, nrow = 7, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    ext[1, "sv"] <- log(.02); ext[2, "v"] <- -4; ext[3, "A"] <- -Inf; ext[4, "A"] <- log(1e-3)
+    ext[5, "c2"] <- 700; ext[6, "c1"] <- log(8); ext[7, "v"] <- NaN
+    if (corr) ext[2, "rho"] <- qnorm((1 + .999) / 2)
+    props <- rbind(props, ext)
+    dadm <- EMC2:::design_model(dat, des, compress = !cens, verbose = FALSE, rt_resolution = 1e-6)
+    llr <- EMC2:::calc_ll_manager(props, dadm, mtlba_r_model(des$model))
+    llc <- EMC2:::calc_ll_manager(props, dadm, des$model)
+    expect_lt(mtlba_err(llc, llr), 1e-11)
+    twr <- apply(props, 1, function(pv)
+      EMC2:::trial_ll_mtlba(EMC2:::get_pars_matrix_oo(pv, dadm, des$model()), dadm, K, rule, dk,
+                            guess = "accumulator", drifts = drifts))
+    twc <- EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE)
+    expect_lt(mtlba_err(as.vector(twc), as.vector(twr)), 1e-10)
+    expect_true(all(is.finite(llc)))
+    expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model), 2), llc)
+    expect_identical(mtlba_omp(EMC2:::calc_ll_manager(props, dadm, des$model, return_trialwise = TRUE), 2), twc)
+  }
+  # a model made before the options existed (no drifts_any / free_lowest in c_options) still
+  # runs in C++ as the positive-drift, above-A model
+  des <- mtlba_design(3, "BE")
+  set.seed(99)
+  dat <- make_data(mtlba_p(3), des, n_trials = 40)
+  dadm <- EMC2:::design_model(dat, des, verbose = FALSE)
+  old <- dadm; attr(old, "c_options") <- attr(dadm, "c_options")[c("n_ratings", "dont_know", "TC")]
+  expect_identical(EMC2:::calc_ll_manager(t(mtlba_p(3)), old, des$model),
+                   EMC2:::calc_ll_manager(t(mtlba_p(3)), dadm, des$model))
+})
+
+test_that("M7c: fits under the defaults sample, predict and report thresholds below A", {
+  des <- suppressMessages(design(
+    factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+    model = function() MTLBA(3), matchfun = function(d) d$S == d$lR,
+    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ 1, c2 ~ 1), report_p_vector = FALSE))
+  p <- c(v = 1, v_lMTRUE = 1.5, B = log(1), A = log(.5), t0 = log(.25), rho = qnorm(.2), c1 = log(.6), c2 = log(1.2))
+  set.seed(73)
+  dat <- make_data(p, des, n_trials = 150)
+  expect_true(all(dat$RR %in% 1:3))
+  emc <- suppressMessages(make_emc(dat, des, type = "single", n_chains = 2, verbose = FALSE))
+  emc <- run_emc(emc, "preburn", stop_criteria = list(iter = 5), cores_for_chains = 1,
+                 cores_per_chain = 1, verbose = FALSE)
+  expect_true(all(is.finite(emc[[1]]$samples$subj_ll)))
+  pp <- predict(emc, n_post = 2, n_cores = 1)
+  expect_equal(nrow(pp), 2 * nrow(dat))
+  gp <- get_pars(emc, map = TRUE, add_recalculated = TRUE, selection = "alpha",
+                 return_mcmc = FALSE, merge_chains = TRUE)
+  expect_true(all(c("d1", "d2") %in% dimnames(gp)[[1]]))
+  mp <- mapped_pars(des, p)
+  expect_true(all(mp$d1 < 0) && all(mp$d2 > 0 & mp$d2 < 1))
 })

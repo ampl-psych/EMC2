@@ -18,10 +18,20 @@
 // model's c_options (attr(dadm, "c_options"), set by design_model), K from the
 // number of criteria.
 //
-// The band is formed on the log scale: sentinels H(lowest) = Phi(-v/sv),
-// S(lowest) = Phi(v/sv); band * Phi(v/sv) = S(lo) - S(hi) = H(hi) - H(lo),
-// taking the route with the smaller leading term; log G by the Mills ratio
-// (z < 0) and Laplace's continued fraction (z < -5, 40 terms). Log tails use
+// Drift convention (c_options drifts_any): "any" (1, the default) conditions
+// the bivariate normal drift pair on not both being negative, normaliser
+// P(not both < 0), untruncated band probabilities for the other accumulator;
+// "positive" (0) truncates both drifts to be positive, normaliser
+// P(both > 0). A free lowest threshold (c_options free_lowest, balance of
+// evidence only) is T_1 = T_2 exp(-c_{K-1}), possibly below A.
+//
+// The band is formed on the log scale: under "positive" with the sentinels
+// H(lowest) = Phi(-v/sv), S(lowest) = Phi(v/sv),
+// band * Phi(v/sv) = S(lo) - S(hi) = H(hi) - H(lo) (a threshold below A takes
+// the positive-drift forms Hp, Sp); under "any" H(lowest) = 0, S(lowest) = 1
+// and the untruncated H, S for any threshold. Either way the route with the
+// smaller leading term is taken; log G by the Mills ratio (z < 0) and
+// Laplace's continued fraction (z < -5, 40 terms). Log tails use
 // R::pnorm(log.p) (Rmath), not the package's Hart pnorm, which cancels there;
 // Rmath's pnorm/dnorm are pure arithmetic for a standard normal, so safe in
 // the OpenMP loop.
@@ -76,6 +86,8 @@ struct MTLBASpec {
   int  col_gB  = -1;
   bool guess_trial = false;    // one trigger per trial (else per accumulator)
   int  gb_constraint = 0;      // guess threshold moves to b with gp: 0 none, 1 own gp, 2 max gp
+  bool any         = false;    // drifts "any" (not both negative) rather than "positive"
+  bool free_lowest = false;    // lowest threshold T_1 = T_2 exp(-c_{K-1}) (may be below A)
   std::vector<int>    col_c;   // c1 .. c{K-1}
   std::vector<int>    col_pg;  // pg1 .. pg{K-1}
   std::vector<double> rt;      // per trial
@@ -142,7 +154,11 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
   for (int i = 0; i < on.size(); ++i) {
     if (on[i] == "guess_trial") s.guess_trial = o[i] != 0;
     if (on[i] == "gb_constraint") s.gb_constraint = (int)o[i];
+    if (on[i] == "drifts_any") s.any = o[i] != 0;          // absent (older models): "positive"
+    if (on[i] == "free_lowest") s.free_lowest = o[i] != 0;
   }
+  if (s.free_lowest && s.TC)
+    Rcpp::stop("MTLBA: a free lowest threshold needs the balance-of-evidence rule");
   s.DK = opt_val("dont_know") != 0;
   if ((int)opt_val("n_ratings") != s.K)
     Rcpp::stop("MTLBA: the model has %d ratings but the parameters give %d",
@@ -292,12 +308,75 @@ inline double mtlba_logS(double y, double t, double A, double v, double sv)
   return mtlba_ldiff(mtlba_logG(-(z1 - al)), mtlba_logG(-z1)) - std::log(al);
 }
 
-// log P(lo_y < e < hi_y, v > 0) at decision time t; lowest: no threshold below.
-// The route (S or H) is chosen by the smaller leading term, S(lo) vs H(hi).
-inline double mtlba_logband_un(double t, double A, double v, double sv,
-                               double lo_y, double hi_y, bool lowest)
+// log P(e <= y, v > 0) and log P(e > y, v > 0) for ANY y >= 0 (a threshold
+// below A under "positive" drifts), as the R twin mtlba_logHSp: for y >= A
+// they are H(y) - Phi(-zv) and S(y); for y < A, with z1 = (y - t v) / (t sv),
+// al = A / (t sv), every term positive,
+//   Hp(y) = [G(z1) - G(-zv)] / al - (y / A) Phi(-zv)
+//   Sp(y) = ((A - y) / A) Phi(zv) + [G(zv) - G(-z1)] / al.
+// Hp cancels as y -> 0: a narrow one, dz = y / (t sv) with dz max(1, |z1|)
+// < 0.1, is (y / A) times the 4-node Gauss-Legendre mean over u in (0, 1) of
+// P(-zv < Z < z1 - dz u) (positive terms), as the R twin.
+inline double mtlba_logHp(double y, double t, double A, double v, double sv)
 {
+  const double zv = v / sv;
+  if (!(y < A) || !(A > 1e-10))
+    return mtlba_ldiff(mtlba_logH(y, t, A, v, sv), R::pnorm(-zv, 0.0, 1.0, 1, 1));
+  const double al = A / (t * sv);
+  const double z1 = (y - t * v) / (t * sv);
+  const double dz = y / (t * sv);
+  if (dz * mtlba_pmax(1.0, std::fabs(z1)) < 0.1) {
+    static const double U4[4]  = {0.069431844202973714, 0.33000947820757187,
+                                  0.66999052179242813, 0.93056815579702623};
+    static const double LW4[4] = {-1.7491171784568635, -1.1206352922365659,
+                                  -1.1206352922365659, -1.7491171784568635};
+    double L[4], M = R_NegInf;
+    for (int i = 0; i < 4; ++i) {
+      L[i] = mtlnr_log_pnorm_interval(-zv, mtlba_pmax(z1 - dz * U4[i], -zv)) + LW4[i];   // clamped: y = 0
+      if (std::isnan(L[i])) L[i] = R_NegInf;   // a one-ulp interval: zero (as the R twin)
+      if (L[i] > M) M = L[i];
+    }
+    if (M == R_NegInf) return R_NegInf;
+    double sum = 0.0;
+    for (int i = 0; i < 4; ++i) sum += std::exp(L[i] - M);
+    return std::log(y / A) + M + std::log(sum);
+  }
+  return mtlba_ldiff(mtlba_ldiff(mtlba_logG(z1), mtlba_logG(-zv)) - std::log(al),
+                     std::log(y / A) + R::pnorm(-zv, 0.0, 1.0, 1, 1));
+}
+inline double mtlba_logSp(double y, double t, double A, double v, double sv)
+{
+  if (!(y < A) || !(A > 1e-10)) return mtlba_logS(y, t, A, v, sv);
+  const double zv = v / sv;
+  const double al = A / (t * sv);
+  const double z1 = (y - t * v) / (t * sv);
+  return mtlba_lse(std::log((A - y) / A) + R::pnorm(zv, 0.0, 1.0, 1, 1),
+                   mtlba_ldiff(mtlba_logG(zv), mtlba_logG(-z1)) - std::log(al));
+}
+
+// log probability of the band (lo_y, hi_y) at decision time t; lowest: no
+// threshold below. pos: log P(lo_y < e < hi_y, v > 0) (the Phi(v/sv)
+// sentinels; a threshold below A takes Hp / Sp); !pos: log P(lo_y < e < hi_y)
+// for the untruncated drift (sentinels H = 0, S = 1). The route (S or H) is
+// chosen by the smaller leading term, S(lo) vs H(hi).
+inline double mtlba_logband_un(double t, double A, double v, double sv,
+                               double lo_y, double hi_y, bool lowest, bool pos = true)
+{
+  if (!pos) {
+    const double hH = mtlba_logH(hi_y, t, A, v, sv);
+    const double lS = lowest ? 0.0 : mtlba_logS(lo_y, t, A, v, sv);
+    if (lS < hH) return mtlba_ldiff(lS, mtlba_logS(hi_y, t, A, v, sv));
+    const double lH = lowest ? R_NegInf : mtlba_logH(lo_y, t, A, v, sv);
+    return mtlba_ldiff(hH, lH);
+  }
   const double zv  = v / sv;
+  if (hi_y < A || (!lowest && lo_y < A)) {   // false for NaN: the usual route
+    const double hH = mtlba_logHp(hi_y, t, A, v, sv);
+    const double lS = lowest ? R::pnorm(zv, 0.0, 1.0, 1, 1) : mtlba_logSp(lo_y, t, A, v, sv);
+    if (lS < hH) return mtlba_ldiff(lS, mtlba_logSp(hi_y, t, A, v, sv));
+    const double lH = lowest ? R_NegInf : mtlba_logHp(lo_y, t, A, v, sv);
+    return mtlba_ldiff(hH, lH);
+  }
   const double hH  = mtlba_logH(hi_y, t, A, v, sv);
   const double lS  = lowest ? R::pnorm(zv, 0.0, 1.0, 1, 1) : mtlba_logS(lo_y, t, A, v, sv);
   if (lS < hH) return mtlba_ldiff(lS, mtlba_logS(hi_y, t, A, v, sv));
@@ -305,18 +384,21 @@ inline double mtlba_logband_un(double t, double A, double v, double sv,
   return mtlba_ldiff(hH, lH);
 }
 
-// log P(lo_y < e < hi_y | v > 0): the band over Phi(v/sv), floored at 1e-10.
+// pos: log P(lo_y < e < hi_y | v > 0), the band over Phi(v/sv), floored at
+// 1e-10; !pos: the untruncated band (nothing to normalise by).
 inline double mtlba_logband(double t, double A, double v, double sv,
-                            double lo_y, double hi_y, bool lowest)
+                            double lo_y, double hi_y, bool lowest, bool pos = true)
 {
+  if (!pos) return mtlba_logband_un(t, A, v, sv, lo_y, hi_y, lowest, false);
   return mtlba_logband_un(t, A, v, sv, lo_y, hi_y, lowest) -
          mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10));
 }
 
-// log positive-drift LBA density of reaching threshold bs at t.
-inline double mtlba_logf(double t, double A, double bs, double v, double sv)
+// log LBA density of reaching threshold bs at t from an untruncated normal
+// drift; pos divides by P(v > 0) (the positive-drift density, as LBA()).
+inline double mtlba_logf(double t, double A, double bs, double v, double sv, bool pos = true)
 {
-  const double lden = mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10));
+  const double lden = pos ? mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10)) : 0.0;
   if (A <= 1e-10)
     return R::dnorm(bs / t, v, sv, 1) + std::log(bs) - 2.0 * std::log(t) - lden;
   const double cz  = (bs - t * v) / (t * sv);
@@ -388,32 +470,36 @@ inline int mtlba_quad_panels(double width, double sig, double pw, int maxp)
   return q < 1 ? 1 : (int)q;
 }
 
-// log of the correlated kernel times P(both drifts > 0): the stopping
-// accumulator (A_s, threshold bs, v_s, sv_s) reaches bs at dt while the other
-// (A_o, v_o, sv_o) lies in its band (lo_y, hi_y, lowest). As the R twin
-// mtlba_logkernel_rho with the default rule: log-scale integrand over the
-// stopping drift x (the band at the conditional mean and sd, unnormalised),
-// window as mtlba_quad_window, summed by log-sum-exp. A_s = 0: no integral.
+// log of the correlated kernel times the normaliser (P(both > 0) under
+// "positive", P(not both < 0) under "any"): the stopping accumulator (A_s,
+// threshold bs, v_s, sv_s) reaches bs at dt while the other (A_o, v_o, sv_o)
+// lies in its band (lo_y, hi_y, lowest). As the R twin mtlba_logkernel_rho
+// with the default rule: log-scale integrand over the stopping drift x (the
+// band at the conditional mean and sd, unnormalised), window as
+// mtlba_quad_window, summed by log-sum-exp. A_s = 0: no integral.
 inline double mtlba_logkernel_rho(double dt, double As, double bs, double vs, double svs,
                                   double Ao, double vo, double svo,
-                                  double lo_y, double hi_y, bool lowest, double rho)
+                                  double lo_y, double hi_y, bool lowest, double rho,
+                                  bool pos = true)
 {
   const double sc    = svo * std::sqrt(1.0 - rho * rho);
   const double slope = rho * svo / svs;
   auto lint = [&](double x) {
     const double mc = vo + slope * (x - vs);
     const double l = std::log(x) + R::dnorm(x, vs, svs, 1) +
-                     mtlba_logband_un(dt, Ao, mc, sc, lo_y, hi_y, lowest);
+                     mtlba_logband_un(dt, Ao, mc, sc, lo_y, hi_y, lowest, pos);
     return std::isnan(l) ? R_NegInf : l;
   };
   if (As <= 1e-10) {
     const double l = lint(bs / dt) - std::log(dt);
     return std::isnan(l) ? R_NegInf : l;
   }
-  // window: the range of x clipped to within r of the interval (v_s, m)
+  // window: the range of x clipped to within r of the interval (v_s, m); the
+  // other drift's lower limit is the band's own under "any" (no truncation)
   const double lo_x = (bs - As) / dt;
   const double hi_x = bs / dt;
-  const double yl = lowest ? 0.0 : mtlba_pmax(0.0, (lo_y - Ao) / dt);
+  const double yl = pos ? (lowest ? 0.0 : mtlba_pmax(0.0, (lo_y - Ao) / dt))
+                        : (lowest ? R_NegInf : (lo_y - Ao) / dt);
   const double m  = vs + rho * svs / svo * (mtlba_pmin(mtlba_pmax(vo, yl), hi_y / dt) - vo);
   const double c_lo = mtlba_pmin(vs, m), c_hi = mtlba_pmax(vs, m);
   const double d = mtlba_pmax(mtlba_pmax(lo_x - c_hi, c_lo - hi_x), 0.0);
@@ -515,15 +601,31 @@ inline double mtlba_logppos(double v1, double sv1, double v2, double sv2, double
   return std::log(mtlba_pmax(mtlba_bvu(-v1 / sv1, -v2 / sv2, rho), 0.0));
 }
 
+// log P(not both drifts < 0) = log [P(v1 > 0) + P(v1 < 0, v2 > 0)], two
+// positive terms (the second is the upper orthant of (-Z1, Z2), correlation -rho).
+inline double mtlba_lognotneg(double v1, double sv1, double v2, double sv2, double rho)
+{
+  return std::log(mtlba_pmax(R::pnorm(v1 / sv1, 0.0, 1.0, 1, 0) +
+                             mtlba_bvu(v1 / sv1, -v2 / sv2, -rho), 0.0));
+}
+
+// log normaliser of the drift convention
+inline double mtlba_lognorm(double v1, double sv1, double v2, double sv2, double rho, bool pos)
+{
+  return pos ? mtlba_logppos(v1, sv1, v2, sv2, rho) : mtlba_lognotneg(v1, sv1, v2, sv2, rho);
+}
+
 // Correlated twin of mtlba_logstop for one parameter row and a finite bound
 // y > 0, as the R twin mtlba_stop_rho1: one integral over accumulator 1's
 // drift x > 0, composite Gauss-Legendre between the kinks of accumulator 1's
 // crossing counts, all terms positive, over P(both > 0). T1, T2: thresholds
-// 1 .. K of the two accumulators. x, w: work space.
+// 1 .. K of the two accumulators. x, w: work space. Under "any" (!pos) x runs
+// over the whole line: for x > 0 the other drift is unrestricted, for x < 0
+// it must be positive (a break at x = 0), over P(not both < 0).
 inline void mtlba_stop_rho1(double y, double A1, double v1, double s1, const double* T1,
                             double A2, double v2, double s2, const double* T2,
                             double rho, int K, bool TC, double& lP, double& lS,
-                            std::vector<double>& x, std::vector<double>& w)
+                            std::vector<double>& x, std::vector<double>& w, bool pos = true)
 {
   lP = lS = R_NaN;
   bool fin = std::isfinite(y) && std::isfinite(A1) && std::isfinite(v1) && std::isfinite(s1) &&
@@ -533,16 +635,17 @@ inline void mtlba_stop_rho1(double y, double A1, double v1, double s1, const dou
   // window: v2 > 0 drags x towards m when v2's mean is negative
   const double m  = v1 + rho * s1 / s2 * ((v2 > 0 ? v2 : 0.0) - v2);
   const double hi = v1 > m ? v1 : m, lw = v1 < m ? v1 : m;
-  const double d  = -hi > 0 ? -hi : 0.0;
+  const double d  = (pos && -hi > 0) ? -hi : 0.0;
   const double r  = std::sqrt(d * d + (MTLBA_STOP_HW * s1) * (MTLBA_STOP_HW * s1));
-  const double a  = (lw - r > 0) ? lw - r : 0.0;
+  const double a  = pos ? ((lw - r > 0) ? lw - r : 0.0) : lw - r;
   const double b  = hi + r;
-  double brk[2 * MTLBA_MAX_K + 2];
+  double brk[2 * MTLBA_MAX_K + 3];
   int nb = 0;
   brk[nb++] = a; brk[nb++] = b;
   for (int n = 0; n < K; ++n)
     for (double kink : {(T1[n] - A1) / y, T1[n] / y})
       if (kink > a && kink < b) brk[nb++] = kink;
+  if (!pos && 0.0 > a && 0.0 < b) brk[nb++] = 0.0;
   std::sort(brk, brk + nb);
   nb = (int)(std::unique(brk, brk + nb) - brk);
   const double sig = s1 * mtlba_pmin(1.0, std::sqrt(1.0 - rho * rho) / std::fabs(rho));
@@ -577,19 +680,23 @@ inline void mtlba_stop_rho1(double y, double A1, double v1, double s1, const dou
         Fle[n] = f < 0 ? 0.0 : (f > 1 ? 1.0 : f);
       }
     }
-    double Sint = 0.0, Pint = (1.0 - Fle[K]) * R::pnorm(mc / sc, 0.0, 1.0, 1, 0);
+    // "positive": the other drift must be positive; "any": only when x < 0
+    const bool pos2 = pos || xi < 0;
+    double Sint = 0.0, Pint = (1.0 - Fle[K]) * (pos ? R::pnorm(mc / sc, 0.0, 1.0, 1, 0) : 1.0);
     for (int n1 = TC ? 0 : K - 1; n1 < K; ++n1) {
       // accumulator 1 at n1 crossings (BE: below b), accumulator 2 against T_{2,mm}
       const double wn = TC ? Fle[n1 + 1] - Fle[n1] : Fle[K];
       if (wn == 0) continue;
       const int mm = TC ? K - n1 : K;
-      Sint += wn * std::exp(mtlba_logband_un(y, A2, mc, sc, 0.0, T2[mm - 1], true));
-      Pint += wn * std::exp(mtlba_logS(T2[mm - 1], y, A2, mc, sc));
+      Sint += wn * std::exp(pos2 ? mtlba_logband_un(y, A2, mc, sc, 0.0, T2[mm - 1], true)
+                                 : mtlba_logH(T2[mm - 1], y, A2, mc, sc));
+      Pint += wn * std::exp(pos ? mtlba_logSp(T2[mm - 1], y, A2, mc, sc)
+                                : mtlba_logS(T2[mm - 1], y, A2, mc, sc));
     }
     sumP += wi * Pint;
     sumS += wi * Sint;
   }
-  const double lpp = mtlba_logppos(v1, s1, v2, s2, rho);
+  const double lpp = mtlba_lognorm(v1, s1, v2, s2, rho, pos);
   lP = std::log(sumP) - lpp;
   lS = std::log(sumS) - lpp;
 }
@@ -599,32 +706,43 @@ struct MTLBACols {
   const double *v, *sv, *B, *A, *t0, *rho;
   const double *gp = nullptr, *gB = nullptr;   // confidence guessing (null: none)
   int gbc = 0;                                 // gb_constraint: 0 none, 1 own gp, 2 max gp
+  bool pos = true;                             // drifts "positive" (else "any")
+  bool free_lowest = false;                    // T_1 = T_2 exp(-c_{K-1})
   std::vector<const double*> c, pg;
 };
 
-// Threshold j (1 .. K; K = b) of the accumulator in row r.
+// Threshold j (1 .. K; K = b) of the accumulator in row r. The R twin's
+// arithmetic: T_j = A + (b - A) d_j, a free lowest threshold through its
+// proportion d_1 = (T_2 exp(-c_{K-1}) - A) / (b - A).
 inline double mtlba_threshold(const MTLBACols& p, int K, int r, int j)
 {
   const double A = p.A[r];
   const double b = p.B[r] + A;
   if (j >= K) return b;
+  if (j == 1 && p.free_lowest) {
+    const double T2 = mtlba_threshold(p, K, r, 2);
+    const double d1 = (T2 * std::exp(-p.c[K - 2][r]) - A) / (b - A);
+    return A + (b - A) * d1;
+  }
   double C = 0.0;
   for (int k = 0; k < K - j; ++k) C += p.c[k][r];
   return A + (b - A) * std::exp(-C);
 }
 
-// log P(both > 0) is the same for all trials of a design cell: a small cache,
-// local to one likelihood call, keyed on the exact (v_s, sv_s, v_o, sv_o, rho).
+// The log normaliser is the same for all trials of a design cell: a small
+// cache, local to one likelihood call, keyed on the exact (v_s, sv_s, v_o,
+// sv_o, rho); floored at log(1e-10).
 struct MTLBAPposCache {
   static constexpr int MAX_ENTRIES = 16;
   int n = 0, next = 0;
+  bool pos = true;
   double keys[MAX_ENTRIES][5], vals[MAX_ENTRIES];
   double get(double vs, double svs, double vo, double svo, double rho) {
     for (int e = 0; e < n; ++e) {
       const double* k = keys[e];
       if (k[0] == vs && k[1] == svs && k[2] == vo && k[3] == svo && k[4] == rho) return vals[e];
     }
-    const double val = mtlba_pmax(mtlba_logppos(vs, svs, vo, svo, rho), std::log(1e-10));
+    const double val = mtlba_pmax(mtlba_lognorm(vs, svs, vo, svo, rho, pos), std::log(1e-10));
     const int e = (n < MAX_ENTRIES) ? n++ : next++ % MAX_ENTRIES;
     keys[e][0] = vs; keys[e][1] = svs; keys[e][2] = vo; keys[e][3] = svo; keys[e][4] = rho;
     vals[e] = val;
@@ -649,11 +767,14 @@ inline double mtlba_logkernel_y(const MTLBACols& p, double rt, int rs, int ro, d
   if (!std::isfinite(Ts) || !std::isfinite(hi)) return R_NegInf;
   if (!lowest && !(std::isfinite(ly) && hi > ly)) return R_NegInf;
   if (!(std::fabs(rho) < 1)) return R_NegInf;   // NaN too
-  if (rho == 0)
-    return mtlba_logf(dt, p.A[rs], Ts, p.v[rs], p.sv[rs]) +
-           mtlba_logband(dt, p.A[ro], p.v[ro], p.sv[ro], ly, hi, lowest);
+  if (rho == 0) {
+    const double l = mtlba_logf(dt, p.A[rs], Ts, p.v[rs], p.sv[rs], p.pos) +
+                     mtlba_logband(dt, p.A[ro], p.v[ro], p.sv[ro], ly, hi, lowest, p.pos);
+    // "any": the closed form is a product of untruncated terms over P(not both < 0)
+    return p.pos ? l : l - ppos.get(p.v[rs], p.sv[rs], p.v[ro], p.sv[ro], 0.0);
+  }
   return mtlba_logkernel_rho(dt, p.A[rs], Ts, p.v[rs], p.sv[rs], p.A[ro], p.v[ro], p.sv[ro],
-                             ly, hi, lowest, rho) -
+                             ly, hi, lowest, rho, p.pos) -
          ppos.get(p.v[rs], p.sv[rs], p.v[ro], p.sv[ro], rho);
 }
 
@@ -780,38 +901,54 @@ inline double mtlba_logresp(const MTLBACols& p, int K, bool TC, bool gtrial, dou
 //   TC: S = sum_{n1<K} p_1(n1) F_2(K-1-n1),
 //       P = Fc_1(K-1) + sum_{n1<K} p_1(n1) Fc_2(K-1-n1),
 // all terms positive (log-sum-exp). NaN for undefined parameters.
+// Under "any" drifts (!p.pos) the same positive-drift terms, unnormalised,
+// are completed by the trials with one negative drift (N_a = P(v_a < 0)):
+//   stopped  = [stopped_pos + N_1 S_2(T_{2,K}) + N_2 S_1(T_{1,K})] / P(not both < 0)
+//   survivor = [survivor_pos + N_1 Hp_2(T_{2,K}) + N_2 Hp_1(T_{1,K})] / P(not both < 0).
 inline void mtlba_logstop(const MTLBACols& p, int K, bool TC, double y, int r1, int r2,
                           const double* T1, const double* T2, double& lP, double& lS)
 {
-  double F[2][MTLBA_MAX_K], Fc[2][MTLBA_MAX_K], band[2][MTLBA_MAX_K];
+  double F[2][MTLBA_MAX_K], Fc[2][MTLBA_MAX_K], band[2][MTLBA_MAX_K], lPhi[2], lN[2];
   const int rows[2] = {r1, r2};
   const double* Ts[2] = {T1, T2};
+  const bool pos = p.pos;
   for (int a = 0; a < 2; ++a) {
     const int r = rows[a];
     const double A = p.A[r], v = p.v[r], sv = p.sv[r];
     if (!std::isfinite(v) || !std::isfinite(sv) || !std::isfinite(A) ||
         !std::isfinite(p.B[r] + A)) { lP = lS = R_NaN; return; }
-    const double lden = mtlba_pmax(R::pnorm(v / sv, 0.0, 1.0, 1, 1), std::log(1e-10));
+    lPhi[a] = R::pnorm(v / sv, 0.0, 1.0, 1, 1);
+    lN[a]   = R::pnorm(-v / sv, 0.0, 1.0, 1, 1);
+    const double lden = pos ? mtlba_pmax(lPhi[a], std::log(1e-10)) : 0.0;
     double lo_y = 0.0;
     for (int nn = 0; nn < K; ++nn) {
       const double hi = Ts[a][nn];
       if (!std::isfinite(hi)) { lP = lS = R_NaN; return; }
-      F[a][nn]  = mtlba_logband(y, A, v, sv, 0.0, hi, true);
-      Fc[a][nn] = mtlba_logS(hi, y, A, v, sv) - lden;
-      band[a][nn] = (nn == 0) ? F[a][0] : mtlba_logband(y, A, v, sv, lo_y, hi, false);
+      F[a][nn]  = pos ? mtlba_logband(y, A, v, sv, 0.0, hi, true)
+                      : mtlba_logband_un(y, A, v, sv, 0.0, hi, true);
+      Fc[a][nn] = mtlba_logSp(hi, y, A, v, sv) - lden;
+      band[a][nn] = (nn == 0) ? F[a][0] :
+        (pos ? mtlba_logband(y, A, v, sv, lo_y, hi, false)
+             : mtlba_logband_un(y, A, v, sv, lo_y, hi, false));
       lo_y = hi;
     }
   }
+  const double l2 = pos ? 0.0 : lPhi[1];   // "any": accumulator 2's positivity explicit
   if (!TC) {
     lS = F[0][K - 1] + F[1][K - 1];
-    lP = mtlba_lse(Fc[0][K - 1], F[0][K - 1] + Fc[1][K - 1]);
+    lP = mtlba_lse(Fc[0][K - 1] + l2, F[0][K - 1] + Fc[1][K - 1]);
   } else {
     lS = band[0][0] + F[1][K - 1];
-    lP = mtlba_lse(Fc[0][K - 1], band[0][0] + Fc[1][K - 1]);
+    lP = mtlba_lse(Fc[0][K - 1] + l2, band[0][0] + Fc[1][K - 1]);
     for (int n1 = 1; n1 < K; ++n1) {
       lS = mtlba_lse(lS, band[0][n1] + F[1][K - 1 - n1]);
       lP = mtlba_lse(lP, band[0][n1] + Fc[1][K - 1 - n1]);
     }
+  }
+  if (!pos) {
+    const double lZ = mtlba_lse(lPhi[0], lN[0] + lPhi[1]);   // log P(not both < 0)
+    lS = mtlba_lse(mtlba_lse(lS, lN[0] + F[1][K - 1]), lN[1] + F[0][K - 1]) - lZ;
+    lP = mtlba_lse(mtlba_lse(lP, lN[0] + Fc[1][K - 1]), lN[1] + Fc[0][K - 1]) - lZ;
   }
 }
 
@@ -835,7 +972,7 @@ inline void mtlba_stop_mix(const MTLBACols& p, int K, bool TC, bool gtrial, doub
   auto state = [&](const double* T1, const double* T2, bool tc, double& P, double& S) {
     if (rho == 0) mtlba_logstop(p, K, tc, y, r1, r2, T1, T2, P, S);
     else mtlba_stop_rho1(y, p.A[r1], p.v[r1], p.sv[r1], T1, p.A[r2], p.v[r2], p.sv[r2], T2,
-                         rho, K, tc, P, S, x, w);   // NaN rho: NaN
+                         rho, K, tc, P, S, x, w, p.pos);   // NaN rho: NaN
   };
   const double g1 = p.gp ? p.gp[r1] : 0.0;
   const double g2 = p.gp ? (gtrial ? g1 : p.gp[r2]) : 0.0;
@@ -946,11 +1083,14 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
     for (int col : s.col_pg) p.pg.push_back(pt.base.colptr(col));
     p.gbc = s.gb_constraint;
   }
+  p.pos = !s.any;
+  p.free_lowest = s.free_lowest;
   const int K = s.K;
   const bool gtrial = s.guess_trial;
   int code = MTLBA_OK;
   MTLBAStopCache cache;
   MTLBAPposCache ppos;
+  ppos.pos = p.pos;
 
   const int nt = (int)s.rt.size();
   for (int t = 0; t < nt; ++t) {

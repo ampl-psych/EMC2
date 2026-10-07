@@ -1,6 +1,6 @@
 ---
 title: "Rating Models"
-description: "Choice, response time and confidence ratings with the correlated multiple-threshold LNR"
+description: "Choice, response time and confidence ratings with the correlated multiple-threshold LNR and LBA"
 author: "Andrew Heathcote"
 output: rmarkdown::html_document
 bibliography: refs.bib
@@ -32,8 +32,9 @@ response time task: on every trial the data contain not just a choice `R` and
 a response time `rt`, but also a rating `RR`, coded as an integer from 1
 (the lowest rating) to `K` (the highest).
 
-This vignette introduces the first rating model in *EMC2*, the correlated
-multiple-threshold log-normal race (MTLNR). The MTLNR extends the log-normal
+This vignette introduces the rating models in *EMC2*, starting with the
+correlated multiple-threshold log-normal race (MTLNR) and ending with the
+multiple-threshold LBA (MTLBA, section 5). The MTLNR extends the log-normal
 race (`?LNR`) to two *correlated* accumulators and reads the confidence
 rating off the losing accumulator: at the moment the winner finishes, the
 loser's state (as a proportion of its own threshold) is compared against
@@ -52,6 +53,8 @@ The steps below are:
    fitting, predictive checks and the z-transformed ROC
 3. More than three ratings, and two current limitations
 4. A hierarchical (multi-subject) example, extending the three-rating design
+5. The multiple-threshold LBA (`MTLBA()`): the same rating layer on two LBA
+   accumulators, with its drift-rate and lowest-threshold conventions
 
 ## 1. A Minimal Example: Two Ratings
 
@@ -367,9 +370,81 @@ plot_pars(emc_hier, true_pars = p_vector, use_prior_lim = FALSE)
 Everything from Section 2 (`rating_summary()`, `plot_ratings()`, `predict()`,
 `zroc()`) works the same way on a hierarchical fit's data and predictives.
 
+## 5. The Multiple-Threshold LBA
+
+`MTLBA()` is the same kind of model built on two LBA accumulators (`?LBA`):
+each accumulator starts at a uniform point in `(0, A)`, rises linearly with
+a normal drift rate towards its choice threshold `b = A + B`, and has
+`n_ratings - 1` confidence thresholds below `b`. Under the default
+balance-of-evidence rule (`rule = "BE"`) the winner gives the choice and the
+rating is read from the loser's evidence against the loser's thresholds, as
+in the MTLNR; `rule = "TC"` (threshold count) instead stops the race at the
+`n_ratings`-th threshold crossing summed over both accumulators. The drift
+rates may be correlated (`rho`), an odd number of responses is possible
+(`dont_know = TRUE`), fast confidence guessing can be added (`gp`, `gB`,
+`pg1 ..`), and censoring or truncation of response times goes through
+`make_missing()`. The full parameterization is in `?MTLBA`.
+
+By default the MTLBA is the model of its source paper and of that paper's
+DMC code: the two drift rates are bivariate normal conditioned only on *not
+both* being negative (`drifts = "any"`), so a losing accumulator may have a
+negative rate and end below its start point, and under balance of evidence
+the lowest confidence threshold may lie below `A` (`lowest_threshold =
+"free"`; the default `"auto"` resolves to this under `rule = "BE"`). These
+two choices are meant to go together: a negative-rate loser is only
+registered by a threshold inside or below the start range, and on the
+paper's data they fit far better together than either alone. The alternative
+is the model with both drift rates truncated to be positive and every
+threshold above `A` (`drifts = "positive", lowest_threshold = "above_A"`), in
+which each accumulator with `rho = 0` and one rating is exactly the `LBA()`.
+Under `rule = "TC"` thresholds must stay above `A` (a threshold below the
+start point would be crossed at time zero), so `"auto"` resolves to
+`"above_A"` there.
+
+The criteria work as for the MTLNR, with one difference for the free lowest
+threshold: the last criterion scales the absolute threshold,
+`T_1 = T_2 * exp(-c_{K-1})`, rather than its proportion above `A`, so the
+reported proportion `d1` is negative when `T_1` is below `A`:
+
+```{r}
+design_lba <- design(
+  factors = list(subjects = 1, S = c("new", "old")),
+  Rlevels = c("new", "old"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ lR),
+  model = function() MTLBA(n_ratings = 3)
+)
+p_lba <- c(v = 1, v_lMTRUE = 1.5, B = log(1), A = log(.5), t0 = log(.25),
+           rho = qnorm((1 - .6) / 2), c1 = log(.6), c1_lRold = .15,
+           c2 = log(1.2), c2_lRold = .15)
+mp <- mapped_pars(design_lba, p_lba)
+unique(mp[, c("lR", "A", "b", "d1", "d2", "rho")])
+```
+
+Here `A = .5`, `b = 1.5`, and the lowest threshold `T_1 = A + B * d1` sits
+below the start range (`d1 < 0`) while `T_2` is above it. Simulation,
+summaries and fitting are as in the earlier sections:
+
+```{r}
+set.seed(20261007)
+dat_lba <- make_data(p_lba, design_lba, n_trials = 500)
+rating_summary(dat_lba, factors = "S")
+```
+
+```{r, eval = FALSE}
+prior_lba <- prior(design_lba, type = "single")
+emc_lba <- make_emc(dat_lba, design_lba, prior_list = prior_lba, type = "single")
+emc_lba <- fit(emc_lba, cores_for_chains = 3)
+```
+
+The correlated likelihood is a one-dimensional integral over the winning
+accumulator's drift rate, evaluated in compiled code by Gauss-Legendre
+quadrature, so a correlated MTLBA is slower than an uncorrelated one by
+roughly the number of quadrature nodes per trial (`?MTLBA`).
+
 ## Next Steps
 
-Other rating designs follow the same pattern: `n_ratings` in `MTLNR()` sets
-the number of confidence levels, and the rating layer (`RR`, `rating_summary()`,
-`plot_ratings()`, `zroc()`, `plot_zroc()`) is shared by the whole series of
-rating models, not just the MTLNR.
+Other rating designs follow the same pattern: `n_ratings` in `MTLNR()` or
+`MTLBA()` sets the number of confidence levels, and the rating layer (`RR`,
+`rating_summary()`, `plot_ratings()`, `zroc()`, `plot_zroc()`) is shared by
+the whole series of rating models.
