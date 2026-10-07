@@ -298,7 +298,16 @@ make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
 #' @param functions List of functions you want to apply to the data generation.
 #' @param TC List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.
-#' @param ... Additional optional arguments
+#' @param ... Additional optional arguments, including:
+#' \itemize{
+#'   \item `conditional_on_data`: if `FALSE`, simulate trial by trial (unconditional on `data`).
+#'   \item `return_trialwise_parameters`, `kernel_output_codes`: return trialwise parameters/kernel outputs as an attribute.
+#'   \item `n_context_trials`: number of previous trials passed to Ffunctions in unconditional simulation (default 1).
+#'   \item `vectorise_safe`: if `TRUE`, Ffunctions are called once per trial with all subjects at once
+#'     (faster). Only set this if your functions are independent across subjects and need no more than
+#'     the last `n_context_trials` trials. Default `FALSE` calls each Ffunction separately per subject.
+#'     Only used when simulating unconditionally.
+#' }
 #' @return A data frame with simulated data
 #' @examples
 #' # First create a design
@@ -418,11 +427,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
 
   simulate_unconditional_on_data <- return_trialwise_parameters <- FALSE
   dots_local <- list(...)
-  if (isFALSE(dots_local$conditional_on_data)) {
+  if(isFALSE(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- TRUE
-  } else if (!is.null(dots_local$conditional_on_data)) {
+  } else if(!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
   }
+
 
   ## Stop-signal staircases and trends on SSD
   if (!is.null(model) && !is.null(model()$trend)) {
@@ -445,6 +455,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     simulate_unconditional_on_data <- TRUE
   }
   return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
+  vectorise_safe <- isTRUE(dots_local$vectorise_safe)
   if('kernel_output_codes' %in% names(dots_local)) {
     kernel_output_codes <- dots_local$kernel_output_codes
   } else {
@@ -455,8 +466,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- add_constants(pars,design$constants)
   if(simulate_unconditional_on_data) {
-    res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                   return_trialwise_parameters, kernel_output_codes, optionals=optionals)
+    res <- make_data_unconditional(
+      data = data, pars = pars, design = design, model = model,
+      return_trialwise_parameters = return_trialwise_parameters,
+      kernel_output_codes = kernel_output_codes,
+      optionals = optionals,
+      n_context_trials = dots_local[["n_context_trials"]] %||% 1L,
+      vectorise_safe = vectorise_safe)
 
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
