@@ -2123,27 +2123,23 @@ make_data_unconditional <- function(data, pars, design, model,
   rt_col <- match("rt", names(dadm_full))
 
   # Step 6: loop
-  trial_vals <- sort(unique(trial_idx))
-  n_trials   <- max(trial_idx)
+  rows_by_trial <- split(seq_len(nrow(dadm_full)), trial_idx)   # row positions per trial, ascending
+  n_trials      <- length(rows_by_trial)
+  stopifnot(n_trials == max(trial_idx))
+
   for (j in seq_len(n_trials)) {
-    # indices
-    current_trial   <- trial_vals[j]
-    current_trial_idx <- trial_idx == current_trial
-    context_start_trial <- trial_vals[max(1L, j-n_context_trials)]
-    active_subjects <- unique(subj_int[current_trial_idx])
-    context_trial_idx <- trial_idx >= context_start_trial &
-      trial_idx <= current_trial &
-      subj_int %in% active_subjects
+    cur_pos         <- rows_by_trial[[j]] # current-trial rows, all subjects
+    active_subjects <- unique(subj_int[cur_pos])
+    cand            <- unlist(rows_by_trial[max(1L, j - n_context_trials):j], use.names = FALSE)
+    ctx_pos         <- sort(cand[subj_int[cand] %in% active_subjects])   # ascending = subject-contiguous
 
     # ---- Materialise dadm_ctx ------------------------------
-    dadm_ctx <- lapply(dadm_full, `[`, context_trial_idx)
+    dadm_ctx <- lapply(dadm_full, `[`, ctx_pos)
     class(dadm_ctx) <- "data.frame"
-    attr(dadm_ctx, "row.names") <- .set_row_names(sum(context_trial_idx))
-
-    context_current_idx <- trial_idx[context_trial_idx] == current_trial
+    attr(dadm_ctx, "row.names") <- .set_row_names(length(ctx_pos))
+    context_current_idx <- trial_idx[ctx_pos] == j
 
     # Subject row indices
-    ctx_pos  <- which(context_trial_idx)
     ctx_subj <- subj_int[ctx_pos]
     ctx_loc  <- local_pos[ctx_pos]
     n_s            <- tabulate(ctx_subj, nbins = S)
@@ -2162,18 +2158,18 @@ make_data_unconditional <- function(data, pars, design, model,
           for (col in names(result_full)) {
             result_curr <- result_full[[col]][context_current_idx]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dadm_full[[col]][current_trial_idx] <- result_curr
+            dadm_full[[col]][cur_pos] <- result_curr
           }
         } else if (output_type == "matrix") {
           for (col in colnames(result_full)) {
             result_curr <- result_full[context_current_idx, col]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dadm_full[[col]][current_trial_idx] <- result_curr
+            dadm_full[[col]][cur_pos] <- result_curr
           }
         } else {
           result_curr <- result_full[context_current_idx]
           dadm_ctx[[i]][context_current_idx] <- result_curr
-          dadm_full[[i]][current_trial_idx] <- result_curr
+          dadm_full[[i]][cur_pos] <- result_curr
         }
       }
     }
@@ -2227,15 +2223,15 @@ make_data_unconditional <- function(data, pars, design, model,
     }
 
     stopifnot(nrow(Rrt) * n_acc == sum(context_current_idx))
-    dadm_full[[R_col]][current_trial_idx] <- rep(Rrt[, "R"], each = n_acc)
-    if ("rt" %in% colnames(Rrt)) dadm_full[[rt_col]][current_trial_idx] <- rep(Rrt[, "rt"], each = n_acc)
+    dadm_full[[R_col]][cur_pos] <- rep(Rrt[, "R"], each = n_acc)
+    if ("rt" %in% colnames(Rrt)) dadm_full[[rt_col]][cur_pos] <- rep(Rrt[, "rt"], each = n_acc)
 
     # ---- ffunctions_post --------------------------------------------------
     if (has_ffunctions_post) {
       # re-materialise dadm_ctx with updated R/rt
-      dadm_ctx <- lapply(dadm_full, `[`, context_trial_idx)
+      dadm_ctx <- lapply(dadm_full, `[`, ctx_pos)
       class(dadm_ctx) <- "data.frame"
-      attr(dadm_ctx, "row.names") <- .set_row_names(sum(context_trial_idx))
+      attr(dadm_ctx, "row.names") <- .set_row_names(length(ctx_pos))
 
       for (i in names(ffunctions_post)) {
         result_full <- ffunctions_post[[i]](dadm_ctx)
@@ -2245,18 +2241,18 @@ make_data_unconditional <- function(data, pars, design, model,
           for (col in names(result_full)) {
             result_curr <- result_full[[col]][context_current_idx]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dadm_full[[col]][current_trial_idx] <- result_curr
+            dadm_full[[col]][cur_pos] <- result_curr
           }
         } else if (output_type == "matrix") {
           for (col in colnames(result_full)) {
             result_curr <- result_full[context_current_idx, col]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dadm_full[[col]][current_trial_idx] <- result_curr
+            dadm_full[[col]][cur_pos] <- result_curr
           }
         } else {
           result_curr <- result_full[context_current_idx]
           dadm_ctx[[i]][context_current_idx] <- result_curr
-          dadm_full[[i]][current_trial_idx] <- result_curr
+          dadm_full[[i]][cur_pos] <- result_curr
         }
       }
     }
