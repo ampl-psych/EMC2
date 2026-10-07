@@ -1020,22 +1020,34 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
 
 
 
+# qbinom()/pbinom() were found numerically wrong on some R builds (R 4.5.0 on NCI Gadi): an exact
+# quantile from cumsum(dbinom()) does not depend on them.
+.safe_qbinom <- function(p, size, prob) {
+  vapply(prob, function(pr) {
+    cs <- cumsum(dbinom(0:size, size, pr))
+    idx <- which(cs >= p)[1]
+    if (is.na(idx)) size else idx - 1L
+  }, numeric(1))
+}
+
 get_gamma <- function (N, K, conf_level = 0.95)
 {
+  # coverage_minus_conf() decreases in gamma but is very flat near 0, where optimize() on its
+  # absolute value can stop far from the root; uniroot() on the signed function cannot.
   p_interior <- function (p_int, x1, x2, z1, z2, gamma, N)
   {
     z_tilde <- (z2 - z1)/(1 - z1)
     N_tilde <- rep(N - x1, each = length(x2))
     p_int <- rep(p_int, each = length(x2))
     x_diff <- outer(x2, x1, "-")
-    p_x2_int <- p_int * dbinom(x_diff, N_tilde, z_tilde)
+    p_x2_int <- p_int * stats::dbinom(x_diff, N_tilde, z_tilde)
     list(p_int = rowSums(p_x2_int), x1 = x2)
   }
-  target <- function(gamma, conf_level, N, K) {
+  coverage_minus_conf <- function(gamma, conf_level, N, K) {
     z <- 1:(K - 1)/K
     z1 <- c(0, z)
     z2 <- c(z, 1)
-    x2_lower <- qbinom(gamma/2, N, z2)
+    x2_lower <- .safe_qbinom(gamma/2, N, z2)
     x2_upper <- c(N - rev(x2_lower)[2:K], N)
     x1 <- 0
     p_int <- 1
@@ -1045,26 +1057,41 @@ get_gamma <- function (N, K, conf_level = 0.95)
       x1 <- tmp$x1
       p_int <- tmp$p_int
     }
-    abs(conf_level - sum(p_int))
+    sum(p_int) - conf_level
   }
-  optimize(target, c(0, 1 - conf_level), conf_level, N = N,
-           K = K)$minimum
+  lo <- .Machine$double.eps; hi <- 1 - conf_level
+  f_lo <- coverage_minus_conf(lo, conf_level, N, K)
+  f_hi <- coverage_minus_conf(hi, conf_level, N, K)
+  if (is.finite(f_lo) && is.finite(f_hi) && f_lo > 0 && f_hi < 0) {
+    stats::uniroot(
+      coverage_minus_conf, c(lo, hi), conf_level = conf_level, N = N, K = K,
+      tol = .Machine$double.eps^0.5
+    )$root
+  } else {
+    # defensive fallback for an N/K/conf_level combination where the endpoints checked above
+    # don't bracket a root (not observed in testing, but keeps the old behaviour rather than
+    # erroring outright)
+    stats::optimize(
+      function(gamma) abs(coverage_minus_conf(gamma, conf_level, N, K)),
+      c(0, 1 - conf_level)
+    )$minimum
+  }
 }
 
 get_lims <- function (N, K, gamma)
 {
   lims <- list()
   z <- seq(0, 1, length.out = K)
-  lims$lower <- qbinom(gamma/2, N, z)/N - z
-  lims$upper <- qbinom(1 - gamma/2, N, z)/N - z
+  lims$lower <- .safe_qbinom(gamma/2, N, z)/N - z
+  lims$upper <- .safe_qbinom(1 - gamma/2, N, z)/N - z
   lims$z <- z
   lims
 }
 
 make_smooth <- function(x, y, N = 1000){
-  lo <- smooth.spline(x, y, spar=0.5)
+  lo <- stats::smooth.spline(x, y, spar=0.5)
   xl <- seq(0, 1, 1/N)
-  return(predict(lo,xl)$y)
+  return(stats::predict(lo,xl)$y)
 }
 
 #' Plot the ECDF Difference in SBC Ranks
