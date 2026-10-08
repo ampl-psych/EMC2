@@ -62,8 +62,7 @@ gibbs_step_single <- function(sampler, alpha){
 }
 
 get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
-  # All draws handed over are used: a 250-draw subset (legacy) is too noisy for
-  # an independence proposal in 30+ dimensions.
+  # Use all available draws to stabilize the independence proposal.
   if(is.null(idx)) idx <- 1:n_pars
   iters <- dim(samples$alpha)[3]
   iter_idx <- if(legacy_sampler()) sample(1:iters, min(iters, 250)) else seq_len(iters)

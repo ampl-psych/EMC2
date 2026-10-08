@@ -107,9 +107,7 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
   type <- sampler$type
   samples <- sampler$samples
   nuis_type <- sampler$sampler_nuis$type
-  if(!is.null(full_filter)){
-    # the caller's own filter (indices into the merged chains)
-  } else if("sample" %in% stage & !is.null(max_n_sample)){
+  if(is.null(full_filter) && "sample" %in% stage && !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
     if(length(sample_filter) > max_n_sample){
@@ -122,7 +120,7 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     } else{
       full_filter <- c(adapt_filter, sample_filter)
     }
-  } else{
+  } else if(is.null(full_filter)){
     full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }
   if(any(sampler$nuisance)){

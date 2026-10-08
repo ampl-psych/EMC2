@@ -42,14 +42,11 @@ Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selec
 i.e. the ratio of between to within MCMC chain variance.
 }
 \details{
-The statistic is the split-Rhat: each chain is cut in half, so that a chain that is still moving
-disagrees with itself, and the potential scale reduction factor of Gelman and Rubin (1992),
-\code{sqrt(((n - 1) / n * W + B / n) / W)} with \code{W} the mean within-half-chain variance and \code{B / n} the
-variance of the half-chain means, is taken over the half-chains. It is the statistic \code{fit()}'s stop rules
-read. It is not the point estimate of \code{coda::gelman.diag()}, which EMC2 reported up to version 3.4.1:
-that one adds a degrees-of-freedom correction, which is large whenever the chains' variances differ
-(a chain visiting the shoulder of a skewed posterior), and log-transforms all-positive parameters.
-Values are therefore somewhat lower than before, mostly for the parameters with the highest values.
+Uses split-Rhat: halve each chain and compute \code{sqrt(((n - 1) / n * W + B / n) / W)},
+where \code{n} is the half-chain length, \code{W} the mean within-half-chain variance and
+\code{B / n} the variance of the half-chain means. The same statistic drives \code{fit()}'s
+stop rules. It omits the degrees-of-freedom correction and log transform used by
+\code{coda::gelman.diag()} in EMC2 up to version 3.4.1, so values may be lower.
 
 See: Gelman, A and Rubin, DB (1992)
 Inference from iterative simulation using multiple sequences, \emph{Statistical Science}, 7, 457-511.

@@ -254,19 +254,16 @@ split_mcl <- function(mcl)
   coda::as.mcmc.list(c(mcl,mcl2))
 }
 
-# Split-Rhat of every variable of X (draws x variables x chains): Gelman &
-# Rubin's (1992) PSRF over the half-chains (split = FALSE: the whole chains),
-# without coda's degrees-of-freedom correction or transform (see ?gd_summary).
-# The one definition of Rhat in the package; NaN for a variable that does not
-# vary.
+# Rhat for draws x variables x chains, without coda's correction or transform.
+# Split chains by default; constant variables return NaN.
 split_rhat <- function(X, split = TRUE){
   n <- dim(X)[1]; h <- if(split) n %/% 2 else n
   if(h < 2) return(stats::setNames(rep(NaN, dim(X)[2]), dimnames(X)[[2]]))
+  # Center before summing squares to avoid cancellation for large offsets.
+  X <- X - rep(X[1, , 1], each = n)
   segs <- if(split) list(X[seq_len(h), , , drop = FALSE], X[h + seq_len(h), , , drop = FALSE]) else list(X)
-  # centred on the first draw, so that the sums of squares below do not cancel
-  ctr <- rep(X[1, , 1], each = h)
-  m <- do.call(cbind, lapply(segs, function(S) colMeans(S - ctr)))
-  v <- (do.call(cbind, lapply(segs, function(S) colMeans((S - ctr)^2))) - m^2) * h / (h - 1)
+  m <- do.call(cbind, lapply(segs, colMeans))
+  v <- (do.call(cbind, lapply(segs, function(S) colMeans(S^2))) - m^2) * h / (h - 1)
   W <- rowMeans(v)
   B_n <- rowSums((m - rowMeans(m))^2) / (ncol(m) - 1)
   r <- suppressWarnings(sqrt(((h - 1) / h * W + B_n) / W))
@@ -274,8 +271,7 @@ split_rhat <- function(X, split = TRUE){
   stats::setNames(r, dimnames(X)[[2]])
 }
 
-# Split-Rhat of the columns of an mcmc.list (one mcmc per chain); with
-# omit_mpsrf = FALSE also coda's multivariate psrf of the halved chains.
+# Split-Rhat, optionally including coda's multivariate PSRF.
 gelman_diag_robust <- function(mcl, omit_mpsrf = TRUE)
 {
   if(!is.list(mcl)) mcl <- list(mcl)
@@ -288,7 +284,7 @@ gelman_diag_robust <- function(mcl, omit_mpsrf = TRUE)
     mp <- try(gelman.diag(split_mcl(mcl), autoburnin = FALSE, transform = FALSE, multivariate = TRUE)$mpsrf, silent = TRUE)
     gd_out <- c(gd_out, mpsrf = if(is(mp, "try-error") || is.null(mp)) Inf else mp)
   }
-  return(gd_out)
+  gd_out
 }
 
 # #' Calculate information criteria (DIC, BPIC), effective number of parameters and

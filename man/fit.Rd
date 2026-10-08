@@ -102,25 +102,20 @@ The potential stop criteria to be set are:
 
 \code{max_gd} (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 
-\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): judge the subject-level parameters (\code{alpha}) by
-this quantile of their Gelman-Rubin diagnostics instead of by the largest, e.g. \code{gd_quantile = .99}; every
-other selected parameter must still be below \code{max_gd}. With hundreds of subjects the largest of thousands of
-diagnostics is set by a handful of them; a quantile makes the criterion independent of the number of subjects.
-Default \code{NULL}: the largest.
+\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): use this quantile of the
+subject-level (\code{alpha}) diagnostics. All other selected parameters must still
+pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
-The Gelman-Rubin diagnostic that \code{mean_gd} and \code{max_gd} read is the split-Rhat that \code{\link[=gd_summary]{gd_summary()}} reports.
-It is checked every \code{step_size} iterations. When a check fails and the diagnostic is lower without the first
-third of the stage's draws, those draws are dropped: chains that are still arriving at the posterior.
+\code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
+every \code{step_size} iterations. After a failed check, the first third of the stage's
+draws is dropped if this lowers the stopping diagnostic.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
-In the \code{adapt} stage of a hierarchical model (every type but \code{single}),
-\code{min_unique} is not the only condition: adapt also continues until, over
-its last 250 iterations, the largest Rhat across chains of any subject's
-parameter is below 1.2 (checked from 250 adapt iterations on, given up after
-three checks without improvement or at 1000). The \code{sample} stage's proposals are built from those draws and are
-not changed once draws are kept. \code{options(emc.adapt_converge = FALSE)}
-restores the \code{min_unique}-only rule.
+Hierarchical models also require the largest subject-parameter Rhat over the last
+250 \code{adapt} iterations to fall below 1.2, unless three checks show no improvement
+or 1000 iterations are reached. \code{options(emc.adapt_converge = FALSE)} disables
+this extra condition. The \code{sample} proposals are then built and fixed.
 
 \code{min_es} (integer): The minimum number of effective samples across all parameters in the selection
 
