@@ -105,6 +105,23 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
+normalise_factor_var_prior <- function(x, n_factors, factor_names) {
+  if (length(x) == 1L) return(rep(unname(x), n_factors))
+  if (!is.null(names(x))) x <- x[factor_names]
+  unname(x)
+}
+
+normalise_lambda_matrix_prior <- function(x, n_pars, n_factors,
+                                          par_names = NULL, factor_names = NULL) {
+  if (is.matrix(x)) {
+    if (!is.null(rownames(x)) && !is.null(par_names)) x <- x[par_names, , drop = FALSE]
+    if (!is.null(colnames(x)) && !is.null(factor_names)) x <- x[, factor_names, drop = FALSE]
+    return(unname(x))
+  }
+  if (length(x) > 1L && !is.null(names(x))) x <- x[factor_names]
+  matrix(x, n_pars, n_factors, byrow = TRUE)
+}
+
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, sem_settings = NULL){
 
   if (is.null(sem_settings)) stop("sem_settings is required")
@@ -134,6 +151,9 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
   if(is.null(prior$lambda_var)){
     prior$lambda_var <- rep(.7, n_factors)
   }
+  if(is.null(prior$lambda_mean)){
+    prior$lambda_mean <- 0
+  }
   if(is.null(prior$K_var)){
     prior$K_var <- rep(1, n_cov)
   }
@@ -155,6 +175,9 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
   if(is.null(prior$b_e)){
     prior$b_e <- rep(.3, n_pars)
   }
+  fn_norm <- if (!is.null(colnames(Lambda_mat))) colnames(Lambda_mat) else if (n_factors > 0) paste0("F", seq_len(n_factors)) else character(0)
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, n_factors, fn_norm)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, n_factors, fn_norm)
   attr(prior, "type") <- "SEM"
   out <- prior
   if(sample){
@@ -225,9 +248,11 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
       }
     }
     if(selection %in% c("loadings", "std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
+      Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var, n_pars, n_factors, par_names, factor_names)
+      Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, n_pars, n_factors, par_names, factor_names)
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in seq_len(n_factors)){
-        lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var[i], n_pars)))
+        lambda[,i,] <- t(mvtnorm::rmvnorm(N, mean = Lambda_mean_mat[, i], sigma = diag(Lambda_var_mat[, i], nrow = n_pars)))
       }
       lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
@@ -251,12 +276,12 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
           group_idx <- which(factor_groups_prior == group_id)
           d_block <- length(group_idx)
           if (d_block > 1) {
-            S_iw_prior <- diag(prior$b_d, d_block)
-            df_iw_prior <- max(prior$a_d, d_block + 2)
+            S_iw_prior <- diag(prior$b_d[group_idx], d_block)
+            df_iw_prior <- prior$a_d[group_idx][1]
             sampled_cov_block_prior <- riwish(df_iw_prior, S_iw_prior)
             delta_inv[group_idx, group_idx, i] <- solve(sampled_cov_block_prior)
           } else if (d_block == 1) {
-            delta_inv[group_idx, group_idx, i] <- rgamma(1, shape = prior$a_d, rate = prior$b_d)
+            delta_inv[group_idx, group_idx, i] <- rgamma(1, shape = prior$a_d[group_idx], rate = prior$b_d[group_idx])
           }
         }
       }
@@ -361,6 +386,16 @@ gibbs_step_SEM <- function(sampler, alpha){
   factor_groups <- sem_settings$factor_groups
   unique_factor_groups <- unique(factor_groups)
 
+  fn_gs <- colnames(sem_settings$Lambda_mat)
+  if (is.null(fn_gs) && n_factors > 0) fn_gs <- paste0("F", seq_len(n_factors))
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, n_factors, fn_gs)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, n_factors, fn_gs)
+
+  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
+  par_names_gs <- sampler$par_names[!sampler$nuisance]
+  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var, n_pars, n_factors, par_names_gs, fn_gs)
+  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, n_pars, n_factors, par_names_gs, fn_gs)
+
   ## current state -----------------------------------------------------------
   eta         <- matrix(last$eta,     n_subjects, n_factors)
   delta_inv   <- matrix(last$delta_inv, n_factors, n_factors)
@@ -403,15 +438,16 @@ gibbs_step_SEM <- function(sampler, alpha){
 
   ## ---- update loadings: lambda and K --------------------------------------
   lambda_y       <- cbind(K, lambda)
-  lambda_y_prior <- cbind(matrix(prior$K_var,     n_pars, n_cov),
-                          matrix(prior$lambda_var,n_pars, n_factors))
+  lambda_y_prior      <- cbind(matrix(prior$K_var, n_pars, n_cov, byrow = TRUE), Lambda_var_mat)
+  lambda_y_prior_mean <- cbind(matrix(0,           n_pars, n_cov),              Lambda_mean_mat)
   for (j in seq_len(n_pars)){
     isFree <- c(isFree_K[j,], isFree_Lambda[j,])
     if(any(isFree)){
       etaS    <- cbind(covariates, eta)[, isFree, drop = FALSE]
       lam_sig <- solve(epsilon_inv[j,j] * crossprod(etaS) +
                        diag(1/lambda_y_prior[j,isFree], sum(isFree)))
-      lam_mu  <- lam_sig %*% (epsilon_inv[j,j] * crossprod(etaS, ytilde[,j]))
+      lam_mu  <- lam_sig %*% (epsilon_inv[j,j] * crossprod(etaS, ytilde[,j]) +
+                              (1/lambda_y_prior[j,isFree]) * lambda_y_prior_mean[j,isFree])
       lambda_y[j, isFree] <- rmvnorm(1, lam_mu, lam_sig)
     }
   }
@@ -490,8 +526,8 @@ gibbs_step_SEM <- function(sampler, alpha){
     resid_blk <- eta_residuals[, group_idx, drop = FALSE]
     cov_block <- crossprod(resid_blk)
 
-    S_iw  <- diag(prior$b_d, d_block)
-    df_iw <- prior$a_d + n_subjects
+    S_iw  <- diag(prior$b_d[group_idx], d_block)
+    df_iw <- prior$a_d[group_idx][1] + n_subjects
     if(df_iw <= d_block - 1)
       stop("Inverse-Wishart degrees-of-freedom too small for factor group ", group_id)
 
@@ -501,8 +537,8 @@ gibbs_step_SEM <- function(sampler, alpha){
     } else {
       delta_inv[group_idx, group_idx] <- rgamma(
         1,
-        shape = prior$a_d + n_subjects/2,
-        rate  = prior$b_d + 0.5 * cov_block)
+        shape = prior$a_d[group_idx] + n_subjects/2,
+        rate  = prior$b_d[group_idx] + 0.5 * cov_block)
     }
   }
 
@@ -732,7 +768,20 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
   factor_groups <- sem_settings$factor_groups
   covariates   <- sem_settings$covariates
 
+  if (is.null(factor_groups)) factor_groups <- if (n_factors > 0) seq_len(n_factors) else integer(0)
   unique_fg    <- unique(factor_groups)
+
+  fn_bs <- colnames(Lambda_mat)
+  if (is.null(fn_bs) && n_factors > 0) fn_bs <- paste0("F", seq_len(n_factors))
+  prior$a_d <- normalise_factor_var_prior(prior$a_d, n_factors, fn_bs)
+  prior$b_d <- normalise_factor_var_prior(prior$b_d, n_factors, fn_bs)
+
+  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
+  pn_bs <- rownames(Lambda_mat)
+  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var, n_pars, n_factors, pn_bs, fn_bs)
+  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, n_pars, n_factors, pn_bs, fn_bs)
+  lambda_mean_free <- unwind_lambda(Lambda_mean_mat, Lambda_mat)
+  lambda_var_free  <- unwind_lambda(Lambda_var_mat,  Lambda_mat)
 
   ## covariate moments used in population moments
   x_mu  <- colMeans(covariates)
@@ -824,8 +873,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
         cov_blk   <- solve(L_prec)
         lp_delta  <- lp_delta +
           log( robust_diwish(W = cov_blk,
-                             v = prior$a_d,
-                             S = diag(prior$b_d, d_blk)) )
+                             v = prior$a_d[fg_idx][1],
+                             S = diag(prior$b_d[fg_idx], d_blk)) )
         jac_delta <- jac_delta +
           calc_log_jac_chol(v_blk)
 
@@ -837,8 +886,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
         lp_delta  <- lp_delta +
           dgamma(prec_val,
-                 shape = prior$a_d,
-                 rate  = prior$b_d,
+                 shape = prior$a_d[fg_idx],
+                 rate  = prior$b_d[fg_idx],
                  log   = TRUE)
         jac_delta <- jac_delta + log_prec
       }
@@ -852,8 +901,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
     lp_lambda <- if (!is.null(v_lambda))
       dmvnorm(v_lambda[i, ],
-              mean = rep(0, length(v_lambda[i, ])),
-              sigma = diag(rep(prior$lambda_var, length.out = length(v_lambda[i, ]))),
+              mean  = lambda_mean_free,
+              sigma = diag(lambda_var_free, nrow = length(lambda_var_free)),
               log = TRUE) else 0
 
     lp_B <- if (!is.null(v_B))

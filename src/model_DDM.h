@@ -1,47 +1,62 @@
-#ifndef DDM_wien
-#define DDM_wien
+// This DDM implementation is taken from the wienR package for R (https://github.com/RaphaelHartmann/WienR), which is distributed under a GNU GPL-2 license
+//
+// Original authors of the source code:
+// Chair of Social Psychology, University of Freiburg
+// Authors: Christoph Klauer and Raphael Hartmann
+//
+// The code has been modified to work with EMC2s internal structures
+
+#ifndef MODEL_DDM_H
+#define MODEL_DDM_H
 
 #include <Rcpp.h>
 using namespace Rcpp;
 #include "utility_functions.h"
-#include "pdf_fncs.h"
-#include "fncs_seven.h"
-#include "tools.h"
+//#include "pdf_fncs.h"
+//#include "fncs_seven.h"
+//#include "tools.h"
+#include "pnorm_utils.h"
+#include "hcubature.h"
+#include "RaceSpec.h"
 
-NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars, std::vector<int> is_ok){
-  int Epsflag = 1;
-  double eps = 5e-3;
-  int K = 0;
-  int Neval = 6000;
-  int choice = 0; //the type of integration method to choose.
-  //0 = "v", 1 = "a", 2= "sv", 3 = "t0", 4 = "st0", 5 = "s", 6 = "Z", 7 = "SZ",
-  int N = rts.length();
-  NumericVector out(N);
-  for(int i = 0; i < N; i++){
-    if (!is_ok[i]) {
-      out[i] = R_NegInf;
-    } else{
-      // we divide v, a and sv by s to introduce the scaling parameter s
-      double pm = (Rs[i]==1) ? -1 : 1;
-      // if sz and st0 are zero we can use simple and fast dwiener function
-      if(pars(i,7) == 0 && pars(i, 4) == 0){
-        double new_rt = rts[i] - pars(i,3);
-        if(new_rt > 0){
-          out[i] = dwiener(new_rt*pm, pars(i, 1)/pars(i,5), pars(i, 0)/pars(i,5), pars(i, 6), pars(i, 2)/pars(i,5), eps, K, Epsflag);
-        } else{
-          out[i] = 	R_NegInf;
-        }
-      } else{ // otherwise use ddiff function with integration
-        double Rval;
-        double Rerr;
-        double sz = (pars(i,6) < (1 - pars(i,6))) ? 2*pars(i,7)*pars(i,6) : 2*pars(i,7)*(1-pars(i,6));
-        ddiff(choice, rts[i], pm, pars(i, 1)/pars(i,5), pars(i, 0)/pars(i,5), pars(i, 3), pars(i, 6), sz, pars(i, 2)/pars(i,5), pars(i,4), eps, K, Epsflag, Neval, &Rval, &Rerr);
-        out[i] = log(Rval);
-      }
-    }
-  }
-  return(out);
-}
+// Struct for cubature
+struct my_params {
+  double t;
+  int low_or_up;
+  double a;
+  double v;
+  double t0;
+  double w;
+  double sw;
+  double sv;
+  double st;
+  };
 
+// Filler function for the DDM
+void fill_ddm(const double* rts,
+              const int* R,
+              const ParamTable& pt,
+              const RaceSpec& spec,
+              const std::vector<int>& idx_all,
+              double* __restrict__ ll_row);
 
-#endif
+// Survival function for the DDM
+void ddm_survivor(const std::vector<int>& idx,
+                  const std::vector<double>& bound,
+                  const ParamTable& pt,
+                  const RaceSpec& spec,
+                  double* __restrict__ out,
+                  RaceScratch& scratch);
+
+void ddm_survivor_with_response(const std::vector<int>&    idx,
+                                const std::vector<int>&    winner,
+                                const std::vector<double>& lower,
+                                const std::vector<double>& upper,
+                                int                        n_acc,
+                                const ParamTable&          pt,
+                                const RaceSpec&            spec,
+                                double* __restrict__       out);
+
+NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars);
+
+#endif // MODEL_DDM_H

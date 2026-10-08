@@ -62,9 +62,10 @@ gibbs_step_single <- function(sampler, alpha){
 }
 
 get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
-  iters <- dim(samples$alpha)[3]
-  iter_idx <- sample(1:iters, min(iters, 250))
+  # Use all available draws to stabilize the independence proposal.
   if(is.null(idx)) idx <- 1:n_pars
+  iters <- dim(samples$alpha)[3]
+  iter_idx <- if(legacy_sampler()) sample(1:iters, min(iters, 250)) else seq_len(iters)
   all_samples <- samples$alpha[idx, s, iter_idx, drop = FALSE]
   all_samples <- matrix(all_samples, nrow = length(idx))
   mu_tilde <- rowMeans(all_samples)

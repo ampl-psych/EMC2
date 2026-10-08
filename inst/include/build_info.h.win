@@ -6,5 +6,8 @@
 #define EMC2_ENABLE_NATIVE  "no"
 #define EMC2_EXTRA_CXXFLAGS ""
 #define EMC2_ACCELERATE     ""
+#define EMC2_OMP_CXXFLAGS   "no autodetect possible"
+#define EMC2_OMP_LIBS       "no autodetect possible"
+
 
 #endif

@@ -3,7 +3,7 @@
     Code
       str(design_data, give.attr = FALSE)
     Output
-      List of 10
+      List of 11
        $ Flist           :List of 5
         ..$ :Class 'formula'  language v ~ lM
         ..$ :Class 'formula'  language sv ~ lM
@@ -25,13 +25,26 @@
         ..$ E2:function (d)  
        $ model           :function ()  
        $ parameter_design: NULL
+       $ TC              :List of 12
+        ..$ LT         : num 0
+        ..$ LC         : num 0
+        ..$ UT         : num Inf
+        ..$ UC         : num Inf
+        ..$ no_truncate: logi FALSE
+        ..$ no_censor  : logi FALSE
+        ..$ verbose    : logi FALSE
+        ..$ digits     : num 2
+        ..$ LCresponse : logi FALSE
+        ..$ UCresponse : logi FALSE
+        ..$ LCdirection: logi TRUE
+        ..$ UCdirection: logi TRUE
 
 ---
 
     Code
       str(design_custom, give.attr = FALSE)
     Output
-      List of 10
+      List of 11
        $ Flist           :List of 3
         ..$ :Class 'formula'  language m ~ 0 + S
         ..$ :Class 'formula'  language s ~ 1
@@ -47,4 +60,17 @@
        $ Ffunctions      : NULL
        $ model           :function ()  
        $ parameter_design: NULL
+       $ TC              :List of 12
+        ..$ LT         : num 0
+        ..$ LC         : num 0
+        ..$ UT         : num Inf
+        ..$ UC         : num Inf
+        ..$ no_truncate: logi FALSE
+        ..$ no_censor  : logi FALSE
+        ..$ verbose    : logi FALSE
+        ..$ digits     : num 2
+        ..$ LCresponse : logi FALSE
+        ..$ UCresponse : logi FALSE
+        ..$ LCdirection: logi TRUE
+        ..$ UCdirection: logi TRUE
 
