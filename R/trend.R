@@ -1915,13 +1915,53 @@ run_ffun <- function(fun, d, output_type, subj_rows, safe) {
 
   if (output_type == "list") {
     nms <- names(parts[[1L]])
-    stats::setNames(lapply(nms, function(nm)
-      unlist(lapply(parts, `[[`, nm), use.names = FALSE)), nms)
+    stats::setNames(
+      lapply(nms, function(nm) combine_ffun_parts(lapply(parts, `[[`, nm))),
+      nms)
   } else if (output_type == "matrix") {
+    nms <- unique(unlist(lapply(parts, colnames), use.names = FALSE))
+    parts <- lapply(parts, function(x) {
+      missing <- setdiff(nms, colnames(x))
+      if (length(missing)) {
+        x <- cbind(x, matrix(NA, nrow=nrow(x), ncol=length(missing), dimnames=list(NULL, missing)))
+      }
+      x[, nms, drop = FALSE]})
+
     do.call(rbind, unname(parts))
   } else {
-    unlist(parts, use.names = FALSE)
+    combine_ffun_parts(parts)
   }
+}
+
+as_codes <- function(col, value, fac_levels) {
+  if(!col %in% names(fac_levels)) return(value)
+  codes <- match(as.character(value), fac_levels[[col]])
+  if(any(is.na(codes) & !is.na(value))) warning("Invalid factor level in column '", col, "'; NA generated",call. = FALSE)
+
+  return(codes)
+}
+
+materialise <- function(dfl, pos, fac_levels, fac_classes) {
+  d <- lapply(dfl, `[`, pos)
+
+  for(col in names(fac_levels)) {
+    attr(d[[col]], "levels") <- fac_levels[[col]]
+    class(d[[col]]) <- fac_classes[[col]]
+  }
+  class(d) <- "data.frame"
+  attr(d, "row.names") <- .set_row_names(length(pos))
+  return(d)
+}
+
+combine_ffun_parts <- function(xs) {
+  is_fac <- vapply(xs, is.factor, logical(1))
+
+  if(!any(is_fac)) return(unlist(xs, use.names = FALSE))
+
+  lev <- unique(unlist(lapply(xs[is_fac], levels), use.names = FALSE))
+  labels <- unlist(lapply(xs, as.character), use.names = FALSE)
+
+  factor(labels, levels=lev, ordered=all(vapply(xs[is_fac], is.ordered, logical(1))))
 }
 
 make_data_unconditional <- function(data, pars, design, model,
@@ -2108,7 +2148,13 @@ make_data_unconditional <- function(data, pars, design, model,
 
   modified <- unique(c("R", "rt", ffun_cols))
   stopifnot(all(modified %in% names(dadm_full)))   # a missing column would be silently created with the wrong length in a plain list
-  dfl <- lapply(dadm_full, identity)               # plain list; columns shared until first write
+
+  # Only strip factors from columns that the loop modifies.
+  fac_cols <- modified[vapply(dadm_full[modified], is.factor, logical(1))]
+  fac_levels <- lapply(dadm_full[fac_cols], levels)
+  fac_classes <- lapply(dadm_full[fac_cols], class)
+  dfl <- as.list(dadm_full)
+  for(col in fac_cols) dfl[[col]] <- as.integer(dfl[[col]])
 
   # Global indices for subjects
   by_subj <- lapply(subj_levels, function(s) which(dadm_full$subjects == s))
@@ -2158,9 +2204,7 @@ make_data_unconditional <- function(data, pars, design, model,
     ctx_pos         <- sort(cand[subj_int[cand] %in% active_subjects])   # ascending = subject-contiguous
 
     # ---- Materialise dadm_ctx ------------------------------
-    dadm_ctx <- lapply(dfl, `[`, ctx_pos)
-    class(dadm_ctx) <- "data.frame"
-    attr(dadm_ctx, "row.names") <- .set_row_names(length(ctx_pos))
+    dadm_ctx <- materialise(dfl, ctx_pos, fac_levels, fac_classes)
     context_current_idx <- trial_idx[ctx_pos] == j
 
     # Subject row indices
@@ -2183,18 +2227,18 @@ make_data_unconditional <- function(data, pars, design, model,
           for (col in names(result_full)) {
             result_curr <- result_full[[col]][context_current_idx]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dfl[[col]][cur_pos] <- result_curr
+            dfl[[col]][cur_pos] <- as_codes(col, result_curr, fac_levels)
           }
         } else if (output_type == "matrix") {
           for (col in colnames(result_full)) {
             result_curr <- result_full[context_current_idx, col]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dfl[[col]][cur_pos] <- result_curr
+            dfl[[col]][cur_pos] <- as_codes(col, result_curr, fac_levels)
           }
         } else {
           result_curr <- result_full[context_current_idx]
           dadm_ctx[[i]][context_current_idx] <- result_curr
-          dfl[[i]][cur_pos] <- result_curr
+          dfl[[i]][cur_pos] <- as_codes(i, result_curr, fac_levels)
         }
       }
     }
@@ -2248,15 +2292,13 @@ make_data_unconditional <- function(data, pars, design, model,
     }
 
     stopifnot(nrow(Rrt) * n_acc == sum(context_current_idx))
-    dfl[["R"]][cur_pos] <- rep(Rrt[, "R"], each = n_acc)
-    if ("rt" %in% colnames(Rrt)) dfl[["rt"]][cur_pos] <- rep(Rrt[, "rt"], each = n_acc)
+    dfl[["R"]][cur_pos] <- as_codes("R", rep(Rrt[, "R"], each = n_acc), fac_levels)
+    if ("rt" %in% colnames(Rrt)) dfl[["rt"]][cur_pos] <- as_codes("rt", rep(Rrt[, "rt"], each = n_acc), fac_levels)
 
     # ---- ffunctions_post --------------------------------------------------
     if (has_ffunctions_post) {
       # re-materialise dadm_ctx with updated R/rt
-      dadm_ctx <- lapply(dfl, `[`, ctx_pos)
-      class(dadm_ctx) <- "data.frame"
-      attr(dadm_ctx, "row.names") <- .set_row_names(length(ctx_pos))
+      dadm_ctx <- materialise(dfl, ctx_pos, fac_levels, fac_classes)
 
       for (i in names(ffunctions_post)) {
         output_type <- attr(ffunctions_post[[i]], "output_type")
@@ -2266,23 +2308,31 @@ make_data_unconditional <- function(data, pars, design, model,
           for (col in names(result_full)) {
             result_curr <- result_full[[col]][context_current_idx]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dfl[[col]][cur_pos] <- result_curr
+            dfl[[col]][cur_pos] <- as_codes(col, result_curr, fac_levels)
           }
         } else if (output_type == "matrix") {
           for (col in colnames(result_full)) {
             result_curr <- result_full[context_current_idx, col]
             dadm_ctx[[col]][context_current_idx]<- result_curr
-            dfl[[col]][cur_pos] <- result_curr
+            dfl[[col]][cur_pos] <- as_codes(col, result_curr, fac_levels)
           }
         } else {
           result_curr <- result_full[context_current_idx]
           dadm_ctx[[i]][context_current_idx] <- result_curr
-          dfl[[i]][cur_pos] <- result_curr
+          dfl[[i]][cur_pos] <- as_codes(i, result_curr, fac_levels)
         }
       }
     }
   }
-  for(col in modified) dadm_full[[col]] <- dfl[[col]]
+  # restore factor levels/classes
+  for (col in modified) {
+    x <- dfl[[col]]
+    if(col %in% fac_cols) {
+      attr(x, "levels") <- fac_levels[[col]]
+      class(x) <- fac_classes[[col]]
+    }
+    dadm_full[[col]] <- x
+  }
 
   if(return_trialwise_parameters) {
     pm_full <- get_group_pipeline_result(gp, rep(0L, S), rep(-1L, S))
