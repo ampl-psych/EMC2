@@ -33,7 +33,16 @@ or an emc object with sampled parameters
 
 \item{TC}{List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.}
 
-\item{...}{Additional optional arguments}
+\item{...}{Additional optional arguments, including:
+\itemize{
+\item \code{conditional_on_data}: if \code{FALSE}, simulate trial by trial (unconditional on \code{data}).
+\item \code{return_trialwise_parameters}, \code{kernel_output_codes}: return trialwise parameters/kernel outputs as an attribute.
+\item \code{n_context_trials}: number of previous trials passed to Ffunctions in unconditional simulation (default 1).
+\item \code{vectorise_safe}: if \code{TRUE}, Ffunctions are called once per trial with all subjects at once
+(faster). Only set this if your functions are independent across subjects and need no more than
+the last \code{n_context_trials} trials. Default \code{FALSE} calls each Ffunction separately per subject.
+Only used when simulating unconditionally.
+}}
 }
 \value{
 A data frame with simulated data

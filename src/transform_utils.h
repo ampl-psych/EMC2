@@ -37,7 +37,9 @@ Rcpp::NumericMatrix c_do_transform(Rcpp::NumericMatrix pars,
 std::vector<TransformSpec> make_transform_specs(const ParamTable& pt,
                                                 const Rcpp::List& transform);
 
-void c_do_transform(ParamTable& pt, const std::vector<TransformSpec>& specs);
+void c_do_transform(ParamTable& pt, const std::vector<TransformSpec>& specs,
+                    int row_start = 0,
+                    int row_end   = -1);
 
 
 std::vector<BoundSpec> make_bound_specs(Rcpp::NumericMatrix minmax,

@@ -247,6 +247,7 @@ static void build_kernel_args(KernelSpec& ks,
     SEXP cns = ka["q_reset_column"];
     if (!Rf_isNull(cns)) {
       std::string col_name = sexp_to_str(cns);
+      ks.q_reset_col_name = col_name;
       if (!data.containsElementNamed(col_name.c_str()))
         Rf_error("kernel_args$q_reset_column: column '%s' not found", col_name.c_str());
       SEXP col = data[col_name.c_str()];
@@ -264,6 +265,7 @@ static void build_kernel_args(KernelSpec& ks,
     SEXP cns = ka["belief_reset_column"];
     if (!Rf_isNull(cns)) {
       std::string col_name = sexp_to_str(cns);
+      ks.belief_reset_col_name = col_name;
       if (!data.containsElementNamed(col_name.c_str()))
         Rf_error("kernel_args$belief_reset_column: column '%s' not found", col_name.c_str());
       SEXP col = data[col_name.c_str()];
@@ -291,6 +293,7 @@ static void build_covariate_coding(BaseSpec& bs,
 {
   bs.has_covariate_coding = false;
   bs.covariate_coding.clear();
+  bs.covariate_coding_name.clear();
 
   if (!b_lst.containsElementNamed("coding") || Rf_isNull(b_lst["coding"])) return;
   if (data_covcoding.size() == 0)
@@ -309,6 +312,7 @@ static void build_covariate_coding(BaseSpec& bs,
   const int T = data.nrows();
 
   std::string coding_nm = Rcpp::as<std::string>(coding_names[0]);
+  bs.covariate_coding_name = coding_nm;  // store for patch_data_rows
 
   int idx = -1;
   for (int j = 0; j < data_coding_names.size(); ++j)
@@ -457,6 +461,157 @@ Rcpp::LogicalVector TrendPlan::premap_design_mask(const Rcpp::List& designs) con
   return mask;
 }
 
+void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
+                                int row_start,
+                                int row_end,
+                                int src_row_start,
+                                int src_row_end)
+{
+  if (!incremental_mutable) Rcpp::stop("TrendPlan::patch_data_rows called on an immutable TrendPlan");
+
+  const int effective_src_end = (src_row_end == -1) ? data.nrows() : src_row_end;
+  const int T = row_end - row_start;
+  const int T_src = effective_src_end - src_row_start;
+
+  if (T_src != T)
+    Rcpp::stop("TrendPlan::patch_data_rows: src range [%d, %d) has %d rows; "
+                 "expected %d for patch range [%d, %d)",
+                 src_row_start, effective_src_end, T_src, T, row_start, row_end);
+
+
+  // covariate_coding attribute
+  Rcpp::List data_covcoding;
+  if (data.hasAttribute("covariate_coding")) {
+    SEXP cm = data.attr("covariate_coding");
+    if (!Rf_isNull(cm)) data_covcoding = Rcpp::List(cm);
+  }
+
+  // ------------------------------------------------------------------
+  // 1. Patch each KernelSpec
+  // ------------------------------------------------------------------
+  for (auto& kv : kernels) {
+    KernelSpec& ks = kv.second;
+
+    // 1a. kernel_input — covariate columns only
+    const int n_cov = (int)ks.cov_names.size();
+    for (int c = 0; c < n_cov; ++c) {
+      const char* cn = ks.cov_names[c].c_str();
+      if (!data.containsElementNamed(cn))
+        Rcpp::stop("patch_data_rows: kernel '%s' covariate '%s' not found in data",
+                   ks.kernel_id.c_str(), cn);
+
+      SEXP col = data[cn];
+      double* dst = ks.kernel_input.colptr(c) + row_start;
+
+      if (TYPEOF(col) == REALSXP) {
+        std::copy(REAL(col) + src_row_start, REAL(col) + effective_src_end, dst);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* src = INTEGER(col) + src_row_start;
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[r]);
+      } else if (TYPEOF(col) == LGLSXP) {
+        const int* src = LOGICAL(col) + src_row_start;
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[r]);
+      } else {
+        Rcpp::stop("patch_data_rows: covariate '%s' must be numeric, integer, or logical", cn);
+      }
+    }
+
+    // 1b. at_mask
+    if (ks.has_at) {
+      if (!data.containsElementNamed(ks.at.c_str()))
+        Rcpp::stop("patch_data_rows: 'at' column '%s' not found", ks.at.c_str());
+      SEXP at_col = data[ks.at.c_str()];
+      if (!Rf_inherits(at_col, "factor"))
+        Rcpp::stop("patch_data_rows: 'at' column '%s' must be a factor", ks.at.c_str());
+      const int* f = INTEGER(at_col) + src_row_start;
+      for (int r = 0; r < T; ++r) {
+        ks.at_mask[row_start + r] = (f[r] == 1) ? 1 : 0;
+        }
+      }
+
+    // 1c. q_reset_col
+    if (!ks.q_reset_col_name.empty()) {
+      if (!data.containsElementNamed(ks.q_reset_col_name.c_str()))
+        Rcpp::stop("patch_data_rows: q_reset_column '%s' not found",
+                   ks.q_reset_col_name.c_str());
+      SEXP col = data[ks.q_reset_col_name.c_str()];
+      if (TYPEOF(col) == LGLSXP) {
+        const int* p = LOGICAL(col)+ src_row_start;
+        std::copy(p, p + T, ks.q_reset_col.data() + row_start);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* p = INTEGER(col)+ src_row_start;
+        std::copy(p, p + T, ks.q_reset_col.data() + row_start);
+      } else {
+        Rcpp::stop("patch_data_rows: q_reset_column '%s' must be logical or integer",
+                   ks.q_reset_col_name.c_str());
+      }
+    }
+
+    // 1d. belief_reset_col
+    if (!ks.belief_reset_col_name.empty()) {
+      if (!data.containsElementNamed(ks.belief_reset_col_name.c_str()))
+        Rcpp::stop("patch_data_rows: belief_reset_column '%s' not found",
+                   ks.belief_reset_col_name.c_str());
+      SEXP col = data[ks.belief_reset_col_name.c_str()];
+      if (TYPEOF(col) == LGLSXP) {
+        const int* p = LOGICAL(col)+ src_row_start;
+        std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* p = INTEGER(col)+ src_row_start;
+        std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
+      } else {
+        Rcpp::stop("patch_data_rows: belief_reset_column '%s' must be logical or integer",
+                   ks.belief_reset_col_name.c_str());
+      }
+    }
+
+    // 1e. nan_mask — full rebuild after kernel_input and at_mask are current
+    build_nan_mask(ks, -1);
+  }
+
+  // ------------------------------------------------------------------
+  // 2. Patch each BaseSpec's covariate_coding
+  // ------------------------------------------------------------------
+  auto patch_bases = [&](std::vector<BaseSpec>& bases) {
+    for (BaseSpec& bs : bases) {
+      if (!bs.has_covariate_coding || bs.covariate_coding_name.empty()) continue;
+      if (data_covcoding.size() == 0)
+        Rcpp::stop("patch_data_rows: base '%s' has covariate_coding but data has no "
+                     "covariate_coding attribute", bs.target_parameter.c_str());
+
+      Rcpp::CharacterVector ccnames = data_covcoding.names();
+      int idx = -1;
+      for (int j = 0; j < ccnames.size(); ++j)
+        if (Rcpp::as<std::string>(ccnames[j]) == bs.covariate_coding_name) { idx = j; break; }
+      if (idx < 0)
+        Rcpp::stop("patch_data_rows: covariate_coding '%s' not found",
+                   bs.covariate_coding_name.c_str());
+
+      SEXP mat_sexp = data_covcoding[idx];
+      const double* src = REAL(mat_sexp) + src_row_start;
+      const int src_nrow = Rf_nrows(mat_sexp);
+      const int ncol     = Rf_ncols(mat_sexp);
+      Mat& dst_mat = bs.covariate_coding[0];
+
+      if (ncol != dst_mat.ncol)
+        Rcpp::stop("patch_data_rows: covariate_coding '%s' column count changed",
+                   bs.covariate_coding_name.c_str());
+
+      for (int c = 0; c < ncol; ++c) {
+        std::copy(src + c * src_nrow,
+                  src + c * src_nrow + T,
+                  dst_mat.colptr(c) + row_start);
+        }
+    }
+  };
+
+  patch_bases(premap_bases);
+  patch_bases(pretransform_bases);
+  patch_bases(posttransform_bases);
+}
+
+
+
 // =============================================================================
 // TrendRuntime constructor
 // =============================================================================
@@ -511,27 +666,6 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
       }
     }
 
-    // if (!variadic) {
-    //   const int n = ks.kernel_input.nrow;
-    //   k_rt.slot_inputs.reserve(n_slots);
-    //
-    //   // covariate slots: copy data in once, never touched again
-    //   for (int s = 0; s < (int)ks.covariate_indices.size(); ++s) {
-    //     Mat buf(n, 1);
-    //     std::copy(ks.kernel_input.colptr(ks.covariate_indices[s]),
-    //               ks.kernel_input.colptr(ks.covariate_indices[s]) + n,
-    //               buf.colptr(0));
-    //     k_rt.slot_inputs.push_back(std::move(buf));
-    //   }
-    //
-    //   // par_input slots: allocate zero buffer, record which par_input feeds it
-    //   for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
-    //     int slot_idx = (int)ks.covariate_indices.size() + i;
-    //     k_rt.slot_inputs.push_back(Mat(n, 1));  // zero-init, filled per particle
-    //     k_rt.par_input_slot_indices.push_back(slot_idx);
-    //     k_rt.par_input_param_col.push_back(i);  // index into ks.par_input
-    //   }
-    // }
     kernels.emplace(ks.kernel_id, std::move(k_rt));
   }
 
@@ -599,31 +733,34 @@ void TrendRuntime::reset_all_kernels() {
 // TrendRuntime::run_kernel  (private)
 // =============================================================================
 
-void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
+void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt,
+                              int row_start, int row_end)
 {
   const KernelSpec& ks   = *k_rt.spec;
   const int         n    = pt.n_trials;
+  const int         end = (row_end < 0) ? n : row_end;
+  const int         T   = end - row_start;
   const bool variadic = k_rt.is_variadic();
 
   if (variadic) {
     // fill par_input columns into shared matrix in-place
     for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
-      const double* src = pt.column_by_name_ptr(ks.par_input[i]);
-      double*       dst = k_rt.kernel_input.colptr(ks.par_input_indices[i]);
-      std::copy(src, src + n, dst);
+      const double* src = pt.column_by_name_ptr(ks.par_input[i]) + row_start;
+      double*       dst = k_rt.kernel_input.colptr(ks.par_input_indices[i]) + row_start;
+      std::copy(src, src + T, dst);
     }
     auto& kptr = k_rt.kernel_ptrs[0];
-    kptr->reset();
+    if(row_start == 0) kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-              k_rt.kernel_input, ks.at_mask, ks.nan_mask);
+              k_rt.kernel_input, ks.at_mask, ks.nan_mask, row_start, row_end);
   } else {
     // overwrite par_input slot buffers in-place — no allocation
     for (int j = 0; j < (int)k_rt.par_input_slot_indices.size(); ++j) {
       int slot_idx  = k_rt.par_input_slot_indices[j];
       int par_i     = k_rt.par_input_param_col[j];
-      const double* src = pt.column_by_name_ptr(ks.par_input[par_i]);
-      double*       dst = k_rt.slot_inputs[slot_idx].colptr(0);
-      std::copy(src, src + n, dst);
+      const double* src = pt.column_by_name_ptr(ks.par_input[par_i]) + row_start;
+      double*       dst = k_rt.slot_inputs[slot_idx].colptr(0) + row_start;
+      std::copy(src, src + T, dst);
     }
 
     const int n_cov_slots = (int)ks.covariate_indices.size();
@@ -631,16 +768,14 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
     // run each slot kernel against its pre-allocated buffer
     for (int s = 0; s < k_rt.n_slots(); ++s) {
       auto& kptr = k_rt.kernel_ptrs[s];
-      kptr->reset();
+      if(row_start == 0) kptr->reset();
 
       // covariate slots get a zero-copy view of their nan column;
       // par_input slots get an all-valid mask (no covariate to check)
-      MatBool slot_nm = (s < n_cov_slots)
-        ? MatBool::col_view(ks.nan_mask, s)
-          : MatBool(k_rt.slot_inputs[s].nrow, 1, 1);
+      MatBool slot_nm = (s < n_cov_slots) ? MatBool::col_view(ks.nan_mask, s) : MatBool(k_rt.slot_inputs[s].nrow, 1, 1);
 
       kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-                k_rt.slot_inputs[s], ks.at_mask, slot_nm);
+                k_rt.slot_inputs[s], ks.at_mask, slot_nm, row_start, row_end);
       }
   }
 }
@@ -649,18 +784,21 @@ void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
 // TrendRuntime::apply_base
 // =============================================================================
 
-void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
+void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt, int row_start, int row_end)
 {
   KernelRuntime&  k_rt = *base_rt.kernel_rt;
   const BaseSpec& bs   = *base_rt.spec;
 
-  if (!k_rt.kernel_ptrs[0]->has_run())
-    run_kernel(k_rt, pt);
+  const int end = (row_end < 0) ? pt.n_trials : row_end;
+  const int T   = end - row_start;
 
-  const int n = pt.n_trials;
+  if (!k_rt.kernel_ptrs[0]->has_run_for(end))
+    run_kernel(k_rt, pt, row_start, row_end);
+
+//  const int n = pt.n_trials;
 
   const int target_idx = pt.base_index_for(bs.target_parameter);
-  double*   target_col = &pt.base(0, target_idx);
+  double*   target_col  = &pt.base(row_start, target_idx);  // offset
 
   const bool base_is_lin      = (bs.base_type == "lin");
   const bool base_is_centered = (bs.base_type == "centered");
@@ -669,9 +807,7 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
   const double center_offset = base_is_centered ? 0.5 : 0.0;
 
   // single base par pointer — same par applied to all slots
-  const double* base_ptr = needs_base_par
-  ? &pt.base(0, base_rt.base_par_indices[0])
-    : nullptr;
+  const double* base_ptr = needs_base_par ? &pt.base(row_start, base_rt.base_par_indices[0]) : nullptr;
 
   const bool variadic = k_rt.is_variadic();
   const int  n_slots  = k_rt.n_slots();
@@ -687,19 +823,19 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
 
     if (has_coding && needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
-        const double* m_col = coding->colptr(col < coding->ncol ? col : 0);
-#pragma omp simd
-        for (int r = 0; r < n; ++r) {
+        const double* q_col = ko.data + col * ko.n_rows + row_start;
+        const double* m_col = coding->colptr(col < coding->ncol ? col : 0) + row_start;
+        #pragma omp simd
+        for (int r = 0; r < T; ++r) {
           double q = q_col[r] - center_offset;
           target_col[r] += q * base_ptr[r] * m_col[r];
         }
       }
     } else if (needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col = ko.data + col * ko.n_rows + row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
+        for (int r = 0; r < T; ++r) {
           double q = q_col[r] - center_offset;
           target_col[r] += q * base_ptr[r];
         }
@@ -707,16 +843,16 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
     } else if (base_is_identity) {
       // identity replaces rather than accumulates — intentional
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col = ko.data + col * ko.n_rows + row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] = q_col[r];
       }
     } else {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col = ko.data + col * ko.n_rows + row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] += q_col[r];
       }
     }
@@ -727,30 +863,62 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
   } else {
     for (int s = 0; s < n_slots; ++s) {
       KernelOutput  ko    = k_rt.kernel_ptrs[s]->get_output_stream(bs.kernel_output);
-      const double* q_col = ko.data;
+      const double* q_col = ko.data + row_start;
 
       if (has_coding && needs_base_par) {
-        const double* m_col = coding->colptr(s);
+        const double* m_col = coding->colptr(s)+ row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
+        for (int r = 0; r < T; ++r) {
           double q = q_col[r] - center_offset;
           target_col[r] += q * base_ptr[r] * m_col[r];
         }
       } else if (needs_base_par) {
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
+        for (int r = 0; r < T; ++r) {
           double q = q_col[r] - center_offset;
           target_col[r] += q * base_ptr[r];
         }
       } else if (base_is_identity) {
         // identity replaces rather than accumulates — intentional
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] = q_col[r];
       } else {
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] += q_col[r];
+      }
+    }
+  }
+}
+
+void TrendRuntime::sync_data_rows_from_plan(int row_start, int row_end)
+{
+  for (auto& kv : kernels) {
+    KernelRuntime&    k_rt = kv.second;
+    const KernelSpec& ks   = *k_rt.spec;
+    const int T = row_end - row_start;
+
+    // rewind kernel state to row_start boundary
+    for (auto& kptr : k_rt.kernel_ptrs)
+      if (row_start < kptr->rows_computed())
+        kptr->rewind(row_start);
+
+    if (k_rt.is_variadic()) {
+      // Copy covariate columns only — par_input cols are filled per-particle
+      const int n_cov = (int)ks.covariate_indices.size();
+      for (int c = 0; c < n_cov; ++c) {
+        const double* src = ks.kernel_input.colptr(c) + row_start;
+        double*       dst = k_rt.kernel_input.colptr(c) + row_start;
+        std::copy(src, src + T, dst);
+      }
+    } else {
+      // Arity-1: one slot_input per covariate slot
+      const int n_cov = (int)ks.covariate_indices.size();
+      for (int s = 0; s < n_cov; ++s) {
+        const double* src = ks.kernel_input.colptr(s) + row_start;
+        double*       dst = k_rt.slot_inputs[s].colptr(0) + row_start;
+        std::copy(src, src + T, dst);
       }
     }
   }
@@ -774,8 +942,8 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
 
   // ensure all kernels have run
   for (auto& kv : kernels)
-    if (!kv.second.kernel_ptrs[0]->has_run())
-      run_kernel(kv.second, pt);
+    if (!kv.second.kernel_ptrs[0]->has_run_for(pt.n_trials))
+      run_kernel(kv.second, pt, 0, pt.n_trials);
 
   // count total output columns across all slots
   int n_cols_total = 0;
