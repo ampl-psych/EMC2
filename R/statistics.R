@@ -574,24 +574,25 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
 get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
                              stat_only = FALSE, stat_name = NULL, digits = 3, ...){
   dots <- list(...)
+  n_cores <- if('n_cores' %in% names(dots)) dots$n_cores else 1
   if(is.null(emc[[1]]$n_subjects) || length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc = emc, selection = selection), fix_dots(dots, get_pars)))
-  out <- vector("list", length = length(MCMC_samples))
-  for(i in 1:length(MCMC_samples)){
-    # cat("\n", names(MCMC_samples)[[i]], "\n")
+  # out <- vector("list", length = length(MCMC_samples))
+
+  process_one <- function(samples) {
     if(length(fun) > 1){
       outputs <- list()
-      for(j in 1:length(fun)){
-        out_j <- do.call(fun[[j]], c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]])))
-        if (is.null(dim(out_j))) {
-          n_par <- if (inherits(MCMC_samples[[i]], "mcmc.list")) {
-            ncol(MCMC_samples[[i]][[1]])
-          } else if (!is.null(dim(MCMC_samples[[i]]))) {
-            dim(MCMC_samples[[i]])[1]
+      for(j in seq_along(fun)){
+        out_j <- do.call(fun[[j]], c(list(samples), fix_dots(dots, fun[[j]])))
+        if(is.null(dim(out_j))){
+          n_par <- if(inherits(samples, "mcmc.list")){
+            ncol(samples[[1]])
+          } else if(!is.null(dim(samples))){
+            dim(samples)[1]
           } else {
-            length(MCMC_samples[[i]])
+            length(samples)
           }
-          if (length(out_j) == n_par) {
+          if(length(out_j) == n_par){
             out_j <- matrix(out_j, ncol = 1L)
             rownames(out_j) <- names(out_j)
           } else {
@@ -600,17 +601,22 @@ get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
         }
         outputs[[j]] <- out_j
       }
-      out[[i]] <- do.call(cbind, outputs)
+      result <- do.call(cbind, outputs)
       if(!is.null(stat_name)){
-        if(ncol(out[[i]]) != length(stat_name)) stop("make sure stat_name is the same length as function output")
-        colnames(out[[i]]) <- stat_name
+        if(ncol(result) != length(stat_name)) stop("make sure stat_name is the same length as function output")
+        colnames(result) <- stat_name
       }
-    } else{
-      out[[i]] <- do.call(fun, c(list(MCMC_samples[[i]]), fix_dots(dots, fun)))#fun(MCMC_samples[[i]], ...)
+      result
+    } else {
+      do.call(fun, c(list(samples), fix_dots(dots, fun)))
     }
   }
+
+  out <- auto_mclapply(MCMC_samples, process_one, mc.cores = n_cores)
   names(out) <- names(MCMC_samples)
-  if(length(fun) == 1 & !is.matrix(out[[i]]) & !is.null(stat)){
+
+  last <- out[[length(out)]]
+  if(length(fun) == 1 & !is.matrix(last) & !is.null(stat)){
     out <- make_nice_summary(out, stat, stat_only, stat_name)
     out <- round(out, digits)
   } else{

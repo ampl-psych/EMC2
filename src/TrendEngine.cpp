@@ -356,6 +356,30 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const
 
     build_covariate_coding(bs, b_lst, data, data_covcoding);
 
+    // Base base args for lin_cond
+    if (bs.base_type == "lin_cond") {
+      if (!b_lst.containsElementNamed("base_args") || Rf_isNull(b_lst["base_args"]))
+        Rf_error("BaseSpec '%s': type 'lin_cond' requires 'base_args'",
+                 bs.target_parameter.c_str());
+      Rcpp::List ba(b_lst["base_args"]);
+
+      if (!ba.containsElementNamed("cond_par") || Rf_isNull(ba["cond_par"]))
+        Rf_error("BaseSpec '%s': base_args$cond_par is required for 'lin_cond'",
+                 bs.target_parameter.c_str());
+      if (!ba.containsElementNamed("cond_sign") || Rf_isNull(ba["cond_sign"]))
+        Rf_error("BaseSpec '%s': base_args$cond_sign is required for 'lin_cond'",
+                 bs.target_parameter.c_str());
+
+      std::string sign_str = Rcpp::as<std::string>(ba["cond_sign"]);
+      if (sign_str != "pos" && sign_str != "neg")
+        Rf_error("BaseSpec '%s': base_args$cond_sign must be 'pos' or 'neg'",
+                 bs.target_parameter.c_str());
+
+      bs.has_cond_par          = true;
+      bs.base_args.cond_par    = list_str(ba, "cond_par");
+      bs.base_args.cond_sign   = (sign_str == "pos") ? 1 : -1;
+    }
+
     for (const auto& pn : bs.pnames) {
       all_trend_params.insert(pn);
       switch (bs.phase) {
@@ -509,6 +533,9 @@ void TrendRuntime::bind_all_to_paramtable(const ParamTable& pt)
       for (const auto& pn : bs.pnames)
         b_rt.base_par_indices.push_back(pt.base_index_for(pn));
       b_rt.kernel_rt = &kernels.at(bs.kernel_id);
+
+      // resolve conditional parameter -- only for lin_cond
+      b_rt.cond_par_idx = bs.has_cond_par ? pt.base_index_for(bs.base_args.cond_par) : -1;
     }
   };
 
@@ -598,13 +625,14 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
   const bool base_is_lin      = (bs.base_type == "lin");
   const bool base_is_centered = (bs.base_type == "centered");
   const bool base_is_identity = (bs.base_type == "identity");
-  const bool needs_base_par   = base_is_lin || base_is_centered;
+  const bool base_is_lin_cond = (bs.base_type == "lin_cond");
+  const bool needs_base_par   = base_is_lin || base_is_centered || base_is_lin_cond;
   const double center_offset = base_is_centered ? 0.5 : 0.0;
 
   // single base par pointer — same par applied to all slots
-  const double* base_ptr = needs_base_par
-  ? &pt.base(0, base_rt.base_par_indices[0])
-    : nullptr;
+  const double* base_ptr = needs_base_par ? &pt.base(0, base_rt.base_par_indices[0]) : nullptr;
+  const double* cond_ptr = base_is_lin_cond ? &pt.base(0, base_rt.cond_par_idx) : nullptr;
+  const int cond_sign = bs.base_args.cond_sign;  // +1 or -1; 0 if unused
 
   const bool variadic = k_rt.is_variadic();
   const int  n_slots  = k_rt.n_slots();
@@ -622,19 +650,35 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
       for (int col = 0; col < ko.n_cols; ++col) {
         const double* q_col = ko.data + col * ko.n_rows;
         const double* m_col = coding->colptr(col < coding->ncol ? col : 0);
+        if (base_is_lin_cond) {
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
-          double q = q_col[r] - center_offset;
-          target_col[r] += q * base_ptr[r] * m_col[r];
+          for (int r = 0; r < n; ++r) {
+            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
+          }
+        } else {
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double q = q_col[r] - center_offset;
+            target_col[r] += q * base_ptr[r] * m_col[r];
+          }
         }
       }
     } else if (needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
         const double* q_col = ko.data + col * ko.n_rows;
+        if (base_is_lin_cond) {
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
-          double q = q_col[r] - center_offset;
-          target_col[r] += q * base_ptr[r];
+          for (int r = 0; r < n; ++r) {
+            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * gate;
+          }
+        } else {
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double q = q_col[r] - center_offset;
+            target_col[r] += q * base_ptr[r];
+          }
         }
       }
     } else if (base_is_identity) {
@@ -664,16 +708,32 @@ void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
 
       if (has_coding && needs_base_par) {
         const double* m_col = coding->colptr(s);
+        if (base_is_lin_cond) {
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
-          double q = q_col[r] - center_offset;
-          target_col[r] += q * base_ptr[r] * m_col[r];
+          for (int r = 0; r < n; ++r) {
+            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
+          }
+        } else {
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double q = q_col[r] - center_offset;
+            target_col[r] += q * base_ptr[r] * m_col[r];
+          }
         }
       } else if (needs_base_par) {
+        if (base_is_lin_cond) {
 #pragma omp simd
-        for (int r = 0; r < n; ++r) {
-          double q = q_col[r] - center_offset;
-          target_col[r] += q * base_ptr[r];
+          for (int r = 0; r < n; ++r) {
+            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * gate;
+          }
+        } else {
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double q = q_col[r] - center_offset;
+            target_col[r] += q * base_ptr[r];
+          }
         }
       } else if (base_is_identity) {
         // identity replaces rather than accumulates — intentional

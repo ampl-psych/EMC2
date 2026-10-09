@@ -10,6 +10,7 @@ make_base(
   kernel,
   kernel_output = 1L,
   coding = NULL,
+  base_args = NULL,
   phase = "premap"
 )
 }

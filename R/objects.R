@@ -384,7 +384,7 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
                     by_subject = FALSE, return_mcmc = TRUE, merge_chains = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,
                     remove_constants = TRUE, use_par = NULL, type = NULL,
-                    true_pars = NULL, chain = NULL, covariates = NULL)
+                    true_pars = NULL, chain = NULL, covariates = NULL, n_cores = 1)
 {
   if(!is.null(emc[[1]]$n_subjects)) emc <- restore_duplicates(emc)
   if(add_recalculated) map <- TRUE
@@ -403,12 +403,19 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
 
   if(!isFALSE(map)){
     # First map them to subject level parameters
-    samples <- lapply(samples, do_map, map =  map, by_subject = TRUE,
-                      get_design(emc), include_constants = FALSE,
-                      add_recalculated = add_recalculated, covariates = covariates,
-                      emc = emc, data = get_data(emc),
-                      group_design = get_group_design(emc),
-                      selection = true_selection)
+    samples <- auto_mclapply(samples, do_map, mc.cores = n_cores,
+                             map = map, by_subject = TRUE,
+                             get_design(emc), include_constants = FALSE,
+                             add_recalculated = add_recalculated, covariates = covariates,
+                             emc = emc, data = get_data(emc),
+                             group_design = get_group_design(emc),
+                             selection = true_selection)
+    # samples <- lapply(samples, do_map, map =  map, by_subject = TRUE,
+    #                   get_design(emc), include_constants = FALSE,
+    #                   add_recalculated = add_recalculated, covariates = covariates,
+    #                   emc = emc, data = get_data(emc),
+    #                   group_design = get_group_design(emc),
+    #                   selection = true_selection)
     # Then if required calculate implied group-level parameters
     if(true_selection != "alpha"){
       idx <- 1:(dim(samples[[1]])[3])

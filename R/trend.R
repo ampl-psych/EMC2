@@ -275,6 +275,7 @@ make_base <- function(target_parameter,
                       kernel,
                       kernel_output = 1L,
                       coding        = NULL,
+                      base_args     = NULL,
                       phase         = "premap") {
 
   # ---- validate ----
@@ -287,6 +288,19 @@ make_base <- function(target_parameter,
 
   if (!phase %in% c("premap", "pretransform", "posttransform"))
     stop("phase must be one of 'premap', 'pretransform', 'posttransform'.")
+
+  # ---- validate base_args ----
+  if (type == "lin_cond") {
+    if (is.null(base_args))
+      stop("base_args must be provided for type 'lin_cond'.")
+    if (is.null(base_args$cond_par))
+      stop("base_args$cond_par must be specified for type 'lin_cond'.")
+    if (is.null(base_args$cond_sign) || !base_args$cond_sign %in% c("pos", "neg"))
+      stop("base_args$cond_sign must be 'pos' or 'neg' for type 'lin_cond'.")
+  } else if (!is.null(base_args)) {
+    warning("base_args is only used for type 'lin_cond'; ignored for type '", type, "'.")
+    base_args <- NULL
+  }
 
   kernel_output <- as.integer(kernel_output)
 
@@ -317,6 +331,7 @@ make_base <- function(target_parameter,
       kernel_id          = kernel$kernel_id,
       kernel_output      = kernel_output,
       coding             = coding,
+      base_args          = base_args,     # NULL for all types except lin_cond
       phase              = phase,
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
@@ -944,7 +959,10 @@ get_bases <- function() {
                default_pars = character(0)),
     identity = list(description = "Identity base: k",
                     transforms = NULL,
-                    default_pars = character(0))
+                    default_pars = character(0)),
+    lin_cond = list(description = "Conditional linear base: parameter + w * k if cond_par satisfies sign condition, else 0",
+                    transforms = list(func = list("w" = "identity")),
+                    default_pars = "w")
   )
   bases
 }
@@ -1553,10 +1571,6 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
-  # cached_pd_pars <- if (!is.null(design$parameter_design)) {
-  #   vapply(design$parameter_design, function(f) deparse(f[[2]]), character(1))
-  # } else character(0)
-  #
   # design matrix cache -- every unique combination of ffactors (key) returns a design matrix. If not yet existent, auto-create
   make_designs_cached <- local({
     cache <- list()

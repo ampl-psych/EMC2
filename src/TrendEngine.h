@@ -88,6 +88,15 @@ struct KernelSpec {
 };
 
 // =============================================================================
+// BaseArgs
+// =============================================================================
+
+struct BaseArgs {
+  std::string cond_par;   // parameter column name to condition on
+  int         cond_sign;  // +1 = positive, -1 = negative
+};
+
+// =============================================================================
 // BaseSpec  —  mirrors emc2_base; pure C++ after construction
 // =============================================================================
 
@@ -104,7 +113,12 @@ struct BaseSpec {
   // one Mat per named map entry; empty if no coding schemes
   bool             has_covariate_coding = false;
   std::vector<Mat> covariate_coding;
+
+  // conditional base args (used by lin_if_pos / lin_if_neg)
+  bool     has_cond_par = false;
+  BaseArgs base_args;
 };
+
 
 // =============================================================================
 // TrendPlan  —  owns all specs; built once per subject
@@ -178,6 +192,7 @@ struct BaseRuntime {
   const BaseSpec*    spec      = nullptr;
   KernelRuntime*     kernel_rt = nullptr;  // non-owning, into TrendRuntime::kernels
   std::vector<int>   base_par_indices;
+  int                cond_par_idx = -1;  // resolved in bind_all_to_paramtable; -1 if unused
 };
 
 struct TrendRuntime {
