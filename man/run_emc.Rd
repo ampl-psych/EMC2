@@ -36,7 +36,7 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as
-specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+specified by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the stop_criteria.}
 
@@ -64,9 +64,10 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 \item{trim}{A boolean. If \code{TRUE} will automatically remove redundant samples (i.e. from preburn, burn, adapt).}
 
 \item{on_singular}{A list or \code{NULL} (default). Controls recovery when the group-level
-covariance becomes computationally singular during sampling. \code{NULL} errors immediately.
+covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
+group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure), \code{on_exhausted}
-(\code{"error"} or \code{"carry_forward"} the previous group parameters), and \code{max_carry_forward}
+(\code{"error"} or \code{"carry_forward"} the previous group parameters), \code{max_carry_forward}
 (consecutive carried-forward iterations before giving up).}
 
 \item{r_cores}{An integer for number of cores to use in R-based likelihood calculations, default 1.}

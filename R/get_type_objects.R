@@ -457,22 +457,27 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     "factor_regressors", "structural_regressors", "mu_implied", "LL"
   )
   if (return_prior & !sample_prior) {
+    dots <- list(...)
+    for (nm in intersect(names(dots), c("lambda_mean", "lambda_var", "a_d", "b_d"))) {
+      prior[[nm]] <- dots[[nm]]
+    }
     if (is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      lambda_var = "variance of the factor loadings",
+      lambda_mean = "mean of free factor loadings; scalar, per-factor vector, or parameter-by-factor matrix (default 0)",
+      lambda_var = "variance of free factor loadings; scalar, per-factor vector, or parameter-by-factor matrix",
       K_var = "variance of the parameter regressors",
       G_var = "variance of the factor regressors",
       B_var = "variance of structural regressors",
-      a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
-      b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
+      a_d = "inverse-gamma shape / inverse-Wishart degrees of freedom; scalar or per-factor vector, constant within correlated groups",
+      b_d = "inverse-gamma rate / inverse-Wishart scale diagonal; scalar or per-factor vector",
       a_e = "shape prior of inverse gamma on residuals",
       b_e = "rate prior of inverse gamma on residuals"
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var"),
+      loadings = c("lambda_mean", "lambda_var"),
       residuals = c("a_e", "b_e"),
       factor_residuals = c("a_d", "b_d"),
       regressors = c("K_var"),
@@ -491,7 +496,8 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     if (!is.null(list(...)$return_info)) {
       return(prior[c("types", "type_descriptions", "descriptions")])
     }
-    prior$prior <- add_prior_names(prior$prior, design, ...)
+    parameter_priors <- c("theta_mu_mean", "theta_mu_var", "a_e", "b_e")
+    prior$prior[parameter_priors] <- add_prior_names(prior$prior[parameter_priors], design, ...)
     return(prior)
   } else {
     if (!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))

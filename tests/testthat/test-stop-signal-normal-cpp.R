@@ -50,7 +50,7 @@ expect_stop_cpp_equal_r <- function(design, p, tolerance = 1e-5) {
   ll_c <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_c)
   ll_r <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_r)
 
-  expect_equal(unname(ll_c), unname(ll_r), tolerance = tolerance)
+  expect_equal(as.vector(ll_c), as.vector(ll_r), tolerance = tolerance)
 }
 
 test_that("SSNORM C++ likelihood matches R reference path", {

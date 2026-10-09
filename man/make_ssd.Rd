@@ -16,7 +16,8 @@ make_ssd(
   factors = NULL,
   formula = NULL,
   staircase_up = NA,
-  staircase_down = NULL
+  staircase_down = NULL,
+  UC = NULL
 )
 }
 \arguments{
@@ -62,11 +63,17 @@ that should increase the staircase on the next stop trial. Defaults to
 \item{staircase_down}{Character vector listing response labels that should
 decrease the staircase. If \code{NULL} (the default), any stop-trial outcome
 not matched by \code{staircase_up} will decrease the staircase.}
+
+\item{UC}{Optional response deadline (seconds) used by the trial-by-trial
+staircase (see Details): a response slower than \code{UC} is unobserved in the
+experiment, so the staircase treats it as a non-response. Ignored when
+\code{NULL}; when the data carry a \code{UC} column that is used instead.}
 }
 \value{
 A function of a data frame that returns a numeric vector of SSDs.
-The function carries class \code{emc_ssd_function} so that \code{\link[=make_data]{make_data()}} can
-attach the generated staircase specifications to the simulated data.
+The function carries class \code{emc_ssd_function} (and the \code{pretrial}
+attribute) so that \code{\link[=make_data]{make_data()}} can attach the generated staircase
+specifications to the simulated data or run the staircase trial by trial.
 }
 \description{
 \code{make_ssd()} returns a function that can be supplied to the
@@ -77,6 +84,24 @@ combination of grouping factors (e.g., subjects, stimulus categories).
 By default, a separate staircase is maintained for each subject (using the
 \code{subjects} column in the data) so that every participant starts at
 \code{SSD0}.
+}
+\details{
+The generator can be used in two places:
+\itemize{
+\item \code{make_data(functions = list(SSD = make_ssd(...)))}: SSDs are assigned
+once for the whole data set and a staircase is run inside the model's
+random function. This is the vectorised path and requires that no
+parameter depends on SSD.
+\item \code{design(functions = list(SSD = make_ssd(...)))}: the generator is a
+pre-trial design function. \code{\link[=make_data]{make_data()}} then simulates trial by trial
+(the \code{conditional_on_data = FALSE} path): on each trial the generator
+steps the staircase from the previous stop trial's outcome and assigns
+the current trial's SSD before the parameters for that trial are
+computed. This is required when a trend makes a parameter depend on SSD
+(e.g. a \code{slin_incr} kernel of \code{SSD} on \code{muS}). With fitted data the default (conditional)
+simulation keeps the observed SSDs, e.g. \code{predict(emc, conditional_on_data = TRUE)}; the unconditional simulation (the default of \code{\link[=predict]{predict()}} when
+the design holds the generator) re-runs the staircase.
+}
 }
 \examples{
 # Fixed SSDs sampled on 25\% of trials

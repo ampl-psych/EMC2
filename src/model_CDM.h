@@ -260,11 +260,11 @@ inline double log_i0_stable_scalar(double x) {
 
 } // namespace cdm_internal
 
-// Returns log-density per trial (R_NegInf if invalid)
-inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, LogicalVector is_ok) {
+// Fills in log-density per trial
+inline void c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix pars,
+                   const std::vector<bool>& participating,
+                   double* __restrict__ ll_buf, int n) {
   using namespace cdm_internal;
-  const int N = rts.size();
-  NumericVector out(N);
 
   // Extract columns by index according to R model: v, theta, a, t0, s, sv
   NumericVector v   = pars(_, 0);
@@ -276,7 +276,7 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
 
   // map theta from (0,1) to [-pi, pi]
   const double PI = 3.14159265358979323846264338327950288;
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < n; ++i) {
     th[i] = (th[i] - 0.5) * 2.0 * PI;
   }
 
@@ -285,8 +285,8 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
   const double two_pi = 2.0 * PI;
 
   // Joint density computation
-  for (int i = 0; i < N; ++i) {
-    if (!is_ok[i]) { out[i] = R_NegInf; continue; }
+  for (int i = 0; i < n; ++i) {
+    if (!participating[i]) continue;  // leave ll_buf[i] at its default 0.0
 
     const double ai = a[i];
     const double sigi = sig[i];
@@ -298,7 +298,7 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
 
     if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
         !R_finite(vi) || !R_finite(thi) || !R_finite(rti) || !R_finite(t0i)) {
-      out[i] = R_NegInf; continue;
+        ll_buf[i] = R_NegInf; continue;
     }
 
     const double tt = std::max(0.0, rti - t0i);
@@ -339,18 +339,15 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
       log_raw = log_fpt + log_det + log_rad + log_ang + log_tim - std::log(two_pi);
     }
 
-    out[i] = log_raw;
+    ll_buf[i] = log_raw;
   }
 
-  return out;
 }
 
 // Returns log-density per trial for SDM (R, R2)
-inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R2s,
-                            NumericMatrix pars, LogicalVector is_ok) {
+inline void c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, NumericMatrix pars, const std::vector<bool>& participating,
+                            double* __restrict__ ll_buf, int n) {
   using namespace cdm_internal;
-  const int N = rts.size();
-  NumericVector out(N);
 
   NumericVector v   = pars(_, 0);
   NumericVector th1 = pars(_, 1);
@@ -358,11 +355,11 @@ inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R
   NumericVector a   = pars(_, 3);
   NumericVector t0  = pars(_, 4);
   NumericVector sig = pars(_, 5);
-  NumericVector sv  = (pars.ncol() > 6) ? pars(_, 6) : NumericVector(N, 0.0);
+  NumericVector sv  = (pars.ncol() > 6) ? pars(_, 6) : NumericVector(n, 0.0);
 
   const double PI = 3.14159265358979323846264338327950288;
   const double two_pi = 2.0 * PI;
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < n; ++i) {
     th1[i] = th1[i] * PI;
     th2[i] = (th2[i] - 0.5) * two_pi;
   }
@@ -371,8 +368,8 @@ inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R
   const double s1 = 0.02;
   const double log_surface = std::log(4.0 * PI);
 
-  for (int i = 0; i < N; ++i) {
-    if (!is_ok[i]) { out[i] = R_NegInf; continue; }
+  for (int i = 0; i < n; ++i) {
+    if (!participating[i]) continue;  // leave ll_buf[i] at its default 0.0
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -387,7 +384,7 @@ inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R
     if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
         !R_finite(vi) || !R_finite(t1) || !R_finite(t2) || !R_finite(rti) || !R_finite(t0i) ||
         !R_finite(r1) || !R_finite(r2)) {
-      out[i] = R_NegInf; continue;
+        ll_buf[i] = R_NegInf; continue;
     }
 
     const double tt = std::max(0.0, rti - t0i);
@@ -413,18 +410,16 @@ inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R
     const double m2 = st1 * std::sin(t2);
     const double cos_term = x0 * m0 + x1 * m1 + x2 * m2;
 
-    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 3, log_surface);
+    ll_buf[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 3, log_surface);
   }
 
-  return out;
 }
 
 // Returns log-density per trial for HSDM (R, R2, R3)
-inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, NumericVector R3s,
-                             NumericMatrix pars, LogicalVector is_ok) {
+inline void c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, NumericVector R3s, NumericMatrix pars,
+                   const std::vector<bool>& participating,
+                   double* __restrict__ ll_buf, int n) {
   using namespace cdm_internal;
-  const int N = rts.size();
-  NumericVector out(N);
 
   NumericVector v   = pars(_, 0);
   NumericVector th1 = pars(_, 1);
@@ -433,11 +428,11 @@ inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector 
   NumericVector a   = pars(_, 4);
   NumericVector t0  = pars(_, 5);
   NumericVector sig = pars(_, 6);
-  NumericVector sv  = (pars.ncol() > 7) ? pars(_, 7) : NumericVector(N, 0.0);
+  NumericVector sv  = (pars.ncol() > 7) ? pars(_, 7) : NumericVector(n, 0.0);
 
   const double PI = 3.14159265358979323846264338327950288;
   const double two_pi = 2.0 * PI;
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < n; ++i) {
     th1[i] = th1[i] * PI;
     th2[i] = th2[i] * PI;
     th3[i] = (th3[i] - 0.5) * two_pi;
@@ -447,8 +442,8 @@ inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector 
   const double s1 = 0.02;
   const double log_surface = std::log(2.0 * PI * PI);
 
-  for (int i = 0; i < N; ++i) {
-    if (!is_ok[i]) { out[i] = R_NegInf; continue; }
+  for (int i = 0; i < n; ++i) {
+    if (!participating[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -465,7 +460,7 @@ inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector 
     if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
         !R_finite(vi) || !R_finite(t1) || !R_finite(t2) || !R_finite(t3) ||
         !R_finite(rti) || !R_finite(t0i) || !R_finite(r1) || !R_finite(r2) || !R_finite(r3)) {
-      out[i] = R_NegInf; continue;
+        ll_buf[i] = R_NegInf; continue;
     }
 
     const double tt = std::max(0.0, rti - t0i);
@@ -496,27 +491,25 @@ inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector 
     const double m3 = st1 * st2 * std::sin(t3);
     const double cos_term = x0 * m0 + x1 * m1 + x2 * m2 + x3 * m3;
 
-    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 4, log_surface);
+    ll_buf[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 4, log_surface);
   }
 
-  return out;
 }
 
 // Returns log-density per trial for PSDM (R)
-inline NumericVector c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, LogicalVector is_ok) {
+inline void c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, const std::vector<bool>& participating,
+                    double* __restrict__ ll_buf, int n) {
   using namespace cdm_internal;
-  const int N = rts.size();
-  NumericVector out(N);
 
   NumericVector v   = pars(_, 0);
   NumericVector th1 = pars(_, 1);
   NumericVector a   = pars(_, 2);
   NumericVector t0  = pars(_, 3);
   NumericVector sig = pars(_, 4);
-  NumericVector sv  = (pars.ncol() > 5) ? pars(_, 5) : NumericVector(N, 0.0);
+  NumericVector sv  = (pars.ncol() > 5) ? pars(_, 5) : NumericVector(n, 0.0);
 
   const double PI = 3.14159265358979323846264338327950288;
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < n; ++i) {
     th1[i] = th1[i] * PI;
   }
 
@@ -524,8 +517,8 @@ inline NumericVector c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix 
   const double s1 = 0.02;
   const double log_two = std::log(2.0);
 
-  for (int i = 0; i < N; ++i) {
-    if (!is_ok[i]) { out[i] = R_NegInf; continue; }
+  for (int i = 0; i < n; ++i) {
+    if (!participating[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -537,7 +530,7 @@ inline NumericVector c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix 
 
     if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
         !R_finite(vi) || !R_finite(t1) || !R_finite(rti) || !R_finite(t0i) || !R_finite(r1)) {
-      out[i] = R_NegInf; continue;
+        ll_buf[i] = R_NegInf; continue;
     }
 
     const double tt = std::max(0.0, rti - t0i);
@@ -571,18 +564,16 @@ inline NumericVector c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix 
         0.5 * (v2 * tt_v) / D;
       log_raw = log_base + k * A + log_i0_stable_scalar(k * B) - log_two;
     }
-    out[i] = log_raw;
+    ll_buf[i] = log_raw;
   }
 
-  return out;
 }
 
 // Returns log-density per trial for PHSDM (R, R2)
-inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s,
-                              NumericMatrix pars, LogicalVector is_ok) {
+inline void c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s,
+                              NumericMatrix pars, const std::vector<bool>& participating,
+                              double* __restrict__ ll_buf, int n) {
   using namespace cdm_internal;
-  const int N = rts.size();
-  NumericVector out(N);
 
   NumericVector v   = pars(_, 0);
   NumericVector th1 = pars(_, 1);
@@ -590,10 +581,10 @@ inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector
   NumericVector a   = pars(_, 3);
   NumericVector t0  = pars(_, 4);
   NumericVector sig = pars(_, 5);
-  NumericVector sv  = (pars.ncol() > 6) ? pars(_, 6) : NumericVector(N, 0.0);
+  NumericVector sv  = (pars.ncol() > 6) ? pars(_, 6) : NumericVector(n, 0.0);
 
   const double PI = 3.14159265358979323846264338327950288;
-  for (int i = 0; i < N; ++i) {
+  for (int i = 0; i < n; ++i) {
     th1[i] = th1[i] * PI;
     th2[i] = th2[i] * PI;
   }
@@ -602,8 +593,8 @@ inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector
   const double s1 = 0.02;
   const double log_pi = std::log(PI);
 
-  for (int i = 0; i < N; ++i) {
-    if (!is_ok[i]) { out[i] = R_NegInf; continue; }
+  for (int i = 0; i < n; ++i) {
+    if (!participating[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -618,7 +609,7 @@ inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector
     if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
         !R_finite(vi) || !R_finite(t1) || !R_finite(t2) || !R_finite(rti) || !R_finite(t0i) ||
         !R_finite(r1) || !R_finite(r2)) {
-      out[i] = R_NegInf; continue;
+        ll_buf[i] = R_NegInf; continue;
     }
 
     const double tt = std::max(0.0, rti - t0i);
@@ -660,10 +651,8 @@ inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector
         0.5 * (v2 * tt_v) / D;
       log_raw = log_base + k * A + log_i0_stable_scalar(k * B) - log_pi;
     }
-    out[i] = log_raw;
+    ll_buf[i] = log_raw;
   }
-
-  return out;
 }
 
 

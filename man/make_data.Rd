@@ -11,6 +11,7 @@ make_data(
   data = NULL,
   expand = 1,
   functions = NULL,
+  TC = NULL,
   ...
 )
 }
@@ -29,6 +30,8 @@ or an emc object with sampled parameters
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
 
 \item{functions}{List of functions you want to apply to the data generation.}
+
+\item{TC}{List of arguments to be supplied to make_missing() for censoring & truncation. See make_missing() for arguments.}
 
 \item{...}{Additional optional arguments}
 }

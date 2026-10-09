@@ -4,16 +4,41 @@
 \alias{plot_sbc_hist}
 \title{Plot the Histogram of the Observed Rank Statistics of SBC}
 \usage{
-plot_sbc_hist(ranks, bins = 10, layout = NA, add_stats = TRUE)
+plot_sbc_hist(
+  ranks,
+  bins = 10,
+  layout = NA,
+  add_stats = TRUE,
+  main = NULL,
+  add_to_main = NULL
+)
 }
 \arguments{
 \item{ranks}{A list of named dataframes of the rank statistic}
 
 \item{bins}{An integer specifying the number of bins to use when plotting the histogram}
 
-\item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}}
+\item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}.
+\code{NA} (the default) auto-computes a grid. \code{NULL} leaves the current device
+layout (\code{mfrow}/\code{mfcol}) untouched, drawing the panels into the existing
+grid with no new page between them.}
 
-\item{add_stats}{Boolean. Should coverage, bias and precision be included in the figure.}
+\item{add_stats}{Logical. \code{TRUE} (the default) appends a chi-square
+goodness-of-fit-to-uniform p-value, computed over the displayed bins (the
+exact test of the bars drawn; high p = consistent with calibration), as a
+second row of each panel's title. \code{FALSE} omits it.}
+
+\item{main}{Optional. \code{NULL} (the default) uses the auto-generated per-panel
+title (the first title row). A single string is used as the title on every
+panel. A character vector sets one title per panel and must have the same
+length as the number of panels being plotted. The \code{add_stats} p-value, when
+shown, is always added as a second title row beneath this.}
+
+\item{add_to_main}{Optional. \code{NULL} (the default) does nothing. A single
+string is prepended to the start of the (auto-generated or \code{main}) title of
+every panel. A character vector is prepended panel-by-panel and must have
+the same length as the number of panels being plotted (no separator is
+inserted).}
 }
 \value{
 No returns

@@ -3,7 +3,7 @@
 
 #include <Rcpp.h>
 #include <cmath>
-#include "gauss.h"  // hcubature + Gauss-Kronrod prototypes
+#include "hcubature.h"  // hcubature + Gauss-Kronrod prototypes
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884
 #endif

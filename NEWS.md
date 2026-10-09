@@ -1,4 +1,26 @@
+# EMC2 (development)
+
+## Sampler
+
+-   `adapt` and `sample` now use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. `preburn` and `burn` retain the search kernel. `options(emc.sampler = "legacy")` restores the previous sampler for comparison.
+-   Independent particle draws now follow their mixture probabilities without forcing a draw from every component. Parameter blocks update sequentially, and shared likelihoods are counted once.
+-   Forked sampling now advances L'Ecuyer-CMRG streams between batches and uses separate participant substreams.
+-   Sample proposals are built from `adapt`, tuned for 100 more adapt iterations, then fixed. Hierarchical adaptation checks subject-level Rhat over the last 250 draws (target 1.2; stops after three checks without improvement or 1000 iterations). Disable this check with `options(emc.adapt_converge = FALSE)`.
+-   Hierarchical subject proposals follow the current group mean and covariance using estimated likelihood precision. `lik_precision()` brackets finite-difference steps and avoids spurious curvature at model bounds.
+-   Standard hierarchical models add exact scale moves and, without a group-level design, location moves to improve funnel mixing. Tuning ends before sampling. Disable with `options(emc.scale_move = FALSE)`; state is stored in `attr(samples, "scale_move")`.
+-   Summaries, plots and stopping rules now share split-Rhat without coda's correction or transform. Stop checks are computed in one pass. `stop_criteria$gd_quantile` optionally uses a subject-level quantile; other parameters still use their largest Rhat.
+-   Singular group-covariance draws are retried up to 3 times; `on_singular = list(max_retries = 0)` disables retries.
+-   Windows workers now receive the `emc.*` options.
+-   SBC plot bands use directly computed binomial quantiles and root-finding for simultaneous coverage.
+-   The long posterior-preservation test runs locally and is skipped on CRAN and CI.
+
 # EMC2 3.4.1
+
+## New features (cens_trunc2-SS-dEXG3mu)
+
+-   New built-in trend kernels `slin_incr` (`k = min(1, k_sat * c)`) and `slin_decr` (`k = -min(1, k_sat * c)`); non-finite covariates give 0. With a `lin` base and `design(transform = list(func = c(<target>.w = "exp")))` they give a rise (or fall) that saturates, e.g. the dEXG3 stop-signal model (`muS = muS(0) + d * min(1, k * SSD)`).
+-   `make_ssd()` generators can be given to `design(functions = list(SSD = ...))`: they are pre-trial design functions that run the staircase trial by trial in `make_data()` (`conditional_on_data = FALSE`), so parameters that depend on SSD see the realised SSD. `make_ssd()` gains a `UC` argument for the late-response rule. `make_data(functions = )` keeps the vectorised staircase for models without a trend on SSD.
+-   `get_data()` keeps `make_ssd()` columns (observed SSDs are data), so `predict(conditional_on_data = TRUE)` predicts at the observed delays.
 
 ## Bug fixes
 

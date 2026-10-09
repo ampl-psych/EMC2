@@ -110,6 +110,8 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   }
   datasets <- list()
   sources <- c()
+  # to_plot gates the data and the *generation* of predictives; predictives that
+  # are supplied explicitly are always plotted.
   plot_data <- "data" %in% to_plot
   # Check for regular input
   if(!is.data.frame(input) && !inherits(input, "emc")){
@@ -135,6 +137,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       length(post_predict) != length(input)) {
     post_predict <- vector("list", length(input))
   }
+
   if(!is.data.frame(prior_predict)  && is.list(prior_predict)){
     if(is.null(names(prior_predict))) stop("If prior_predict is a list, it must have names")
     datasets[names(prior_predict)] <- prior_predict
@@ -230,6 +233,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
 
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
+
 
 #' Plot Statistics on Data
 #'
