@@ -167,6 +167,10 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     data <- get_data(emc)
   }
   design <- get_design(emc)
+  if (emc_has_stale_model(emc)) {
+    message("This object was fitted with an older EMC2; its model was refreshed for prediction. ",
+            "Run update2version() on the object to make this permanent.")
+  }
   return_trialwise_parameters <- isTRUE(dots$return_trialwise_parameters)
   if (is.null(dots$conditional_on_data) && has_conditional_covariates(design[[1]])) {
     dots$conditional_on_data <- FALSE
@@ -1205,6 +1209,10 @@ get_design.emc <- function(x){
   } else{
     emc_design <- get_design(get_prior(x))
   }
+  # Objects fitted before May 2025 carry a model closure with the old
+  # rfun(lR, pars) interface; refresh it (in memory) so the design is usable
+  # by make_data()/predict(). update2version() makes this permanent.
+  emc_design <- refresh_design_models(emc_design)
   class(emc_design) <- "emc.design"
   return(emc_design)
 }
