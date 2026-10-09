@@ -2194,6 +2194,21 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
+  # -----------------------------------------------------------------------
+  # Step 3: Set-up design matrix cache
+  # -----------------------------------------------------------------------
+  make_keys <- function(dat, key_cols) {
+    if (length(key_cols) == 0L) return(rep("intercept_only", nrow(dat)))
+    do.call(paste, c(
+      lapply(key_cols, function(col) {
+        v <- dat[[col]]
+        if (anyNA(v)) stop(sprintf("Column '%s' is NA in key computation", col))
+        if (is.logical(v) || is.factor(v)) as.character(as.integer(v))
+        else as.character(v)
+      }),
+      list(sep = "_")
+    ))
+  }
 
   make_designs_cached <- local({
     cache <- list()
