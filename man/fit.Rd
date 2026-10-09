@@ -42,7 +42,7 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as specified
-by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the \code{stop_criteria}.}
 
@@ -68,12 +68,13 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 \item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
 group-level covariance becomes computationally singular during sampling (which
 otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
-keeps the default behaviour: error immediately, naming the diverging parameters.
+keeps the defaults below: up to 3 re-draws of the group step, then an error
+naming the diverging parameters.
 A list may set any of:
 \itemize{
 \item \code{max_retries} — integer; on a singular covariance, re-draw the group
 (Gibbs) step this many times before giving up on that iteration. Rescues
-transient early-burn singularities. Default 0.
+transient singularities. Default 3.
 \item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
 are exhausted, \code{"carry_forward"} reuses the previous iteration's group
 parameters and continues instead of aborting.
@@ -101,7 +102,20 @@ The potential stop criteria to be set are:
 
 \code{max_gd} (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 
+\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): use this quantile of the
+subject-level (\code{alpha}) diagnostics. All other selected parameters must still
+pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
+
+\code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
+every \code{step_size} iterations. After a failed check, the first third of the stage's
+draws is dropped if this lowers the stopping diagnostic.
+
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
+
+Hierarchical models also require the largest subject-parameter Rhat over the last
+250 \code{adapt} iterations to fall below 1.2, unless three checks show no improvement
+or 1000 iterations are reached. \code{options(emc.adapt_converge = FALSE)} disables
+this extra condition. The \code{sample} proposals are then built and fixed.
 
 \code{min_es} (integer): The minimum number of effective samples across all parameters in the selection
 

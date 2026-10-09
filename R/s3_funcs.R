@@ -532,7 +532,20 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``max_gd`` (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 #'
+#' ``gd_quantile`` (numeric in (0, 1], only with ``max_gd``): use this quantile of the
+#' subject-level (``alpha``) diagnostics. All other selected parameters must still
+#' pass ``max_gd``. Default ``NULL`` uses the maximum throughout.
+#'
+#' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
+#' every ``step_size`` iterations. After a failed check, the first third of the stage's
+#' draws is dropped if this lowers the stopping diagnostic.
+#'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
+#'
+#' Hierarchical models also require the largest subject-parameter Rhat over the last
+#' 250 ``adapt`` iterations to fall below 1.2, unless three checks show no improvement
+#' or 1000 iterations are reached. ``options(emc.adapt_converge = FALSE)`` disables
+#' this extra condition. The ``sample`` proposals are then built and fixed.
 #'
 #' ``min_es`` (integer): The minimum number of effective samples across all parameters in the selection
 #'
@@ -560,7 +573,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' This fine-tunes the width of the search space to obtain the desired acceptance probability.
 #' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as specified
-#' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
+#' by ``stop_criteria`` are checked and, in the stages before `sample`, proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
 #' @param fileName A string. If specified, will auto-save emc object at this location on every iteration.
 #' @param particle_factor An integer. ``particle_factor`` multiplied by the square
@@ -580,12 +593,13 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param on_singular A list or `NULL` (the default). Controls recovery when the
 #' group-level covariance becomes computationally singular during sampling (which
 #' otherwise aborts the run, typically from an unidentified parameter). `NULL`
-#' keeps the default behaviour: error immediately, naming the diverging parameters.
+#' keeps the defaults below: up to 3 re-draws of the group step, then an error
+#' naming the diverging parameters.
 #' A list may set any of:
 #' \itemize{
 #'   \item `max_retries` — integer; on a singular covariance, re-draw the group
 #'     (Gibbs) step this many times before giving up on that iteration. Rescues
-#'     transient early-burn singularities. Default 0.
+#'     transient singularities. Default 3.
 #'   \item `on_exhausted` — `"error"` (default) or `"carry_forward"`. When retries
 #'     are exhausted, `"carry_forward"` reuses the previous iteration's group
 #'     parameters and continues instead of aborting.
@@ -1034,6 +1048,12 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
 #' i.e. the ratio of between to within MCMC chain variance.
 #'
+#' Uses split-Rhat: halve each chain and compute `sqrt(((n - 1) / n * W + B / n) / W)`,
+#' where `n` is the half-chain length, `W` the mean within-half-chain variance and
+#' `B / n` the variance of the half-chain means. The same statistic drives `fit()`'s
+#' stop rules. It omits the degrees-of-freedom correction and log transform used by
+#' `coda::gelman.diag()` in EMC2 up to version 3.4.1, so values may be lower.
+#'
 #' See: Gelman, A and Rubin, DB (1992)
 #' Inference from iterative simulation using multiple sequences, *Statistical Science*, 7, 457-511.
 #'
@@ -1041,7 +1061,7 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #'
 #' @param emc An emc object
 #' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param omit_mpsrf Boolean. If `TRUE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`).
+#' @param omit_mpsrf Boolean. If `FALSE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`) of the halved chains.
 #' @param stat A string. Should correspond to a function that can be applied to a vector,
 #' which will be performed on the vector/rows or columns of the matrix of the parameters
 #' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,
