@@ -47,73 +47,140 @@ static int list_int(const Rcpp::List& lst, const char* field, int def = 0) {
 // KernelSpec construction helpers — plain C++ after data extraction
 // =============================================================================
 
-static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
+// =============================================================================
+// build_at_mask  —  replaces build_first_level()
+// at_mask[r] = 1 if trial r is the first level of the 'at' factor, else 0
+// If no 'at' specified, all entries are 1
+// =============================================================================
+
+static void build_at_mask(KernelSpec& ks,
+                          const Rcpp::DataFrame& data,
+                          const int n_active_trials)
 {
   const int n_full = data.nrows();
-  if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
-  const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
+  if (n_full <= 0) Rf_error("build_at_mask: data has zero rows");
+  const int n = (n_active_trials > 0 && n_active_trials < n_full)
+    ? n_active_trials : n_full;
 
-  ks.first_level.assign(n, true);
+  ks.at_mask.assign(n, 1);  // default: all trials active
 
   if (ks.has_at) {
     if (!data.containsElementNamed(ks.at.c_str()))
-      Rf_error("build_first_level: data has no column '%s'", ks.at.c_str());
+      Rf_error("build_at_mask: data has no column '%s'", ks.at.c_str());
     SEXP at_col = data[ks.at.c_str()];
     if (!Rf_inherits(at_col, "factor"))
-      Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
+      Rf_error("build_at_mask: 'at' column '%s' must be a factor", ks.at.c_str());
     if (Rf_length(at_col) != n_full)
-      Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
+      Rf_error("build_at_mask: 'at' column '%s' has wrong length", ks.at.c_str());
     const int* f = INTEGER(at_col);
-    for (int i = 0; i < n; ++i)
-      ks.first_level[i] = (f[i] == 1);
+    for (int r = 0; r < n; ++r)
+      ks.at_mask[r] = (f[r] == 1) ? 1 : 0;
   }
-
-  ks.expand_idx.assign(n, 0);
-  int count = 0;
-  for (int i = 0; i < n; ++i) {
-    if (ks.first_level[i]) ++count;
-    ks.expand_idx[i] = count;
-  }
-  if (count == 0)
-    Rf_error("build_first_level: no rows with first 'at' level found");
-  for (int i = 0; i < n; ++i)
-    if (ks.expand_idx[i] == 0)
-      Rf_error("build_first_level: rows before first 'at' level");
-
-  // Filter mode - only pass rows corresponding to the first level of the at factor (default)
-  if (ks.at_mode == AtMode::Filter) {
-    // comp_index = first-level rows only
-    ks.comp_index.clear();
-    ks.comp_index.reserve(count);
-    for (int i = 0; i < n; ++i)
-      if (ks.first_level[i]) ks.comp_index.push_back(i);
-
-    // is_first_level_comp: all true (trivially, every comp row is first-level)
-    ks.is_first_level_comp.assign(count, 1);
-
-  } else {
-    // push = pass all rows, but only apply update to *next* first-level of at
-    // push mode: comp_index = all rows
-    ks.comp_index.resize(n);
-    std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
-
-    // is_first_level_comp: compressed boolean, same length as comp_index
-    ks.is_first_level_comp.resize(n);
-    for (int i = 0; i < n; ++i)
-      ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
-  }
-  // ks.comp_index.clear();
-  // ks.comp_index.reserve(count);
-  // for (int i = 0; i < n; ++i)
-  //   if (ks.first_level[i]) ks.comp_index.push_back(i);
 }
 
-static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
+// =============================================================================
+// build_nan_mask  —  must run after build_kernel_input()
+// nan_mask(r, c) = 1 if kernel_input(r, c) is not NaN, else 0
+// Shape matches kernel_input: n_trials x n_cov_cols
+// Only covers covariate columns (par_input columns are excluded —
+// they are filled per-particle at runtime and checked separately if needed)
+// =============================================================================
+
+static void build_nan_mask(KernelSpec& ks, const int n_active_trials)
+{
+  const int n_full = ks.kernel_input.nrow;
+  const int n      = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;
+  const int ncov   = (int)ks.cov_names.size();
+
+  ks.nan_mask = MatBool(n, ncov, 0);  // default: all 0
+
+  for (int c = 0; c < ncov; ++c) {
+    const double* src = ks.kernel_input.colptr(c);
+    uint8_t*      dst = ks.nan_mask.colptr(c);
+
+    bool waiting_for_first = false;
+
+    for (int r = 0; r < n; ++r) {
+      if (ks.at_mask[r]) {
+        waiting_for_first = true;
+      }
+      if (waiting_for_first && !is_nan(src[r])) {
+        dst[r] = 1;
+        waiting_for_first = false;
+      }
+    }
+  }
+}
+
+// static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
+// {
+//   const int n_full = data.nrows();
+//   if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
+//   const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
+//
+//   ks.first_level.assign(n, true);
+//
+//   if (ks.has_at) {
+//     if (!data.containsElementNamed(ks.at.c_str()))
+//       Rf_error("build_first_level: data has no column '%s'", ks.at.c_str());
+//     SEXP at_col = data[ks.at.c_str()];
+//     if (!Rf_inherits(at_col, "factor"))
+//       Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
+//     if (Rf_length(at_col) != n_full)
+//       Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
+//     const int* f = INTEGER(at_col);
+//     for (int i = 0; i < n; ++i)
+//       ks.first_level[i] = (f[i] == 1);
+//   }
+//
+//   ks.expand_idx.assign(n, 0);
+//   int count = 0;
+//   for (int i = 0; i < n; ++i) {
+//     if (ks.first_level[i]) ++count;
+//     ks.expand_idx[i] = count;
+//   }
+//   if (count == 0)
+//     Rf_error("build_first_level: no rows with first 'at' level found");
+//   for (int i = 0; i < n; ++i)
+//     if (ks.expand_idx[i] == 0)
+//       Rf_error("build_first_level: rows before first 'at' level");
+//
+//   // Filter mode - only pass rows corresponding to the first level of the at factor (default)
+//   if (ks.at_mode == AtMode::Filter) {
+//     // comp_index = first-level rows only
+//     ks.comp_index.clear();
+//     ks.comp_index.reserve(count);
+//     for (int i = 0; i < n; ++i)
+//       if (ks.first_level[i]) ks.comp_index.push_back(i);
+//
+//     // is_first_level_comp: all true (trivially, every comp row is first-level)
+//     ks.is_first_level_comp.assign(count, 1);
+//
+//   } else {
+//     // push = pass all rows, but only apply update to *next* first-level of at
+//     // push mode: comp_index = all rows
+//     ks.comp_index.resize(n);
+//     std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
+//
+//     // is_first_level_comp: compressed boolean, same length as comp_index
+//     ks.is_first_level_comp.resize(n);
+//     for (int i = 0; i < n; ++i)
+//       ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
+//   }
+//   // ks.comp_index.clear();
+//   // ks.comp_index.reserve(count);
+//   // for (int i = 0; i < n; ++i)
+//   //   if (ks.first_level[i]) ks.comp_index.push_back(i);
+// }
+
+static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
 {
   const int n_cov = (int)ks.cov_names.size();
   const int n_par = (int)ks.par_input.size();
   const int n_col = n_cov + n_par;
-  const int n_row = data.nrows();
+  const int n_full = data.nrows();
+  const int n_row  = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;
+
 
   if (n_col == 0)
     Rf_error("KernelSpec '%s': needs at least one cov_name or par_input",
@@ -152,6 +219,16 @@ static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data)
   for (int i = 0; i < n_par; ++i)
     ks.par_input_indices.push_back(n_cov + i);
   // par_input columns remain zero-initialised; filled per-particle at runtime
+
+  if (n_active_trials > 0 && n_active_trials < n_row) {
+    // rebuild with capped rows
+    Mat capped(n_active_trials, n_col);
+    for (int c = 0; c < n_col; ++c)
+      std::copy(ks.kernel_input.colptr(c),
+                ks.kernel_input.colptr(c) + n_active_trials,
+                capped.colptr(c));
+    ks.kernel_input = std::move(capped);
+  }
 }
 
 static void build_kernel_args(KernelSpec& ks,
@@ -170,6 +247,7 @@ static void build_kernel_args(KernelSpec& ks,
     SEXP cns = ka["q_reset_column"];
     if (!Rf_isNull(cns)) {
       std::string col_name = sexp_to_str(cns);
+      ks.q_reset_col_name = col_name;
       if (!data.containsElementNamed(col_name.c_str()))
         Rf_error("kernel_args$q_reset_column: column '%s' not found", col_name.c_str());
       SEXP col = data[col_name.c_str()];
@@ -187,6 +265,7 @@ static void build_kernel_args(KernelSpec& ks,
     SEXP cns = ka["belief_reset_column"];
     if (!Rf_isNull(cns)) {
       std::string col_name = sexp_to_str(cns);
+      ks.belief_reset_col_name = col_name;
       if (!data.containsElementNamed(col_name.c_str()))
         Rf_error("kernel_args$belief_reset_column: column '%s' not found", col_name.c_str());
       SEXP col = data[col_name.c_str()];
@@ -214,6 +293,7 @@ static void build_covariate_coding(BaseSpec& bs,
 {
   bs.has_covariate_coding = false;
   bs.covariate_coding.clear();
+  bs.covariate_coding_name.clear();
 
   if (!b_lst.containsElementNamed("coding") || Rf_isNull(b_lst["coding"])) return;
   if (data_covcoding.size() == 0)
@@ -232,6 +312,7 @@ static void build_covariate_coding(BaseSpec& bs,
   const int T = data.nrows();
 
   std::string coding_nm = Rcpp::as<std::string>(coding_names[0]);
+  bs.covariate_coding_name = coding_nm;  // store for patch_data_rows
 
   int idx = -1;
   for (int j = 0; j < data_coding_names.size(); ++j)
@@ -291,18 +372,6 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const
       ks.has_at = true;
       ks.at     = list_str(k_lst, "at");
     }
-    // at_mode: "filter" (default) or "push"
-    {
-      std::string mode_str = list_str(k_lst, "at_mode");  // "" if absent
-      if (mode_str.empty() || mode_str == "filter") {
-        ks.at_mode = AtMode::Filter;
-      } else if (mode_str == "push") {
-        ks.at_mode = AtMode::Push;
-      } else {
-        Rf_error("KernelSpec '%s': unknown at_mode '%s' (must be 'filter' or 'push')",
-                 ks.kernel_id.c_str(), mode_str.c_str());
-      }
-    }
 
     if (ks.kernel_type == KernelType::Custom) {
       if (!k_lst.containsElementNamed("kernel_pointer"))
@@ -315,8 +384,11 @@ TrendPlan::TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const
     }
 
     build_kernel_args(ks, k_lst, data);
-    build_kernel_input(ks, data);
-    build_first_level(ks, data, n_active_trials);
+    build_kernel_input(ks, data, n_active_trials);
+    build_at_mask(ks, data, n_active_trials);  // independent, but consistent to keep together
+    build_nan_mask(ks, n_active_trials);       // after kernel_input and at_mask
+
+    // build_first_level(ks, data, n_active_trials);
 
     // populate param sets
     for (const auto& pn : ks.pnames) {
@@ -413,6 +485,157 @@ Rcpp::LogicalVector TrendPlan::premap_design_mask(const Rcpp::List& designs) con
   return mask;
 }
 
+void TrendPlan::patch_data_rows(const Rcpp::DataFrame& data,
+                                int row_start,
+                                int row_end,
+                                int src_row_start,
+                                int src_row_end)
+{
+  if (!incremental_mutable) Rcpp::stop("TrendPlan::patch_data_rows called on an immutable TrendPlan");
+
+  const int effective_src_end = (src_row_end == -1) ? data.nrows() : src_row_end;
+  const int T = row_end - row_start;
+  const int T_src = effective_src_end - src_row_start;
+
+  if (T_src != T)
+    Rcpp::stop("TrendPlan::patch_data_rows: src range [%d, %d) has %d rows; "
+                 "expected %d for patch range [%d, %d)",
+                 src_row_start, effective_src_end, T_src, T, row_start, row_end);
+
+
+  // covariate_coding attribute
+  Rcpp::List data_covcoding;
+  if (data.hasAttribute("covariate_coding")) {
+    SEXP cm = data.attr("covariate_coding");
+    if (!Rf_isNull(cm)) data_covcoding = Rcpp::List(cm);
+  }
+
+  // ------------------------------------------------------------------
+  // 1. Patch each KernelSpec
+  // ------------------------------------------------------------------
+  for (auto& kv : kernels) {
+    KernelSpec& ks = kv.second;
+
+    // 1a. kernel_input — covariate columns only
+    const int n_cov = (int)ks.cov_names.size();
+    for (int c = 0; c < n_cov; ++c) {
+      const char* cn = ks.cov_names[c].c_str();
+      if (!data.containsElementNamed(cn))
+        Rcpp::stop("patch_data_rows: kernel '%s' covariate '%s' not found in data",
+                   ks.kernel_id.c_str(), cn);
+
+      SEXP col = data[cn];
+      double* dst = ks.kernel_input.colptr(c) + row_start;
+
+      if (TYPEOF(col) == REALSXP) {
+        std::copy(REAL(col) + src_row_start, REAL(col) + effective_src_end, dst);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* src = INTEGER(col) + src_row_start;
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_INTEGER) ? NA_REAL : static_cast<double>(src[r]);
+      } else if (TYPEOF(col) == LGLSXP) {
+        const int* src = LOGICAL(col) + src_row_start;
+        for (int r = 0; r < T; ++r) dst[r] = (src[r] == NA_LOGICAL) ? NA_REAL : static_cast<double>(src[r]);
+      } else {
+        Rcpp::stop("patch_data_rows: covariate '%s' must be numeric, integer, or logical", cn);
+      }
+    }
+
+    // 1b. at_mask
+    if (ks.has_at) {
+      if (!data.containsElementNamed(ks.at.c_str()))
+        Rcpp::stop("patch_data_rows: 'at' column '%s' not found", ks.at.c_str());
+      SEXP at_col = data[ks.at.c_str()];
+      if (!Rf_inherits(at_col, "factor"))
+        Rcpp::stop("patch_data_rows: 'at' column '%s' must be a factor", ks.at.c_str());
+      const int* f = INTEGER(at_col) + src_row_start;
+      for (int r = 0; r < T; ++r) {
+        ks.at_mask[row_start + r] = (f[r] == 1) ? 1 : 0;
+        }
+      }
+
+    // 1c. q_reset_col
+    if (!ks.q_reset_col_name.empty()) {
+      if (!data.containsElementNamed(ks.q_reset_col_name.c_str()))
+        Rcpp::stop("patch_data_rows: q_reset_column '%s' not found",
+                   ks.q_reset_col_name.c_str());
+      SEXP col = data[ks.q_reset_col_name.c_str()];
+      if (TYPEOF(col) == LGLSXP) {
+        const int* p = LOGICAL(col)+ src_row_start;
+        std::copy(p, p + T, ks.q_reset_col.data() + row_start);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* p = INTEGER(col)+ src_row_start;
+        std::copy(p, p + T, ks.q_reset_col.data() + row_start);
+      } else {
+        Rcpp::stop("patch_data_rows: q_reset_column '%s' must be logical or integer",
+                   ks.q_reset_col_name.c_str());
+      }
+    }
+
+    // 1d. belief_reset_col
+    if (!ks.belief_reset_col_name.empty()) {
+      if (!data.containsElementNamed(ks.belief_reset_col_name.c_str()))
+        Rcpp::stop("patch_data_rows: belief_reset_column '%s' not found",
+                   ks.belief_reset_col_name.c_str());
+      SEXP col = data[ks.belief_reset_col_name.c_str()];
+      if (TYPEOF(col) == LGLSXP) {
+        const int* p = LOGICAL(col)+ src_row_start;
+        std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
+      } else if (TYPEOF(col) == INTSXP) {
+        const int* p = INTEGER(col)+ src_row_start;
+        std::copy(p, p + T, ks.belief_reset_col.data() + row_start);
+      } else {
+        Rcpp::stop("patch_data_rows: belief_reset_column '%s' must be logical or integer",
+                   ks.belief_reset_col_name.c_str());
+      }
+    }
+
+    // 1e. nan_mask — full rebuild after kernel_input and at_mask are current
+    build_nan_mask(ks, -1);
+  }
+
+  // ------------------------------------------------------------------
+  // 2. Patch each BaseSpec's covariate_coding
+  // ------------------------------------------------------------------
+  auto patch_bases = [&](std::vector<BaseSpec>& bases) {
+    for (BaseSpec& bs : bases) {
+      if (!bs.has_covariate_coding || bs.covariate_coding_name.empty()) continue;
+      if (data_covcoding.size() == 0)
+        Rcpp::stop("patch_data_rows: base '%s' has covariate_coding but data has no "
+                     "covariate_coding attribute", bs.target_parameter.c_str());
+
+      Rcpp::CharacterVector ccnames = data_covcoding.names();
+      int idx = -1;
+      for (int j = 0; j < ccnames.size(); ++j)
+        if (Rcpp::as<std::string>(ccnames[j]) == bs.covariate_coding_name) { idx = j; break; }
+      if (idx < 0)
+        Rcpp::stop("patch_data_rows: covariate_coding '%s' not found",
+                   bs.covariate_coding_name.c_str());
+
+      SEXP mat_sexp = data_covcoding[idx];
+      const double* src = REAL(mat_sexp) + src_row_start;
+      const int src_nrow = Rf_nrows(mat_sexp);
+      const int ncol     = Rf_ncols(mat_sexp);
+      Mat& dst_mat = bs.covariate_coding[0];
+
+      if (ncol != dst_mat.ncol)
+        Rcpp::stop("patch_data_rows: covariate_coding '%s' column count changed",
+                   bs.covariate_coding_name.c_str());
+
+      for (int c = 0; c < ncol; ++c) {
+        std::copy(src + c * src_nrow,
+                  src + c * src_nrow + T,
+                  dst_mat.colptr(c) + row_start);
+        }
+    }
+  };
+
+  patch_bases(premap_bases);
+  patch_bases(pretransform_bases);
+  patch_bases(posttransform_bases);
+}
+
+
+
 // =============================================================================
 // TrendRuntime constructor
 // =============================================================================
@@ -467,27 +690,6 @@ TrendRuntime::TrendRuntime(const TrendPlan& plan_) : plan(&plan_)
       }
     }
 
-    // if (!variadic) {
-    //   const int n = ks.kernel_input.nrow;
-    //   k_rt.slot_inputs.reserve(n_slots);
-    //
-    //   // covariate slots: copy data in once, never touched again
-    //   for (int s = 0; s < (int)ks.covariate_indices.size(); ++s) {
-    //     Mat buf(n, 1);
-    //     std::copy(ks.kernel_input.colptr(ks.covariate_indices[s]),
-    //               ks.kernel_input.colptr(ks.covariate_indices[s]) + n,
-    //               buf.colptr(0));
-    //     k_rt.slot_inputs.push_back(std::move(buf));
-    //   }
-    //
-    //   // par_input slots: allocate zero buffer, record which par_input feeds it
-    //   for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
-    //     int slot_idx = (int)ks.covariate_indices.size() + i;
-    //     k_rt.slot_inputs.push_back(Mat(n, 1));  // zero-init, filled per particle
-    //     k_rt.par_input_slot_indices.push_back(slot_idx);
-    //     k_rt.par_input_param_col.push_back(i);  // index into ks.par_input
-    //   }
-    // }
     kernels.emplace(ks.kernel_id, std::move(k_rt));
   }
 
@@ -558,192 +760,244 @@ void TrendRuntime::reset_all_kernels() {
 // TrendRuntime::run_kernel  (private)
 // =============================================================================
 
-void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt)
+void TrendRuntime::run_kernel(KernelRuntime& k_rt, ParamTable& pt,
+                              int row_start, int row_end)
 {
   const KernelSpec& ks   = *k_rt.spec;
   const int         n    = pt.n_trials;
+  const int         end = (row_end < 0) ? n : row_end;
+  const int         T   = end - row_start;
   const bool variadic = k_rt.is_variadic();
 
   if (variadic) {
     // fill par_input columns into shared matrix in-place
     for (int i = 0; i < (int)ks.par_input_indices.size(); ++i) {
-      const double* src = pt.column_by_name_ptr(ks.par_input[i]);
-      double*       dst = k_rt.kernel_input.colptr(ks.par_input_indices[i]);
-      std::copy(src, src + n, dst);
+      const double* src = pt.column_by_name_ptr(ks.par_input[i]) + row_start;
+      double*       dst = k_rt.kernel_input.colptr(ks.par_input_indices[i]) + row_start;
+      std::copy(src, src + T, dst);
     }
     auto& kptr = k_rt.kernel_ptrs[0];
-    kptr->reset();
+    if(row_start == 0) kptr->reset();
     kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-              k_rt.kernel_input, ks.comp_index);
-    if (ks.has_at && ks.at_mode == AtMode::Filter) {
-      // only expand in filter mode; push mode output is already full-length
-      kptr->set_expand_idx(ks.expand_idx);
-      kptr->do_expand(ks.expand_idx);
-    }
+              k_rt.kernel_input, ks.at_mask, ks.nan_mask, row_start, row_end);
   } else {
     // overwrite par_input slot buffers in-place — no allocation
     for (int j = 0; j < (int)k_rt.par_input_slot_indices.size(); ++j) {
       int slot_idx  = k_rt.par_input_slot_indices[j];
       int par_i     = k_rt.par_input_param_col[j];
-      const double* src = pt.column_by_name_ptr(ks.par_input[par_i]);
-      double*       dst = k_rt.slot_inputs[slot_idx].colptr(0);
-      std::copy(src, src + n, dst);
+      const double* src = pt.column_by_name_ptr(ks.par_input[par_i]) + row_start;
+      double*       dst = k_rt.slot_inputs[slot_idx].colptr(0) + row_start;
+      std::copy(src, src + T, dst);
     }
+
+    const int n_cov_slots = (int)ks.covariate_indices.size();
 
     // run each slot kernel against its pre-allocated buffer
     for (int s = 0; s < k_rt.n_slots(); ++s) {
       auto& kptr = k_rt.kernel_ptrs[s];
-      kptr->reset();
+      if(row_start == 0) kptr->reset();
+
+      // covariate slots get a zero-copy view of their nan column;
+      // par_input slots get an all-valid mask (no covariate to check)
+      MatBool slot_nm = (s < n_cov_slots) ? MatBool::col_view(ks.nan_mask, s) : MatBool(k_rt.slot_inputs[s].nrow, 1, 1);
+
       kptr->run(make_kernel_pars_view(pt, k_rt.kernel_par_indices),
-                k_rt.slot_inputs[s], ks.comp_index);
-      // only expand in filter mode; push mode output is already full-length
-      if (ks.has_at && ks.at_mode == AtMode::Filter) {
-        kptr->set_expand_idx(ks.expand_idx);
-        kptr->do_expand(ks.expand_idx);
+                k_rt.slot_inputs[s], ks.at_mask, slot_nm, row_start, row_end);
       }
-    }
   }
 }
 
 // =============================================================================
 // TrendRuntime::apply_base
 // =============================================================================
-
-void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt)
+void TrendRuntime::apply_base(BaseRuntime& base_rt, ParamTable& pt,
+                              int row_start, int row_end)
 {
-  KernelRuntime&  k_rt = *base_rt.kernel_rt;
-  const BaseSpec& bs   = *base_rt.spec;
+  KernelRuntime& k_rt = *base_rt.kernel_rt;
+  const BaseSpec& bs = *base_rt.spec;
 
-  if (!k_rt.kernel_ptrs[0]->has_run())
-    run_kernel(k_rt, pt);
+  const int end = (row_end < 0) ? pt.n_trials : row_end;
+  const int T = end - row_start;
 
-  const int n = pt.n_trials;
+  if (!k_rt.kernel_ptrs[0]->has_run_for(end))
+    run_kernel(k_rt, pt, row_start, row_end);
 
   const int target_idx = pt.base_index_for(bs.target_parameter);
-  double*   target_col = &pt.base(0, target_idx);
+  double* target_col = &pt.base(row_start, target_idx);
 
-  const bool base_is_lin      = (bs.base_type == "lin");
+  const bool base_is_lin = (bs.base_type == "lin");
   const bool base_is_centered = (bs.base_type == "centered");
   const bool base_is_identity = (bs.base_type == "identity");
   const bool base_is_lin_cond = (bs.base_type == "lin_cond");
-  const bool needs_base_par   = base_is_lin || base_is_centered || base_is_lin_cond;
+  const bool needs_base_par =
+    base_is_lin || base_is_centered || base_is_lin_cond;
   const double center_offset = base_is_centered ? 0.5 : 0.0;
 
-  // single base par pointer — same par applied to all slots
-  const double* base_ptr = needs_base_par ? &pt.base(0, base_rt.base_par_indices[0]) : nullptr;
-  const double* cond_ptr = base_is_lin_cond ? &pt.base(0, base_rt.cond_par_idx) : nullptr;
-  const int cond_sign = bs.base_args.cond_sign;  // +1 or -1; 0 if unused
+  // Pointers are offset once; loop indices are relative to row_start.
+  const double* base_ptr = needs_base_par
+  ? &pt.base(row_start, base_rt.base_par_indices[0])
+    : nullptr;
+  const double* cond_ptr = base_is_lin_cond
+  ? &pt.base(row_start, base_rt.cond_par_idx)
+    : nullptr;
+  const int cond_sign = bs.base_args.cond_sign;
 
   const bool variadic = k_rt.is_variadic();
-  const int  n_slots  = k_rt.n_slots();
+  const int n_slots = k_rt.n_slots();
 
-  const bool has_coding = bs.has_covariate_coding && !bs.covariate_coding.empty();
-  const Mat* coding     = has_coding ? &bs.covariate_coding[0] : nullptr;
+  const bool has_coding =
+    bs.has_covariate_coding && !bs.covariate_coding.empty();
+  const Mat* coding = has_coding ? &bs.covariate_coding[0] : nullptr;
 
-  // -----------------------------------------------------------------------
-  // Variadic kernel: single kernel, output is [n x n_cols]
-  // -----------------------------------------------------------------------
+  // Variadic kernel: single kernel, output is [n_rows x n_cols].
   if (variadic) {
-    KernelOutput ko = k_rt.kernel_ptrs[0]->get_output_stream(bs.kernel_output);
+    KernelOutput ko =
+      k_rt.kernel_ptrs[0]->get_output_stream(bs.kernel_output);
 
     if (has_coding && needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
-        const double* m_col = coding->colptr(col < coding->ncol ? col : 0);
+        const double* q_col =
+          ko.data + col * ko.n_rows + row_start;
+        const double* m_col =
+          coding->colptr(col < coding->ncol ? col : 0) + row_start;
+
         if (base_is_lin_cond) {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
-            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
+          for (int r = 0; r < T; ++r) {
+            const double gate =
+              (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] +=
+              (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
           }
         } else {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double q = q_col[r] - center_offset;
+          for (int r = 0; r < T; ++r) {
+            const double q = q_col[r] - center_offset;
             target_col[r] += q * base_ptr[r] * m_col[r];
           }
         }
       }
     } else if (needs_base_par) {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col =
+          ko.data + col * ko.n_rows + row_start;
+
         if (base_is_lin_cond) {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
-            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * gate;
+          for (int r = 0; r < T; ++r) {
+            const double gate =
+              (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] +=
+              (q_col[r] - center_offset) * base_ptr[r] * gate;
           }
         } else {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double q = q_col[r] - center_offset;
+          for (int r = 0; r < T; ++r) {
+            const double q = q_col[r] - center_offset;
             target_col[r] += q * base_ptr[r];
           }
         }
       }
     } else if (base_is_identity) {
-      // identity replaces rather than accumulates — intentional
+      // Preserve existing semantics: each output column replaces the target.
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col =
+          ko.data + col * ko.n_rows + row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] = q_col[r];
       }
     } else {
       for (int col = 0; col < ko.n_cols; ++col) {
-        const double* q_col = ko.data + col * ko.n_rows;
+        const double* q_col =
+          ko.data + col * ko.n_rows + row_start;
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] += q_col[r];
       }
     }
-
-    // -----------------------------------------------------------------------
-    // Arity-1: one kernel per slot, map column s scales slot s
-    // -----------------------------------------------------------------------
   } else {
+    // Arity-1: one kernel per slot; coding column s scales slot s.
     for (int s = 0; s < n_slots; ++s) {
-      KernelOutput  ko    = k_rt.kernel_ptrs[s]->get_output_stream(bs.kernel_output);
-      const double* q_col = ko.data;
+      KernelOutput ko =
+        k_rt.kernel_ptrs[s]->get_output_stream(bs.kernel_output);
+      const double* q_col = ko.data + row_start;
 
       if (has_coding && needs_base_par) {
-        const double* m_col = coding->colptr(s);
+        const double* m_col = coding->colptr(s) + row_start;
+
         if (base_is_lin_cond) {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
-            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
+          for (int r = 0; r < T; ++r) {
+            const double gate =
+              (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] +=
+              (q_col[r] - center_offset) * base_ptr[r] * m_col[r] * gate;
           }
         } else {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double q = q_col[r] - center_offset;
+          for (int r = 0; r < T; ++r) {
+            const double q = q_col[r] - center_offset;
             target_col[r] += q * base_ptr[r] * m_col[r];
           }
         }
       } else if (needs_base_par) {
         if (base_is_lin_cond) {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double gate = (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
-            target_col[r] += (q_col[r] - center_offset) * base_ptr[r] * gate;
+          for (int r = 0; r < T; ++r) {
+            const double gate =
+              (cond_ptr[r] * cond_sign > 0.0) ? 1.0 : 0.0;
+            target_col[r] +=
+              (q_col[r] - center_offset) * base_ptr[r] * gate;
           }
         } else {
 #pragma omp simd
-          for (int r = 0; r < n; ++r) {
-            double q = q_col[r] - center_offset;
+          for (int r = 0; r < T; ++r) {
+            const double q = q_col[r] - center_offset;
             target_col[r] += q * base_ptr[r];
           }
         }
       } else if (base_is_identity) {
-        // identity replaces rather than accumulates — intentional
+        // Identity replaces rather than accumulates.
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] = q_col[r];
       } else {
 #pragma omp simd
-        for (int r = 0; r < n; ++r)
+        for (int r = 0; r < T; ++r)
           target_col[r] += q_col[r];
+      }
+    }
+  }
+}
+
+void TrendRuntime::sync_data_rows_from_plan(int row_start, int row_end)
+{
+  for (auto& kv : kernels) {
+    KernelRuntime&    k_rt = kv.second;
+    const KernelSpec& ks   = *k_rt.spec;
+    const int T = row_end - row_start;
+
+    // rewind kernel state to row_start boundary
+    for (auto& kptr : k_rt.kernel_ptrs)
+      if (row_start < kptr->rows_computed())
+        kptr->rewind(row_start);
+
+    if (k_rt.is_variadic()) {
+      // Copy covariate columns only — par_input cols are filled per-particle
+      const int n_cov = (int)ks.covariate_indices.size();
+      for (int c = 0; c < n_cov; ++c) {
+        const double* src = ks.kernel_input.colptr(c) + row_start;
+        double*       dst = k_rt.kernel_input.colptr(c) + row_start;
+        std::copy(src, src + T, dst);
+      }
+    } else {
+      // Arity-1: one slot_input per covariate slot
+      const int n_cov = (int)ks.covariate_indices.size();
+      for (int s = 0; s < n_cov; ++s) {
+        const double* src = ks.kernel_input.colptr(s) + row_start;
+        double*       dst = k_rt.slot_inputs[s].colptr(0) + row_start;
+        std::copy(src, src + T, dst);
       }
     }
   }
@@ -767,8 +1021,8 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
 
   // ensure all kernels have run
   for (auto& kv : kernels)
-    if (!kv.second.kernel_ptrs[0]->has_run())
-      run_kernel(kv.second, pt);
+    if (!kv.second.kernel_ptrs[0]->has_run_for(pt.n_trials))
+      run_kernel(kv.second, pt, 0, pt.n_trials);
 
   // count total output columns across all slots
   int n_cols_total = 0;

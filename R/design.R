@@ -830,23 +830,22 @@ design_model <- function(data,design,model=NULL,
 
   # Apply functions
   Ffunction_names <- character(0)
-  if (!is.null(design$Ffunctions)) {
-    for (i in names(design$Ffunctions)) {
+  if(!is.null(design$Ffunctions)) {
+    for(i in seq_along(design$Ffunctions)) {
       output <- design$Ffunctions[[i]](da)
 
       # Normalise to a named list of vectors
-      if (is.matrix(output)) {
-        if (is.null(colnames(output)))
-          stop(sprintf("Ffunction '%s' returned a matrix without column names.", i))
+      if(is.matrix(output)) {
+        cnames <- colnames(output)
+        if (is.null(cnames)) stop(sprintf("Ffunction '%s' returned a matrix without column names.", i))
         output <- lapply(seq_len(ncol(output)), function(j) output[, j])
-        names(output) <- colnames(output)  # was matrix colnames
-      } else if (is.data.frame(output)) {
+        names(output) <- cnames
+      } else if(is.data.frame(output)) {
         output <- as.list(output)
-      } else if (!is.list(output)) {
+      } else if(!is.list(output)) {
         # vector — name must come from the function name
-        if (!nzchar(i))
-          stop("Unnamed Ffunction returned a vector; function must have a name.")
-        output <- stats::setNames(list(output), i)
+        if (!nzchar(i)) stop("Unnamed Ffunction returned a vector; function must have a name.")
+        output <- stats::setNames(list(output), names(design$Ffunctions)[[i]])
       }
       # output is now always a named list
 

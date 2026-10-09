@@ -29,7 +29,7 @@ inline TrendPhase parse_phase(const std::string& ph) {
 // =============================================================================
 // KernelSpec  —  mirrors emc2_kernel; pure C++ after construction
 // =============================================================================
-enum class AtMode { Filter, Push };
+// enum class AtMode { Filter, Push };
 
 struct KernelSpec {
   // identity
@@ -47,11 +47,8 @@ struct KernelSpec {
   // 'at' filter
   bool        has_at = false;
   std::string at;
-
-  // What to do with 'at'? Either filter (remove rows that are not the first level of the at factor)
-  // or 'push' -- don't filter, but only apply update to the next trial that corresponds to the first level of the at factor
-  AtMode               at_mode = AtMode::Filter;
-  std::vector<uint8_t> is_first_level_comp;  // length = comp_index.size()
+  std::vector<uint8_t> at_mask;
+  MatBool nan_mask;
 
   // finalised prefixed parameter names
   std::vector<std::string> pnames;
@@ -63,15 +60,14 @@ struct KernelSpec {
   std::vector<int> q_reset_col;   // length n_trials, or empty
   std::vector<int> belief_reset_col;
   KernelArgs       kernel_args;   // raw-pointer view; rebuilt via build_kernel_args()
+  std::string      q_reset_col_name;
+  std::string      belief_reset_col_name;
 
   // custom kernel pointer (R_NilValue if not custom)
   SEXP custom_fun = R_NilValue;
 
   // data-derived fields — plain C++ after construction
   Mat                      kernel_input;   // n_trials x (n_cov + n_par)
-  std::vector<bool>        first_level;    // length n_trials
-  std::vector<int>         expand_idx;     // length n_trials
-  std::vector<int>         comp_index;     // first-level row indices
 
   std::vector<int>         covariate_indices;
   std::vector<int>         par_input_indices;
@@ -80,8 +76,6 @@ struct KernelSpec {
     kernel_args = KernelArgs{};
     if (!q_reset_col.empty())
       kernel_args.q_reset = q_reset_col.data();
-    if (!is_first_level_comp.empty())
-      kernel_args.is_first_level_comp = is_first_level_comp.data();
     if (!belief_reset_col.empty())
       kernel_args.belief_reset = belief_reset_col.data();
   }
@@ -117,6 +111,7 @@ struct BaseSpec {
   // conditional base args (used by lin_if_pos / lin_if_neg)
   bool     has_cond_par = false;
   BaseArgs base_args;
+  std::string      covariate_coding_name;
 };
 
 
@@ -125,6 +120,10 @@ struct BaseSpec {
 // =============================================================================
 
 struct TrendPlan {
+  // allow for incremental updating of data? Must be false when used in multithreading
+  // as this is an ummutable owner
+  bool incremental_mutable = false;
+
   std::unordered_map<std::string, KernelSpec> kernels;
 
   std::vector<BaseSpec> premap_bases;
@@ -144,6 +143,10 @@ struct TrendPlan {
   bool has_premap()        const { return !premap_bases.empty(); }
   bool has_pretransform()  const { return !pretransform_bases.empty(); }
   bool has_posttransform() const { return !posttransform_bases.empty(); }
+
+  // For updating in incremental data simulation
+  void enable_incremental_updates() { incremental_mutable = true; }
+  void patch_data_rows(const Rcpp::DataFrame& data, int row_start, int row_end, int src_row_start=0, int src_row_end=-1);
 
   // Returns a LogicalVector (Rcpp boundary — used by make_pipeline_cache)
   Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const;
@@ -211,6 +214,8 @@ struct TrendRuntime {
   bool has_pretransform()  const { return plan->has_pretransform(); }
   bool has_posttransform() const { return plan->has_posttransform(); }
 
+  void sync_data_rows_from_plan(int row_start, int row_end);
+
   const std::unordered_set<std::string>& premap_trend_params()       const { return plan->premap_params; }
   const std::unordered_set<std::string>& pretransform_trend_params()  const { return plan->pretransform_params; }
   const std::unordered_set<std::string>& posttransform_trend_params() const { return plan->posttransform_params; }
@@ -232,7 +237,7 @@ struct TrendRuntime {
   }
 
   void bind_all_to_paramtable(const ParamTable& pt);
-  void apply_base(BaseRuntime& base_rt, ParamTable& pt);
+  void apply_base(BaseRuntime& base_rt, ParamTable& pt, int row_start = 0, int row_end = -1);
   void reset_all_kernels();
 
   // Rcpp boundary — diagnostic only, not in hot path
@@ -240,7 +245,7 @@ struct TrendRuntime {
   Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes);
 
 private:
-  void run_kernel(KernelRuntime& k_rt, ParamTable& pt);
+  void run_kernel(KernelRuntime& k_rt, ParamTable& pt, int row_start=0, int row_end=-1);
 };
 
 // =============================================================================
