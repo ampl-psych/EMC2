@@ -11,6 +11,7 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
+#' @noRd
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -720,6 +721,7 @@ pstopTEXG <- function(
 #' Verbruggen, F., Aron, A. R., Band, G. P., Beste, C., Bissett, P. G., Brockett, A. T., ... & Boehler, C. N. (2019). A consensus guide to capturing the ability to inhibit actions and impulsive behaviors in the stop-signal task. *elife*, *8*, e46323. \doi{10.7554/eLife.46323}
 #'
 #' @return A model list with all the necessary functions to sample
+#' @noRd
 SSEXG <- function() {
   list(
     type = "RACE",
@@ -1068,6 +1070,7 @@ pstopHybrid <- function(
 #' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 #'
 #' @return A model list with all the necessary functions to sample
+#' @noRd
 SSRDEX <- function() {
   list(
     type = "RACE",

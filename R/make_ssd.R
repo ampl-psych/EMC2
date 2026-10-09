@@ -73,6 +73,7 @@
 #'   attribute) so that [make_data()] can attach the generated staircase
 #'   specifications to the simulated data or run the staircase trial by trial.
 #'
+#' @noRd
 #' @examples
 #' # Fixed SSDs sampled on 25% of trials
 #' ssd_fixed <- make_ssd(values = c(.26, .35, .46), p = rep(.25 / 3, 3), staircase = FALSE)

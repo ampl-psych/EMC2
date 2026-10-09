@@ -92,6 +92,7 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' @param digits Integer, number of decimal places used when rounding the
 #'        percentage summaries reported when \code{verbose = TRUE}. Default 2.
 #' @return A filtered and modified data frame with added/updated LC, UC, LT and UT columns
+#' @export
 #' @examples
 #' # First make some data
 #'   designRDM <- design(model = RDM,
