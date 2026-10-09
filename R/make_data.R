@@ -105,8 +105,6 @@ check_missing <- function(TC,data=NULL,design=NULL) {
 #' # Filter data frame without LT/UC/LT/UT columns (as in most real data files)
 #' data <- dat
 #' mdata <- make_missing(dat,LT=.7,LC=.75,UC=1.5,UT=1.6,verbose=TRUE)
-#' @export
-
 make_missing <- function(data, LT = NULL, UT = NULL, LC = NULL, UC = NULL,
                          LCresponse = NULL, UCresponse = NULL,LCdirection = NULL, UCdirection = NULL,
                          no_truncate=FALSE,no_censor=FALSE,

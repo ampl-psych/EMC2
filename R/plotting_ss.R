@@ -1092,7 +1092,6 @@ plot_stop_signal_summary <- function(input,
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Invisibly returns the plotted summary data.
-#' @export
 plot_ss_if <- function(input,
                     post_predict = NULL,
                     prior_predict = NULL,
@@ -1463,7 +1462,6 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Invisibly returns the plotted summary data.
-#' @export
 plot_ss_srrt <- function(input,
                       post_predict = NULL,
                       prior_predict = NULL,
