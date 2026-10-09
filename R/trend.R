@@ -1472,23 +1472,62 @@ stack_designs <- function(designs_previous, designs_current) {
 }
 
 
-make_cache_key <- function(key_cols, dadm_slice) {
-  key <- paste(sapply(key_cols, function(fc) {
-    val <- dadm_slice[[fc]][1]  # only look at first row
-    if (is.na(val)) stop(sprintf("Column '%s' is NA in make_cache_key()"))
-    else if (is.logical(val)) as.character(as.integer(val))
-    else if (is.factor(val))  as.character(as.integer(val))
-    else as.character(val)
-  }), collapse = "_")
-  if (nchar(key) == 0) key <- "intercept_only"
-  key
-}
-
+# make_cache_key <- function(key_cols, dadm_slice) {
+#   key <- paste(sapply(key_cols, function(fc) {
+#     val <- dadm_slice[[fc]][1]  # only look at first row
+#     if (is.na(val)) stop(sprintf("Column '%s' is NA in make_cache_key()"))
+#     else if (is.logical(val)) as.character(as.integer(val))
+#     else if (is.factor(val))  as.character(as.integer(val))
+#     else as.character(val)
+#   }), collapse = "_")
+#   if (nchar(key) == 0) key <- "intercept_only"
+#   key
+# }
+#
+# make_cache_key <- function(key_cols, dadm_slice) {
+#   # need to do this per row
+#   missing_cols <- setdiff(key_cols, names(dadm_slice))
+#   if (length(missing_cols)) {
+#     stop(
+#       "Missing columns in make_cache_key(): ",
+#       paste(missing_cols, collapse = ", ")
+#     )
+#   }
+#
+#   values <- setNames(
+#     lapply(key_cols, function(fc) {
+#       val <- dadm_slice[[fc]]
+#
+#       if (anyNA(val)) {
+#         stop(sprintf(
+#           "Column '%s' is NA in make_cache_key()", fc
+#         ))
+#       }
+#
+#       val
+#     }),
+#     key_cols
+#   )
+#
+#   # Preserve row order, column names, types, and factor levels.
+#   # Include row count even for intercept-only designs.
+#   payload <- list(
+#     n_rows = nrow(dadm_slice),
+#     columns = values
+#   )
+#
+#   paste(
+#     as.character(serialize(payload, NULL, version = 2)),
+#     collapse = ""
+#   )
+# }
+#
 # make_data_unconditional <- function(data, pars, design, model,
-#                                              return_trialwise_parameters,
-#                                              kernel_output_codes = c(1L),
-#                                              optionals = NULL,
-#                                              n_context_trials = 1L) {
+#                                     return_trialwise_parameters,
+#                                     kernel_output_codes = c(1L),
+#                                     optionals = NULL,
+#                                     n_context_trials = 1L,
+#                                     vectorise_safe=FALSE) {
 #   model_fun  <- model
 #   model_list <- model()
 #   includeColumns <- colnames(data)
@@ -1633,6 +1672,9 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #   # Step 3: Per-subject loop
 #   # -----------------------------------------------------------------------
 #   trialwise_parameters <- NULL
+#   design_history <- list()
+#   simulation_history <- list()
+#
 #   subj_levels <- levels(dadm_full$subjects)
 #   constants   <- attr(dadm_full, "constants")
 #   if (is.null(constants)) constants <- NA
@@ -1701,6 +1743,10 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #                                   constants = constants, pretransform = model_list$pre_transform,
 #                                   trend = model_list$trend)
 #     dadm_previous <- NULL
+#     subject_design_history <- vector("list", length(trial_vals))
+#     names(subject_design_history) <- as.character(trial_vals)
+#     subject_simulation_history <- vector("list", length(trial_vals))
+#     names(subject_simulation_history) <- as.character(trial_vals)
 #
 #     for (j in seq_along(trial_vals)) {
 #       current_trial        <- trial_vals[j]
@@ -1789,6 +1835,18 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #       row_start <- idx_ctx[1]-1L   # 0-based
 #       row_end   <- idx_curr[length(idx_curr)]  # exclusive
 #
+#       subject_design_history[[j]] <- list(
+#         trial = current_trial,
+#         current_rows = idx_curr,
+#         context_rows = idx_ctx,
+#
+#         # Capture the inputs too, to diagnose incorrect factor values.
+#         current_data = dadm_current,
+#         context_data = dadm_ctx,
+#
+#         current_designs = designs_current,
+#         context_designs = designs_ctx
+#       )
 #       step_subject_pipeline(xptr = sp, new_designs = designs_ctx,  # only pass context
 #         new_data = dadm_ctx,     # only pass context
 #         row_start = row_start, row_end = row_end)
@@ -1806,6 +1864,26 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #                         fix = !is.null(optionals$shrink2bound))
 #       }
 #
+#       subject_simulation_history[[j]] <- list(
+#         trial = current_trial,
+#         current_rows = idx_curr,
+#         data = dadm_current,
+#
+#         # Pipeline output before Ttransform and bounds:
+#         pm = pm,
+#
+#         # Exact parameter values supplied to rfun:
+#         pr = pr,
+#
+#         current_designs = designs_current,
+#         context_designs = designs_ctx,
+#
+#         # Current-trial kernel outputs at simulation time:
+#         covariates = get_subject_pipeline_covariates(
+#           sp,
+#           kernel_output_codes = as.integer(kernel_output_codes)
+#         )[idx_curr, , drop = FALSE]
+#       )
 #       # 9. Simulate R and rt
 #       if (any(names(dadm_current) == "RACE")) {
 #         Rrt <- RACE_rfun(dadm_current, pr, model_fun)
@@ -1813,8 +1891,14 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #         Rrt <- model_list$rfun(dadm_current, pr)
 #       }
 #
-#       dadm_subj_df[[R_col]][idx_curr]  <- Rrt[, "R"]
-#       if("rt" %in% colnames(Rrt)) dadm_subj_df[[rt_col]][idx_curr] <- Rrt[, "rt"]
+#       subject_simulation_history[[j]]$response <- Rrt
+#
+#       dadm_current[["R"]] <- rep(Rrt[, "R"], each = n_acc)
+#       dadm_subj_df[[R_col]][idx_curr] <- dadm_current[["R"]]
+#       if ("rt" %in% colnames(Rrt)) {
+#         dadm_current[["rt"]] <- rep(Rrt[, "rt"], each = n_acc)
+#         dadm_subj_df[[rt_col]][idx_curr] <- dadm_current[["rt"]]
+#       }
 #
 #       # 10. ffunctions_post
 #       if (has_ffunctions_post) {
@@ -1868,7 +1952,9 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #       }
 #     }
 #
+#     design_history[[as.character(subj)]] <- subject_design_history
 #     if(return_trialwise_parameters) trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
+#     simulation_history[[as.character(subj)]] <- subject_simulation_history
 #
 #     missing_in_full <- setdiff(names(dadm_subj_df), names(dadm_full))
 #     if(length(missing_in_full)) for (nm in missing_in_full) dadm_full[[nm]] <- NA
@@ -1882,15 +1968,16 @@ make_cache_key <- function(key_cols, dadm_slice) {
 #     first_lR  <- levels(dadm_full$lR)[1]
 #     dadm_full <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
 #   }
-#   if (!is.na(rt_col)) {
-#     dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
-#   } else {
-#     dadm_full <- dadm_full[, unique(c(includeColumns, "R")), drop = FALSE]
-#   }
-#   dadm_full <- dadm_full[, !colnames(dadm_full) %in% c("lR", "lM"), drop = FALSE]
+#   # if (!is.na(rt_col)) {
+#   #   dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
+#   # } else {
+#   #   dadm_full <- dadm_full[, unique(c(includeColumns, "R")), drop = FALSE]
+#   # }
+#   # dadm_full <- dadm_full[, !colnames(dadm_full) %in% c("lR", "lM"), drop = FALSE]
 #
-#   list(data = dadm_full, trialwise_parameters = trialwise_parameters)
+#   list(data = dadm_full, trialwise_parameters = trialwise_parameters,  designs = design_history, simulation = simulation_history)
 # }
+
 
 # Vectorised across subjects
 sub_design_rows <- function(designs, isin)
@@ -2362,6 +2449,7 @@ make_data_unconditional <- function(data, pars, design, model,
   dadm_full <- dadm_full[, keep, drop = FALSE]
   list(data = dadm_full, trialwise_parameters = trialwise_parameters)
 }
+
 
 #' Apply a kernel implied in an emc object
 #'
