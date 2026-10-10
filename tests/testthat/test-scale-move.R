@@ -33,24 +33,17 @@ toy_pars <- c("a", "b")
 toy_subject_ll <- function(sampler, s, x)
   as.numeric(EMC2:::calc_ll_manager(matrix(x, 1, dimnames = list(NULL, toy_pars)), sampler$data[[s]], sampler$model))
 
-# A state of the toy and its surrogate: "rough" takes the curvature of the Gaussian part at the
-# likelihood's mode (overstating its tails); "flat" has none, so only the exact check knows the likelihood.
-toy_state <- function(sampler, surrogate = c("rough", "flat"), alpha = matrix(c(.3, -.2, -.3, .25), 2, 2)) {
-  surrogate <- match.arg(surrogate)
+toy_state <- function(sampler, alpha = matrix(c(.3, -.2, -.3, .25), 2, 2)) {
   p <- 2; n <- 2; mu <- c(.1, -.1); a <- c(.5, 2); Sigma <- diag(c(.3, .3))
   dimnames(alpha) <- list(toy_pars, NULL)
-  lik_prec <- lapply(1:n, function(s) {
-    d <- sampler$data[[s]]
-    if (surrogate == "flat") list(prec = diag(0, 2), lin = rep(0, 2)) else list(prec = diag(2 * d$T), lin = 2 * d$T * d$ybar)
-  })
   list(pars = list(tmu = mu, tvar = Sigma, tvinv = solve(Sigma), a_half = a, subj_mu = matrix(mu, p, n), alpha = alpha),
-       alpha = alpha, ll = sapply(1:n, function(s) toy_subject_ll(sampler, s, alpha[, s])), lik_prec = lik_prec)
+       alpha = alpha, ll = sapply(1:n, function(s) toy_subject_ll(sampler, s, alpha[, s])))
 }
 
 # Independent Gibbs/Metropolis reference for the posterior-preservation check.
-toy_run <- function(sampler, iter, use_move, seed, surrogate = c("rough", "flat")) {
+toy_run <- function(sampler, iter, use_move, seed) {
   set.seed(seed, kind = "L'Ecuyer-CMRG")
-  x <- toy_state(sampler, match.arg(surrogate), alpha = matrix(0, 2, 2))
+  x <- toy_state(sampler, alpha = matrix(0, 2, 2))
   p <- 2; n <- 2; v <- sampler$prior$v; A <- sampler$prior$A
   m0 <- sampler$prior$theta_mu_mean; V0inv <- sampler$prior$theta_mu_invar
   mu <- x$pars$tmu; a <- x$pars$a_half; Sigma <- x$pars$tvar; alpha <- x$alpha; cur_ll <- x$ll
@@ -72,7 +65,7 @@ toy_run <- function(sampler, iter, use_move, seed, surrogate = c("rough", "flat"
     }
     if (use_move) {
       pars <- list(tmu = mu, tvar = Sigma, tvinv = Sinv, a_half = a, subj_mu = matrix(mu, p, n), alpha = alpha)
-      sm <- EMC2:::scale_move_standard(sampler, pars, alpha, cur_ll, settings, x$lik_prec, frozen = i > iter / 4)
+      sm <- EMC2:::scale_move_standard(sampler, pars, alpha, cur_ll, settings, frozen = i > iter / 4)
       Sigma <- sm$pars$tvar; a <- sm$pars$a_half; mu <- sm$pars$tmu; alpha <- sm$alpha; cur_ll <- sm$ll
       settings <- sm$settings
     }
@@ -81,7 +74,7 @@ toy_run <- function(sampler, iter, use_move, seed, surrogate = c("rough", "flat"
   out[-seq_len(iter / 4), ]
 }
 
-test_that("scale moves preserve the posterior with rough and flat surrogates", {
+test_that("scale and location moves preserve the posterior", {
   skip_on_cran()
   skip_on_ci()
   set.seed(21, kind = "Mersenne-Twister")
@@ -93,9 +86,8 @@ test_that("scale moves preserve the posterior with rough and flat surrogates", {
   des <- design(model = ll, custom_p_vector = toy_pars, report_p_vector = FALSE)
   sampler <- make_emc(dat, des, type = "standard", n_chains = 2, compress = FALSE)[[1]]
   ref <- toy_run(sampler, 12000, use_move = FALSE, seed = 1)
-  for (surrogate in c("rough", "flat")) {
-    draws <- toy_run(sampler, 12000, use_move = TRUE,
-                     seed = if (surrogate == "rough") 2 else 4, surrogate = surrogate)
+  for (seed in c(2, 4)) {
+    draws <- toy_run(sampler, 12000, use_move = TRUE, seed = seed)
     for (k in colnames(ref)) {
       lg <- k %in% c("s11", "s22", "aux1", "aux2")
       x <- if (lg) log(draws[, k]) else draws[, k]

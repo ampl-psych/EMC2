@@ -337,7 +337,7 @@ run_stage <- function(pmwgs,
                          dimnames = dimnames(pmwgs$samples$alpha)[1:2])
     prev_ll <- pmwgs$samples$subj_ll[, j-1]
     if(do_scale){
-      sm <- scale_move_standard(pmwgs, pars, alpha_full, prev_ll, scale_settings, tune$lik_prec,
+      sm <- scale_move_standard(pmwgs, pars, alpha_full, prev_ll, scale_settings,
                                 frozen = isTRUE(tune$frozen), n_cores = n_cores, r_cores = r_cores)
       pars <- sm$pars; alpha_full <- sm$alpha; prev_ll <- sm$ll; scale_settings <- sm$settings
     }

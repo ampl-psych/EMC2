@@ -167,10 +167,6 @@ run_emc <- function(emc, stage, stop_criteria,
                                verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
-    # the interweaving sweep's gate, once its steps have had adapt_converge$min sweeps to settle
-    if(stage == "adapt" && !legacy_sampler()){
-      emc <- gate_scale_move(emc, kernel_window, decide = chain_n(emc)[1, "adapt"] >= adapt_converge$min)
-    }
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
@@ -320,23 +316,6 @@ alpha_draws <- function(emc, its){
   }, matrix(0, n, d[1] * d[2]))
 }
 
-# The interweaving sweep's gate (scale_move_gate), from the sweeps since its
-# last call and the group-level draws of the last n_iter iterations
-gate_scale_move <- function(emc, n_iter, decide = TRUE){
-  sm <- lapply(emc, function(x) attr(x$samples, "scale_move"))
-  if(any(sapply(sm, is.null)) || emc[[1]]$type != "standard") return(emc)
-  idx <- emc[[1]]$samples$idx; it <- max(2, idx - n_iter + 1):idx
-  tv <- do.call(cbind, lapply(emc, function(x) apply(x$samples$theta_var[, , it, drop = FALSE], 3, diag)))
-  p <- nrow(tv)
-  mu <- if(is.null(emc[[1]]$group_designs) && nrow(emc[[1]]$samples$theta_mu) == p)
-    do.call(cbind, lapply(emc, function(x) x$samples$theta_mu[, it, drop = FALSE])) else NULL
-  sm <- scale_move_gate(sm, var_lsd = apply(.5 * log(tv), 1, stats::var),
-                        var_mu = if(is.null(mu)) NULL else apply(mu, 1, stats::var),
-                        mean_var = rowMeans(tv), n_subjects = emc[[1]]$n_subjects, decide = decide)
-  for(i in seq_along(emc)) attr(emc[[i]]$samples, "scale_move") <- sm[[i]]
-  emc
-}
-
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1,
                        kernel = NULL)
@@ -399,8 +378,7 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-# Finite-difference precision drives the sweep; draw-based precision improves
-# particle proposals for skewed posteriors when the group level is stable.
+# Supplement finite-difference likelihood precision with the recent draws.
 create_lik_prec <- function(emc, n_cores){
   idx <- emc[[1]]$samples$idx
   history_idx <- proposal_window(idx)
@@ -423,37 +401,22 @@ create_lik_prec <- function(emc, n_cores){
   return(emc)
 }
 
-# Draw-based likelihood precision requires a stable group precision to subtract.
-lik_prec_draws_cv <- .5
-
 window_group_level <- function(emc, history_idx, n_draws){
   x1 <- emc[[1]]
   if(x1$type != "standard" || any(x1$nuisance) || n_draws < 100) return(NULL)
-  if(group_precision_cv(emc, history_idx) >= lik_prec_draws_cv) return(NULL)
   tryCatch({
-    prec <- 0; mu <- 0
+    V <- 0; mu <- 0
     for(x in emc){
-      for(i in history_idx) prec <- prec + chol2inv(chol(x$samples$theta_var[, , i]))
+      V <- V + apply(x$samples$theta_var[, , history_idx, drop = FALSE], 1:2, mean)
       fs <- filtered_samples(x, history_idx, type = x1$type)
       mu <- mu + if(is.null(fs$subj_mu)) matrix(rowMeans(fs$theta_mu), nrow(fs$theta_mu), x1$n_subjects)
                  else apply(fs$subj_mu, 1:2, mean)
     }
-    n <- length(emc) * length(history_idx)
-    out <- list(prec = prec / n, mu = mu / length(emc))
+    # Invert the mean covariance so near-zero variance draws do not dominate.
+    out <- list(prec = chol2inv(chol(V / length(emc))), mu = mu / length(emc))
     if(!all(is.finite(out$prec)) || !all(is.finite(out$mu)) || nrow(out$mu) != nrow(out$prec)) return(NULL)
     out
   }, error = function(e) NULL)
-}
-
-# The largest coefficient of variation, over the parameters, of the group
-# precision 1 / sigma^2 over iterations history_idx of all chains (Inf if
-# not computable)
-group_precision_cv <- function(emc, history_idx){
-  pr <- do.call(cbind, lapply(emc, function(x) 1 / apply(x$samples$theta_var[, , history_idx, drop = FALSE], 3, diag)))
-  pr <- matrix(pr, ncol = length(emc) * length(history_idx))
-  cv <- apply(pr, 1, stats::sd) / rowMeans(pr)
-  if(!all(is.finite(cv))) return(Inf)
-  max(cv)
 }
 
 # Estimate likelihood precision as cov(draws)^-1 - P in prior-whitened coordinates.
