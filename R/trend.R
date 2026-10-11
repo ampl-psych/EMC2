@@ -43,6 +43,30 @@
 #'       all preceding observations should be forgotten.
 #'       `TRUE`/`1` triggers a reset; `FALSE`/`0` does not.}#'
 #'   }
+#' @param reference Optional numeric scalar, a value of the covariate. If given,
+#'   the kernel output is expressed relative to its value at that point:
+#'   `k(c) - k(reference)`, evaluated row by row with the row's own kernel
+#'   parameters. The target parameter then becomes the parameter's value at
+#'   `c = reference` instead of at `c = 0`, which removes the collinearity
+#'   between the target parameter and the base weight that arises whenever the
+#'   covariate varies over a narrow range that excludes zero (e.g. stop-signal
+#'   delays: choose a `reference` near the middle of the delays used). It changes
+#'   the meaning, and so the prior, of the target parameter. Because it is a
+#'   fixed constant, it needs no knowledge of the other trials, so the sampler
+#'   and the trial-by-trial simulator see exactly the same model. Rows with a
+#'   non-finite covariate are left as the kernel produces them: the `slin_*` and
+#'   `sat_*` kernels give 0 there (no trend on that row); every other kernel
+#'   expects a finite covariate, so give such rows the covariate value
+#'   `reference` and they contribute exactly 0. Only for a single, non-sequential,
+#'   built-in kernel. Defaults to `NULL` (no shift).
+#'
+#'   Saturating kernels (`slin_*`, `sat_*`, `exp_*`, `pow_*`) become constant
+#'   once the covariate is past the point of saturation, and a constant kernel is
+#'   absorbed by the base weight and the target parameter. Their shape parameter
+#'   is therefore identified only from below unless the covariate has mass on
+#'   both sides of the bend: profile the likelihood before interpreting one, and
+#'   consider bounding it with a `pnorm` transform whose `lower`/`upper` span the
+#'   observed covariate range (see [design()]).
 #' @param custom_kernel A custom kernel registered with [register_kernel()].
 #'   Required when `kernel = "custom"`.
 #' @param at If `NULL`, the kernel is applied to every row in `dadm`. If a
@@ -74,7 +98,8 @@ make_kernel <- function(cov_names,
                         kernel_args        = NULL,
                         custom_kernel      = NULL,
                         at                 = "lR",
-                        at_mode            = "filter") {
+                        at_mode            = "filter",
+                        reference          = NULL) {
 
   # ---- validate kernel type ----
   known <- names(trend_help(type, return_types = TRUE)$kernels)
@@ -83,6 +108,20 @@ make_kernel <- function(cov_names,
 
   if (identical(type, "custom") && is.null(custom_kernel))
     stop("custom_kernel must be provided when type = 'custom'.")
+
+  # validate reference
+  if (!is.null(reference)) {
+    if (!is.numeric(reference) || length(reference) != 1 || !is.finite(reference))
+      stop("reference must be NULL or a single finite number (a value of the covariate).")
+    if (type %in% .sequential_kernels())
+      stop("reference is not supported for the sequential (delta/DBM family) kernels, ",
+           "whose output is a running estimate rather than a function of the covariate.")
+    if (identical(type, "custom"))
+      stop("reference is not supported for custom kernels.")
+    if (length(cov_names) != 1 || length(par_input) > 0)
+      stop("reference requires exactly one covariate and no par_input.")
+    reference <- as.numeric(reference)
+  }
 
   # validate at_mode
   if (!at_mode %in% c("filter", "push"))
@@ -144,6 +183,7 @@ make_kernel <- function(cov_names,
       kernel_pointer     = if (!is.null(custom_kernel)) custom_kernel$kernel_pointer else NULL,
       at                 = at,
       at_mode            = at_mode,
+      reference          = reference,
       sequential         = type %in% .sequential_kernels(),
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
@@ -1019,6 +1059,20 @@ get_kernels <- function() {
                      sequential   = FALSE,
                      n_outputs    = 1L,
                      NA_allowed   = TRUE),
+    sat_incr = list(description = "Increasing saturating kernel, parameterised by the saturation point: k = min(1, c / s_sat)",
+                    transforms = list(func = list("s_sat" = "exp")),
+                    default_pars = "s_sat",
+                    bases = base_2p,
+                    sequential   = FALSE,
+                    n_outputs    = 1L,
+                    NA_allowed   = TRUE),
+    sat_decr = list(description = "Decreasing saturating kernel, parameterised by the saturation point: k = -min(1, c / s_sat)",
+                    transforms = list(func = list("s_sat" = "exp")),
+                    default_pars = "s_sat",
+                    bases = base_2p,
+                    sequential   = FALSE,
+                    n_outputs    = 1L,
+                    NA_allowed   = TRUE),
     pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
                     transforms = list(func =list("d_pd" = "exp")),
                     default_pars = "d_pd",

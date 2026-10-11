@@ -488,6 +488,93 @@ emc <- fix_custom_kernel_pointers(emc, trend_custom)
 
 Interpretation: the base controls how the custom kernel’s output enters the parameter (e.g., `add` means additive). The `transforms` declared in `register_trend()` are attached to the model so custom kernel parameters can be estimated under appropriate constraints.
 
+## Centring, and when a shape parameter is estimable
+
+Two things bite whenever a covariate varies over a narrow range that does not
+include zero -- stop-signal delays (`SSD`, roughly 0.05-0.4 s) being the
+motivating case.
+
+**The target parameter competes with the base weight.** With a `lin` base the
+trended parameter is `p + w * k(c)`. If `k(c)` barely varies across trials, `p`
+and `w` trade off almost perfectly: raising one and lowering the other leaves
+the fit unchanged, so both posteriors are wide and strongly correlated even when
+their sum is pinned down. `reference = c0` re-expresses the kernel relative to
+its value at a chosen covariate value, `k(c) - k(c0)`, which makes `p` the value
+at `c = c0` and largely removes the correlation when `c0` sits near the middle
+of the covariate's range. It changes what `p` means, so adjust its prior
+accordingly. `c0` is a fixed constant, not something computed from the data, so
+the model is the same whether it is sampled or simulated trial by trial (a
+data-dependent centring would not be: on the trial-by-trial path only the trials
+simulated so far exist).
+
+```{r, eval=FALSE}
+kern  <- make_kernel(cov_names = "SSD", type = "sat_incr", reference = 0.25)
+trend <- make_trend(make_base("muS", "lin", kern, phase = "posttransform"))
+```
+
+For a linear kernel the same thing can be done without `reference`, by giving
+the kernel a shifted covariate (`SSD - 0.25`); `reference` exists for the
+non-linear kernels, where shifting the covariate changes the shape (with
+`sat_incr`, `min(1, (c - c0) / s)` goes negative below `c0`).
+
+**Covariates that are undefined on some trials.** The `slin_*` and `sat_*`
+kernels return 0 for a non-finite covariate, so the row carries no trend: on the
+go trials of a stop-signal design `SSD` is `Inf` and the stop parameters are
+untouched. The other kernels expect a finite covariate, and `design()` refuses
+an `NA` covariate for them, because what a missing value means (no effect? the
+average? the last value?) is a modelling decision. To use one of them on `SSD`,
+leave `SSD` itself alone (the likelihood needs `Inf` to recognise a go trial)
+and derive a second covariate that fills the undefined trials with the
+`reference` value, so they contribute exactly zero:
+
+```{r, eval=FALSE}
+ssd_k <- function(d) ifelse(is.finite(d$SSD), d$SSD, 0.25)
+attr(ssd_k, "pretrial") <- TRUE   # evaluate before the trial when simulating trial by trial
+design(..., functions = list(SSD = make_ssd(...), SSDk = ssd_k),
+       trend = make_trend(make_base("muS", "lin",
+                 make_kernel("SSDk", "lin_incr", reference = 0.25),
+                 phase = "posttransform")))
+```
+
+The `pretrial` attribute matters only when data are simulated trial by trial
+(a `make_ssd()` staircase in the design): it makes the derived covariate
+available before the trial's parameters are computed, as the staircase's own
+`SSD` is.
+
+**A saturating kernel's shape parameter is identified only from below.**
+`slin_*`, `sat_*`, `exp_*` and `pow_*` all flatten out once the covariate is
+past the bend, and a constant kernel is absorbed by `w` and `p`. So the data can
+say "the plateau is reached by such-and-such a covariate value" but never how
+much earlier it was reached: the likelihood is flat in that direction and the
+posterior simply returns the prior there. Simulation-based calibration will not
+warn you -- a flat likelihood gives posterior = prior and perfectly uniform
+ranks. Check it directly by profiling before interpreting a shape parameter:
+
+```{r, eval=FALSE}
+# log-likelihood across a grid of the shape parameter, everything else fixed
+pm <- matrix(rep(p_vector, 30), nrow = 30, byrow = TRUE,
+             dimnames = list(NULL, names(p_vector)))
+pm[, "muS.s_sat"] <- log(seq(0.02, 1, length.out = 30))
+ll <- calc_ll_manager(pm, dadm, design$model)
+plot(seq(0.02, 1, length.out = 30), ll - max(ll), type = "l",
+     xlab = "saturation point (s)", ylab = "log-likelihood difference")
+```
+
+If the curve is flat over part of the range, that part is not estimable. Two
+responses: use `sat_*` and **bound** the saturation point to the observed
+covariate range, so the parameter can only take values the data can distinguish,
+
+```{r, eval=FALSE}
+design(..., trend = trend,
+       transform = list(func  = c(muS.s_sat = "pnorm"),
+                        lower = c(muS.s_sat = 0.05),
+                        upper = c(muS.s_sat = 0.40)))
+```
+
+or drop the shape parameter (fix it with `constants`) and compare models on
+whether saturation is present at all, which is a more robust question than
+estimating where it happens.
+
 ## Tips for Choosing Trends
 
 1. Start simple: Begin with linear trends before moving to more complex options

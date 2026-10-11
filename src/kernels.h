@@ -53,6 +53,8 @@ enum class KernelType {
   ExpDecr,
   SLinIncr,
   SLinDecr,
+  SatIncr,
+  SatDecr,
   PowIncr,
   PowDecr,
   Poly2,
@@ -85,6 +87,8 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::ExpDecr:
   case KernelType::SLinIncr:
   case KernelType::SLinDecr:
+  case KernelType::SatIncr:
+  case KernelType::SatDecr:
   case KernelType::PowIncr:
   case KernelType::PowDecr:
   case KernelType::Poly2:
@@ -199,6 +203,25 @@ public:
     throw std::runtime_error("BaseKernel::output_stream_name: unsupported code");
   }
 
+
+  // Reference-point support (see make_kernel(reference = )). The engine runs
+  // the kernel once on a covariate buffer filled with the reference value and
+  // once on the data, then subtracts the first from the second, so the output
+  // is k(c) - k(c0) row by row: the target parameter becomes its value at
+  // c = c0. Rows whose covariate is non-finite are left as the kernel produced
+  // them (the slin_* / sat_* kernels give 0 there, "no trend on this row").
+  void copy_output_to(std::vector<double>& dst) const { dst = out_; }
+  void subtract_reference(const std::vector<double>& ref,
+                          const Mat& covariate,
+                          const std::vector<int>& comp_idx) {
+    const int n = static_cast<int>(out_.size());
+    if ((int)ref.size() != n)
+      Rcpp::stop("subtract_reference: reference output has %d rows, kernel output %d",
+                 (int)ref.size(), n);
+    for (int j = 0; j < n; ++j) {
+      if (is_finite(covariate(comp_idx[j], 0))) out_[j] -= ref[j];
+    }
+  }
 
 protected:
   void mark_run_complete() { has_run_ = true; }
@@ -509,6 +532,44 @@ struct SLinKernel : BaseKernel {
 };
 using SLinIncrKernel = SLinKernel<1>;
 using SLinDecrKernel = SLinKernel<-1>;
+
+// Saturating kernels parameterised by the saturation point rather than the rate:
+// sat_incr k = min(1, c / s_sat) reaches its plateau at c = s_sat, sat_decr is
+// its negative. Identical shape to slin_* with s_sat = 1 / k_sat, but s_sat is in
+// the units of the covariate, so a prior can be put on "where the plateau starts"
+// -- which is what the data can speak to. Non-finite covariates give 0.
+template <int SIGN>
+struct SatKernel : BaseKernel {
+  void run(const KernelParsView& kernel_pars,
+           const Mat& covariate,
+           const std::vector<int>& comp_idx) override {
+
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("SatKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, 0);
+
+             const double* s_col = kernel_pars.cols[0];
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               double s = s_col[r];
+               if (is_finite(x) && is_finite(s) && s > 0.0) {
+                 double v = x / s;
+                 out_[j] = SIGN * ((v < 1.0) ? v : 1.0);
+               } else {
+                 out_[j] = 0.0;
+               }
+             }
+
+             mark_run_complete();
+           }
+};
+using SatIncrKernel = SatKernel<1>;
+using SatDecrKernel = SatKernel<-1>;
 
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,

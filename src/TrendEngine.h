@@ -59,6 +59,10 @@ struct KernelSpec {
   // sequential flag
   bool sequential = false;
 
+  // reference point: kernel output is k(c) - k(reference) (see make_kernel(reference = ))
+  bool   has_reference = false;
+  double reference     = 0.0;
+
   // kernel_args
   std::vector<int> q_reset_col;   // length n_trials, or empty
   std::vector<int> belief_reset_col;
@@ -151,6 +155,12 @@ struct KernelRuntime {
   // one pre-allocated 1-column Mat per slot (arity-1 only)
   // variadic: empty, kernel uses ks.kernel_input directly
   std::vector<Mat> slot_inputs;
+
+  // reference-point buffers (arity-1 only, one per covariate slot, filled with
+  // spec->reference); empty unless spec->has_reference. ref_out is scratch for
+  // the kernel's output on that buffer.
+  std::vector<Mat>    ref_inputs;
+  std::vector<double> ref_out;
 
   // which slots are par_input (need refilling per particle)
   // index into slot_inputs / kernel_ptrs
