@@ -138,7 +138,7 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
   nr <- length(levels(lR))
   dt <- matrix(Inf,nrow=nr,ncol=nrow(pars)/nr)
   t0 <- pars[,"t0"]
-  pars <- pars[ok,]
+  pars <- pars[ok,,drop=FALSE]
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
   dt[ok] <- (pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
