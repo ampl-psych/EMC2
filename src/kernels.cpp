@@ -11,6 +11,8 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   if (k == "exp_decr")     return KernelType::ExpDecr;
   if (k == "slin_incr")    return KernelType::SLinIncr;
   if (k == "slin_decr")    return KernelType::SLinDecr;
+  if (k == "sat_incr")     return KernelType::SatIncr;
+  if (k == "sat_decr")     return KernelType::SatDecr;
   if (k == "pow_incr")     return KernelType::PowIncr;
   if (k == "pow_decr")     return KernelType::PowDecr;
   if (k == "poly2")        return KernelType::Poly2;
@@ -41,6 +43,8 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   case KernelType::ExpDecr:     return std::make_unique<ExpDecrKernel>();
   case KernelType::SLinIncr:    return std::make_unique<SLinIncrKernel>();
   case KernelType::SLinDecr:    return std::make_unique<SLinDecrKernel>();
+  case KernelType::SatIncr:     return std::make_unique<SatIncrKernel>();
+  case KernelType::SatDecr:     return std::make_unique<SatDecrKernel>();
   case KernelType::PowIncr:     return std::make_unique<PowIncrKernel>();
   case KernelType::PowDecr:     return std::make_unique<PowDecrKernel>();
   case KernelType::Poly2:       return std::make_unique<Poly2Kernel>();

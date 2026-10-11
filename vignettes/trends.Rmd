@@ -488,6 +488,60 @@ emc <- fix_custom_kernel_pointers(emc, trend_custom)
 
 Interpretation: the base controls how the custom kernel’s output enters the parameter (e.g., `add` means additive). The `transforms` declared in `register_trend()` are attached to the model so custom kernel parameters can be estimated under appropriate constraints.
 
+## Centring, and when a shape parameter is estimable
+
+Two things bite whenever a covariate varies over a narrow range that does not
+include zero -- stop-signal delays (`SSD`, roughly 0.05-0.4 s) being the
+motivating case.
+
+**The target parameter competes with the base weight.** With a `lin` base the
+trended parameter is `p + w * k(c)`. If `k(c)` barely varies across trials, `p`
+and `w` trade off almost perfectly: raising one and lowering the other leaves
+the fit unchanged, so both posteriors are wide and strongly correlated even when
+their sum is pinned down. `centre = TRUE` subtracts the mean of `k(c)` over the
+rows the kernel applies to, which makes `p` the value at the *average*
+covariate and largely removes the correlation. It changes what `p` means, so
+adjust its prior accordingly.
+
+```{r, eval=FALSE}
+kern  <- make_kernel(cov_names = "SSD", type = "sat_incr", centre = TRUE)
+trend <- make_trend(make_base("muS", "lin", kern, phase = "posttransform"))
+```
+
+**A saturating kernel's shape parameter is identified only from below.**
+`slin_*`, `sat_*`, `exp_*` and `pow_*` all flatten out once the covariate is
+past the bend, and a constant kernel is absorbed by `w` and `p`. So the data can
+say "the plateau is reached by such-and-such a covariate value" but never how
+much earlier it was reached: the likelihood is flat in that direction and the
+posterior simply returns the prior there. Simulation-based calibration will not
+warn you -- a flat likelihood gives posterior = prior and perfectly uniform
+ranks. Check it directly by profiling before interpreting a shape parameter:
+
+```{r, eval=FALSE}
+# log-likelihood across a grid of the shape parameter, everything else fixed
+pm <- matrix(rep(p_vector, 30), nrow = 30, byrow = TRUE,
+             dimnames = list(NULL, names(p_vector)))
+pm[, "muS.s_sat"] <- log(seq(0.02, 1, length.out = 30))
+ll <- calc_ll_manager(pm, dadm, design$model)
+plot(seq(0.02, 1, length.out = 30), ll - max(ll), type = "l",
+     xlab = "saturation point (s)", ylab = "log-likelihood difference")
+```
+
+If the curve is flat over part of the range, that part is not estimable. Two
+responses: use `sat_*` and **bound** the saturation point to the observed
+covariate range, so the parameter can only take values the data can distinguish,
+
+```{r, eval=FALSE}
+design(..., trend = trend,
+       transform = list(func  = c(muS.s_sat = "pnorm"),
+                        lower = c(muS.s_sat = 0.05),
+                        upper = c(muS.s_sat = 0.40)))
+```
+
+or drop the shape parameter (fix it with `constants`) and compare models on
+whether saturation is present at all, which is a more robust question than
+estimating where it happens.
+
 ## Tips for Choosing Trends
 
 1. Start simple: Begin with linear trends before moving to more complex options
