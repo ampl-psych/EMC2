@@ -125,7 +125,7 @@ struct TrendPlan {
   TrendPlan() = default;
 
   // Rcpp boundary: only place Rcpp types are used
-  TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data);
+  TrendPlan(const Rcpp::List& trend, const Rcpp::DataFrame& data, const int n_active_trials);
 
   bool has_premap()        const { return !premap_bases.empty(); }
   bool has_pretransform()  const { return !pretransform_bases.empty(); }

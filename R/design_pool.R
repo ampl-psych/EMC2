@@ -130,14 +130,17 @@ get_designs_expanded <- function(dadm, model = NULL, order = c("model", "stored"
     if (is.function(model)) model <- model()
     p_types <- names(model$p_types)
 
-    # all design entries are in p_types (not vice versa!) --> no parameter redesign
+    # all design entries are in p_types (not vice versa!)
     if (!is.null(names(designs)) && all(names(designs) %in% p_types)) {
       out <- lapply(p_types, function(p) {
         x <- designs[[p]]
         if (is.null(x)) return(NULL)
         exp <- attr(x, "expand")
         if (is.null(exp)) return(x)
-        x[exp, , drop = FALSE]
+        par_des <- attr(x, "parameter_design")
+        x <- x[exp, , drop = FALSE]
+        attr(x, 'parameter_design') <- par_des
+        x
       })
       names(out) <- p_types
       return(out)

@@ -689,14 +689,11 @@ trend_help <- function(kernel = NULL, base = NULL, show_experimental=FALSE, ...)
 #' Check and update formula list for trend parameters
 #'
 #' @param trend An `emc2_trend` object created by [make_trend()].
-#' @param covariates Character vector of covariate column names in the data.
 #' @param model A model function, or NULL.
 #' @param formula List of formulas, or NULL.
-#' @param parameter_design A parameter_design list, or NULL.
 #' @return Updated formula list with intercept formulas added for missing trend
 #'   parameters.
-check_trend <- function(trend, covariates = NULL, model = NULL,
-                        formula = NULL, parameter_design = NULL) {
+check_trend <- function(trend, model = NULL, formula = NULL) {
 
   # ---- non-premap bases must target existing model parameters ----
   # (premap bases may also target sampled parameters or design columns)
@@ -721,21 +718,8 @@ check_trend <- function(trend, covariates = NULL, model = NULL,
   trend_pnames <- get_trend_pnames(trend)
 
   if (!is.null(formula)) {
-    pd_targets <- NULL
-    if (!is.null(parameter_design)) {
-      expand_over <- parameter_design$expand_over
-      pd_targets  <- if (!is.null(expand_over)) {
-        as.vector(outer(rownames(parameter_design$weights),
-                        expand_over, paste, sep = "."))
-      } else {
-        rownames(parameter_design$weights)
-      }
-    }
-
     formula_lhs <- unlist(lapply(formula, function(x) all.vars(x)[1]))
     isin <- trend_pnames %in% formula_lhs
-    if (!is.null(pd_targets))
-      isin <- isin | (trend_pnames %in% pd_targets)
 
     if (any(!isin)) {
       formula <- c(formula,
@@ -934,9 +918,12 @@ has_trend_coding <- function(model) {
 }
 
 has_conditional_covariates <- function(design) {
-  # find define covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
-  # they can be lRfiltered or not
-  function_output_columns <- names(design$Ffunctions)
+  # find covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
+  # they can be lR filtered or not
+  function_output_columns <- unlist(lapply(names(design$Ffunctions), function(nm) {
+    stored <- attr(design$Ffunctions[[nm]], "output_column_names")
+    if (!is.null(stored)) stored else nm  # fall back to function name (scalar case)
+  }), use.names = FALSE)
   behavioral_covariates <- c('rt', 'R', function_output_columns)
 
   # find actual covariates, look for a match
@@ -1515,10 +1502,36 @@ make_data_unconditional <- function(data, pars, design, model,
   # Step 2: Set up design cache.
   # -----------------------------------------------------------------------
   factor_cols <- setdiff(names(design$Ffactors), "subjects")
-  ffun_cols   <- names(design$Ffunctions)
   p_types     <- names(design$Flist)
 
-  #
+  # Build ffun_cols first, initialise dadm_full columns for pre-trial functions
+  ffun_cols       <- character(0)
+  has_ffunctions  <- !is.null(design$Ffunctions)
+  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
+  if (has_ffunctions) {
+    ffunctions      <- design$Ffunctions
+    ffunctions_pre  <- ffunctions[sapply(ffunctions, function(x) isTRUE(attr(x, "pretrial")))]
+    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) !isTRUE(attr(x, "pretrial")))]
+    has_ffunctions_pre  <- length(ffunctions_pre) > 0
+    has_ffunctions_post <- length(ffunctions_post) > 0
+    for (i in names(ffunctions_pre)) {
+      output <- ffunctions_pre[[i]](dadm_full)
+      if (is.list(output)) {
+        ffun_cols <- c(ffun_cols, names(output))
+        for (col in names(output)) dadm_full[[col]][] <- NA
+      } else {
+        ffun_cols <- c(ffun_cols, i)
+        dadm_full[[i]][] <- NA
+      }
+    }
+    for (i in names(ffunctions_post)) {
+      output <- ffunctions_post[[i]](dadm_full)
+      if (is.list(output)) ffun_cols <- c(ffun_cols, names(output))
+      else                 ffun_cols <- c(ffun_cols, i)
+    }
+  }
+
+  # Now key_cols uses the correct ffun_cols
   formula_vars <- unique(unlist(lapply(design$Flist, function(f) all.vars(f)[-1])))
   key_cols <- union(factor_cols, intersect(ffun_cols, formula_vars))
 
@@ -1540,8 +1553,10 @@ make_data_unconditional <- function(data, pars, design, model,
   }
   for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
 
-  cached_pd_pars <- if (!is.null(design$parameter_design)) rownames(design$parameter_design$weights) else character(0)
-
+  # cached_pd_pars <- if (!is.null(design$parameter_design)) {
+  #   vapply(design$parameter_design, function(f) deparse(f[[2]]), character(1))
+  # } else character(0)
+  #
   # design matrix cache -- every unique combination of ffactors (key) returns a design matrix. If not yet existent, auto-create
   make_designs_cached <- local({
     cache <- list()
@@ -1553,20 +1568,34 @@ make_data_unconditional <- function(data, pars, design, model,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
         )
-        pd_cached <- if (length(cached_pd_pars) > 0) {
-          expand_parameter_design(
-            list(weights = design$parameter_design$weights[cached_pd_pars, , drop = FALSE]),
-            dadm_slice, compress_dms = FALSE
-          )
-        } else list()
-
-        cache[[key]] <<- c(regular, pd_cached)
+        cache[[key]] <<- regular
       }
-
-      pd_names <- cached_pd_pars
-      cache[[key]][c(p_types, pd_names[pd_names %in% names(cache[[key]])])]
+      cache[[key]]
     }
   })
+
+  # make_designs_cached <- local({
+  #   cache <- list()
+  #   function(dadm_slice, key) {
+  #     if (is.null(cache[[key]])) {
+  #       regular <- lapply(
+  #         stats::setNames(p_types, p_types),
+  #         function(x) make_dm(design$Flist[[x]], da = dadm_slice,
+  #                             Fcovariates = design$Fcovariates,
+  #                             compress_dms = FALSE)
+  #       )
+  #       # pd_cached <- if (length(cached_pd_pars) > 0) {
+  #       #   parsed <- parse_parameter_design(design$parameter_design, regular)
+  #       #   expand_parameter_design(parsed, regular)
+  #       # } else list()
+  #       cache[[key]] <<- regular
+  #       # cache[[key]] <<- c(regular, pd_cached)
+  #       }
+  #
+  #     # pd_names <- cached_pd_pars
+  #     # cache[[key]][c(p_types, pd_names[pd_names %in% names(cache[[key]])])]
+  #   }
+  # })
 
   # Identify whether any trend has covariate coding
   trend        <- model_list$trend  # list(kernels = list(...), bases = list(...))
@@ -1578,20 +1607,6 @@ make_data_unconditional <- function(data, pars, design, model,
   } else list()
   has_covariate_coding <- length(bases_with_coding) > 0
 
-  has_ffunctions <- !is.null(design$Ffunctions)
-  has_ffunctions_pre <- has_ffunctions_post <- has_ffunctions
-  # By default, ffunctions are assumed to be applied post-trial (after R and rt are recorded).
-  # Functions marked 'pretrial' will be applied pretrial
-  if(has_ffunctions) {
-    ffunctions <- design$Ffunctions
-    ffunctions_pre <- ffunctions[sapply(ffunctions, function(x) { isTRUE(attr(x, 'pretrial'))})]
-    ffunctions_post <- ffunctions[sapply(ffunctions, function(x) { !isTRUE(attr(x, 'pretrial'))})]
-    has_ffunctions_pre <- length(ffunctions_pre) > 0
-    has_ffunctions_post <- length(ffunctions_post) > 0
-    for(i in names(ffunctions_pre)) {
-      dadm_full[[i]][] <- NA  # Set all columns corresponding to pre-trial function outputs to NA - no lingering empirical data
-    }
-  }
   # dadm_full$rt[] <- NA
   # dadm_full$R[] <- NA
 
@@ -1693,13 +1708,30 @@ make_data_unconditional <- function(data, pars, design, model,
         class(dadm_ctx) <- "data.frame"
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
-        for (i in names(ffunctions_pre)) {
-          result_full             <- ffunctions_pre[[i]](dadm_ctx)
-          result_curr             <- utils::tail(result_full, length(idx_curr))
-          dadm_ctx[[i]]           <- result_full
-          dadm_current[[i]]       <- result_curr
-          dadm_subj_df[[i]][idx_curr] <- result_curr
+        for(i in names(ffunctions_pre)) {
+          result_full <- ffunctions_pre[[i]](dadm_ctx)
+          if (is.list(result_full)) {
+            for (col in names(result_full)) {
+              result_curr             <- utils::tail(result_full[[col]], length(idx_curr))
+              dadm_ctx[[col]]         <- result_full[[col]]
+              dadm_current[[col]]     <- result_curr
+              dadm_subj_df[[col]][idx_curr] <- result_curr
+            }
+          } else {
+            result_curr                   <- utils::tail(result_full, length(idx_curr))
+            dadm_ctx[[i]]                 <- result_full
+            dadm_current[[i]]             <- result_curr
+            dadm_subj_df[[i]][idx_curr]   <- result_curr
+          }
         }
+
+        # for (i in names(ffunctions_pre)) {
+        #   result_full             <- ffunctions_pre[[i]](dadm_ctx)
+        #   result_curr             <- utils::tail(result_full, length(idx_curr))
+        #   dadm_ctx[[i]]           <- result_full
+        #   dadm_current[[i]]       <- result_curr
+        #   dadm_subj_df[[i]][idx_curr] <- result_curr
+        # }
       }
 
 
@@ -1747,7 +1779,8 @@ make_data_unconditional <- function(data, pars, design, model,
         pretransforms        = model_list$pre_transform,
         trend                = model_list$trend,
         return_kernel_matrix = FALSE,
-        return_all_pars      = TRUE
+        return_all_pars      = TRUE,
+        n_active_trials      = j * n_acc
       )[[1]]  # returns a list per particle
 
       if (tmp_return_trialwise && !is.null(model_list$trend)) {
@@ -1799,10 +1832,22 @@ make_data_unconditional <- function(data, pars, design, model,
         attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
 
         for (i in names(ffunctions_post)) {
-          result_full             <- ffunctions_post[[i]](dadm_ctx)
-          dadm_ctx[[i]]           <- result_full
-          dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
+          result_full <- ffunctions_post[[i]](dadm_ctx)
+          if (is.list(result_full)) {
+            for (col in names(result_full)) {
+              dadm_ctx[[col]]               <- result_full[[col]]
+              dadm_subj_df[[col]][idx_curr] <- utils::tail(result_full[[col]], length(idx_curr))
+            }
+          } else {
+            dadm_ctx[[i]]                   <- result_full
+            dadm_subj_df[[i]][idx_curr]     <- utils::tail(result_full, length(idx_curr))
+          }
         }
+        # for (i in names(ffunctions_post)) {
+        #   result_full             <- ffunctions_post[[i]](dadm_ctx)
+        #   dadm_ctx[[i]]           <- result_full
+        #   dadm_subj_df[[i]][idx_curr] <- utils::tail(result_full, length(idx_curr))
+        # }
 
         # Update design matrices for parameters that depend on ffunctions_post (should be only learning-related)
         key_post <- paste(sapply(key_cols, function(fc) {
