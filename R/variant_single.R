@@ -40,42 +40,6 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   return(out)
 }
 
-get_startpoints_single <- function(pmwgs, start_mu, start_var){
-  if (is.null(start_mu)) start_mu <- pmwgs$prior$theta_mu_mean
-  # If no starting point for var just sample some
-  if (is.null(start_var)) start_var <- pmwgs$prior$theta_mu_var
-  return(list(tmu = start_mu, tvar = start_var))
-}
-
-get_group_level_single <- function(parameters, s){
-  # "group level" is just prior here
-  mu <- parameters$tmu
-  var <- parameters$tvar
-  return(list(mu = mu, var = var))
-}
-
-gibbs_step_single <- function(sampler, alpha){
-  n_pars <- sum(!sampler$nuisance)
-  alpha_out <- matrix(alpha, nrow = n_pars, ncol = sampler$n_subjects)
-  rownames(alpha_out) <- sampler$par_names[!sampler$nuisance]
-  return(list(tmu = sampler$prior$theta_mu_mean,tvar = sampler$prior$theta_mu_var,alpha = alpha_out))
-}
-
-get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
-  iters <- dim(samples$alpha)[3]
-  iter_idx <- sample(1:iters, min(iters, 250))
-  if(is.null(idx)) idx <- 1:n_pars
-  all_samples <- samples$alpha[idx, s, iter_idx, drop = FALSE]
-  all_samples <- matrix(all_samples, nrow = length(idx))
-  mu_tilde <- rowMeans(all_samples)
-  var_tilde <- if (length(idx) == 1L) {
-    matrix(stats::var(as.numeric(all_samples)), nrow = 1L, ncol = 1L)
-  } else {
-    var(t(all_samples))
-  }
-  return(list(eff_mu = mu_tilde, eff_var = var_tilde))
-}
-
 filtered_samples_single <- function(sampler, filter){
   out <- list(
     alpha = sampler$samples$alpha[, , filter, drop = F],
@@ -117,7 +81,6 @@ bridge_add_group_single <- function(all_samples, samples, idx){
 bridge_add_info_single <- function(info, samples){
   return(info)
 }
-
 
 bridge_group_and_prior_and_jac_single <- function(proposals_group, proposals_list, info){
   proposals <- do.call(rbind, proposals_list)

@@ -42,7 +42,7 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as specified
-by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the \code{stop_criteria}.}
 
@@ -52,8 +52,7 @@ by \code{stop_criteria} are checked and proposal distributions are updated. Defa
 root of the number of sampled parameters determines the number of particles used.}
 
 \item{cores_per_chain}{An integer. How many cores to use per chain. Parallelizes across
-participant calculations. Only available on Linux or Mac OS. For Windows, only
-parallelization across chains (\code{cores_for_chains}) is available.}
+participant calculations using native threads.}
 
 \item{cores_for_chains}{An integer. How many cores to use across chains.
 Defaults to the number of chains. The total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
@@ -65,22 +64,10 @@ ignored if the required number of iterations has not been reached yet.}
 \item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
 
-\item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
-group-level covariance becomes computationally singular during sampling (which
-otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
-keeps the default behaviour: error immediately, naming the diverging parameters.
-A list may set any of:
-\itemize{
-\item \code{max_retries} — integer; on a singular covariance, re-draw the group
-(Gibbs) step this many times before giving up on that iteration. Rescues
-transient early-burn singularities. Default 0.
-\item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
-are exhausted, \code{"carry_forward"} reuses the previous iteration's group
-parameters and continues instead of aborting.
-\item \code{max_carry_forward} — integer; consecutive carried-forward iterations
-allowed before giving up with a diagnosis of the diverging parameters. Default 10.
-}
-Retry is attempted before carry-forward when both are enabled.}
+\item{on_singular}{A list or \code{NULL} (default). Controls recovery when the group-level
+covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
+group step, then an error.
+A list may set \code{max_retries} (integer, re-draw the group step on failure).}
 
 \item{...}{Additional optional arguments}
 }
@@ -101,13 +88,30 @@ The potential stop criteria to be set are:
 
 \code{max_gd} (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 
+\code{gd_quantile} (numeric in (0, 1], only with \code{max_gd}): use this quantile of the
+subject-level (\code{alpha}) diagnostics. All other selected parameters must still
+pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
+
+\code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
+every \code{step_size} iterations. After a failed check, the first third of the stage's
+draws is dropped if this lowers the stopping diagnostic.
+
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
+
+Hierarchical models also require the largest subject-parameter Rhat over the last
+250 \code{adapt} iterations to fall below 1.2, unless three checks show no improvement
+or 1000 iterations are reached. \code{options(emc.adapt_converge = FALSE)} disables
+this extra condition. The \code{sample} proposals are then built and fixed.
 
 \code{min_es} (integer): The minimum number of effective samples across all parameters in the selection
 
 \code{omit_mpsrf} (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is \code{FALSE}.
 
 \code{iter} (integer): The number of MCMC samples to collect.
+
+Chains share fixed likelihood inputs in one process. Each chain has its own
+native RNG, seeded from R, with its state saved in the samples for resuming fits.
+Resuming with a different C++ library seeds fresh chain RNGs from R.
 
 The estimation is performed using particle-metropolis within-Gibbs sampling.
 For sampling details see:
@@ -141,6 +145,6 @@ LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress 
 #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 
 # For a transient singular group covariance during burn, retry the group step:
-# LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
+# LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3))
 }
 }

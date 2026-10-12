@@ -1,3 +1,25 @@
+unwind_lambda <- function(lambda, constraintMat, reverse = F){
+  if(reverse){
+    out <- constraintMat
+    out[constraintMat == Inf] <- lambda
+  } else{
+    out <- as.numeric(lambda[constraintMat == Inf])
+  }
+  return(out)
+}
+
+constrain_lambda <- function(lambda, constraintMat){
+  # Inf marks an estimated entry; any finite entry is fixed to that value, which
+  # is not necessarily 0 (e.g. unit loadings used to induce a correlation structure).
+  is_fixed <- constraintMat != Inf
+  for(i in 1:dim(lambda)[3]){
+    tmp <- lambda[,,i]
+    tmp[is_fixed] <- constraintMat[is_fixed]
+    lambda[,,i] <- tmp
+  }
+  return(lambda)
+}
+
 # Rewrite of the factor.switching package ---------------------------------
 
 # sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,

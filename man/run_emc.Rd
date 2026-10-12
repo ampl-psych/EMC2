@@ -21,7 +21,7 @@ run_emc(
   thin = FALSE,
   trim = TRUE,
   on_singular = NULL,
-  r_cores = 1
+  .context = NULL
 )
 }
 \arguments{
@@ -36,19 +36,18 @@ This fine-tunes the width of the search space to obtain the desired acceptance p
 1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as
-specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
+specified by \code{stop_criteria} are checked and, in the stages before \code{sample}, proposal distributions are updated. Defaults to 100.}
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the stop_criteria.}
 
-\item{verboseProgress}{Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.}
+\item{verboseProgress}{Logical. Whether to print progress within each sampling step.}
 
 \item{fileName}{A string. If specified will autosave emc at this location on every iteration.}
 
 \item{particle_factor}{An integer. \code{particle_factor} multiplied by the square root of the number of sampled parameters determines the number of particles used.}
 
 \item{cores_per_chain}{An integer. How many cores to use per chain.
-Parallelizes across participant calculations. Only available on Linux or Mac OS.
-For Windows, only parallelization across chains (\code{cores_for_chains}) is available.}
+Parallelizes across participant calculations using native threads.}
 
 \item{cores_for_chains}{An integer. How many cores to use across chains.
 Defaults to the number of chains. the total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
@@ -64,12 +63,12 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 \item{trim}{A boolean. If \code{TRUE} will automatically remove redundant samples (i.e. from preburn, burn, adapt).}
 
 \item{on_singular}{A list or \code{NULL} (default). Controls recovery when the group-level
-covariance becomes computationally singular during sampling. \code{NULL} errors immediately.
-A list may set \code{max_retries} (integer, re-draw the group step on failure), \code{on_exhausted}
-(\code{"error"} or \code{"carry_forward"} the previous group parameters), \code{max_carry_forward}
-(consecutive carried-forward iterations before giving up).}
+covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
+group step, then an error.
+A list may set \code{max_retries} (integer, re-draw the group step on failure).}
 
-\item{r_cores}{An integer for number of cores to use in R-based likelihood calculations, default 1.}
+\item{.context}{Internal compiled likelihood cache.}
+
 }
 \value{
 An emc object

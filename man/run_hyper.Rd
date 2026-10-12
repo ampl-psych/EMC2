@@ -14,7 +14,7 @@ run_hyper(
 )
 }
 \arguments{
-\item{type}{A string indicating whether to run a \code{standard} group-level, \code{blocked}, \code{diagonal}, \code{factor}, or \code{single} (i.e., non-hierarchical) model.}
+\item{type}{A string indicating whether to run a \code{standard}, \code{blocked}, \code{diagonal}, \code{diagonal-gamma}, \code{SEM}, \code{infnt_factor}, or \code{single} (non-hierarchical) model.}
 
 \item{data}{A data frame, or a list of data frames. Needs to have the variable \code{subjects} as participant identifier.}
 

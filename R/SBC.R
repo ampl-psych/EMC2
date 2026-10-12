@@ -1020,45 +1020,38 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
 
 
 
-get_gamma <- function (N, K, conf_level = 0.95)
-{
-  p_interior <- function (p_int, x1, x2, z1, z2, gamma, N)
-  {
-    z_tilde <- (z2 - z1)/(1 - z1)
-    N_tilde <- rep(N - x1, each = length(x2))
-    p_int <- rep(p_int, each = length(x2))
-    x_diff <- outer(x2, x1, "-")
-    p_x2_int <- p_int * dbinom(x_diff, N_tilde, z_tilde)
-    list(p_int = rowSums(p_x2_int), x1 = x2)
-  }
-  target <- function(gamma, conf_level, N, K) {
-    z <- 1:(K - 1)/K
-    z1 <- c(0, z)
-    z2 <- c(z, 1)
-    x2_lower <- qbinom(gamma/2, N, z2)
-    x2_upper <- c(N - rev(x2_lower)[2:K], N)
-    x1 <- 0
-    p_int <- 1
-    for (i in seq_along(z1)) {
-      tmp <- p_interior(p_int, x1 = x1, x2 = x2_lower[i]:x2_upper[i],
-                        z1 = z1[i], z2 = z2[i], gamma = gamma, N = N)
-      x1 <- tmp$x1
-      p_int <- tmp$p_int
-    }
-    abs(conf_level - sum(p_int))
-  }
-  optimize(target, c(0, 1 - conf_level), conf_level, N = N,
-           K = K)$minimum
+# Invert the binomial CDF directly; qbinom() failed on some R builds.
+.safe_qbinom <- function(p, size, prob) {
+  vapply(prob, function(pr) min(size, sum(cumsum(dbinom(0:size, size, pr)) < p)), numeric(1))
 }
 
-get_lims <- function (N, K, gamma)
-{
-  lims <- list()
+get_gamma <- function(N, K, conf_level = 0.95) {
+  z <- seq_len(K) / K
+  coverage_minus_conf <- function(gamma) {
+    lower <- .safe_qbinom(gamma/2, N, z)
+    upper <- c(N - rev(lower)[-1], N)
+    x1 <- 0
+    p_int <- 1
+    for (i in seq_along(z)) {
+      x2 <- lower[i]:upper[i]
+      p_int <- rowSums(rep(p_int, each = length(x2)) *
+        dbinom(outer(x2, x1, "-"), rep(N - x1, each = length(x2)), 1/(K - i + 1)))
+      x1 <- x2
+    }
+    sum(p_int) - conf_level
+  }
+  hi <- 1 - conf_level
+  f_hi <- coverage_minus_conf(hi)
+  # Discrete bands can remain conservative throughout this interval.
+  if(f_hi >= 0) return(hi)
+  uniroot(coverage_minus_conf, c(0, hi), f.lower = hi, f.upper = f_hi,
+          tol = sqrt(.Machine$double.eps))$root
+}
+
+get_lims <- function(N, K, gamma) {
   z <- seq(0, 1, length.out = K)
-  lims$lower <- qbinom(gamma/2, N, z)/N - z
-  lims$upper <- qbinom(1 - gamma/2, N, z)/N - z
-  lims$z <- z
-  lims
+  list(lower = .safe_qbinom(gamma/2, N, z)/N - z,
+       upper = .safe_qbinom(1 - gamma/2, N, z)/N - z, z = z)
 }
 
 make_smooth <- function(x, y, N = 1000){

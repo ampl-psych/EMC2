@@ -22,7 +22,7 @@ gd_summary(emc, ...)
 
 \item{selection}{A Character vector. Indicates which parameter types to check (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
-\item{omit_mpsrf}{Boolean. If \code{TRUE} also returns the multivariate point scale reduction factor (see \code{?coda::gelman.diag}).}
+\item{omit_mpsrf}{Boolean. If \code{FALSE} also returns the multivariate point scale reduction factor (see \code{?coda::gelman.diag}) of the halved chains.}
 
 \item{stat}{A string. Should correspond to a function that can be applied to a vector,
 which will be performed on the vector/rows or columns of the matrix of the parameters}
@@ -42,6 +42,12 @@ Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selec
 i.e. the ratio of between to within MCMC chain variance.
 }
 \details{
+Uses split-Rhat: halve each chain and compute \code{sqrt(((n - 1) / n * W + B / n) / W)},
+where \code{n} is the half-chain length, \code{W} the mean within-half-chain variance and
+\code{B / n} the variance of the half-chain means. The same statistic drives \code{fit()}'s
+stop rules. It omits the degrees-of-freedom correction and log transform used by
+\code{coda::gelman.diag()} in EMC2 up to version 3.4.1, so values may be lower.
+
 See: Gelman, A and Rubin, DB (1992)
 Inference from iterative simulation using multiple sequences, \emph{Statistical Science}, 7, 457-511.
 
