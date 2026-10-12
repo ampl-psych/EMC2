@@ -1,0 +1,4 @@
+"sampler","chains","workers","draws","seconds","likelihoods"
+"R (before port)",4,1,1000,83.815,4656000
+"C++",4,1,1000,4.29,4656000
+"C++",4,2,1000,2.721,4656000

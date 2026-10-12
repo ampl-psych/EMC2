@@ -1,8 +1,7 @@
-sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
+sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names, iters, stage)
-  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
 
   # Get total parameters including regressors
@@ -40,7 +39,7 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...) {
-  n_pars <- sum(!sampler$nuisance)
+  n_pars <- sampler$n_pars
   group_design <- list(...)$group_design
 
   # Get all parameter names including regressors
@@ -48,7 +47,7 @@ add_info_standard <- function(sampler, prior = NULL, ...) {
 
   sampler$par_group <- list(...)$par_groups
   if (is.null(sampler$par_group)) sampler$par_group <- rep(1, n_pars)
-  sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
+  sampler$is_blocked <- duplicated(sampler$par_group) | duplicated(sampler$par_group, fromLast = TRUE)
   sampler$prior <- get_prior_standard(prior, n_pars,
     sample = F,
     group_design = group_design
@@ -98,38 +97,13 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   out
 }
 
-.standard_theta_var_draws <- function(theta_var, idx) {
-  if (is.logical(idx)) idx <- which(idx)
-  theta_var <- theta_var[idx, idx, , drop = FALSE]
-  n_pars <- length(idx)
-  n_iter <- dim(theta_var)[3]
-  out_len <- n_pars * (n_pars + 1) / 2
-  out <- matrix(NA_real_, nrow = out_len, ncol = n_iter)
-  nm <- dimnames(theta_var)[[1]]
-  for (i in seq_len(n_iter)) {
-    out[, i] <- unwind(.standard_square_matrix(theta_var[, , i], n_pars, nm))
-  }
-  out
-}
 
-.standard_prior_design_info <- function(design = NULL, group_design = NULL,
-                                        nuisance = NULL, nuisance_non_hyper = NULL) {
+.standard_prior_design_info <- function(design = NULL, group_design = NULL) {
   if (is.null(design)) {
     return(list(par_names = NULL, group_design = group_design))
   }
 
   par_names <- names(sampled_pars(design, doMap = FALSE))
-  nuisance_idx <- unique(c(nuisance, nuisance_non_hyper))
-  if (length(nuisance_idx) > 0L) {
-    if (is.character(nuisance_idx)) {
-      nuisance_idx <- match(nuisance_idx, par_names)
-    }
-    nuisance_idx <- nuisance_idx[!is.na(nuisance_idx)]
-    if (length(nuisance_idx) > 0L) {
-      par_names <- par_names[!seq_along(par_names) %in% nuisance_idx]
-    }
-  }
-
   if (!is.null(group_design)) {
     keep <- intersect(names(group_design), par_names)
     if (length(keep) == 0L) {
@@ -144,12 +118,12 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
 }
 
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
-                               par_groups = NULL, nuisance = NULL, nuisance_non_hyper = NULL){
+                               par_groups = NULL){
   # Checking and default priors
   if (is.null(prior)) {
     prior <- list()
   }
-  design_info <- .standard_prior_design_info(design, group_design, nuisance, nuisance_non_hyper)
+  design_info <- .standard_prior_design_info(design, group_design)
   par_names <- design_info$par_names
   group_design <- design_info$group_design
   if(!is.null(design)){
@@ -271,7 +245,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       }
       if (is.null(par_groups)) par_groups <- rep(1, n_pars)
       constraintMat <- matrix(0, n_pars, n_pars)
-      for (i in 1:length(unique(par_groups))) {
+      for (i in unique(par_groups)) {
         idx <- par_groups == i
         constraintMat[idx, idx] <- Inf
       }
@@ -372,85 +346,6 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   return(out)
 }
 
-get_startpoints_standard <- function(pmwgs, start_mu, start_var) {
-  n_pars <- sum(!pmwgs$nuisance)
-  n_total_pars <- length(pmwgs$prior$theta_mu_mean) # Includes regressor parameters
-  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)[1, ]
-  # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- riwish(n_pars * 3, diag(n_pars))
-  start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
-
-  # Calculate subject-specific means using design matrices
-  group_designs <- add_group_design(pmwgs$par_names[!pmwgs$nuisance], pmwgs$group_designs, pmwgs$n_subjects)
-  # Needs to include random effects if present
-  # For startpoints, if u is not provided, we can either sample it or set to 0.
-  # Code below needs subj_mu to be computed including u.
-
-  n_rand <- get_n_random(pmwgs$par_names, pmwgs$group_designs)
-  u <- NULL
-  s <- NULL
-  a_half_s <- NULL
-  if (n_rand > 0) {
-    n_s <- get_n_random_variance(pmwgs$par_names, pmwgs$group_designs)
-
-    # Initialize a_half_s from prior: IG(1/2, 1/A_z^2)
-    # A_z might be scalar or vector in prior.
-    A_z <- if (is.null(pmwgs$prior$A_z)) rep(0.3, n_s) else rep(pmwgs$prior$A_z, length.out = n_s)
-    a_half_s <- 1 / rgamma(n_s, shape = 1 / 2, rate = 1 / (A_z^2))
-
-    # Initialize s (variance) from prior: IG(v_Z/2, v_Z/a_half_s)
-    v_Z <- if (is.null(pmwgs$prior$v_Z)) 2 else pmwgs$prior$v_Z
-    s <- 1 / rgamma(n_s, shape = v_Z / 2, rate = v_Z / a_half_s)
-
-    # Re-using logic from get_prior_standard for u generation
-    u <- numeric(n_rand)
-    idx_u <- 1
-    idx_s <- 1
-    # Iterate group designs to match s to u
-    for (p in pmwgs$par_names[!pmwgs$nuisance]) {
-      if (is.list(pmwgs$group_designs[[p]]) && !is.null(pmwgs$group_designs[[p]]$random)) {
-        for (gname in names(pmwgs$group_designs[[p]]$random)) {
-          z <- pmwgs$group_designs[[p]]$random[[gname]]
-          k_z <- ncol(z)
-          sd_val <- sqrt(s[idx_s])
-          u[idx_u:(idx_u + k_z - 1)] <- rnorm(k_z, 0, sd_val)
-          idx_u <- idx_u + k_z
-          idx_s <- idx_s + 1
-        }
-      }
-    }
-  }
-
-  random_designs <- add_group_design_random(pmwgs$par_names[!pmwgs$nuisance], pmwgs$group_designs)
-  random_maps <- add_group_design_map(pmwgs$par_names[!pmwgs$nuisance], pmwgs$group_designs)
-  subj_mu <- calculate_subject_means_RE(group_designs, start_mu, random_designs, u, random_maps)
-
-  out <- list(
-    tmu = start_mu, tvar = start_var, tvinv = ginv(start_var),
-    a_half = start_a_half, subj_mu = subj_mu
-  )
-
-  if (!is.null(u)) {
-    out$u <- u
-    out$s <- s
-    out$a_half_s <- a_half_s
-  }
-  return(out)
-}
-
-get_group_level_standard <- function(parameters, s) {
-  # This function is modified for other versions
-  mu <- parameters$subj_mu[, s]
-  var <- parameters$tvar
-  out <- list(mu = mu, var = var)
-  if (!is.null(parameters$u)) out$u <- parameters$u
-  if (!is.null(parameters$s)) {
-    out$s <- parameters$s
-    out$a_half_s <- parameters$a_half_s
-  }
-  return(out)
-}
-
 calculate_subject_means_RE <- function(group_designs, tmu, random_designs = NULL, u = NULL, random_maps = NULL) {
   # Calculate fixed effects
   mu <- calculate_subject_means(group_designs, tmu)
@@ -490,337 +385,16 @@ calculate_subject_means_RE <- function(group_designs, tmu, random_designs = NULL
   return(mu)
 }
 
-fill_samples_standard <- function(samples, group_level, proposals, j = 1, n_pars) {
-  samples$a_half[, j] <- group_level$a_half
-  samples$last_theta_var_inv <- group_level$tvinv
-  if (!is.null(group_level$u) && !is.null(samples$theta_u)) samples$theta_u[, j] <- group_level$u
-  if (!is.null(group_level$s) && !is.null(samples$theta_s)) {
-    samples$theta_s[, j] <- group_level$s
-    samples$a_half_s[, j] <- group_level$a_half_s
-  }
-  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
-  return(samples)
-}
-
-gibbs_step_standard <- function(sampler, alpha) {
-  #
-  # alpha:  (p x n) subject-level parameter matrix
-  #
-  # sampler$group_designs:   list of length p, each (n x m_k)
-  # sampler$is_blocked:    length p logical; is_blocked[k] = TRUE => param k is in some covariance block
-  # sampler$par_group:     length p integer group labels (only used if is_blocked=TRUE)
-  #
-  # sampler$prior contains at least:
-  #   - theta_mu_mean (length total_params) and theta_mu_invar (total_params x total_params)
-  #   - v, A => hyperparams for the IW/Gamma updates
-  #
-  # last_sample_standard(...) must provide:
-  #   - last$tmu (total_params-vector) of group means (includes both intercepts and slopes)
-  #   - last$tvar, last$tvinv (p x p)
-  #   - last$a_half (p)
-  #
-  # The function returns an updated (tmu, tvar, tvinv, a_half, alpha),
-  # doing partial block updates for the covariance tvar, and a joint
-  # update for all mu parameters (including former beta parameters)
-
-
-  group_designs <- sampler$group_designs
-  is_blocked <- sampler$is_blocked[!sampler$nuisance]
-  par_group <- sampler$par_group[!sampler$nuisance]
-  prior <- sampler$prior
-
-  last <- last_sample_standard(sampler$samples)
-  tmu <- last$tmu # group means, dimension total_params (includes former beta)
-  tvar <- last$tvar # (p x p)
-  tvinv <- last$tvinv
-  a_half <- last$a_half # length p
-
-  if (length(dim(alpha)) != 2L) {
-    alpha <- matrix(alpha, nrow = sum(!sampler$nuisance), ncol = sampler$n_subjects)
-    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
-  }
-
-  p <- nrow(alpha)           # number of subject-level parameters
-  n <- ncol(alpha)           # number of subjects
-
-  # Extract Random Effects state
-  u <- last$u
-  s <- last$s
-  a_half_s <- last$a_half_s
-
-  if (is.null(p) || is.null(n)) {
-    p <- sum(!sampler$nuisance)
-    n <- sampler$n_subjects
-    alpha <- matrix(alpha, nrow = p, ncol = n)
-    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
-  }
-
-  # Some backwards compatibility
-  if (is.null(is_blocked) || length(is_blocked) == 0) {
-    is_blocked <- rep(T, p)
-  }
-  if (is.null(par_group)) {
-    par_group <- rep(1, p)
-  }
-
-  # Prepare designs
-  fixed_designs <- add_group_design(sampler$par_names[!sampler$nuisance], group_designs, n)
-  random_designs <- add_group_design_random(sampler$par_names[!sampler$nuisance], group_designs)
-  random_maps <- add_group_design_map(sampler$par_names[!sampler$nuisance], group_designs)
-
-
-
-  n_rand <- get_n_random(sampler$par_names[!sampler$nuisance], group_designs)
-  has_random <- n_rand > 0
-
-  M <- length(tmu) # Total parameters (former mu + beta)
-
-  ## --------------------------------------------------
-  ## 1) Update Beta (Fixed Effects)
-  ## --------------------------------------------------
-  # Target: alpha - Zu
-  alpha_star <- alpha
-  if (has_random && !is.null(u)) {
-    # Compute Zu offset
-    # Compute Zu offset manually relative to alpha to get residuals
-    u_idx <- 1
-    for (k in seq_len(p)) {
-      pname <- names(fixed_designs)[k]
-      if (!is.null(random_designs[[pname]])) {
-        for (z in random_designs[[pname]]) {
-          n_u <- ncol(z)
-          offset <- as.vector(z %*% u[u_idx:(u_idx + n_u - 1)])
-          alpha_star[k, ] <- alpha_star[k, ] - offset
-          u_idx <- u_idx + n_u
-        }
-      }
-    }
-  }
-
-  prec_data <- matrix(0, M, M)
-  mean_data <- numeric(M)
-
-  # For each subject i, we build an (p x M) matrix that maps tmu -> predicted alpha_i
-  for (i in seq_len(n)) {
-    par_idx <- 0
-    M_i <- matrix(0, nrow = p, ncol = M)
-    for (k in seq_len(p)) {
-      x_ik <- fixed_designs[[k]][i, , drop = FALSE]
-      # place them in row k:
-      M_i[k, par_idx + 1:ncol(fixed_designs[[k]])] <- x_ik
-      par_idx <- par_idx + ncol(fixed_designs[[k]])
-    }
-    # Accumulate
-    prec_data <- prec_data + crossprod(M_i, tvinv %*% M_i)
-    mean_data <- mean_data + crossprod(M_i, tvinv %*% alpha_star[, i, drop = FALSE])
-  }
-
-  prec_post <- prior$theta_mu_invar + prec_data
-  cov_post <- solve(prec_post)
-  mean_post <- cov_post %*% (prior$theta_mu_invar %*% prior$theta_mu_mean + mean_data)
-
-  # Draw new parameter vector
-  L <- t(chol(cov_post))
-  z <- rnorm(M)
-  tmu_new <- as.vector(mean_post + L %*% z)
-
-  ## --------------------------------------------------
-  ## 2) Update Random Effects u
-  ## --------------------------------------------------
-  u_new <- u
-  s_new <- s
-  a_half_s_new <- a_half_s
-
-  if (has_random) {
-    # Calculate mu_fixed = X * beta
-    mu_fixed <- calculate_subject_means(fixed_designs, tmu_new)
-
-    # We iterate over each random component
-    u_ptr <- 1
-    s_ptr <- 1
-
-    for (k in seq_len(p)) { # For each parameter
-      pname <- names(fixed_designs)[k]
-      if (!is.null(random_designs[[pname]])) {
-        # Prior precision in parameter space
-        prec_noise <- tvinv[k, k]
-
-        # Track component sizes and indices for this parameter
-        z_list <- random_designs[[pname]]
-        comp_sizes <- vapply(z_list, ncol, integer(1))
-        comp_starts <- u_ptr + c(0, cumsum(comp_sizes))[seq_along(comp_sizes)]
-
-        # Now iterate over components for THIS parameter k
-        for (j in seq_along(z_list)) {
-          z <- z_list[[j]]
-          n_u <- comp_sizes[j]
-          curr_idx <- comp_starts[j]:(comp_starts[j] + n_u - 1)
-          curr_s2 <- s_new[s_ptr]
-
-          # Recompute total random effect contribution with current u_new
-          total_rand_offset <- numeric(n)
-          for (jj in seq_along(z_list)) {
-            idx_jj <- comp_starts[jj]:(comp_starts[jj] + comp_sizes[jj] - 1)
-            total_rand_offset <- total_rand_offset + as.vector(z_list[[jj]] %*% u_new[idx_jj])
-          }
-
-          # Recompute cross-correlation adjustment with current u_new
-          mu_full <- calculate_subject_means_RE(fixed_designs, tmu_new, random_designs, u_new, random_maps)
-          devs <- alpha - mu_full
-
-          weighted_devs <- (tvinv %*% devs)[k, ]
-          other_terms <- weighted_devs - tvinv[k, k] * devs[k, ]
-          adjustment <- -other_terms / tvinv[k, k]
-
-          # Base target for this component is the residual after removing fixed effects,
-          # total random effects, and the cross-correlation adjustment.
-          base_target <- alpha[k, ] - mu_fixed[k, ] - total_rand_offset - adjustment
-
-          current_u_segment <- u_new[curr_idx]
-
-          # Isolate the current random effect component (u_curr) from the residuals.
-          # base_target excludes all random effects, so we add back the current
-          # component (Z * u_segment) to get the target for this update step.
-          target <- base_target + as.vector(z %*% current_u_segment)
-
-          # Bayesian Linear Regression Update for u
-          # Prior u ~ N(0, s^2), Error Precision = prec_noise
-          ztz <- crossprod(z)
-          # If z is indicator, ztz is diagonal.
-
-          post_prec <- prec_noise * ztz
-          diag(post_prec) <- diag(post_prec) + 1 / curr_s2
-
-          post_cov <- solve(post_prec)
-
-          post_mean <- post_cov %*% (prec_noise * crossprod(z, target))
-
-          # Sample new u
-          L_u <- t(chol(post_cov))
-          u_drawn <- as.vector(post_mean + L_u %*% rnorm(n_u))
-
-          # Update u_new
-          u_new[curr_idx] <- u_drawn
-
-          # Update s for this component
-          # s^2 | u ~ IG( v/2 + J/2, v/a_half_s + sum(u^2)/2 )
-          # We sample the Variance (s^2) from the Inverse Gamma posterior.
-
-          J_dim <- n_u
-          shape_s <- (prior$v_Z + J_dim) / 2
-          rate_s <- prior$v_Z / a_half_s_new[s_ptr] + 0.5 * sum(u_drawn^2)
-
-          s2_new <- 1 / rgamma(1, shape = shape_s, rate = rate_s)
-
-          # Store as Variance (s^2)
-          s_new[s_ptr] <- s2_new
-
-          # Update a_half_s (auxiliary variable for s variance)
-          # Uses Inverse Gamma sampler (via 1/rgamma)
-          # Selects A_z based on component index s_ptr
-          val_A <- if (length(prior$A_z) >= s_ptr) prior$A_z[s_ptr] else prior$A_z[1]
-          shape_a <- (prior$v_Z + 1) / 2
-
-          a_half_s_new[s_ptr] <- 1 / rgamma(1, shape = shape_a, rate = prior$v_Z * (1 / s2_new) + 1 / (val_A^2))
-
-          s_ptr <- s_ptr + 1
-        }
-        u_ptr <- u_ptr + sum(comp_sizes)
-      }
-    }
-
-    # Final update of subj_mu with NEW u for residuals
-    subj_mu <- calculate_subject_means_RE(fixed_designs, tmu_new, random_designs, u_new, random_maps)
-  } else {
-    subj_mu <- calculate_subject_means(fixed_designs, tmu_new)
-  }
-
-  ## --------------------------------------------------
-  ## 3) Update Covariance (tvar)
-  ## --------------------------------------------------
-
-  resid <- alpha - subj_mu
-
-  tvar_new <- matrix(0, p, p)
-  blocked_idx <- which(is_blocked)
-  unblocked_idx <- which(!is_blocked)
-
-  if (length(blocked_idx) > 0) {
-    block_groups <- unique(par_group[blocked_idx])
-    for (g in block_groups) {
-      group_idx <- blocked_idx[par_group[blocked_idx] == g]
-      d <- length(group_idx)
-      resid_block <- resid[group_idx, , drop = FALSE]
-      cov_block <- resid_block %*% t(resid_block)
-
-      B_half_block <- 2 * prior$v * diag(1 / a_half[group_idx], d) + cov_block
-      df_block <- prior$v + d - 1 + n
-
-      Sigma_block <- riwish(df_block, B_half_block)
-      tvar_new[group_idx, group_idx] <- Sigma_block
-    }
-  }
-
-  if (length(unblocked_idx) > 0) {
-    sum_sq_vec <- rowSums(resid[unblocked_idx, , drop = FALSE]^2)
-    shape_vec <- prior$v / 2 + n / 2
-    rate_vec <- prior$v / a_half[unblocked_idx] + 0.5 * sum_sq_vec
-
-    tvinv_diag <- rgamma(length(unblocked_idx), shape = shape_vec, rate = rate_vec)
-    tvar_diag <- 1 / tvinv_diag
-
-    tvar_new[cbind(unblocked_idx, unblocked_idx)] <- tvar_diag
-  }
-
-  tvinv_new <- solve(tvar_new)
-
-  block_dim <- integer(p)
-  block_dim[unblocked_idx] <- 1
-  if (length(blocked_idx) > 0) {
-    block_groups <- unique(par_group[blocked_idx])
-    for (g in block_groups) {
-      group_idx <- blocked_idx[par_group[blocked_idx] == g]
-      block_dim[group_idx] <- length(group_idx)
-    }
-  }
-
-  shape_vec <- (prior$v + block_dim) / 2
-  rate_vec <- prior$v * diag(tvinv_new) + 1 / (prior$A^2)
-  a_half_new <- 1 / rgamma(p, shape = shape_vec, rate = rate_vec)
-
-  out <- list(
-    tmu = tmu_new,
-    tvar = tvar_new,
-    tvinv = tvinv_new,
-    a_half = a_half_new,
-    subj_mu = subj_mu,
-    alpha = alpha
-  )
-  if (has_random) {
-    out$u <- u_new
-    out$s <- s_new
-    out$a_half_s <- a_half_s_new
-  }
-  return(out)
-}
-
-
 # Interweaving moves: scale subject deviations, covariance and a_j together;
 # without a group design, also shift subjects and their group mean together.
 # Each move receives an exact likelihood check. Step sizes adapt during
 # warmup and stay fixed during sampling.
 
 scale_move_stages <- function(){
-  if(legacy_sampler()) return(character(0))
   opt <- getOption("emc.scale_move")
   if(is.null(opt) || isTRUE(opt)) return(c("adapt", "sample"))
   if(isFALSE(opt)) return(character(0))
   as.character(opt)
-}
-
-# Prior, group-density and Jacobian ratio for f = exp(delta), a'_j = a_j / f^2.
-scale_move_log_prior <- function(delta, A_j, a_j){
-  delta - (exp(2 * delta) - 1) / (A_j^2 * a_j)
 }
 
 scale_move_init <- function(settings, par_names){
@@ -847,130 +421,6 @@ scale_move_freeze <- function(settings){
   settings
 }
 
-scale_move_standard <- function(sampler, pars, alpha_full, prev_ll, settings,
-                                frozen = FALSE, n_cores = 1, r_cores = 1, gain = .1){
-  keep <- which(!sampler$nuisance)
-  p <- length(keep); n <- ncol(alpha_full)
-  A <- rep(sampler$prior$A, length.out = p)
-  do_loc <- is.null(sampler$group_designs) && length(pars$tmu) == p
-  acc <- acc_loc <- numeric(p)
-  for(k in seq_len(if(do_loc) 2 * p else p)){
-    scale <- k <= p
-    j <- if(scale) k else k - p
-    jj <- keep[j]
-    alpha_new <- alpha_full
-    if(scale){
-      delta <- rnorm(1, 0, settings$step[j]); f <- exp(delta)
-      alpha_new[jj, ] <- pars$subj_mu[j, ] + f * (alpha_full[jj, ] - pars$subj_mu[j, ])
-      lp <- scale_move_log_prior(delta, A[j], pars$a_half[j])
-    } else{
-      e <- rnorm(1, 0, settings$loc[j])
-      alpha_new[jj, ] <- alpha_full[jj, ] + e
-      P0 <- sampler$prior$theta_mu_invar
-      lp <- -e * sum(P0[j, ] * (pars$tmu - sampler$prior$theta_mu_mean)) - .5 * e^2 * P0[j, j]
-    }
-    # Compare serial and forked checks three times to avoid fork overhead for cheap likelihoods.
-    ll_one <- function(s){
-      x <- matrix(alpha_new[, s], nrow = 1, dimnames = list(NULL, rownames(alpha_full)))
-      as.numeric(calc_ll_manager(x, dadm = sampler$data[[s]], model = sampler$model, r_cores = r_cores))
-    }
-    serial <- if(n_cores <= 1) TRUE else settings$check_serial
-    timing <- is.null(serial)
-    if(timing) serial <- length(settings$check_time$serial) <= length(settings$check_time$parallel)
-    if(timing) t_check <- proc.time()[["elapsed"]]
-    ll_new <- if(serial) unlist(lapply(seq_len(n), ll_one)) else
-      unlist(parallel::mclapply(seq_len(n), ll_one, mc.cores = n_cores))
-    if(timing){
-      t_check <- proc.time()[["elapsed"]] - t_check
-      if(serial) settings$check_time$serial <- c(settings$check_time$serial, t_check)
-      else settings$check_time$parallel <- c(settings$check_time$parallel, t_check)
-      if(length(settings$check_time$parallel) >= 3)
-        settings$check_serial <- min(settings$check_time$serial) <= min(settings$check_time$parallel)
-    }
-    lr <- sum(ll_new - prev_ll) + lp
-    if(is.finite(lr) && log(runif(1)) < lr){
-      alpha_full <- alpha_new
-      prev_ll <- ll_new
-      if(scale){
-        acc[j] <- 1
-        factors <- rep(1, p); factors[j] <- f
-        pars$tvar <- pars$tvar * outer(factors, factors)
-        pars$tvinv <- pars$tvinv / outer(factors, factors)
-        pars$a_half[j] <- pars$a_half[j] / f^2
-      } else{
-        acc_loc[j] <- 1
-        pars$tmu[j] <- pars$tmu[j] + e
-        pars$subj_mu[j, ] <- pars$subj_mu[j, ] + e
-      }
-    }
-  }
-  pars$alpha <- alpha_full[keep, , drop = FALSE]
-  if(!frozen){
-    settings$step <- exp(log(settings$step) + gain * (acc - .3))
-    if(do_loc) settings$loc <- exp(log(settings$loc) + gain * (acc_loc - .3))
-    settings$uses <- settings$uses + 1
-    if(settings$uses > 20){
-      settings$log_step_sum <- settings$log_step_sum + log(settings$step)
-      settings$log_loc_sum <- settings$log_loc_sum + log(settings$loc)
-    }
-  }
-  list(pars = pars, alpha = alpha_full, ll = prev_ll, settings = settings)
-}
-
-last_sample_standard <- function(store) {
-  tmu <- store$theta_mu[, store$idx, drop = TRUE]
-  names(tmu) <- rownames(store$theta_mu)
-  p_names <- dimnames(store$theta_var)[[1]]
-  p <- dim(store$theta_var)[1]
-  out <- list(
-    tmu = tmu,  # Now includes beta
-    tvar = .standard_square_matrix(store$theta_var[, , store$idx], p, p_names),
-    tvinv = .standard_square_matrix(store$last_theta_var_inv, p, p_names),
-    a_half = store$a_half[, store$idx]
-  )
-  if (!is.null(store$theta_u)) out$u <- store$theta_u[, store$idx]
-  if (!is.null(store$theta_s)) {
-    out$s <- store$theta_s[, store$idx]
-    out$a_half_s <- store$a_half_s[, store$idx]
-  }
-  return(out)
-}
-
-get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx = NULL) {
-  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
-  if(is.null(idx)) idx <- 1:n_pars
-  if(is.logical(idx)) idx <- which(idx)
-  n_idx <- length(idx)
-  alpha_samples <- matrix(samples$alpha[idx, s, , drop = FALSE], nrow = n_idx)
-  theta_mu_samples <- if (!is.null(samples$subj_mu)) {
-    matrix(samples$subj_mu[idx, s, , drop = FALSE], nrow = n_idx)
-  } else {
-    matrix(samples$theta_mu[idx, , drop = FALSE], nrow = n_idx)
-  }
-  pts2_unwound <- .standard_theta_var_draws(samples$theta_var, idx)
-  all_samples <- rbind(alpha_samples, theta_mu_samples, pts2_unwound)
-  mu_tilde <- rowMeans(all_samples)
-  var_tilde <- if (length(mu_tilde) == 1L) {
-    matrix(stats::var(as.numeric(all_samples)), nrow = 1L, ncol = 1L)
-  } else {
-    stats::cov(t(all_samples))
-  }
-  theta_var_iteration <- .standard_square_matrix(
-    samples$theta_var[idx, idx, iteration, drop = FALSE],
-    n_idx,
-    rownames(theta_mu_samples)
-  )
-  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
-                     dependent.ind = 1:n_idx, given.ind = (n_idx + 1):length(mu_tilde),
-                     X.given = c(theta_mu_samples[, iteration], unwind(theta_var_iteration)))
-  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
-}
-
-unwind <- function(var_matrix, ...) {
-  y <- t(chol(var_matrix))
-  diag(y) <- log(diag(y))
-  y[lower.tri(y, diag = TRUE)]
-}
 
 filtered_samples_standard <- function(sampler, filter, ...) {
   out <- list(
@@ -980,30 +430,16 @@ filtered_samples_standard <- function(sampler, filter, ...) {
     iteration = length(filter)
   )
   if (!is.null(sampler$group_designs)) {
-    par_names <- dimnames(out$alpha)[[1]]
-    n_subjects <- dim(out$alpha)[2]
-    fixed_designs <- add_group_design(par_names, sampler$group_designs, n_subjects)
-    random_designs <- add_group_design_random(par_names, sampler$group_designs)
-    random_maps <- add_group_design_map(par_names, sampler$group_designs)
     theta_u <- if (!is.null(sampler$samples$theta_u)) {
       sampler$samples$theta_u[, filter, drop = FALSE]
     } else {
       NULL
     }
-    out$subj_mu <- array(NA_real_,
-                         dim = dim(out$alpha),
-                         dimnames = dimnames(out$alpha))
-    for (i in seq_len(out$iteration)) {
-      u <- if (!is.null(theta_u)) theta_u[, i, drop = TRUE] else NULL
-      out$subj_mu[, , i] <- calculate_subject_means_RE(
-        fixed_designs, out$theta_mu[, i, drop = TRUE],
-        random_designs, u, random_maps
-      )
-    }
+    out$subj_mu <- native_group_means(sampler, out$theta_mu, theta_u)
+    dimnames(out$subj_mu) <- dimnames(out$alpha)
   }
   out
 }
-
 
 calc_log_jac_chol <- function(x) {
   ## work out dimension -------------------------------------------------
@@ -1278,7 +714,6 @@ bridge_group_and_prior_and_jac_standard <- function(
 
   return(sum_out)
 }
-
 
 bridge_add_info_standard <- function(info, samples) {
   if (is.null(samples$is_blocked)) {

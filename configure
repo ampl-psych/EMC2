@@ -17,6 +17,7 @@
 PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
 FAST_MATH=no        # fast-math disabled by default
 ENABLE_NATIVE=no    # native optimizations disabled by default
+ENABLE_OPENMP=yes
 
 # --------------------------------------------------------------------------- #
 #  Argument parsing                                                            #
@@ -42,6 +43,8 @@ configure options for EMC2:
   --native                Add -march=native (default: disabled).
                           Improves speed via architecture-specific optimizations.
                           Disabled by default for CRAN compatibility.
+
+  --disable-openmp        Build the serial sampler without OpenMP.
 
   --help, -h              Show this help message and exit.
 
@@ -71,6 +74,9 @@ EOF
     --native)
       ENABLE_NATIVE=yes
       ;;
+    --disable-openmp)
+      ENABLE_OPENMP=no
+      ;;
     *)
       echo "configure: warning: unrecognised option '$arg' (ignored)" >&2
       ;;
@@ -80,10 +86,13 @@ done
 # --------------------------------------------------------------------------- #
 #  R's compiler — split binary from embedded flags (e.g. "g++ -std=gnu++17") #
 # --------------------------------------------------------------------------- #
-CXX_FULL="$(R CMD config CXX)"
+R_BIN="${R_HOME:+${R_HOME}/bin/}R"
+CXX_FULL="$("$R_BIN" CMD config CXX17)"
 CXX_BIN="$(echo "$CXX_FULL"  | awk '{print $1}')"
-CXX_STD="$(echo "$CXX_FULL"  | cut -s -d' ' -f2-)"
-R_CXXFLAGS="$(R CMD config CXXFLAGS)"
+CXX_STD="$(echo "$CXX_FULL" | cut -s -d' ' -f2-) $("$R_BIN" CMD config CXX17STD)"
+R_CXXFLAGS="$("$R_BIN" CMD config CXX17FLAGS)"
+R_CPPFLAGS="$("$R_BIN" CMD config CPPFLAGS)"
+R_LDFLAGS="$("$R_BIN" CMD config LDFLAGS)"
 
 # --------------------------------------------------------------------------- #
 #  Extra user-requested flags                                                  #
@@ -114,38 +123,45 @@ esac
 OMP_CXXFLAGS=""
 OMP_LIBS=""
 
-cat > /tmp/omp_test.cpp <<'OMPEOF'
+OMP_TMP="$(mktemp -d "${TMPDIR:-/tmp}/emc2-openmp.XXXXXX")" || exit 1
+trap 'rm -rf "$OMP_TMP"' EXIT HUP INT TERM
+cat > "$OMP_TMP/test.cpp" <<'OMPEOF'
 #include <omp.h>
-int main() { return omp_get_max_threads(); }
+#if !defined(_OPENMP) || _OPENMP < 201307
+#error OpenMP 4.0 is required for task groups
+#endif
+int main() { return omp_get_max_threads() < 1; }
 OMPEOF
 
+if [ "$ENABLE_OPENMP" = yes ]; then
 case "$(uname)" in
   Darwin)
-    for prefix in /opt/homebrew /usr/local; do
-      if $CXX_BIN $CXX_STD $R_CXXFLAGS \
+    # Prefer the runtime shipped with CRAN R; fall back to Homebrew.
+    R_LIB="$("$R_BIN" RHOME)/lib"
+    for prefix in /usr/local /opt/homebrew/opt/libomp /usr/local/opt/libomp; do
+      if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS \
             -Xclang -fopenmp \
-            -I"${prefix}/opt/libomp/include" \
-            -L"${prefix}/opt/libomp/lib" -lomp \
-            /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
-        OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/opt/libomp/include"
-        OMP_LIBS="-L${prefix}/opt/libomp/lib -lomp"
-        echo "configure: OpenMP enabled via ${prefix}/opt/libomp"
+            -I"${prefix}/include" \
+            "$OMP_TMP/test.cpp" -o "$OMP_TMP/test" \
+            -L"$R_LIB" $R_LDFLAGS -L"${prefix}/lib" -lomp 2>/dev/null; then
+        OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/include"
+        OMP_LIBS="-L\"$R_LIB\" -L${prefix}/lib -lomp"
+        echo "configure: OpenMP enabled"
         break
       fi
     done
     ;;
   *)
-    if $CXX_BIN $CXX_STD $R_CXXFLAGS \
+    if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS \
           -fopenmp \
-          /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
+          "$OMP_TMP/test.cpp" -o "$OMP_TMP/test" $R_LDFLAGS 2>/dev/null; then
       OMP_CXXFLAGS="-fopenmp"
       OMP_LIBS="-fopenmp"
       echo "configure: OpenMP enabled via -fopenmp"
     fi
     ;;
 esac
-
-rm -f /tmp/omp_test.cpp /tmp/omp_test
+fi
 
 if [ -z "$OMP_LIBS" ]; then
   echo "configure: OpenMP not available, building without it (single-threaded fallback)"
@@ -180,12 +196,13 @@ echo "configure: src/Makevars written"
 # --------------------------------------------------------------------------- #
 #  Write inst/include/build_info.h from inst/include/build_info.h.in          #
 # --------------------------------------------------------------------------- #
+OMP_LIBS_HEADER=$(printf '%s\n' "$OMP_LIBS" | sed 's/"/\\\\"/g')
 sed \
   -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
   -e "s|@FAST_MATH@|${FAST_MATH}|g" \
   -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
-  -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
+  -e "s|@OMP_LIBS@|${OMP_LIBS_HEADER}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
   inst/include/build_info.h.in > inst/include/build_info.h

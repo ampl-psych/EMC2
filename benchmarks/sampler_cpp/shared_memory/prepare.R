@@ -1,0 +1,12 @@
+root <- Sys.getenv('EMC2_BENCHMARK_ROOT', '/home/nsteven/2026/StanCompare/emc2_shared')
+.libPaths(c(Sys.getenv('EMC2_BENCHMARK_LIB', file.path(root, 'lib')), .libPaths()))
+library(EMC2)
+input <- Sys.getenv('EMC2_BENCHMARK_FIT', '/home/nsteven/2026/StanCompare/results/hier_matched/rep01/ddm5_emc2.rds')
+x <- EMC2:::restore_sample_kernel(EMC2:::restore_duplicates(readRDS(input)))
+x <- subset(x, stage='sample', filter=chain_n(x)[1,'sample']-1L)
+set.seed(4101)
+args <- lapply(x, function(chain) EMC2:::prepare_native_stage(chain, 'sample', 0L,
+  round(50 * sqrt(chain$n_pars)), list(search_width=1), NULL))
+x <- EMC2:::native_run_chains(args, EMC2:::sampler_contexts(x, 1L), 'sample', 0L, 1L, FALSE)
+saveRDS(x, file.path(root, 'ddm5_start.rds'))
+cat(length(x),'chains;', x[[1]]$n_subjects,'participants;', x[[1]]$n_pars,'coefficients\n')

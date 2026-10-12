@@ -63,7 +63,6 @@
 #'   \item{n_pars}{The number of parameters in the model}
 #'   \item{n_subjects}{The number of unique subject ID's in the data}
 #'   \item{model}{A list containing the model functions}
-#'   \item{nuisance}{A logical vector indicating which parameters are nuisance parameters}
 #'   \item{subjects}{A vector containing the unique subject ID's}
 #'   \item{type}{The type of model e.g., "standard" or "diagonal"}
 #'   \item{prior}{A list that holds the prior for \code{theta_mu} (the model
@@ -72,8 +71,6 @@
 #'     and inverse covariance matrix (\code{theta_mu_invar})}
 #'   \item{samples}{A list with defined structure containing the samples, see
 #'     the Samples Element section for more detail}
-#'   \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
-#'   similarly structured to the overall samples list of one of the MCMC chains.}
 #' }
 #' @source \url{https://www.pnas.org/doi/10.1073/pnas.0805903105}
 "samples_LNR"

@@ -448,7 +448,7 @@ print.emc.prior <- function(x, ...) {
 #' @param covariates dataframe/functions as specified by the design
 #' @inheritParams plot_pars
 #' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
-#' or arguments required for the types of models e.g. n_factors for type = "factor"
+#' or arguments required for the types of models e.g. n_factors for type = "infnt_factor"
 #' @return An invisible mcmc.list object with prior samples of the selected type
 #' @export
 #'
