@@ -55,53 +55,9 @@ test_that("make_emc warns about collinear (rank-deficient) design blocks", {
                  "B_Eab")
 })
 
-# A per-chain failure inside the parallel sampler must produce an informative
-# error naming the chain and reason, not a cryptic downstream crash.
-test_that("check_chain_failures reports which chain failed and why", {
-  good <- list(list(samples = list(idx = 1)), list(samples = list(idx = 1)))
-  expect_null(check_chain_failures(good, "burn", NULL))
-
-  te <- structure("Error\n", class = "try-error",
-                  condition = simpleError("matrix not positive definite"))
-  expect_error(check_chain_failures(list(good[[1]], te), "burn", NULL),
-               "chain 2: matrix not positive definite")
-  # a worker killed (NULL slot) is also reported
-  expect_error(check_chain_failures(list(good[[1]], NULL), "sample", NULL),
-               "Sampling failed in 1 of 2 chain")
-})
-
 # on_singular: recovery from a singular group covariance during sampling.
 test_that("resolve_on_singular fills defaults and validates", {
   d <- resolve_on_singular(NULL)
   expect_identical(d$max_retries, 3)
-  expect_identical(d$on_exhausted, "error")
   expect_error(resolve_on_singular(list(bad_field = 1)), "unknown")
-  expect_error(resolve_on_singular(list(on_exhausted = "nope")))
-})
-
-test_that("is_singular_error recognises the covariance failure", {
-  expect_true(is_singular_error(simpleError("system is computationally singular: reciprocal condition number = 1e-16")))
-  expect_true(is_singular_error(simpleError("Lapack routine dgesv: system is exactly singular")))
-  # chol() non-PD failure, both the old and the R >= 4.x wording
-  expect_true(is_singular_error(simpleError("the leading minor of order 38 is not positive")))
-  expect_true(is_singular_error(simpleError("the leading minor of order 3 is not positive definite")))
-  expect_false(is_singular_error(simpleError("some unrelated error")))
-})
-
-test_that("robust_gibbs_step retries then gives up", {
-  n <- 0
-  orig <- EMC2:::gibbs_step
-  assignInNamespace("gibbs_step", function(sampler, alpha, type, ...) {
-    n <<- n + 1
-    if (n <= 2) stop("system is computationally singular")
-    list(ok = TRUE)
-  }, ns = "EMC2")
-  on.exit(assignInNamespace("gibbs_step", orig, ns = "EMC2"), add = TRUE)
-
-  n <- 0
-  res <- robust_gibbs_step(NULL, NULL, "standard", resolve_on_singular(list(max_retries = 5)))
-  expect_true(isTRUE(res$ok))
-  expect_identical(n, 3)                       # 2 failures + 1 success
-  n <- 0
-  expect_null(robust_gibbs_step(NULL, NULL, "standard", resolve_on_singular(list(max_retries = 1))))
 })

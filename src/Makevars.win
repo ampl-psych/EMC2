@@ -2,5 +2,29 @@
 # toolchains whose default is older (e.g. Intel icpc on NCI Gadi) compile.
 CXX_STD = CXX17
 
-PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include -DPNORM_MODE=1
-PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
+# The sampler owns threading; Armadillo must not print from worker threads.
+PKG_CPPFLAGS = -I../inst/include -DPNORM_MODE=1 -DARMA_WARN_LEVEL=0 -DARMA_DONT_USE_OPENMP
+PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
+
+SAMPLER_OBJECTS = sampler/group.o sampler/infnt_factor.o sampler/likelihood.o \
+  sampler/particle.o sampler/proposals.o sampler/runner.o sampler/sem.o
+OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
+  build_info.o custom_trend_interface.o fa.o group_designs.o hcubature.o kernels.o \
+  math_utils_apple.o math_utils_generic.o model_DDM.o model_LBA.o model_RDM.o \
+  model_exgaussian.o model_lnr.o model_multinomial.o mri.o param_table_interface.o \
+  particle_ll.o rCDM.o sampler.o transform_utils.o utility_functions.o $(SAMPLER_OBJECTS)
+
+all: $(SHLIB)
+
+build_info.o: ../inst/include/build_info.h
+particle_ll.o sampler/likelihood.o: LikelihoodContext.h
+
+sampler.o $(SAMPLER_OBJECTS): sampler/group.h sampler/infnt_factor.h \
+  sampler/likelihood.h sampler/particle.h sampler/proposals.h sampler/random.h \
+  sampler/runner.h sampler/sem.h
+
+.PHONY: all clean
+
+clean:
+	rm -f $(OBJECTS) $(SHLIB)

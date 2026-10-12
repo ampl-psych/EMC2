@@ -6,39 +6,7 @@
 }
 
 .multinomial_probit_trial_probs <- function(utility) {
-  n_alt <- length(utility)
-
-  if (n_alt == 1L) return(1)
-  if (n_alt == 2L) {
-    p_first <- pnorm((utility[1] - utility[2]) / sqrt(2))
-    return(c(p_first, 1 - p_first))
-  }
-  if (n_alt > 21L) {
-    stop("multinomial_probit currently supports at most 21 response levels")
-  }
-
-  sigma <- matrix(1, nrow = n_alt - 1L, ncol = n_alt - 1L)
-  diag(sigma) <- 2
-  probs <- numeric(n_alt)
-  algorithm <- mvtnorm::Miwa()
-
-  for (i in seq_len(n_alt)) {
-    delta <- utility[i] - utility[-i]
-    probs[i] <- mvtnorm::pmvnorm(
-      lower = -delta,
-      upper = rep(Inf, n_alt - 1L),
-      sigma = sigma,
-      algorithm = algorithm
-    )[1]
-  }
-
-  probs[!is.finite(probs) | probs < 0] <- 0
-  total <- sum(probs)
-  if (total <= 0) {
-    rep(1 / n_alt, n_alt)
-  } else {
-    probs / total
-  }
+  c_multinomial_probit_probs(utility)
 }
 
 pMULTINOMIAL_LOGIT <- function(trials, pars) {
@@ -97,7 +65,7 @@ rMULTINOMIAL_PROBIT <- function(lR, pars, p_types = "utility") {
 
   list(
     type = "MULTINOMIAL",
-    c_name = switch(link, logit = "MULTINOMIAL_LOGIT"),
+    c_name = switch(link, logit = "MULTINOMIAL_LOGIT", probit = "MULTINOMIAL_PROBIT"),
     geometry = "multinomial",
     link = link,
     p_types = c("utility" = 0),

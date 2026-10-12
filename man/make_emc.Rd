@@ -26,7 +26,7 @@ make_emc(
 
 \item{model}{A model list. If none is supplied, the model specified in \code{design()} is used.}
 
-\item{type}{A string indicating whether to run a \code{standard} group-level, \code{blocked}, \code{diagonal}, \code{factor}, or \code{single} (i.e., non-hierarchical) model.}
+\item{type}{A string indicating whether to run a \code{standard}, \code{blocked}, \code{diagonal}, \code{diagonal-gamma}, \code{SEM}, \code{infnt_factor}, or \code{single} (non-hierarchical) model.}
 
 \item{n_chains}{An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute \code{rhat}).}
 

@@ -60,12 +60,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param step_size An integer. After each step, the stopping requirements as
 #' specified by `stop_criteria` are checked and, in the stages before `sample`, proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
-#' @param verboseProgress Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.
+#' @param verboseProgress Logical. Whether to print progress within each sampling step.
 #' @param fileName A string. If specified will autosave emc at this location on every iteration.
 #' @param particle_factor An integer. `particle_factor` multiplied by the square root of the number of sampled parameters determines the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain.
-#' Parallelizes across participant calculations. Only available on Linux or Mac OS.
-#' For Windows, only parallelization across chains (``cores_for_chains``) is available.
+#' Parallelizes across participant calculations using native threads.
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
@@ -78,11 +77,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
 #' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
 #' group step, then an error.
-#' A list may set `max_retries` (integer, re-draw the group step on failure), `on_exhausted`
-#' (`"error"` or `"carry_forward"` the previous group parameters), `max_carry_forward`
-#' (consecutive carried-forward iterations before giving up).
-#' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
+#' A list may set `max_retries` (integer, re-draw the group step on failure).
 #' @export
+#' @param .context Internal compiled likelihood cache.
 #' @return An emc object
 #' @examples \donttest{
 #' # First define a design
@@ -101,10 +98,10 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE, on_singular = NULL, r_cores=1){
+                    thin = FALSE, trim = TRUE, on_singular = NULL, .context = NULL){
   if(length(emc) == 1) stop("run_emc() currently requires n_chains > 1.")
   emc <- restore_duplicates(emc)
-  if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
+  if (is.null(.context)) .context <- sampler_contexts(emc, cores_per_chain)
   if (verbose) message(paste0("Running ", stage, " stage"))
   total_iters_stage <- chain_n(emc)[,stage][1]
   if(stage != "preburn"){
@@ -112,7 +109,7 @@ run_emc <- function(emc, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
-  progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
+  progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose)
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
@@ -125,7 +122,6 @@ run_emc <- function(emc, stage, stop_criteria,
     if(trim){
       emc <- fit_remove_samples(emc)
     }
-    if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
     last_stage <- get_last_stage(emc)
     if(stage == "preburn"){
@@ -137,20 +133,13 @@ run_emc <- function(emc, stage, stop_criteria,
     }
     t0 <- Sys.time()
     # Actual sampling
-    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    sub_emc <- run_native_chains(sub_emc, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
-                             on_singular = on_singular, r_cores = r_cores)
-
-    # A chain that errors inside the parallel sampler comes back as a try-error
-    # (or a value with no $samples) rather than a sampler object. Report which
-    # chain failed and why here, instead of failing later with a cryptic error
-    # in chain_n() ("$ operator is invalid for atomic vectors").
-    check_chain_failures(sub_emc, stage, fileName)
+                             n_cores=cores_per_chain, cores_for_chains = cores_for_chains,
+                             on_singular = on_singular, context = .context)
 
     class(sub_emc) <- "emc"
-    if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)
@@ -164,13 +153,9 @@ run_emc <- function(emc, stage, stop_criteria,
       emc <- sub_emc
     }
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
-                               verbose, progress,n_blocks)
+                               verbose, progress)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
-    # the interweaving sweep's gate, once its steps have had adapt_converge$min sweeps to settle
-    if(stage == "adapt" && !legacy_sampler()){
-      emc <- gate_scale_move(emc, kernel_window, decide = chain_n(emc)[1, "adapt"] >= adapt_converge$min)
-    }
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
@@ -209,12 +194,12 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
 
-  if(stage == "adapt" && !legacy_sampler() && is.null(emc[[1]]$sample_kernel) &&
+  if(stage == "adapt" && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
     emc <- tune_sample_kernel(emc, verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName, particle_factor = particle_factor, search_width = search_width,
                               cores_per_chain = cores_per_chain, cores_for_chains = cores_for_chains,
-                              n_blocks = n_blocks, on_singular = on_singular, r_cores = r_cores)
+                              n_blocks = n_blocks, on_singular = on_singular, context = .context)
   }
 
   emc <- strip_duplicates(emc)
@@ -228,7 +213,7 @@ adapt_converge <- list(min = 250, max = 1000, rhat = 1.2, stall = 3)
 
 # Stop when the proposal window converges, stalls, or reaches the adapt limit.
 adapt_converged <- function(emc, n_adapt, history = NULL){
-  if(legacy_sampler() || isFALSE(getOption("emc.adapt_converge")) || emc[[1]]$type == "single") return(TRUE)
+  if(isFALSE(getOption("emc.adapt_converge")) || emc[[1]]$type == "single") return(TRUE)
   if(n_adapt < adapt_converge$min) return(structure(FALSE, rhat = history))
   h <- c(history, max(window_rhat(emc, kernel_window)))
   structure(adapt_stop(h, n_adapt), rhat = h)
@@ -242,7 +227,7 @@ adapt_stop <- function(h, n_adapt){
 
 tune_sample_kernel <- function(emc, verbose, verboseProgress, fileName, particle_factor,
                                search_width, cores_per_chain, cores_for_chains, n_blocks,
-                               on_singular, r_cores){
+                               on_singular, context){
   n_cores <- cores_per_chain*cores_for_chains
   emc <- add_proposals(emc, "sample", n_cores, n_blocks, window = kernel_window)
   emc <- map_pm_settings(emc, function(x){
@@ -252,14 +237,12 @@ tune_sample_kernel <- function(emc, verbose, verboseProgress, fileName, particle
   })
   emc <- map_scale_move(emc, scale_move_reset_tail)
   sub_emc <- subset(emc, filter = chain_n(emc)[1,"adapt"] - 1, stage = "adapt")
-  sub_emc <- auto_mclapply(sub_emc, run_stages, stage = "adapt", kernel = "sample", iter = 100,
+  sub_emc <- run_native_chains(sub_emc, stage = "adapt", kernel = "sample", iter = 100,
                            verbose = verbose, verboseProgress = verboseProgress,
                            particle_factor = particle_factor, search_width = search_width,
-                           n_cores = cores_per_chain, mc.cores = cores_for_chains,
-                           on_singular = on_singular, r_cores = r_cores)
-  check_chain_failures(sub_emc, "adapt", fileName)
+                           n_cores = cores_per_chain, cores_for_chains = cores_for_chains,
+                           on_singular = on_singular, context = context)
   class(sub_emc) <- "emc"
-  if(cores_for_chains > 1) sub_emc <- fix_custom_kernel_pointers(sub_emc, emc)
   emc <- concat_emc(emc, sub_emc, 100, "adapt")
   # Freeze the local step size at the average over the tail, and the number
   # of particles where the average effective sample size meets its target
@@ -320,43 +303,9 @@ alpha_draws <- function(emc, its){
   }, matrix(0, n, d[1] * d[2]))
 }
 
-# The interweaving sweep's gate (scale_move_gate), from the sweeps since its
-# last call and the group-level draws of the last n_iter iterations
-gate_scale_move <- function(emc, n_iter, decide = TRUE){
-  sm <- lapply(emc, function(x) attr(x$samples, "scale_move"))
-  if(any(sapply(sm, is.null)) || emc[[1]]$type != "standard") return(emc)
-  idx <- emc[[1]]$samples$idx; it <- max(2, idx - n_iter + 1):idx
-  tv <- do.call(cbind, lapply(emc, function(x) apply(x$samples$theta_var[, , it, drop = FALSE], 3, diag)))
-  p <- nrow(tv)
-  mu <- if(is.null(emc[[1]]$group_designs) && nrow(emc[[1]]$samples$theta_mu) == p)
-    do.call(cbind, lapply(emc, function(x) x$samples$theta_mu[, it, drop = FALSE])) else NULL
-  sm <- scale_move_gate(sm, var_lsd = apply(.5 * log(tv), 1, stats::var),
-                        var_mu = if(is.null(mu)) NULL else apply(mu, 1, stats::var),
-                        mean_var = rowMeans(tv), n_subjects = emc[[1]]$n_subjects, decide = decide)
-  for(i in seq_along(emc)) attr(emc[[i]]$samples, "scale_move") <- sm[[i]]
-  emc
-}
-
-run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1, on_singular = NULL, r_cores = 1,
-                       kernel = NULL)
-{
-  particles <- round(particle_factor*sqrt(sampler$n_pars))
-  if (!sampler$init) {
-    sampler <- init(sampler, n_cores = n_cores, r_cores = r_cores)
-  }
-  if (iter == 0) return(sampler)
-  tune <- list(search_width = search_width, kernel = kernel)
-  sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, tune = tune, verbose = verbose,
-                       verboseProgress = verboseProgress, on_singular = on_singular, r_cores = r_cores)
-  return(sampler)
-}
-
 add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
-  legacy <- legacy_sampler()
   # Reuse the frozen proposals, including when a saved fit is resumed.
-  fixed <- stage == "sample" && !legacy
+  fixed <- stage == "sample"
   if(fixed && length(emc[[1]]$sample_kernel$chains) == length(emc)){
     return(restore_sample_kernel(emc))
   }
@@ -372,7 +321,7 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
   if(stage == "sample"){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
-  if(stage %in% c("adapt", "sample") && !legacy && emc[[1]]$type != "single"){
+  if(stage %in% c("adapt", "sample") && emc[[1]]$type != "single"){
     emc <- create_lik_prec(emc, n_cores)
   }
   if(fixed) emc <- store_sample_kernel(emc)
@@ -399,113 +348,15 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-# Finite-difference precision drives the sweep; draw-based precision improves
-# particle proposals for skewed posteriors when the group level is stable.
 create_lik_prec <- function(emc, n_cores){
-  idx <- emc[[1]]$samples$idx
-  history_idx <- proposal_window(idx)
-  alpha <- get_pars(emc, filter = history_idx, selection = "alpha",
-                    stage = c('preburn', 'burn', 'adapt', 'sample'),
-                    by_subject = T, merge_chains = T, return_mcmc = F,
-                    remove_dup = F, remove_constants = F)
-  group <- window_group_level(emc, history_idx, dim(alpha)[3])
-  lik_prec <- auto_mclapply(1:emc[[1]]$n_subjects, function(sub){
-    draws <- matrix(alpha[, sub, ], nrow = dim(alpha)[1], dimnames = list(dimnames(alpha)[[1]], NULL))
-    lik <- tryCatch(lik_precision(rowMeans(draws), apply(draws, 1, stats::sd), emc[[1]]$data[[sub]], emc[[1]]$model),
-                    error = function(e) NULL)
-    if(!is.null(group) && !is.null(lik)){
-      lik$post <- tryCatch(lik_precision_draws(draws, group$prec, group$mu[, sub], lik, n_chains = length(emc)),
-                           error = function(e) NULL)
-    }
-    lik
-  }, mc.cores = n_cores)
-  for(i in 1:length(emc)) emc[[i]]$lik_prec <- lik_prec
-  return(emc)
-}
-
-# Draw-based likelihood precision requires a stable group precision to subtract.
-lik_prec_draws_cv <- .5
-
-window_group_level <- function(emc, history_idx, n_draws){
-  x1 <- emc[[1]]
-  if(x1$type != "standard" || any(x1$nuisance) || n_draws < 100) return(NULL)
-  if(group_precision_cv(emc, history_idx) >= lik_prec_draws_cv) return(NULL)
-  tryCatch({
-    prec <- 0; mu <- 0
-    for(x in emc){
-      for(i in history_idx) prec <- prec + chol2inv(chol(x$samples$theta_var[, , i]))
-      fs <- filtered_samples(x, history_idx, type = x1$type)
-      mu <- mu + if(is.null(fs$subj_mu)) matrix(rowMeans(fs$theta_mu), nrow(fs$theta_mu), x1$n_subjects)
-                 else apply(fs$subj_mu, 1:2, mean)
-    }
-    n <- length(emc) * length(history_idx)
-    out <- list(prec = prec / n, mu = mu / length(emc))
-    if(!all(is.finite(out$prec)) || !all(is.finite(out$mu)) || nrow(out$mu) != nrow(out$prec)) return(NULL)
-    out
-  }, error = function(e) NULL)
-}
-
-# The largest coefficient of variation, over the parameters, of the group
-# precision 1 / sigma^2 over iterations history_idx of all chains (Inf if
-# not computable)
-group_precision_cv <- function(emc, history_idx){
-  pr <- do.call(cbind, lapply(emc, function(x) 1 / apply(x$samples$theta_var[, , history_idx, drop = FALSE], 3, diag)))
-  pr <- matrix(pr, ncol = length(emc) * length(history_idx))
-  cv <- apply(pr, 1, stats::sd) / rowMeans(pr)
-  if(!all(is.finite(cv))) return(Inf)
-  max(cv)
-}
-
-# Estimate likelihood precision as cov(draws)^-1 - P in prior-whitened coordinates.
-# Use the draws above the ESS-based noise threshold; elsewhere use capped finite
-# differences. Keep cross terms so the conditional mean stays near the draws' mean.
-# draws: parameters x draws, in n_chains equal blocks.
-lik_precision_draws <- function(draws, P, mu, fd, tau = .5, n_chains = 1){
-  p <- nrow(draws); N <- ncol(draws)
-  if(length(unique(draws[1, ])) < max(50, 5 * p)) return(NULL)
-  blk <- rep(seq_len(n_chains), each = N %/% n_chains, length.out = N)
-  ess <- stats::median(sapply(seq_len(p), function(j) sum(tapply(draws[j, ], blk, function(x)
-    tryCatch(as.numeric(coda::effectiveSize(x)), error = function(e) 1)))))
-  tau <- max(tau, (1 + sqrt(p / max(ess, p)))^2 - 1)
-  m <- rowMeans(draws)
-  Vinv <- chol2inv(chol(stats::cov(t(draws))))
-  e <- eigen(P, symmetric = TRUE)
-  if(any(e$values <= 0)) return(NULL)
-  Ph <- e$vectors %*% (sqrt(e$values) * t(e$vectors))        # P^1/2
-  Pih <- e$vectors %*% (t(e$vectors) / sqrt(e$values))       # P^-1/2
-  M <- Pih %*% Vinv %*% Pih
-  eg <- eigen((M + t(M)) / 2, symmetric = TRUE)
-  lam <- eg$values - 1
-  trusted <- lam > tau
-  U <- eg$vectors[, trusted, drop = FALSE]
-  mt <- drop(Ph %*% m); mut <- drop(Ph %*% mu)
-  Lw <- U %*% (lam[trusted] * t(U))
-  lw <- drop(U %*% (eg$values[trusted] * drop(t(U) %*% mt) - drop(t(U) %*% mut)))
-  if(!all(trusted)){
-    C <- eg$vectors[, !trusted, drop = FALSE]                 # basis of the other directions
-    Fw <- Pih %*% fd$prec %*% Pih
-    Fc <- t(C) %*% Fw %*% C
-    ef <- eigen((Fc + t(Fc)) / 2, symmetric = TRUE)
-    Vc <- C %*% ef$vectors
-    phi <- pmax(ef$values, 0)
-    capped <- phi > tau
-    phi[capped] <- tau
-    Lw <- Lw + Vc %*% (phi * t(Vc))
-    lfd <- drop(t(Vc) %*% (Pih %*% fd$lin - Fw %*% (U %*% drop(t(U) %*% mt))))
-    lemp <- (phi + 1) * drop(t(Vc) %*% mt) - drop(t(Vc) %*% mut)
-    lw <- lw + drop(Vc %*% ifelse(capped, lemp, lfd))
-  }
-  L <- Ph %*% Lw %*% Ph
-  L <- (L + t(L)) / 2
-  lin <- drop(Ph %*% lw)
-  if(!all(is.finite(L)) || !all(is.finite(lin))) return(NULL)
-  dimnames(L) <- dimnames(fd$prec); names(lin) <- names(fd$lin)
-  list(prec = L, lin = lin)
+  history_idx <- proposal_window(emc[[1]]$samples$idx)
+  lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
+  for (i in seq_along(emc)) emc[[i]]$lik_prec <- lik_prec
+  emc
 }
 
 check_progress <- function (emc, stage, iter, stop_criteria,
-                            max_tries, step_size, n_cores, verbose, progress = NULL,
-                            n_blocks)
+                            max_tries, step_size, n_cores, verbose, progress = NULL)
 {
   min_es <- stop_criteria$min_es
   if(is.null(min_es)) min_es <- 0
@@ -572,7 +423,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, n_blocks = gd$n_blocks, gd=gd,
+              trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
@@ -581,7 +432,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
 # stored array in one pass (gd_summary() costs one call per subject), in
 # gd_summary()'s order.
 stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
-  gd_out <- c(); alpha <- NULL; alpha_all <- NULL; other <- c()
+  gd_out <- c(); alpha <- NULL; other <- c()
   for(select in selection){
     if(select == "alpha"){
       its <- lapply(emc, function(x){
@@ -611,7 +462,6 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
         is_const <- c(t(matrix(is_const, p, ns)))
       }
       gd[is.na(gd)] <- Inf
-      alpha_all <- gd
       gd <- gd[!is_const]
       alpha <- gd
       if(!omit_mpsrf){
@@ -629,8 +479,7 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
     }
     gd_out <- c(gd_out, c(gd))
   }
-  # alpha_all: every subject-level entry in its place, for set_tune_ess()
-  list(gd = gd_out, alpha = alpha, other = other, alpha_all = alpha_all)
+  list(gd = gd_out, alpha = alpha, other = other)
 }
 
 # Apply the quantile only to subject parameters; all other Rhats must pass.
@@ -668,41 +517,9 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf,
     }
   }
   gd <- g$gd
-  emc <- set_tune_ess(emc, g$alpha_all, mean_gd, max_gd)
   class(emc) <- "emc"
   return(list(gd = gd, gd_done = ok_gd, emc = emc))
 }
-
-set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
-  if(is.null(alpha_gd)){
-    return(emc)
-  }
-  alpha_gd <- matrix(alpha_gd, emc[[1]]$n_subjects)
-  if(!is.null(mean_gd)){
-    mean_alpha_ok <- rowMeans(alpha_gd) < 1+(mean_gd-1)*.5
-  } else{
-    mean_alpha_ok <- rep(T, nrow(alpha_gd))
-  }
-  if(!is.null(max_gd)){
-    max_alpha_ok <- apply(alpha_gd, 1, max) < 1+(max_gd-1)*.5
-  } else{
-    max_alpha_ok <- rep(T, nrow(alpha_gd))
-  }
-  alpha_ok <- max_alpha_ok & mean_alpha_ok
-  emc <- lapply(emc, function(x){
-    pm_settings <- attr(x$samples, "pm_settings")
-    pm_settings <- mapply(pm_settings, alpha_ok, FUN = function(y, z){
-      for(i in 1:length(y)){
-        y[[i]]$gd_good <- z
-      }
-      return(list(y))
-    })
-    attr(x$samples, "pm_settings") <- pm_settings
-    return(x)
-  })
-  return(emc)
-}
-
 
 # window: build them from the last `window` adapt iterations of each chain
 # only (the draws adapt_converged() judged), or from as many more as the joint
@@ -714,7 +531,7 @@ create_eff_proposals <- function(emc, n_cores, window = NULL){
   if(!is.null(window) && chain_n(emc)[1, "sample"] == 0){
     n_it <- emc[[1]]$samples$idx
     n_adapt <- chain_n(emc)[1, "adapt"]
-    p <- sum(!emc[[1]]$nuisance)
+    p <- emc[[1]]$n_pars
     window <- max(window, ceiling(2 * (2 * p + p * (p + 1) / 2) / length(emc)))
     if(window < n_adapt){
       it <- (n_it - window + 1):n_it
@@ -723,97 +540,16 @@ create_eff_proposals <- function(emc, n_cores, window = NULL){
   }
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc),
                                   full_filter = full_filter)
-
-  type <- emc[[1]]$type
-  components <- attr(emc[[1]]$data, "components")
-  for(i in 1:length(emc)){
-    iteration = round(test_samples$iteration * i/length(emc))
-    n_pars <- emc[[1]]$n_pars
-    nuisance <- emc[[1]]$nuisance
-    n_subjects <- emc[[1]]$n_subjects
-    eff_mu <- matrix(0, nrow = n_pars, ncol = n_subjects)
-    eff_var <- array(0, dim = c(n_pars, n_pars, n_subjects))
-    for(comp in unique(components)){
-      idx <- comp == components
-      nuis_idx <- nuisance[idx]
-      if(any(nuis_idx)){
-        type <- samples_merged$sampler_nuis$type
-        conditionals <- auto_mclapply(X = 1:n_subjects,
-                                      FUN = get_conditionals, samples = test_samples,
-                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                      type = type ,
-                                      mc.cores = n_cores)
-        conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
-                                           FUN = get_conditionals, samples = test_samples$nuisance,
-                                           n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
-                                           type = type,
-                                           mc.cores = n_cores)
-        conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
-        conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
-        eff_mu[idx & !nuisance,] <- conditionals[,1,]
-        eff_var[idx & !nuisance, idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
-        eff_mu[idx & nuisance,] <- conditionals_nuis[,1,]
-        eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
-      } else{
-        conditionals <- auto_mclapply(X = 1:n_subjects,
-                                      FUN = get_conditionals, samples = test_samples,
-                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                      type = type,
-                                      mc.cores = n_cores)
-        conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
-        eff_mu[idx & !nuisance,] <- conditionals[,1,]
-        eff_var[idx & !nuisance,idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
-      }
-
-    }
-
-    eff_mu <- split(eff_mu, col(eff_mu))
-    eff_var <- apply(eff_var, 3, identity, simplify = F)
-    emc[[i]]$eff_mu <- eff_mu
-    emc[[i]]$eff_var <- eff_var
-    # attr(emc[[i]], "eff_alpha") <- eff_alpha
-    # attr(emc[[i]], "eff_tau") <- eff_tau
-  }
-  return(emc)
+  native_eff_proposals(emc, test_samples)
 }
 
-
 sub_blocking <- function(emc, n_blocks){
-  covs <- lapply(emc, FUN = function(x){return(x$chains_var)})
-  out <- array(0, dim = dim(covs[[1]][[1]]))
-  for(i in 1:length(covs)){
-    cov_tmp <- covs[[1]]
-    for(j in 1:length(cov_tmp)){
-      out <- out + cov2cor(cov_tmp[[1]])
-    }
-  }
-  shared_ll_idx <- attr(emc[[1]]$data, "shared_ll_idx")
-  min_comp <- 0
-  components <- c()
-  for(ll in unique(shared_ll_idx)){
-    idx <- ll == shared_ll_idx
-    distance <-as.dist(1- abs(out[idx, idx]/out[1,1]))
-    clusts <- hclust(distance)
-    sub_comps <- min_comp + cutree(clusts, k = n_blocks) # This could go wrong if one group has just one member
-    min_comp <- max(sub_comps)
-    components <- c(components, sub_comps)
-  }
-  return(components)
+  native_sub_blocking(emc, n_blocks)
 }
 
 # The draws the proposals are built from: the last 250 iterations, or the last
 # third once there are fewer than 375
 proposal_window <- function(idx) unique(pmax(1, round(idx - min(250, idx / 1.5)):idx - 1))
-
-# Diagonal prior variance of every subject-level parameter, matched by name:
-# the group-level prior leaves nuisance parameters out, they get its mean.
-prior_fallback_var <- function(sampler){
-  pv <- diag(as.matrix(sampler$prior$theta_mu_var))
-  v <- unname(pv[sampler$par_names])
-  if(length(pv) == sampler$n_pars && is.null(names(pv))) v <- pv
-  v[is.na(v)] <- mean(pv)
-  diag(v, sampler$n_pars)
-}
 
 create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_subjects <- emc[[1]]$n_subjects
@@ -829,81 +565,17 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
                     by_subject = T, merge_chains = T, return_mcmc = F,
                     remove_dup = F, remove_constants = F)
-
-  components <- attr(emc[[1]]$data, "components")
-  block_idx <- block_variance_idx(components)
-  for(j in 1:n_chains){
-    # Take only a random half of all the samples for each chain
-    rnd_index <- sample(1:ncol(LL), round(ncol(LL)/2))
-    chains_var <- vector("list", n_subjects)
-    chains_mu <- vector("list", n_subjects)
-    for(sub in 1:n_subjects){
-      moments <- weighted_moments(alpha[,sub,rnd_index], LL[sub, rnd_index])
-      emp_covs <- moments$w_cov
-      chains_mu[[sub]] <- moments$w_mu
-      if(do_block) emp_covs[block_idx] <- 0
-      if(!is.positive.definite(emp_covs)){
-        # If not positive definite (e.g. too few distinct draws), do not use it
-        next
-      } else{
-        chains_var[[sub]] <- emp_covs
-      }
-    }
-    # Subjects without a usable covariance: use the mean of the other
-    # subjects', else this chain's previous one, else a scaled-down prior
-    # variance (its epsilon then adapts quickly). A fixed diag(.5) can be
-    # orders of magnitude too wide for a concentrated posterior.
-    null_idx <- sapply(chains_var, is.null)
-    if(all(null_idx)){
-      mean_chains_var <- if(legacy_sampler()) diag(n_pars) * .5 else NULL
-    } else{
-      mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
-    }
-    if(any(null_idx)){
-      prev <- emc[[j]]$chains_var
-      for(q in 1:n_subjects){
-        if(null_idx[q]){
-          chains_var[[q]] <- if(!is.null(mean_chains_var)) mean_chains_var
-          else if(!is.null(prev) && !is.null(prev[[q]])) prev[[q]]
-          else prior_fallback_var(emc[[1]]) * .1
-        }
-      }
-      if(is.null(mean_chains_var)) mean_chains_var <- Reduce(`+`, chains_var) / n_subjects
-    }
-
-    new_prop_var <- mean(diag(mean_chains_var))
-    if(is.null(attr(emc[[j]], "prop_var"))){
-      # This is in preburn case, group-level proposals are wider
-      # So we scale the epsilon a bit to account for narrow individual proposals
-      prop_var_ratio <- 2
-    } else{
-      # epsilon scales standard deviations, prop_var is a variance
-      prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
-      if(!legacy_sampler()) prop_var_ratio <- sqrt(prop_var_ratio)
-    }
-    # Within adapt the hierarchical local kernel's epsilon is relative to
-    # the likelihood + group precision (new_particle), not to chains_var
-    lik_scaled <- stage == "adapt" && !legacy_sampler() && emc[[1]]$type != "single"
-    if(stage != "sample" && !lik_scaled){
-      emc[[j]] <- update_epsilon_scale(emc[[j]], prop_var_ratio)
-    }
-    attr(emc[[j]], "prop_var") <- new_prop_var
-    emc[[j]]$chains_var <- chains_var
-    emc[[j]]$chains_mu <- chains_mu
-  }
-  return(emc)
+  native_chain_proposals(emc, alpha, LL, do_block, stage)
 }
 
 reset_pm_settings <- function(emc, stage){
   new_stage <- stage != get_last_stage(emc)
-  legacy <- legacy_sampler()
   # Acceptance counts restart every step (step_size iterations), so the
   # epsilon and mixing-weight adaptation follows the recent window rather
   # than the whole stage's history.
-  if(legacy && !(new_stage || stage == "burn")) return(emc)
   # The sample stage's kernel is fixed: it keeps the settings that the tail of
   # adapt tuned for it (tune_sample_kernel)
-  if(!legacy && stage == "sample") return(emc)
+  if(stage == "sample") return(emc)
   map_pm_settings(emc, function(x){
     x <- reset_acc_counts(x)
     if(new_stage){
@@ -912,22 +584,10 @@ reset_pm_settings <- function(emc, stage){
       # burn's epsilons belong to (prior-variance, chains_var) random
       # walks; adapt's first scaled component is the chains_var one, so
       # carry that epsilon (check_epsilon then pads the vector)
-      if(stage == "adapt" && !legacy) x$epsilon <- x$epsilon[length(x$epsilon)]
+      if(stage == "adapt") x$epsilon <- x$epsilon[length(x$epsilon)]
     }
     x
   })
-}
-
-update_epsilon_scale <- function(pmwgs, prop_var_ratio){
-  pm_settings <- attr(pmwgs$samples, "pm_settings")
-  pm_settings <- lapply(pm_settings, function(x){
-    for(i in 1:length(x)){
-      x[[i]]$epsilon <- x[[i]]$epsilon * prop_var_ratio
-    }
-    return(x)
-  })
-  attr(pmwgs$samples, "pm_settings") <- pm_settings
-  return(pmwgs)
 }
 
 test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
@@ -943,7 +603,6 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   n_unique_sub <- apply(first_par, 1, FUN = function(x) return(length(unique(x))))
   n_pars <- sampler$n_pars
   components <- attr(sampler$data, "components")
-  nuisance <- sampler$nuisance
 
   if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
@@ -953,18 +612,8 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
     attempt <- tryCatch({
       for(comp in unique(components)){
         idx <- comp == components
-        nuis_idx <- nuisance[idx]
-        if(any(nuis_idx)){
-          type <- sampler$sampler_nuis$type
-          auto_mclapply(X = 1:sampler$n_subjects,
-                        FUN = get_conditionals, samples = test_samples$nuisance,
-                        n_pars = sum(idx[nuisance]), idx = idx[nuisance],
-                        type = type,
-                        mc.cores = n_cores_conditional)
-        }
-        auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
-                      n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
-                      mc.cores = n_cores_conditional)
+        lapply(seq_len(sampler$n_subjects), function(s)
+          native_conditionals(test_samples, sampler$type, s, test_samples$iteration, idx))
       }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
@@ -989,7 +638,6 @@ loadRData <- function(fileName){
   get(ls()[ls() != "fileName"])
 }
 
-
 # Apply a design's TC (truncation/censoring) list to data that have not been
 # through make_missing(). No-op when TC requests nothing or the data already
 # carry censoring columns.
@@ -1010,7 +658,6 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
                digits = if (is.null(TC$digits)) 2 else TC$digits)
 }
 
-
 #' Make an emc Object
 #'
 #' Creates an emc object by combining the data, prior,
@@ -1019,7 +666,7 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
 #' @param data A data frame, or a list of data frames. Needs to have the variable `subjects` as participant identifier.
 #' @param design A list with a pre-specified design, the output of `design()`.
 #' @param model A model list. If none is supplied, the model specified in `design()` is used.
-#' @param type A string indicating whether to run a `standard` group-level, `blocked`, `diagonal`, `factor`, or `single` (i.e., non-hierarchical) model.
+#' @param type A string indicating whether to run a `standard`, `blocked`, `diagonal`, `diagonal-gamma`, `SEM`, `infnt_factor`, or `single` (non-hierarchical) model.
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
@@ -1066,10 +713,7 @@ make_emc <- function(data,design,model=NULL,
                     par_groups=NULL, memory_saver = FALSE, ...){
   # arguments for future compatibility
   n_factors <- NULL
-  nuisance <- NULL
-  nuisance_non_hyper <- NULL
   sem_settings <- NULL
-  Lambda_mat <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
@@ -1088,12 +732,9 @@ make_emc <- function(data,design,model=NULL,
     stop("can only use type = `single` when there's only one subject in the data")
   }
 
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "infnt_factor", "SEM", "diagonal-gamma")))
-    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, single")
+  if (!(type %in% c("standard","diagonal","blocked","single", "infnt_factor", "SEM", "diagonal-gamma")))
+    stop("type must be one of: standard,diagonal,blocked,diagonal-gamma,SEM,infnt_factor,single")
 
-  if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
-    stop("You can only specify nuisance OR nuisance_non_hyper")
-  }
   if (is(data, "data.frame")) data <- list(data)
   data <- lapply(data,function(d){
     d$subjects <- factor(d$subjects)
@@ -1189,9 +830,7 @@ make_emc <- function(data,design,model=NULL,
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   if (type %in% c("single", "infnt_factor", "diagonal-gamma")) {
-    out <- pmwgs(dadm_list, type, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper,
-                 n_factors = n_factors)
+    out <- pmwgs(dadm_list, type, n_factors = n_factors)
   } else if (type %in% c("standard", "blocked", "diagonal")) {
     if(type == "blocked"){
       if(is.null(par_groups)) stop("par_groups must be specified for blocked models")
@@ -1222,17 +861,9 @@ make_emc <- function(data,design,model=NULL,
     }
     if(type %in% c("diagonal", "blocked")) type <- "standard"
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
-                 group_design = group_design,
-                 nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper)
-  } else if (type == "factor") {
-    out <- pmwgs(dadm_list, type, n_factors = n_factors,
-                 nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper,
-                 Lambda_mat = Lambda_mat)
+                 group_design = group_design)
   } else if (type == "SEM"){
-    out <- pmwgs(dadm_list, type, sem_settings = sem_settings, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper)
+    out <- pmwgs(dadm_list, type, sem_settings = sem_settings)
   }
   out$model <- lapply(design, function(x) x$model)
   # Only for joint models we need to keep a list of functions
@@ -1307,16 +938,15 @@ extractDadms <- function(dadms, names = NULL){
               dadm_list = dadm_list, subjects = subjects))
 }
 
-auto_mclapply <- function(X, FUN, mc.cores, ..., rng_substream = FALSE){
+auto_mclapply <- function(X, FUN, mc.cores, ...){
   if(Sys.info()[1] == "Windows") return(cluster_lapply(X, FUN, mc.cores, ...))
   if(mc.cores > 1 && length(X) > 1 && RNGkind()[1] == "L'Ecuyer-CMRG"){
-    # Reserve streams for chains and substreams for their subject workers.
+    # Reserve separate streams for chains.
     # Advancing the parent also prevents repeated streams in later batches.
-    jump <- if(rng_substream) parallel::nextRNGSubStream else parallel::nextRNGStream
     seed <- get(".Random.seed", envir = .GlobalEnv)
     seeds <- vector("list", length(X))
-    for(i in seq_along(X)) seeds[[i]] <- seed <- jump(seed)
-    assign(".Random.seed", jump(seed), envir = .GlobalEnv)
+    for(i in seq_along(X)) seeds[[i]] <- seed <- parallel::nextRNGStream(seed)
+    assign(".Random.seed", parallel::nextRNGStream(seed), envir = .GlobalEnv)
     return(parallel::mclapply(setNames(seq_along(X), names(X)), function(i, ...){
       assign(".Random.seed", seeds[[i]], envir = .GlobalEnv)
       FUN(X[[i]], ...)
@@ -1334,114 +964,29 @@ cluster_lapply <- function(X, FUN, cores, ...){
   parallel::parLapply(cl = cluster, X, FUN, ...)
 }
 
-# Turn a silent per-chain sampler failure into an informative error. mclapply
-# puts a try-error object in a chain's slot when its worker errors (and a worker
-# killed for memory returns something with no $samples); left unchecked this
-# surfaces much later as "$ operator is invalid for atomic vectors" in chain_n().
-check_chain_failures <- function(chains, stage, fileName = NULL){
-  failed <- vapply(chains, function(x){
-    inherits(x, "try-error") || is.null(x) || !is.list(x) || is.null(x$samples)
-  }, logical(1))
-  if(!any(failed)) return(invisible(NULL))
-  reasons <- vapply(which(failed), function(i){
-    x <- chains[[i]]
-    cond <- attr(x, "condition")
-    reason <- if(!is.null(cond)) conditionMessage(cond)
-      else if(inherits(x, "try-error")) trimws(as.character(x))
-      else "chain worker returned no samples (it likely crashed or ran out of memory)"
-    paste0("  chain ", i, ": ", reason)
-  }, character(1))
-  saved <- if(!is.null(fileName)) paste0(" The fit up to the previous stage was saved to '",
-                                         fix_fileName(fileName), "'.") else ""
-  # Tailor the advice to what actually failed, rather than always blaming the
-  # covariance. The per-chain reasons now carry context (iteration + on_singular
-  # recovery so far + diverging parameters) added in run_stage.
-  singular_like <- any(grepl("singular|reciprocal condition|not positive|leading minor|positive definite|ill-conditioned|Lapack",
-                             reasons, ignore.case = TRUE))
-  advice <- if (singular_like) {
-    paste0("The group-level covariance became ill-conditioned, usually from an ",
-           "unidentified or weakly-identified parameter (see the diverging parameters ",
-           "listed above). Options: check for unidentified parameters, use a tighter ",
-           "prior or fewer free parameters, or set the `on_singular` argument of fit() ",
-           "to retry / carry_forward.")
-  } else {
-    paste0("This is not the known singular-covariance failure but some other error ",
-           "(shown above) hit inside a chain. Read the underlying message and context; ",
-           "if it looks like a bug rather than your model/data, please report it.")
-  }
-  # Wrap the advice to ~80 columns so it is readable; the saved-file note gets
-  # its own line.
-  advice <- paste(strwrap(advice, width = 80), collapse = "\n")
-  if (nzchar(saved)) advice <- paste0(advice, "\n", trimws(saved))
-  stop("Sampling failed in ", sum(failed), " of ", length(chains),
-       " chain(s) during the '", stage, "' stage:\n",
-       paste(reasons, collapse = "\n"),
-       "\n\n", advice, call. = FALSE)
-}
-
 #' Strip all entries except samples from EMC list entries
 #' @param emc A list of EMC objects
 #' @return The same list with everything but samples removed from all but first entry
 #' @noRd
 strip_duplicates <- function(emc, incl_props = TRUE) {
   # Keep only samples in non-first entries
-  for (i in 2:length(emc)) {
+  for (i in seq_along(emc)[-1L]) {
     samples <- emc[[i]]$samples
     prop_var <- attr(emc[[i]], "prop_var")
     emc[[i]] <- list(samples = samples)
     attr(emc[[i]], "prop_var") <- prop_var
   }
   if(incl_props){
-    # Also remove eff_mu, eff_var, chains_cov
+    # Also remove proposal distributions.
     for (i in 1:length(emc)) {
       emc[[i]]$eff_mu <- NULL
       emc[[i]]$eff_var <- NULL
-      emc[[i]]$chains_cov <- NULL
+      emc[[i]]$chains_var <- NULL
       emc[[i]]$chains_mu <- NULL
       emc[[i]]$lik_prec <- NULL
     }
   }
   return(emc)
-}
-
-get_posterior_weights <- function(ll){
-  max_ll <- max(ll)
-  weights <- exp(ll - max_ll)
-  weights <- weights / sum(weights)
-  return(weights)
-}
-
-weighted_moments <- function(chain, ll = NULL) {
-  # chain: a matrix with each col as a sample, and each row as a parameter
-  # weights: an optional vector of weights. If not provided, equal weighting is assumed.
-  if (is.null(dim(chain))) {
-    chain <- matrix(chain, nrow = 1L)
-  }
-  n <- ncol(chain)
-  d <- nrow(chain)
-
-  # Use equal weights if none are provided.
-  if (is.null(ll)) {
-    weights <- rep(1 / n, n)
-  } else {
-    weights <- get_posterior_weights(ll)
-  }
-
-  # Compute the weighted mean of the chain.
-  weighted_mean <- drop(chain %*% weights)
-  # NIEK THIS CAUSES ERRORS
-  # # Compute the weighted covariance matrix.
-  # cov_matrix <- matrix(0, nrow = d, ncol = d)
-  # for (i in 1:n) {
-  #   diff <- chain[,i] - weighted_mean
-  #   cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
-  # }
-  cov_matrix <- if (d == 1L) {
-    matrix(stats::var(as.numeric(chain)), nrow = 1L, ncol = 1L)
-  } else {
-    cov(t(chain))
-  }
-  return(list(w_cov = cov_matrix, w_mu = weighted_mean))
 }
 
 
@@ -1452,7 +997,7 @@ weighted_moments <- function(chain, ll = NULL) {
 #' @noRd
 restore_duplicates <- function(emc) {
   # Restore everything except samples from first entry
-  for (i in 2:length(emc)) {
+  for (i in seq_along(emc)[-1L]) {
     samples <- emc[[i]]$samples
     emc[[i]] <- emc[[1]]
     emc[[i]]$samples <- samples

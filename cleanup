@@ -7,6 +7,7 @@ rm -f src/Makevars
 rm -f src/Makevars.tmp
 rm -f inst/include/build_info.h
 rm -f config.status config.log config.cache
+rm -f src/sampler/*.o
 
 # Autoconf leftovers
 rm -rf autom4te.cache

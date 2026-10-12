@@ -20,6 +20,15 @@ Or for the development version:
 
 `remotes::install_github("ampl-psych/EMC2",dependencies=TRUE)`
 
+Source installation requires a C++17 compiler. On Windows, install
+[Rtools](https://cran.r-project.org/bin/windows/Rtools/) for your R version. On
+macOS, install the [R build tools](https://mac.r-project.org/tools/); EMC2 detects
+OpenMP from the R build tools or Homebrew `libomp`. Linux uses the compiler's OpenMP support.
+Without OpenMP, the same C++ sampler runs serially.
+
+`fit()` uses shared-memory C++ sampling. Set `cores_for_chains` and
+`cores_per_chain` to control parallelism, for example 4 and 2 for eight threads.
+
 ## Workflow Overview
 
 Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions:.

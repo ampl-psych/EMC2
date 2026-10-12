@@ -51,23 +51,6 @@ log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
 }
 
 
-log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
-  # DDM summed log likelihood for go/nogo model
-{
-  like <- numeric(dim(dadm)[1])
-  if (any(attr(pars,"ok"))) {
-    isna <- is.na(dadm$rt)
-    ok <- attr(pars,"ok") & !isna
-    like[ok] <- model$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
-    ok <- attr(pars,"ok") & isna
-    like[ok] <- # dont terminate on go boundary before timeout
-      pmax(0,pmin(1,(1-model$pfun(dadm$TIMEOUT[ok],dadm$Rgo[ok],pars[ok,,drop=FALSE]))))
-
-  }
-  like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
-  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
-}
-
 log_likelihood_ordered <- function(pars, dadm, model, lower = -Inf, min_ll = log(1e-10))
   # probability of ordered discrete choices based on integrals of a continuous
   # distribution between cuts, with a fixed lower bound for the first response
@@ -124,20 +107,18 @@ log_likelihood_multinomial <- function(pars, dadm, model, min_ll = log(1e-10)) {
 log_likelihood_joint <- function(proposals, dadms, model_list, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
-  k <- 0
   total_ll <- 0
   for(dadm in dadms){
     i <- i + 1
     if(is.null(component) || component == i){
       if(is.data.frame(dadm)){
-        k <- k + 1
         # Sometimes designs are the same across models (typically in fMRI)
         # Instead of storing multiple, we just store a pointer to the first original design
         if(is.numeric(attr(dadm, "designs"))){
           ref_idx <- attr(dadm, "designs")
           attr(dadm, "designs") <- attr(dadms[[ref_idx]], "designs")
         }
-        parPrefix <- parPreFixs[k]
+        parPrefix <- parPreFixs[if (length(parPreFixs) == 1L) 1L else i]
         # Unfortunately indexing can't get quicker than this as far as I can tell.
         columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
         currentPars <- proposals[,columns_to_use, drop = F]

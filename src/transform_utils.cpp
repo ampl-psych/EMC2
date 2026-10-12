@@ -180,7 +180,7 @@ void c_do_bound(const ParamTable& pt,
                 const std::vector<BoundSpec>& specs,
                 std::vector<int>& result)
 {
-  const Mat base = pt.base;
+  const Mat& base = pt.base;
   const int nrows = base.nrow;
 
   std::fill(result.begin(), result.begin() + nrows, 1);

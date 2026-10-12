@@ -441,7 +441,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
-                       trim = TRUE, r_cores = 1)
+                       trim = TRUE)
   t_start <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
@@ -471,12 +471,13 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
   }
   stages <- c('preburn', 'burn', 'adapt', 'sample')
   to_run <- stages[which(stages == last_stage):length(stages)]
+  context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)
   for(stage in to_run){
     emc <- run_emc(emc, stage = stage, stop_criteria[[stage]], cores_for_chains = cores_for_chains, search_width = search_width,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
-                   on_singular = on_singular, r_cores = dots$r_cores)
+                   on_singular = on_singular, .context = context)
   }
   if (verbose) {
     # Re-use check_progress to get final Rhat and ESS for the sample stage,
@@ -489,8 +490,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
       step_size  = step_size,
       n_cores    = cores_per_chain * cores_for_chains,
       verbose    = FALSE,
-      progress   = NULL,
-      n_blocks   = dots$n_blocks
+      progress   = NULL
     )
 
     gd      <- final_progress$gd$gd
@@ -553,6 +553,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
 #'
+#' Chains share fixed likelihood inputs in one process. Each chain has its own
+#' native RNG, seeded from R, with its state saved in the samples for resuming fits.
+#' Resuming with a different C++ library seeds fresh chain RNGs from R.
+#'
 #' The estimation is performed using particle-metropolis within-Gibbs sampling.
 #' For sampling details see:
 #'
@@ -579,8 +583,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param particle_factor An integer. ``particle_factor`` multiplied by the square
 #' root of the number of sampled parameters determines the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across
-#' participant calculations. Only available on Linux or Mac OS. For Windows, only
-#' parallelization across chains (``cores_for_chains``) is available.
+#' participant calculations using native threads.
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
@@ -590,23 +593,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' of parameters these should hold. See the details and examples section.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
-#' @param on_singular A list or `NULL` (the default). Controls recovery when the
-#' group-level covariance becomes computationally singular during sampling (which
-#' otherwise aborts the run, typically from an unidentified parameter). `NULL`
-#' keeps the defaults below: up to 3 re-draws of the group step, then an error
-#' naming the diverging parameters.
-#' A list may set any of:
-#' \itemize{
-#'   \item `max_retries` — integer; on a singular covariance, re-draw the group
-#'     (Gibbs) step this many times before giving up on that iteration. Rescues
-#'     transient singularities. Default 3.
-#'   \item `on_exhausted` — `"error"` (default) or `"carry_forward"`. When retries
-#'     are exhausted, `"carry_forward"` reuses the previous iteration's group
-#'     parameters and continues instead of aborting.
-#'   \item `max_carry_forward` — integer; consecutive carried-forward iterations
-#'     allowed before giving up with a diagnosis of the diverging parameters. Default 10.
-#' }
-#' Retry is attempted before carry-forward when both are enabled.
+#' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
+#' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
+#' group step, then an error.
+#' A list may set `max_retries` (integer, re-draw the group step on failure).
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{
@@ -630,7 +620,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 #'
 #' # For a transient singular group covariance during burn, retry the group step:
-#' # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
+#' # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3))
 #'}
 #' @export
 fit <- function(emc, ...){

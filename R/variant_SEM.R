@@ -1,4 +1,4 @@
-sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
+sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
   args <- list(...)
   sem_settings <- args$sem_settings
   if (is.null(sem_settings)) stop("sem_settings is required")
@@ -15,10 +15,9 @@ sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integra
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names, iters, stage)
-  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
   x_names <- if (n_cov > 0) colnames(covariates) else character(0)
-  factor_names <- paste0("F", 1:n_factors)
+  factor_names <- if (n_factors > 0) paste0("F", seq_len(n_factors)) else character(0)
   if(!is.null(colnames(sem_settings$Lambda_mat)))  factor_names <- colnames(sem_settings$Lambda_mat)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
@@ -68,8 +67,8 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   sem_settings <- args$sem_settings
   if (is.null(sem_settings)) stop("sem_settings is required")
 
-  n_pars <- sum(!sampler$nuisance)
-  par_names <- sampler$par_names[!sampler$nuisance]
+  n_pars <- sampler$n_pars
+  par_names <- sampler$par_names
   sem_settings$Lambda_mat <- align_sem_rows(sem_settings$Lambda_mat, par_names, "Lambda_mat")
   sem_settings$K_mat <- align_sem_rows(sem_settings$K_mat, par_names, "K_mat")
 
@@ -102,7 +101,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   sampler$sem_settings <- sem_settings
   sampler$prior <- get_prior_SEM(prior, n_pars = n_pars, sample = F, sem_settings = sem_settings)
   sampler$n_factors <- n_factors
-  return(sampler)
+  normalise_SEM_prior(sampler)
 }
 
 normalise_factor_var_prior <- function(x, n_factors, factor_names) {
@@ -120,6 +119,43 @@ normalise_lambda_matrix_prior <- function(x, n_pars, n_factors,
   }
   if (length(x) > 1L && !is.null(names(x))) x <- x[factor_names]
   matrix(x, n_pars, n_factors, byrow = TRUE)
+}
+
+normalise_SEM_prior <- function(sampler) {
+  settings <- sampler$sem_settings
+  settings$covariates <- if (is.null(settings$covariates)) {
+    matrix(numeric(0), sampler$n_subjects, 0)
+  } else as.matrix(settings$covariates)
+  factor_names <- colnames(settings$Lambda_mat)
+  if (is.null(factor_names)) factor_names <- if (sampler$n_factors > 0) paste0("F", seq_len(sampler$n_factors)) else character(0)
+  for (name in c("lambda_var", "lambda_mean")) {
+    sampler$prior[[name]] <- normalise_lambda_matrix_prior(
+      sampler$prior[[name]], sampler$n_pars, sampler$n_factors,
+      sampler$par_names, factor_names)
+  }
+  sampler$sem_settings <- settings
+  sampler
+}
+
+sem_moments <- function(mu, lambda, B, K, G, epsilon_inv, delta_inv,
+                        covariates, population = TRUE) {
+  mu <- as.vector(mu)
+  p <- length(mu)
+  q <- sqrt(length(B))
+  x <- as.matrix(covariates)
+  effect <- matrix(K, p, ncol(x))
+  variance <- diag(1 / as.vector(epsilon_inv), p)
+  if (q > 0) {
+    loading <- matrix(lambda, p, q) %*% solve(diag(q) - matrix(B, q, q))
+    effect <- effect + loading %*% matrix(G, q, ncol(x))
+    variance <- variance + loading %*% solve(matrix(delta_inv, q, q)) %*% t(loading)
+  }
+  if (population) {
+    list(mu = drop(mu + effect %*% colMeans(x)),
+         var = variance + effect %*% cov(x) %*% t(effect))
+  } else {
+    list(mu = sweep(effect %*% t(x), 1, mu, "+"), var = variance)
+  }
 }
 
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, sem_settings = NULL){
@@ -196,7 +232,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     unique_factor_groups_prior <- unique(factor_groups_prior)
 
     if(is.null(colnames(Lambda_mat))){
-      factor_names <- paste0("F", 1:n_factors)
+      factor_names <- if (n_factors > 0) paste0("F", seq_len(n_factors)) else character(0)
     } else{
       factor_names <- colnames(Lambda_mat)
     }
@@ -224,7 +260,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("factor_regressors","std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       G <- array(0, dim = c(n_factors, n_cov, N))
-      for(i in seq_len(n_cov)){
+      if (n_factors > 0) for(i in seq_len(n_cov)){
         G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var[i], n_factors)))
       }
       G <- constrain_lambda(G, G_mat)
@@ -290,383 +326,89 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$delta_inv <- delta_inv
       }
     }
-    if(selection %in% c("mu_implied", "alpha")) {
-      mu_implied <- mu
-      for(i in 1:N){
-        B_0_inv <- solve(diag(n_factors) - B[,,i])
-        mu_implied[,i] <- c(mu[,i] + lambda[,,i] %*% B_0_inv %*% G[,,i] %*% x_mu + K[,,i] %*% x_mu)
+    if (selection == "mu_implied") {
+      samples$mu_implied <- mu
+      for (i in seq_len(N)) {
+        effect <- matrix(K[,,i], n_pars, n_cov)
+        if (n_factors > 0) {
+          effect <- effect + matrix(lambda[,,i], n_pars, n_factors) %*%
+            solve(diag(n_factors) - matrix(B[,,i], n_factors, n_factors)) %*%
+            matrix(G[,,i], n_factors, n_cov)
+        }
+        samples$mu_implied[,i] <- mu[,i] + effect %*% x_mu
       }
-      if(selection != "alpha") samples$mu_implied <- mu_implied
     }
-    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha", "std_loadings")) {
-      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
-      colnames(vars) <- rownames(vars) <- par_names
-      for(i in 1:N){
-        B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
-        vars[,,i] <- as.matrix(lambda[,,i]) %*% B_0_inv %*% (as.matrix(G[,,i]) %*% x_var %*% t(as.matrix(G[,,i])) +
-                     solve(as.matrix(delta_inv[,,i]))) %*% t(B_0_inv) %*% t(as.matrix(lambda[,,i])) +
-                     as.matrix(K[,,i]) %*% x_var %*% t(as.matrix(K[,,i])) + diag(1/epsilon_inv[,i])
+    if(selection %in% c("alpha", "sigma2", "covariance", "correlation", "Sigma", "std_loadings")) {
+      vars <- array(NA_real_, c(n_pars, n_pars, N), list(par_names, par_names, NULL))
+      if (selection == "alpha") {
+        subjects <- if (is.null(design$Ffactors)) design[[1]]$Ffactors$subjects else design$Ffactors$subjects
+        samples$alpha <- array(NA_real_, c(n_pars, length(subjects), N), list(par_names, subjects, NULL))
       }
-      if(selection != "alpha") samples$theta_var <- vars
-    }
-    if(selection %in% "alpha"){
-      samples$alpha <- get_alphas(mu, vars, design[[1]]$Ffactors$subjects)
+      for(i in seq_len(N)) {
+        moments <- sem_moments(if (selection %in% c("mu_implied", "alpha", "std_loadings")) mu[,i] else rep(0, n_pars),
+          lambda[,,i], B[,,i], K[,,i], G[,,i], epsilon_inv[,i], delta_inv[,,i],
+          covariates, population = selection != "alpha")
+        vars[,,i] <- moments$var
+        if (selection == "alpha") {
+          samples$alpha[,,i] <- moments$mu + t(mvtnorm::rmvnorm(length(subjects), sigma = moments$var))
+        }
+      }
+      if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "std_loadings")) samples$theta_var <- vars
     }
     out <- samples
   }
   return(out)
 }
 
-get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!pmwgs$nuisance)
-  if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
-  if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
-  start_delta_inv <- diag(1, pmwgs$n_factors)
-  start_epsilon_inv <- rep(1, n_pars)
-  start_eta <- matrix(0, nrow = pmwgs$n_subjects, ncol = pmwgs$n_factors)
-
-  start_lambda <- matrix(0, nrow = n_pars, ncol = pmwgs$n_factors)
-  start_B <- matrix(0, nrow = pmwgs$n_factors, ncol = pmwgs$n_factors)
-
-  sem_settings <- pmwgs$sem_settings
-  n_cov <- if (!is.null(sem_settings$covariates)) ncol(sem_settings$covariates) else 0
-  start_K <- matrix(0, nrow = n_pars, ncol = n_cov)
-  start_G <- matrix(0, nrow = pmwgs$n_factors, ncol = n_cov)
-
-  Lambda_mat <- sem_settings$Lambda_mat
-  B_mat <- sem_settings$B_mat
-  K_mat <- sem_settings$K_mat
-  G_mat <- sem_settings$G_mat
-
-  start_lambda[Lambda_mat != Inf] <- Lambda_mat[Lambda_mat != Inf]
-  start_B[B_mat != Inf] <- B_mat[B_mat != Inf]
-  start_K[K_mat != Inf] <- K_mat[K_mat != Inf]
-  start_G[G_mat != Inf] <- G_mat[G_mat != Inf]
-  return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda, B = start_B,
-              K = start_K, G = start_G,
-              epsilon_inv = start_epsilon_inv, delta_inv = start_delta_inv,
-              eta = start_eta, subj_mu = start_mu))
+filtered_samples_SEM <- function(sampler, filter) {
+  samples <- sampler$samples
+  list(theta_mu = samples$theta_mu[, filter, drop = FALSE],
+       lambda = samples$lambda[, , filter, drop = FALSE],
+       epsilon_inv = samples$epsilon_inv[, filter, drop = FALSE],
+       eta = samples$eta[, , filter, drop = FALSE],
+       alpha = samples$alpha[, , filter, drop = FALSE],
+       n_factors = sampler$n_factors, iteration = length(filter),
+       sem_settings = sampler$sem_settings)
 }
 
-fill_samples_SEM <- function(samples, group_level, proposals, j = 1, n_pars){
-  samples$lambda[,,j] <- group_level$lambda
-  samples$B[,,j] <- group_level$B
-  samples$K[,,j] <- group_level$K
-  samples$G[,,j] <- group_level$G
-  samples$epsilon_inv[,j] <- group_level$epsilon_inv
-  samples$delta_inv[,,j] <- group_level$delta_inv
-  samples$eta[,,j] <- group_level$eta
-  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
-  return(samples)
-}
-
-gibbs_step_SEM <- function(sampler, alpha){
-  last          <- last_sample_SEM(sampler$samples)
-  sem_settings  <- sampler$sem_settings
-  prior         <- sampler$prior
-
-  if (length(dim(alpha)) != 2L) {
-    alpha <- matrix(alpha, nrow = sum(!sampler$nuisance), ncol = sampler$n_subjects)
-    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
-  }
-
-  y             <- t(alpha)                     # subjects x variables
-  n_subjects    <- sampler$n_subjects
-  n_pars        <- sum(!sampler$nuisance)
-  n_factors     <- sampler$n_factors
-  covariates    <- as.matrix(sem_settings$covariates)
-  n_cov         <- if (!is.null(covariates)) ncol(covariates) else 0
-
-  ## free-parameter masks ----------------------------------------------------
-  isFree_Lambda <- sem_settings$Lambda_mat == Inf
-  isFree_B      <- sem_settings$B_mat     == Inf
-  isFree_K      <- sem_settings$K_mat     == Inf
-  isFree_G      <- sem_settings$G_mat     == Inf
-
-  factor_groups <- sem_settings$factor_groups
-  unique_factor_groups <- unique(factor_groups)
-
-  fn_gs <- colnames(sem_settings$Lambda_mat)
-  if (is.null(fn_gs) && n_factors > 0) fn_gs <- paste0("F", seq_len(n_factors))
-  prior$a_d <- normalise_factor_var_prior(prior$a_d, n_factors, fn_gs)
-  prior$b_d <- normalise_factor_var_prior(prior$b_d, n_factors, fn_gs)
-
-  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
-  par_names_gs <- sampler$par_names[!sampler$nuisance]
-  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var, n_pars, n_factors, par_names_gs, fn_gs)
-  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, n_pars, n_factors, par_names_gs, fn_gs)
-
-  ## current state -----------------------------------------------------------
-  eta         <- matrix(last$eta,     n_subjects, n_factors)
-  delta_inv   <- matrix(last$delta_inv, n_factors, n_factors)
-  epsilon_inv <- diag(last$epsilon_inv)
-  lambda      <- matrix(last$lambda,  n_pars,    n_factors)
-  B           <- matrix(last$B,       n_factors, n_factors)
-  K           <- matrix(last$K,       n_pars,    n_cov)
-  G           <- matrix(last$G,       n_factors, n_cov)
-  mu          <- last$mu
-
-  ## ---- update mu ----------------------------------------------------------
-  mu_sig <- solve(n_subjects * epsilon_inv +
-                  diag(1 / prior$theta_mu_var, n_pars))
-  mu_mu  <- mu_sig %*%
-            (epsilon_inv %*%
-               colSums(y - covariates %*% t(K) - eta %*% t(lambda)) +
-             diag(1/prior$theta_mu_var, n_pars) %*% prior$theta_mu_mean)
-  mu <- drop(rmvnorm(1, mu_mu, mu_sig))
-  ytilde <- sweep(y, 2, mu)
-
-  ## ---- update eta ---------------------------------------------------------
-  B0_inv   <- solve(diag(n_factors) - B)
-  Psi0_inv <- solve(B0_inv %*% solve(delta_inv) %*% t(B0_inv))
-  eta_sig  <- solve(Psi0_inv + t(lambda) %*% epsilon_inv %*% lambda)
-  for (i in seq_len(n_subjects)){
-    eta_mean <- eta_sig %*%
-      ( t(lambda) %*% epsilon_inv %*%
-          (ytilde[i,] - K %*% covariates[i,]) +
-        Psi0_inv %*% B0_inv %*% (G %*% covariates[i,]) )
-    eta[i,] <- rmvnorm(1, eta_mean, eta_sig)
-  }
-
-  ## ---- update epsilon (item precision) ------------------------------------
-  epsilon_inv <- diag(rgamma(
-    n_pars,
-    shape = prior$a_e + n_subjects/2,
-    rate  = prior$b_e + 0.5 * colSums((ytilde -
-                                        covariates %*% t(K) -
-                                        eta %*% t(lambda))^2)))
-
-  ## ---- update loadings: lambda and K --------------------------------------
-  lambda_y       <- cbind(K, lambda)
-  lambda_y_prior      <- cbind(matrix(prior$K_var, n_pars, n_cov, byrow = TRUE), Lambda_var_mat)
-  lambda_y_prior_mean <- cbind(matrix(0,           n_pars, n_cov),              Lambda_mean_mat)
-  for (j in seq_len(n_pars)){
-    isFree <- c(isFree_K[j,], isFree_Lambda[j,])
-    if(any(isFree)){
-      etaS    <- cbind(covariates, eta)[, isFree, drop = FALSE]
-      lam_sig <- solve(epsilon_inv[j,j] * crossprod(etaS) +
-                       diag(1/lambda_y_prior[j,isFree], sum(isFree)))
-      lam_mu  <- lam_sig %*% (epsilon_inv[j,j] * crossprod(etaS, ytilde[,j]) +
-                              (1/lambda_y_prior[j,isFree]) * lambda_y_prior_mean[j,isFree])
-      lambda_y[j, isFree] <- rmvnorm(1, lam_mu, lam_sig)
+group__IC_SEM <- function(emc, stage = "sample", filter = NULL, ...) {
+  p <- emc[[1]]$n_pars
+  n <- emc[[1]]$n_subjects
+  mean_alpha <- mean_mu <- matrix(0, p, n)
+  mean_var <- matrix(0, p, p)
+  lls <- list()
+  for (chain in emc) {
+    samples <- chain$samples
+    idx <- drop(filter_emc(matrix(get_idx(list(chain), stage), 1), filter = filter))
+    for (i in idx) {
+      moments <- sem_moments(samples$theta_mu[,i], samples$lambda[,,i],
+        samples$B[,,i], samples$K[,,i], samples$G[,,i], samples$epsilon_inv[,i],
+        samples$delta_inv[,,i], chain$sem_settings$covariates, population = FALSE)
+      alpha <- matrix(samples$alpha[,,i], p, n)
+      lls[[length(lls) + 1L]] <- mvtnorm::dmvnorm(t(alpha - moments$mu), sigma = moments$var, log = TRUE)
+      mean_alpha <- mean_alpha + alpha
+      mean_mu <- mean_mu + moments$mu
+      mean_var <- mean_var + moments$var
     }
   }
-  if(n_cov > 0){
-    K      <- lambda_y[, seq_len(n_cov),        drop = FALSE]
-    lambda <- lambda_y[, -(seq_len(n_cov)),     drop = FALSE]
-  } else{
-    lambda <- lambda_y
-  }
-
-
-  ## ---- correlated update for G and B --------------------------------------
-  G_new <- G
-  B_new <- B
-
-  # Design matrix shared across rows
-  Z_full <- cbind(covariates, eta)   # n_subjects x (n_cov + n_factors)
-
-  # Start with residuals under current coefficients
-  eta_residuals <- eta - eta %*% t(B_new) - covariates %*% t(G_new)
-
-  for (p in seq_len(n_factors)) {
-    free_Gp <- isFree_G[p, ]            # logical length = n_cov
-    free_Bp <- isFree_B[p, ]            # logical length = n_factors
-    free_idx <- c(free_Gp, free_Bp)
-    if (!any(free_idx)) next            # nothing to sample
-
-    ## 1.  Design matrix for free columns only
-    Z_p <- Z_full[, free_idx, drop = FALSE]
-
-    ## 2.  Conditional target vector y*
-    delta_pp <- delta_inv[p, p]
-    if (n_factors > 1){
-      c_vec <- eta_residuals[, -p, drop = FALSE] %*% delta_inv[-p, p, drop = FALSE]
-    }
-    else{
-      c_vec <- matrix(0, n_subjects, 1)
-    }
-    y_star <- delta_pp * eta[, p, drop = FALSE] + c_vec
-
-    ## 3.  Prior variance vector aligned with Z_p
-    prior_vec <- c(prior$G_var, prior$B_var)[free_idx]   # length = ncol(Z_p)
-
-    ## 4.  Posterior draw
-    B_sig <- solve(delta_pp * crossprod(Z_p) +
-                     diag(1 / prior_vec, length(prior_vec)))
-    B_mu  <- B_sig %*% crossprod(Z_p, y_star)
-    coef_sample <- mvtnorm::rmvnorm(1, B_mu, B_sig)      # 1 x ncol(Z_p)
-
-    ## 5.  Split the draw into G-part and B-part -------------------
-    n_free_G <- sum(free_Gp)          # could be 0
-    coef_G <- if (n_free_G)  coef_sample[1:n_free_G] else numeric(0)
-    coef_B <- if (n_free_G < length(coef_sample))
-      coef_sample[(n_free_G + 1):length(coef_sample)]
-    else
-      numeric(0)
-
-    if (n_free_G)
-      G_new[p, free_Gp] <- coef_G
-    if (length(coef_B))
-      B_new[p, free_Bp] <- coef_B
-
-    ## 6.  Refresh residuals before next row
-    eta_residuals[, p] <- eta[, p] - Z_p %*% t(coef_sample)
-  }
-
-  G <- G_new
-  B <- B_new
-
-  ## ---- update delta_inv ---------------------------------------------------
-  eta_residuals <- eta - eta %*% t(B) - covariates %*% t(G)
-
-  for (group_id in unique_factor_groups){
-    group_idx <- which(factor_groups == group_id)
-    d_block   <- length(group_idx)
-    resid_blk <- eta_residuals[, group_idx, drop = FALSE]
-    cov_block <- crossprod(resid_blk)
-
-    S_iw  <- diag(prior$b_d[group_idx], d_block)
-    df_iw <- prior$a_d[group_idx][1] + n_subjects
-    if(df_iw <= d_block - 1)
-      stop("Inverse-Wishart degrees-of-freedom too small for factor group ", group_id)
-
-    if(d_block > 1){
-      sampled_cov <- riwish(df_iw, S_iw + cov_block)
-      delta_inv[group_idx, group_idx] <- solve(sampled_cov)
-    } else {
-      delta_inv[group_idx, group_idx] <- rgamma(
-        1,
-        shape = prior$a_d[group_idx] + n_subjects/2,
-        rate  = prior$b_d[group_idx] + 0.5 * cov_block)
-    }
-  }
-
-  ## ---- derived population moments ----------------------------------------
-  x_mu  <- colMeans(covariates)
-  x_var <- cov(covariates)
-  B0_inv  <- solve(diag(n_factors) - B)
-  pop_mean <- drop(mu + lambda %*% B0_inv %*% G %*% x_mu + K %*% x_mu)
-  pop_var  <- lambda %*% B0_inv %*% (G %*% x_var %*% t(G) +
-                                      solve(delta_inv)) %*%
-              t(B0_inv) %*% t(lambda) +
-              K %*% x_var %*% t(K) +
-              solve(epsilon_inv)
-
-  ## ---- return -------------------------------------------------------------
-  list(tmu          = mu,
-       lambda      = lambda,
-       eta         = eta,
-       B           = B,
-       K           = K,
-       G           = G,
-       epsilon_inv = diag(epsilon_inv),
-       delta_inv   = delta_inv,
-       alpha       = t(y),
-       subj_mu         = pop_mean,
-       tvar        = pop_var)
+  N <- length(lls)
+  lls <- do.call(cbind, lls)
+  if (isTRUE(list(...)$for_WAIC)) return(lls)
+  list(mean_ll = mean(colSums(lls)), minD = -2 * max(colSums(lls)),
+       Dmean = -2 * sum(mvtnorm::dmvnorm(t((mean_alpha - mean_mu) / N),
+                                      sigma = mean_var / N, log = TRUE)))
 }
 
-
-
-last_sample_SEM <- function(store) {
-  list(
-    mu = store$theta_mu[, store$idx],
-    eta = store$eta[,,store$idx],
-    lambda = store$lambda[,,store$idx],
-    B = store$B[,,store$idx],
-    K = store$K[,,store$idx],
-    G = store$G[,,store$idx],
-    delta_inv = store$delta_inv[,,store$idx],
-    epsilon_inv = store$epsilon_inv[,store$idx]
-  )
-}
-
-get_group_level_SEM <- function(parameters, s){
-  mu <- parameters$subj_mu
-  var <- parameters$tvar
-  return(list(mu = mu, var = var))
-}
-
-
-get_conditionals_SEM <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
-  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
-  if(is.null(idx)) idx <- 1:n_pars
-  epsilon_inv <- log(samples$epsilon_inv[idx,])
-  eta <- matrix(samples$eta[s,,], nrow = samples$n_factors)
-  Lambda_mat <- samples$sem_settings$Lambda_mat
-  lambda <- apply(samples$lambda[idx,,,drop = F], 3, unwind_lambda, Lambda_mat[idx,])
-  theta_mu <- samples$theta_mu[idx,]
-  all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, epsilon_inv, lambda)
-  mu_tilde <- rowMeans(all_samples)
-  var_tilde <- cov(t(all_samples))
-  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
-                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[idx,iteration],
-                                 samples$eta[s,,iteration],
-                                 log(samples$epsilon_inv[idx, iteration]),
-                                 unwind_lambda(samples$lambda[idx,, iteration], Lambda_mat[idx,])))
-  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
-}
-
-filtered_samples_SEM <- function(sampler, filter){
-  out <- list(
-    theta_mu = sampler$samples$theta_mu[, filter],
-    lambda = sampler$samples$lambda[, , filter, drop = F],
-    epsilon_inv = sampler$samples$epsilon_inv[, filter],
-    eta = sampler$samples$eta[, , filter, drop = F],
-    alpha = sampler$samples$alpha[, , filter],
-    n_factors = sampler$n_factors,
-    iteration = length(filter),
-    sem_settings = sampler$sem_settings
-  )
-}
-
-group__IC_SEM <- function(emc, stage="sample",filter=NULL, ...){
-  alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
-                    return_mcmc = FALSE, merge_chains = TRUE)
-  theta_mu <- get_pars(emc, selection = "mu_implied", stage = stage, filter = filter,
-                       return_mcmc = FALSE, merge_chains = TRUE)
-  theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
-                        return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  mean_alpha <- apply(alpha, 1:2, mean)
-  mean_mu <- rowMeans(theta_mu)
-  mean_var <- apply(theta_var, 1:2, mean)
-
-  N <- ncol(theta_mu)
-  lls <- numeric(N)
-  if(list(...)$for_WAIC){
-    lls <- matrix(NA, nrow = ncol(mean_alpha), ncol = N)
-    for(i in 1:N){
-      lls[,i] <- dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T)
-    }
-    return(lls)
+get_mu_implied <- function(x, idx) {
+  samples <- x$samples
+  mu <- samples$theta_mu[,idx, drop = FALSE]
+  for (i in seq_along(idx)) {
+    j <- idx[i]
+    mu[,i] <- sem_moments(samples$theta_mu[,j], samples$lambda[,,j],
+      samples$B[,,j], samples$K[,,j], samples$G[,,j], samples$epsilon_inv[,j],
+      samples$delta_inv[,,j], x$sem_settings$covariates)$mu
   }
-  for(i in 1:N){
-    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
-  }
-  minD <- -2*max(lls)
-  mean_ll <- mean(lls)
-  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
-  Dmean <- -2*mean_pars_ll
-  return(list(mean_ll = mean_ll, Dmean = Dmean,
-              minD = minD))
-}
-
-get_mu_implied <- function(x, idx){
-  mu <- x$samples$theta_mu[,idx]
-  B <- x$samples$B[,,idx, drop = F]
-  G <- x$samples$G[,,idx, drop = F]
-  K <- x$samples$K[,,idx, drop = F]
-  loadings <- x$samples$lambda[,,idx, drop = F]
-  n_factors <- ncol(loadings)
-  x_mu <- colMeans(x$sem_settings$covariates)
-  for(i in 1:ncol(mu)){
-    B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
-    mu[,i] <- as.matrix(mu[,i]) + as.matrix(loadings[,,i]) %*% B_0_inv %*% as.matrix(G[,,i]) %*% x_mu
-    + as.matrix(K[,,i]) %*% x_mu
-  }
-  return(mu)
+  mu
 }
 
 
@@ -749,220 +491,70 @@ bridge_add_group_SEM <- function(all_samples, samples, idx){
 
 
 
-bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
-                                               proposals_list,
-                                               info)
-{
-  ## --------------------------------------------------------------------- ##
-  ## 0.  CONSTANTS & SHORT-HANDS                                           ##
-  ## --------------------------------------------------------------------- ##
-  prior        <- info$prior
-  n_pars       <- info$n_pars
-  n_factors    <- info$n_factors
-  sem_settings <- info$sem_settings
-
-  Lambda_mat   <- sem_settings$Lambda_mat
-  B_mat        <- sem_settings$B_mat
-  K_mat        <- sem_settings$K_mat
-  G_mat        <- sem_settings$G_mat
-  factor_groups <- sem_settings$factor_groups
-  covariates   <- sem_settings$covariates
-
-  if (is.null(factor_groups)) factor_groups <- if (n_factors > 0) seq_len(n_factors) else integer(0)
-  unique_fg    <- unique(factor_groups)
-
-  fn_bs <- colnames(Lambda_mat)
-  if (is.null(fn_bs) && n_factors > 0) fn_bs <- paste0("F", seq_len(n_factors))
-  prior$a_d <- normalise_factor_var_prior(prior$a_d, n_factors, fn_bs)
-  prior$b_d <- normalise_factor_var_prior(prior$b_d, n_factors, fn_bs)
-
-  if (is.null(prior$lambda_mean)) prior$lambda_mean <- 0
-  pn_bs <- rownames(Lambda_mat)
-  Lambda_var_mat  <- normalise_lambda_matrix_prior(prior$lambda_var, n_pars, n_factors, pn_bs, fn_bs)
-  Lambda_mean_mat <- normalise_lambda_matrix_prior(prior$lambda_mean, n_pars, n_factors, pn_bs, fn_bs)
-  lambda_mean_free <- unwind_lambda(Lambda_mean_mat, Lambda_mat)
-  lambda_var_free  <- unwind_lambda(Lambda_var_mat,  Lambda_mat)
-
-  ## covariate moments used in population moments
-  x_mu  <- colMeans(covariates)
-  x_var <- cov(covariates)
-
-  ## posterior samples of subject-level alpha stacked row-wise
-  proposals <- do.call(cbind, proposals_list)
-
-  ## --------------------------------------------------------------------- ##
-  ## 1.  SLICE THE PROPOSAL VECTOR INTO NAMED BLOCKS                       ##
-  ##     (each row = one draw)                                             ##
-  ## --------------------------------------------------------------------- ##
-  pos          <- 0
-  grab <- function(len)
-  {
-    if (len == 0) return(NULL)
-    out <- proposals_group[ , (pos + 1):(pos + len), drop = FALSE]
-    pos <<- pos + len
-    out
-  }
-
-  theta_mu <- grab(n_pars)
-
-  v_lambda <- grab(sum(Lambda_mat == Inf))
-  v_B      <- grab(sum(B_mat     == Inf))
-  v_K      <- grab(sum(K_mat     == Inf))
-  v_G      <- grab(sum(G_mat     == Inf))
-
-  eps_log  <- grab(n_pars)           # log-precision for manifest residuals
-
-  ## delta-blocks: list indexed by factor-group id
-  delta_vec_list <- lapply(unique_fg, function(fg_id)
-  {
-    d  <- sum(factor_groups == fg_id)
-    len <- if (d > 1) d * (d + 1) / 2 else 1
-    grab(len)
-  })
-  names(delta_vec_list) <- as.character(unique_fg)
-
-  stopifnot(pos == ncol(proposals_group))  # sanity
-
-  n_iter <- nrow(proposals_group)
-  log_post_plus_jac <- numeric(n_iter)
-
-  ## --------------------------------------------------------------------- ##
-  ## 2.  MAIN LOOP OVER ITERATIONS                                         ##
-  ## --------------------------------------------------------------------- ##
-  for (i in seq_len(n_iter)) {
-
-    ## -------- 2a. Reconstruct free matrices (fallback = fixed) ----------
-    lambda_i <- if (!is.null(v_lambda))
-      unwind_lambda(v_lambda[i,], Lambda_mat, reverse = TRUE)
-    else Lambda_mat
-
-    B_i      <- if (!is.null(v_B))
-      unwind_lambda(v_B[i,], B_mat, reverse = TRUE)
-    else B_mat
-
-    K_i      <- if (!is.null(v_K))
-      unwind_lambda(v_K[i,], K_mat, reverse = TRUE)
-    else K_mat
-
-    G_i      <- if (!is.null(v_G))
-      unwind_lambda(v_G[i,], G_mat, reverse = TRUE)
-    else G_mat
-
-    ## manifest residual precisions
-    eps_prec_i <- exp( eps_log[i,] )          # size n_pars
-
-    ## -------- 2b. Factor-level precision matrix delta_inv -------------------
-    delta_inv_i <- matrix(0, n_factors, n_factors)
-    lp_delta    <- 0          # prior part
-    jac_delta   <- 0          # Jacobian part
-
-    for (fg_id in unique_fg) {
-
-      fg_idx <- which(factor_groups == fg_id)
-      d_blk  <- length(fg_idx)
-      v_blk  <- delta_vec_list[[as.character(fg_id)]][i, ]
-
-      if (d_blk > 1) {
-
-        ##   multivariate block - v_blk holds the *lower-triangular*
-        ##   elements (diag on log scale) of the precision Cholesky.
-        L_prec          <- unwind_chol(v_blk, reverse = TRUE)  # precision
-        delta_inv_i[fg_idx, fg_idx] <- L_prec
-
-        ##   prior on covariance (inverse-Wishart)  + Jacobian
-        cov_blk   <- solve(L_prec)
-        lp_delta  <- lp_delta +
-          log( robust_diwish(W = cov_blk,
-                             v = prior$a_d[fg_idx][1],
-                             S = diag(prior$b_d[fg_idx], d_blk)) )
-        jac_delta <- jac_delta +
-          calc_log_jac_chol(v_blk)
-
-      } else {  # d_blk == 1  (Gamma on precision)
-
-        log_prec   <- v_blk[1]
-        prec_val   <- exp(log_prec)
-        delta_inv_i[fg_idx, fg_idx] <- prec_val
-
-        lp_delta  <- lp_delta +
-          dgamma(prec_val,
-                 shape = prior$a_d[fg_idx],
-                 rate  = prior$b_d[fg_idx],
-                 log   = TRUE)
-        jac_delta <- jac_delta + log_prec
+bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, info) {
+  prior <- info$prior
+  p <- info$n_pars
+  q <- info$n_factors
+  settings <- info$sem_settings
+  factor_names <- colnames(settings$Lambda_mat)
+  if (is.null(factor_names)) factor_names <- if (q > 0) paste0("F", seq_len(q)) else character(0)
+  a_d <- normalise_factor_var_prior(prior$a_d, q, factor_names)
+  b_d <- normalise_factor_var_prior(prior$b_d, q, factor_names)
+  groups <- split(seq_len(q), factor(settings$factor_groups, levels = unique(settings$factor_groups)))
+  matrices <- settings[c("Lambda_mat", "B_mat", "K_mat", "G_mat")]
+  lambda_mean <- normalise_lambda_matrix_prior(prior$lambda_mean, p, q,
+    rownames(settings$Lambda_mat), factor_names)
+  lambda_var <- normalise_lambda_matrix_prior(prior$lambda_var, p, q,
+    rownames(settings$Lambda_mat), factor_names)
+  variances <- list(lambda_var,
+    matrix(prior$B_var, q, q, byrow = TRUE),
+    matrix(prior$K_var, p, ncol(settings$K_mat), byrow = TRUE),
+    matrix(prior$G_var, q, ncol(settings$G_mat), byrow = TRUE))
+  means <- list(lambda_mean, matrix(0, q, q),
+    matrix(0, p, ncol(settings$K_mat)), matrix(0, q, ncol(settings$G_mat)))
+  alpha <- do.call(cbind, proposals_list)
+  out <- numeric(nrow(proposals_group))
+  for (i in seq_along(out)) {
+    pos <- p
+    mu <- proposals_group[i,seq_len(p)]
+    lp <- sum(dnorm(mu, prior$theta_mu_mean, sqrt(prior$theta_mu_var), log = TRUE))
+    values <- matrices
+    for (j in seq_along(matrices)) {
+      free <- matrices[[j]] == Inf
+      k <- sum(free)
+      if (k > 0) {
+        value <- proposals_group[i,pos + seq_len(k)]
+        values[[j]][free] <- value
+        lp <- lp + sum(dnorm(value, means[[j]][free], sqrt(variances[[j]][free]), log = TRUE))
+      }
+      pos <- pos + k
+    }
+    log_eps <- proposals_group[i,pos + seq_len(p)]
+    eps <- exp(log_eps)
+    pos <- pos + p
+    lp <- lp + sum(dgamma(eps, prior$a_e, rate = prior$b_e, log = TRUE) + log_eps)
+    delta_inv <- matrix(0, q, q)
+    for (idx in groups) {
+      d <- length(idx)
+      k <- d * (d + 1) / 2
+      value <- proposals_group[i,pos + seq_len(k)]
+      pos <- pos + k
+      if (d == 1) {
+        delta_inv[idx,idx] <- exp(value)
+        lp <- lp + dgamma(exp(value), a_d[idx], rate = b_d[idx], log = TRUE) + value
+      } else {
+        precision <- unwind_chol(value, reverse = TRUE)
+        delta_inv[idx,idx] <- precision
+        lp <- lp + log(robust_diwish(solve(precision), a_d[idx[1]], diag(b_d[idx], d))) +
+          calc_log_jac_chol(value) - (d + 1) * as.numeric(determinant(precision, logarithm = TRUE)$modulus)
       }
     }
-
-    ## -------- 2c. Priors for other free blocks --------------------------
-    lp_theta_mu <- dmvnorm(theta_mu[i, ],
-                           mean   = prior$theta_mu_mean,
-                           sigma  = diag(prior$theta_mu_var),
-                           log    = TRUE)
-
-    lp_lambda <- if (!is.null(v_lambda))
-      dmvnorm(v_lambda[i, ],
-              mean  = lambda_mean_free,
-              sigma = diag(lambda_var_free, nrow = length(lambda_var_free)),
-              log = TRUE) else 0
-
-    lp_B <- if (!is.null(v_B))
-      dmvnorm(v_B[i, ],
-              mean  = rep(0, length(v_B[i, ])),
-              sigma = diag(rep(prior$B_var, length.out = length(v_B[i, ]))),
-              log   = TRUE) else 0
-
-    lp_K <- if (!is.null(v_K))
-      dmvnorm(v_K[i, ],
-              mean  = rep(0, length(v_K[i, ])),
-              sigma = diag(rep(prior$K_var, length.out = length(v_K[i, ]))),
-              log   = TRUE) else 0
-
-    lp_G <- if (!is.null(v_G))
-      dmvnorm(v_G[i, ],
-              mean  = rep(0, length(v_G[i, ])),
-              sigma = diag(rep(prior$G_var, length.out = length(v_G[i, ]))),
-              log   = TRUE) else 0
-
-    ## epsilon-prior + Jacobian on log scale
-    lp_eps <- sum( dgamma(eps_prec_i,
-                          shape = prior$a_e,
-                          rate  = prior$b_e,
-                          log   = TRUE) )
-    jac_eps <- sum(eps_log[i, ])
-
-    ## -------- 2d. Group-level log-likelihood ---------------------------
-    B0_inv   <- solve(diag(n_factors) - B_i)
-    pop_mean <- drop(theta_mu[i, ] +
-                       lambda_i %*% B0_inv %*% G_i %*% x_mu +
-                       K_i      %*%            x_mu)
-
-    pop_var  <- lambda_i %*% B0_inv %*%
-      (G_i %*% x_var %*% t(G_i) +
-         solve(delta_inv_i)) %*%
-      t(B0_inv) %*% t(lambda_i) +
-      K_i %*% x_var %*% t(K_i) +
-      diag(1 / eps_prec_i)
-
-    ##  subject-level rows  x  parameter columns
-    alpha_mat <- matrix(proposals[i, ],
-                        ncol = n_pars,
-                        byrow = TRUE)
-
-    ll_group <- sum( mvtnorm::dmvnorm(alpha_mat,
-                                      mean   = pop_mean,
-                                      sigma  = pop_var,
-                                      log    = TRUE) )
-
-    ## -------- 2e. Combine all pieces -----------------------------------
-    log_post_plus_jac[i] <- ll_group     +
-      lp_theta_mu  + lp_lambda + lp_B +
-      lp_K         + lp_G      +
-      lp_eps       +
-      lp_delta     +
-      jac_eps      + jac_delta
+    moments <- sem_moments(mu, values[[1]], values[[2]], values[[3]], values[[4]],
+      eps, delta_inv, settings$covariates, population = FALSE)
+    residual <- matrix(alpha[i,], ncol = p, byrow = TRUE) - t(moments$mu)
+    out[i] <- lp + sum(mvtnorm::dmvnorm(residual, sigma = moments$var, log = TRUE))
   }
-
-  return(log_post_plus_jac)
+  out
 }
 
 #' Define Structural Equation Model (SEM) Matrices

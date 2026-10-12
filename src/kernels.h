@@ -153,27 +153,6 @@ public:
     return last_row_end == row_end_requested;
   }
 
-  // const std::vector<double>& get_output() const { return out_; }
-
-  // void set_expand_idx(const std::vector<int>& idx) {
-  //   expand_idx_ = idx;
-  //   has_expand_idx_ = !expand_idx_.empty();
-  // }
-  // const std::vector<int>& expand_idx() const { return expand_idx_; }
-  // bool has_expand_idx() const { return has_expand_idx_; }
-
-  // // Expand compressed out_ (length n_comp) into full length using expand_idx
-  // void do_expand(const std::vector<int>& expand_idx) {
-  //   const int n_full = static_cast<int>(expand_idx.size());
-  //
-  //   out_.resize(n_full);  // keeps compressed data in [0..n_comp-1]
-  //
-  //   for (int i = n_full - 1; i >= 0; --i) {
-  //     int k = expand_idx[i] - 1;  // 1-based -> 0-based
-  //     out_[i] = out_[k];
-  //   }
-  // }
-
   // does this kernel have a stream for this code?
   virtual bool has_output_stream(int code) const {
     return (code == 1);  // default: only main trajectory
@@ -193,16 +172,6 @@ public:
     ko.n_cols = 1;
     return ko;
   }
-
-  // // single-stream getter, code=1 for main trajectory by default. code=2 for pes in delta, code=3 for xx in new kernels
-  // virtual Rcpp::NumericVector get_output_stream(int code) const {
-  //   using namespace Rcpp;
-  //   if (code != 1) {
-  //     stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
-  //   }
-  //   // out_ is already full-length at this point
-  //   return wrap(out_);  // copies to NumericVector
-  // }
 
   // Optional: name for each stream
   virtual std::string output_stream_name(int code) const {
@@ -1089,11 +1058,9 @@ struct DBMBaseKernel : BaseKernel {
 protected:
   std::vector<double> pred_mean_;
   std::vector<double> pred_mode_;
-  mutable std::vector<double> surprise_;          // computed lazily
+  std::vector<double> surprise_;
   std::vector<double> pred_logprecision_;
-  std::vector<double> comp_obs_;                  // compressed observations, stored during run()
-  mutable bool surprise_computed_ = false;
-  const int* belief_reset_ = nullptr;             //
+  const int* belief_reset_ = nullptr;
   std::vector<double> n_hit_history_;
   std::vector<double> n_trial_history_;
 
@@ -1106,20 +1073,33 @@ protected:
   double last_mode_ = 0.0;
   double last_lp_   = 0.0;
 
-  void store_obs(const double* cov_ptr, int n, const std::vector<uint8_t>& at_mask) {
-    comp_obs_.resize(n);
-    for (int r = 0; r < n; ++r)
-      comp_obs_[r] = at_mask[r] ? cov_ptr[r] : std::numeric_limits<double>::quiet_NaN();
+  void init_streams(int n) {
+    last_mean_ = last_mode_ = last_lp_ = 0.0;
+    pred_mean_.resize(n);
+    pred_mode_.resize(n);
+    pred_logprecision_.resize(n);
+    surprise_.assign(n, NA_REAL);
   }
 
-  void ensure_surprise() const {
-    if (surprise_computed_) return;
-    const int n = static_cast<int>(pred_mean_.size());
-    surprise_.resize(n, std::numeric_limits<double>::quiet_NaN());
-    for (int r = 0; r < n; ++r)
-      if (!is_nan(comp_obs_[r]))
-        surprise_[r] = shannon_surprise(pred_mean_[r], comp_obs_[r]);
-    surprise_computed_ = true;
+  // active row: new prediction; surprise defaults to NA until an observation arrives
+  void set_active(int r, double mean, double mode, double lp) {
+    last_mean_ = pred_mean_[r]         = mean;
+    last_mode_ = pred_mode_[r]         = mode;
+    last_lp_   = pred_logprecision_[r] = lp;
+    surprise_[r] = NA_REAL;
+  }
+
+  // inactive row: carry forward, no surprise
+  void set_inactive(int r) {
+    pred_mean_[r]         = last_mean_;
+    pred_mode_[r]         = last_mode_;
+    pred_logprecision_[r] = last_lp_;
+    surprise_[r]          = NA_REAL;
+  }
+
+  // call only on active rows with a valid observation
+  void set_surprise(int r, double obs) {
+    surprise_[r] = shannon_surprise(last_mean_, obs);
   }
 
 public:
@@ -1129,8 +1109,6 @@ public:
     pred_mode_.clear();
     surprise_.clear();
     pred_logprecision_.clear();
-    comp_obs_.clear();
-    surprise_computed_ = false;
     n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
     last_mean_ = last_mode_ = last_lp_ = 0.0;
     n_hit_history_.clear();
@@ -1153,7 +1131,6 @@ public:
   }
 
   KernelOutput get_output_stream(int code) const override {
-    if (code == 3) ensure_surprise();
     const std::vector<double>* src = nullptr;
     if      (code == 1) src = &pred_mean_;
     else if (code == 2) src = &pred_mode_;
@@ -1170,10 +1147,6 @@ public:
     if (code == 4) return "log-precision";
     throw std::runtime_error("DBMBaseKernel::output_stream_name: unsupported code");
   }
-
-protected:
-  // keep out_ in sync with pred_mean_ for BaseKernel::get_output_stream (code=1)
-  void sync_out_to_mean() { out_ = pred_mean_; }
 };
 
 // =============================================================================
@@ -1202,12 +1175,7 @@ struct BetaBinomialKernel : DBMBaseKernel {
 
              if (row_start == 0) {
                n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
-               last_mean_ = last_mode_ = last_lp_ = 0.0;
-               pred_mean_.resize(n);
-               pred_mode_.resize(n);
-               pred_logprecision_.resize(n);
-               comp_obs_.resize(n);
-               surprise_computed_ = false;
+               init_streams(n);
                n_hit_history_.assign(n, 0.0);
                n_trial_history_.assign(n, 0.0);
              }
@@ -1226,24 +1194,18 @@ struct BetaBinomialKernel : DBMBaseKernel {
                  }
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 last_mean_ = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode_ = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp_   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
+                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
                } else {
-                 pred_mean_[r]         = last_mean_;
-                 pred_mode_[r]         = last_mode_;
-                 pred_logprecision_[r] = last_lp_;
+                 set_inactive(r);
                }
 
                if(nm[r]) {
                  // not-nan mask controls update
+                 set_surprise(r, cov_ptr[r]);
                  n_hit_pending_   += cov_ptr[r];
                  n_trial_pending_ += 1.0;
-                 }
+               }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
              mark_run_complete(end);
            }
 };
@@ -1276,12 +1238,7 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 
              if (row_start == 0) {
                n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
-               last_mean_ = last_mode_ = last_lp_ = 0.0;
-               pred_mean_.resize(n);
-               pred_mode_.resize(n);
-               pred_logprecision_.resize(n);
-               comp_obs_.resize(n);
-               surprise_computed_ = false;
+               init_streams(n);
                n_hit_history_.assign(n, 0.0);
                n_trial_history_.assign(n, 0.0);
              }
@@ -1306,24 +1263,18 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
                  }
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 last_mean_ = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode_ = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp_   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
-               } else {
-                 pred_mean_[r]         = last_mean_;
-                 pred_mode_[r]         = last_mode_;
-                 pred_logprecision_[r] = last_lp_;
-               }
+                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
+              } else {
+                set_inactive(r);
+              }
 
                if(nm[r]) {
                  // trigger update
+                 set_surprise(r, cov_ptr[r]);
                  n_hit_pending_   += cov_ptr[r];
                  n_trial_pending_ += 1.0;
                }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
              mark_run_complete(end);
            }
 };
@@ -1376,13 +1327,8 @@ public:
 
              if (row_start == 0) {
                n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
-               last_mean_ = last_mode_ = last_lp_ = 0.0;
                buf_.clear(); buf_pending_.clear();
-               pred_mean_.resize(n);
-               pred_mode_.resize(n);
-               pred_logprecision_.resize(n);
-               comp_obs_.resize(n);
-               surprise_computed_ = false;
+               init_streams(n);
                n_hit_history_.assign(n, 0.0);
                n_trial_history_.assign(n, 0.0);
                buf_history_.assign(n, std::deque<Event>{});
@@ -1417,24 +1363,19 @@ public:
 
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 last_mean_ = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode_ = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp_   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
+                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
                } else {
-                 pred_mean_[r]         = last_mean_;
-                 pred_mode_[r]         = last_mode_;
-                 pred_logprecision_[r] = last_lp_;
+                 set_inactive(r);
                }
 
                if(nm[r]) {
                  buf_pending_.push_back({cov_ptr[r], r});
+                 set_surprise(r, cov_ptr[r]);
                  n_hit_pending_   += cov_ptr[r];
                  n_trial_pending_ += 1.0;
                }
              }
 
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
              mark_run_complete(end);
            }
 };
@@ -1449,10 +1390,55 @@ public:
 struct DBMKernel : DBMBaseKernel {
 private:
   int grid_res_ = 100;
+  int grid_built_for_ = -1;
   std::vector<double> DBM_post_;
   std::vector<double> DBM_post_pending_;
-  bool first_active_ = true;
   std::vector<std::vector<double>> post_history_;
+  bool first_active_ = true;  // have we started yet?
+  int first_trial_row_ = -1;
+
+
+  std::vector<double> prob_grid_, x_like_, y_like_;
+  // Scratch vectors to write in posterior probabilities across the grid
+  // Resized in ensure_grid();
+  // DBM_prior_ : cache of the normalised Beta(a, b) prior, keyed on (a, b); see ensure_prior()
+  std::vector<double> DBM_prior_, DBM_pred_;
+
+  std::vector<double> log_x_, log_1mx_;                 // grid-only log terms
+  double cached_a_ = std::numeric_limits<double>::quiet_NaN();
+  double cached_b_ = std::numeric_limits<double>::quiet_NaN();
+  bool   prior_valid_ = false;
+
+  // Build a grid once, and calculate the dbeta_values once per grid.
+  // log p0(\gamma_i) = (a-1)*log(\gamma_i) + (b-1)*log(1-\gamma_i) - [ln\Gamma(a) + ln\Gamma(b) - ln\Gamma(a+b)]
+  // log(\gamma_i) and log(1-\gamma_i) depend only on i - so only on the grid, not on a or b -- precompute them once rather than each row.
+  // [ln\Gamma(a) + ln\Gamma(b) - ln\Gamma(a+b)]  is constant across i, so it cancels in the normalisation. It can be removed entirely.
+  void ensure_grid() {
+    if (grid_built_for_ == grid_res_) return;
+    const int gs = grid_res_ + 1;
+    prob_grid_.resize(gs); x_like_.resize(gs); y_like_.resize(gs);
+    log_x_.assign(gs, 0.0); log_1mx_.assign(gs, 0.0);
+    DBM_prior_.resize(gs); DBM_pred_.resize(gs);
+    for (int i = 0; i < gs; ++i) {
+      prob_grid_[i] = static_cast<double>(i) / (gs - 1);
+      x_like_[i]    = prob_grid_[i];
+      y_like_[i]    = 1.0 - prob_grid_[i];
+    }
+    for (int i = 1; i < gs - 1; ++i) {                  // endpoints unused
+      log_x_[i]   = std::log(prob_grid_[i]);            // log(\gamma_i)
+      log_1mx_[i] = std::log1p(-prob_grid_[i]);         // log(1-\gamma_i)
+    }
+    prior_valid_    = false;                            // grid changed -> cached prior is stale
+    grid_built_for_ = grid_res_;
+  }
+
+  // DBM_prior_ is now a cache keyed on (a, b), not scratch space
+  void ensure_prior(double a, double b) {
+    if (prior_valid_ && a == cached_a_ && b == cached_b_) return;
+    beta_prior_grid(log_x_, log_1mx_, a, b, DBM_prior_);  // <- calculates the Beta prior across the grid with a and b. See kernels_math.h
+    cached_a_ = a; cached_b_ = b; prior_valid_ = true;    // keep this in a cache and only recalculate when the prior changes.
+  }
+
 
 public:
   void reset() override {
@@ -1460,21 +1446,20 @@ public:
     DBM_post_.clear();
     DBM_post_pending_.clear();
     first_active_ = true;
+    first_trial_row_ = -1;
     post_history_.clear();
   }
 
   void rewind(int row_start) override {
-    DBMBaseKernel::rewind(row_start);
-    DBM_post_         = post_history_[row_start];
-    DBM_post_pending_ = DBM_post_;
-    first_active_     = false;  // we've been here before
+    if (post_history_[row_start].empty())
+      Rcpp::stop("DBMKernel::rewind: row %d is not a trial start", row_start);
+    DBM_post_pending_ = post_history_[row_start];
+    first_active_ = (first_trial_row_ < 0) || (row_start <= first_trial_row_);
   }
 
   void set_kernel_args(const KernelArgs& args) override {
     DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
-    // if (args.is_first_level_comp != nullptr)
-    //   Rcpp::stop("DBMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,
@@ -1496,72 +1481,100 @@ public:
              const double* cov_ptr = covariate.colptr(0);
              const uint8_t* nm     = nan_mask.colptr(0);
 
+             // Grid is member of the kernel, no need to re-create it each run() call
+             ensure_grid();
              const int gs = grid_res_ + 1;
-             std::vector<double> prob_grid(gs), x_like(gs), y_like(gs);
-             for (int i = 0; i < gs; ++i) {
-               prob_grid[i] = static_cast<double>(i) / (gs - 1);
-               x_like[i]   = prob_grid[i];
-               y_like[i]   = 1.0 - prob_grid[i];
-             }
+             const std::vector<double>& prob_grid = prob_grid_;
+             const std::vector<double>& x_like    = x_like_;
+             const std::vector<double>& y_like    = y_like_;
+             std::vector<double>&       DBM_prior = DBM_prior_;
+             std::vector<double>&       DBM_pred  = DBM_pred_;
 
              if (row_start == 0) {
                DBM_post_.assign(gs, 0.0);
                DBM_post_pending_.assign(gs, 0.0);
                first_active_ = true;
-               last_mean_ = last_mode_ = last_lp_ = 0.0;
-               pred_mean_.resize(n);
-               pred_mode_.resize(n);
-               pred_logprecision_.resize(n);
-               comp_obs_.resize(n);
-               surprise_computed_ = false;
+               first_trial_row_ = -1;
+               init_streams(n);
                post_history_.assign(n, std::vector<double>{});
              }
+
              for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
+                 // at mask controls committing to stored value
+                 // Last trial's pending posterior is committed:
+                 // DBM_post_[i]  =  p(\gamma_{t-1} = \gamma_i | x_{1:t-1})
                  DBM_post_ = DBM_post_pending_;
-                 post_history_[r] = DBM_post_;  // store committed posterior
+                 post_history_[r] = DBM_post_;  // store committed posterior, to be able to rewind
 
+                 // Beta prior: p0 ~ Beta(a,b)
+                 // a = \mu0*s0, b = (1-\mu0)·s0
+                 // DBM_prior[i] = p0(\gamma_i), normalised so that \Sum_i p0_i = 1
                  const double cp  = cp_col[r];
                  const double mu0 = mu0_col[r];
                  const double s0  = s0_col[r];
                  const double a   = mu0 * s0;
                  const double b   = (1.0 - mu0) * s0;
+
+                 // Prior probability across grid values:
+                 // Prior p0(\gamma_i) = Beta(a, b) on the grid, normalised (cached on (a, b))
+                 ensure_prior(a, b);
+
                  const bool reset = first_active_ || (belief_reset_ && belief_reset_[r]);
-
-                 std::vector<double> DBM_prior(gs), DBM_pred(gs);
-                 for (int i = 0; i < gs; ++i) DBM_prior[i] = dbeta_val(prob_grid[i], a, b);
-                 normalise_inplace(DBM_prior);
-
-                 if (reset) {
+                 if(reset) {
+                   // No memory (first trial or belief reset): pred = p0, i.e. c = 1
                    DBM_pred = DBM_prior;
                  } else {
-                   for (int i = 0; i < gs; ++i) DBM_pred[i] = (1.0 - cp) * DBM_post_[i] + cp * DBM_prior[i];
-                   normalise_inplace(DBM_pred);
+                   //  --- TRANSITION -----------------------------------------------
+                   // The probability of gamma is a mixture: Either it's drawn from the prior (with probability c)
+                   // or it's the same as last (with probability 1-c):
+                   // p(\gamma_t | x_{1:t-1}) = (1-c)*p(\gamma_{t-1} | x_{1:t-1}) + c*p0(\gamma_t)
+                   // DBM_pred[i]             = (1-c)*DBM_post_[i]                + c*DBM_prior[i]
+                   for(int i = 0; i < gs; ++i) DBM_pred[i] = (1.0 - cp) * DBM_post_[i] + cp * DBM_prior[i];
+                   normalise_inplace(DBM_pred);  // ensure integration to one
                  }
 
-                 last_mean_ = pred_mean_[r]         = mean_discrete(prob_grid, DBM_pred);
-                 last_mode_ = pred_mode_[r]         = mode_discrete(prob_grid, DBM_pred);
-                 last_lp_   = pred_logprecision_[r] = log_precision_discrete(prob_grid, DBM_pred);
+                 // --- PREDICTION -----------------------------------------------
+                 // Summaries of p(\gamma_t | x_{1:t-1}):
+                 //   mean = \Sum_i \gamma_i*w_i  = P(x_t = 1 | x_{1:t-1})   (the prediction)
+                 //   mode = \gamma_i at the largest w_i
+                 //   log-precision = -log Var(\gamma_t),  Var = \Sum_i (\gamma_i - mean)**2 * w_i
+                 set_active(r, mean_discrete(prob_grid, DBM_pred),
+                            mode_discrete(prob_grid, DBM_pred),
+                            log_precision_discrete(prob_grid, DBM_pred));
 
-                 // compute pending posterior
-                 if (!nm[r]) {
-                   DBM_post_pending_ = DBM_pred;
-                 } else {
-                   const double x = cov_ptr[r];
-                   const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
-                   for (int i = 0; i < gs; ++i) DBM_post_pending_[i] = DBM_pred[i] * like[i];
-                   normalise_inplace(DBM_post_pending_);
-                 }
+                 // Carry forward current predictions until next observation nm
+                 DBM_post_pending_ = DBM_pred;
 
+                 // We've started
+                 if(first_active_) first_trial_row_ = r;
                  first_active_ = false;
                } else {
-                 pred_mean_[r]         = last_mean_;
-                 pred_mode_[r]         = last_mode_;
-                 pred_logprecision_[r] = last_lp_;
+                 set_inactive(r);  // carry forward current beliefs
+               }
+
+               // ========================================================================
+               // OBSERVATION (nm): first non-NaN value of the trial, on any row
+               // ========================================================================
+               if(nm[r]) {
+                 // --- SURPRISE ---------------------------------------------------------
+                 //     S_t = -log2 P(x_t | x_{1:t-1})
+                 //         = -log2(\hat{p}_t)      if x = 1
+                 //         = -log2(1 - \hat{p}_t)  if x = 0, with \hat{p}_t = last_mean_
+                 const double x = cov_ptr[r];
+                 set_surprise(r, x);
+
+                 // --- BAYESIAN UPDATE ------------------------------------------
+                 //     p(\gamma_t | x_{1:t}) \prop \gamma^x (1-\gamma)^(1-x) * p(\gamma_t | x_{1:t-1})
+                 //     like[i] = \gamma_i      if x = 1   (x_like)
+                 //             = 1 - \gamma_i  if x = 0   (y_like)
+                 //     DBM_post_pending_ currently holds DBM_pred, so multiply in place
+                 //     and renormalise (the division by P(x_t | x_{1:t-1})).
+                 const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
+                 for (int i = 0; i < gs; ++i) DBM_post_pending_[i] *= like[i];
+                 normalise_inplace(DBM_post_pending_);
                }
              }
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
              mark_run_complete(end);
            }
 };
@@ -1647,8 +1660,6 @@ public:
   void set_kernel_args(const KernelArgs& args) override {
     DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
-    // if (args.is_first_level_comp != nullptr)
-    //   Rcpp::stop("TPMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,
@@ -1679,12 +1690,7 @@ public:
                TPM_post_pending_.assign(nc, 0.0);
                first_active_  = true;
                prev_active_r_ = -1;
-               last_mean_ = last_mode_ = last_lp_ = 0.0;
-               pred_mean_.resize(n);
-               pred_mode_.resize(n);
-               pred_logprecision_.resize(n);
-               comp_obs_.resize(n);
-               surprise_computed_ = false;
+               init_streams(n);
                post_history_.assign(n, std::vector<double>{});
                prev_active_r_history_.assign(n, -1);
              }
@@ -1713,15 +1719,17 @@ public:
                  }
                  normalise_inplace(TPM_pred);
 
-                 if(prev_na || reset) {
-                   last_mean_ = pred_mean_[r]         = mean_discrete(grid.mean_p, TPM_pred);
-                   last_mode_ = pred_mode_[r]         = mode_discrete(grid.mean_p, TPM_pred);
-                   last_lp_   = pred_logprecision_[r] = log_precision_discrete(grid.mean_p, TPM_pred);
+                 if (prev_na || reset) {
+                   set_active(r, mean_discrete(grid.mean_p, TPM_pred),
+                              mode_discrete(grid.mean_p, TPM_pred),
+                              log_precision_discrete(grid.mean_p, TPM_pred));
                  } else {
-                   last_mean_ = pred_mean_[r]         = prev == 1 ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
-                   last_mode_ = pred_mode_[r]         = prev == 1 ? mode_discrete(grid.p_XX, TPM_pred) : mode_discrete(grid.p_XY, TPM_pred);
-                   last_lp_   = pred_logprecision_[r] = prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred) : log_precision_discrete(grid.p_XY, TPM_pred);
+                   const std::vector<double>& g = (prev == 1) ? grid.p_XX : grid.p_XY;
+                   set_active(r, mean_discrete(g, TPM_pred),
+                              mode_discrete(g, TPM_pred),
+                              log_precision_discrete(g, TPM_pred));
                  }
+                 if (!curr_na) set_surprise(r, x);
 
                  // compute pending posterior
                  if (curr_na || prev_na || reset) {
@@ -1736,14 +1744,9 @@ public:
                  first_active_  = false;
                  prev_active_r_ = r;
                } else {
-                 pred_mean_[r]         = last_mean_;
-                 pred_mode_[r]         = last_mode_;
-                 pred_logprecision_[r] = last_lp_;
+                 set_inactive(r);
                }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
              mark_run_complete(end);
            }
 };
