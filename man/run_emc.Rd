@@ -68,7 +68,6 @@ group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure).}
 
 \item{.context}{Internal compiled likelihood cache.}
-
 }
 \value{
 An emc object

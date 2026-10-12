@@ -18,6 +18,7 @@
 #include "model_CDM.h"
 // for extract_y -- should be moved elsewhere
 #include "model_MRI.h"
+#include "model_multinomial.h"
 
 // RaceSetup last — references functions defined in model headers above
 #include "RaceSetup.h"
