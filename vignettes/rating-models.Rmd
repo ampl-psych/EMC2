@@ -437,6 +437,41 @@ emc_lba <- make_emc(dat_lba, design_lba, prior_list = prior_lba, type = "single"
 emc_lba <- fit(emc_lba, cores_for_chains = 3)
 ```
 
+The thresholds above are *additive*: `b = A + B`, with `A` and `B` on their
+own scales. The source paper parameterized the same model by *proportions*
+(`parameterization = "proportional"`): `B` is the choice threshold `b`
+itself, `c1` sets the highest confidence threshold as a probit proportion of
+`b`, `A` the start-point range as a proportion of that threshold, and each
+further criterion a lower threshold as a proportion of the one above it (a
+free lowest threshold as a proportion of `T_2` alone). The start point and
+every confidence threshold then scale with `b`. With a speed-accuracy factor
+`SA`, for example, `B ~ SA * lR` lets the choice thresholds differ between
+conditions while the confidence thresholds and `A` stay the same proportions
+of them, an assumption the additive parameterization cannot express:
+
+```{r}
+design_prop <- design(
+  factors = list(subjects = 1, S = c("new", "old"), SA = c("speed", "accuracy")),
+  Rlevels = c("new", "old"),
+  matchfun = function(d) d$S == d$lR,
+  formula = list(v ~ lM, B ~ SA * lR, A ~ 1, t0 ~ 1, rho ~ 1, c1 ~ lR, c2 ~ lR),
+  model = function() MTLBA(n_ratings = 3, parameterization = "proportional")
+)
+p_prop <- c(v = 1, v_lMTRUE = 1.5, B = log(1.2), B_SAaccuracy = .3, B_lRold = .1,
+            "B_SAaccuracy:lRold" = 0, A = qnorm(.6), t0 = log(.25),
+            rho = qnorm((1 - .6) / 2), c1 = qnorm(.7), c1_lRold = .2,
+            c2 = qnorm(.3), c2_lRold = .1)
+mp <- mapped_pars(design_prop, p_prop)
+unique(mp[, c("SA", "lR", "A", "b", "d1", "d2")])
+```
+
+`A` here is the natural start-point range, which differs between
+accumulators and conditions although `A ~ 1`; the reported proportions `d1`
+and `d2` (as for the additive model, of `b - A` above `A`) are the same in
+both conditions. The likelihood is the additive model's at the translated
+values, and `?MTLBA` gives the correspondence with the source paper's
+parameters.
+
 The correlated likelihood is a one-dimensional integral over the winning
 accumulator's drift rate, evaluated in compiled code by Gauss-Legendre
 quadrature, so a correlated MTLBA is slower than an uncorrelated one by

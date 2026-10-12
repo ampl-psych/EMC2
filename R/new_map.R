@@ -214,6 +214,9 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
 
   fml_names <- names(fmls)
   par_names <- dimnames(pars)[[3]]
+  # p_types whose column Ttransform replaces by a recalculated quantity (e.g. MTLBA's
+  # proportional A): mapped over the cells they vary in, like recalculated parameters
+  recalc_p_types <- design$model()$recalculated_p_types
 
   # Some map wrangling
   if(!is.logical(map)){ # Not just a simple boolean
@@ -270,7 +273,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
       # First case, map = TRUE
       if(isTRUE(map[i]) || is.character(map[[i]])){
         if(isTRUE(map[i])){
-          if(par_names[i] %in% fml_names){
+          if(par_names[i] %in% fml_names && !(par_names[i] %in% recalc_p_types)){
             vars <- all.vars(fmls[[par_names[i]]])
           } else{ # recalculated parameter: the design factors it varies over
             vars <- recalculated_vars(cur_pars, df[idx,, drop = FALSE],

@@ -11,7 +11,8 @@ MTLBA(
   guess = "accumulator",
   gb_constraint = "none",
   drifts = "any",
-  lowest_threshold = "auto"
+  lowest_threshold = "auto",
+  parameterization = "additive"
 )
 }
 \arguments{
@@ -39,6 +40,11 @@ drifts truncated to be positive). See Details.}
 \code{"above_A"} under \code{rule = "TC"}), \code{"free"} (the lowest confidence
 threshold may lie below \code{A}; balance of evidence only) or \code{"above_A"}.
 See Details.}
+
+\item{parameterization}{\code{"additive"} (the default: \code{b = A + B}, the
+confidence thresholds proportions of \code{B} above \code{A}) or \code{"proportional"}
+(the source paper's: \code{B} is \code{b}, and \code{A} and the confidence thresholds are
+nested proportions of \code{b}). See Details.}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample.
@@ -99,6 +105,41 @@ divided by \code{P(both > 0)}; with \code{rho = 0} this is the \code{\link[=LBA]
 for each accumulator. With \code{lowest_threshold = "free"} the band below
 \code{A} uses the positive-drift probabilities.
 }
+
+Parameterization (\code{parameterization}): the table above is \code{"additive"}
+(the default), with \code{b = A + B} and \code{A} absolute. \code{"proportional"} is the
+parameterization of the model's source paper and its DMC code, in which
+the start-point range and every confidence threshold are proportions, so
+they scale with \code{b}. The parameter names are the same; their meaning,
+transforms and defaults change:\tabular{lllll}{
+   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Interpretation} \cr
+   \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab The choice threshold \code{b} itself \cr
+   \emph{c1} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab Highest confidence threshold \verb{T_\{K-1\}} as a proportion of \code{b} \cr
+   \emph{A} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab Maximum start point as a proportion of \verb{T_\{K-1\}} (of \code{b} when \code{n_ratings = 1}) \cr
+   \emph{ck} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab Threshold \verb{T_\{K-k\}} as a proportion of the one above it \cr
+}
+
+
+Below the highest one, each confidence threshold lies between \code{A} and the
+threshold above it, \verb{T_\{K-k\} = A + (T_\{K-k+1\} - A) * ck}, except a free
+lowest threshold, which is a proportion of \code{T_2} alone,
+\verb{T_1 = T_2 * c_\{K-1\}}, and so may lie below \code{A} (the source paper's model;
+with \code{n_ratings = 2} the one confidence threshold is the highest, above
+\code{A}, and \code{lowest_threshold} makes no difference). Every other parameter,
+\code{gB} included, keeps its meaning. A formula such as \code{B ~ SA * lR} with
+\verb{A ~ 1, c1 ~ lR, c2 ~ lR} therefore keeps the start-point range and the
+confidence thresholds at the same proportions of \code{b} across the levels of
+\code{SA}, and \code{A ~ 1} gives a different start-point range to each accumulator
+whenever \code{b} or \code{c1} differ between them. The likelihood is that of the
+additive model at the corresponding values (the translation is exact).
+Mapped parameters (\code{\link[=mapped_pars]{mapped_pars()}}, \code{map = TRUE} in \code{\link[=get_pars]{get_pars()}} and the
+plots) report \code{A} as the natural start-point range, over the design cells
+it varies in (e.g. \code{A_lRnew} and \code{A_lRold}), \code{B} as \code{b}, and with
+\code{add_recalculated = TRUE} also \code{b} and the proportions \verb{d1 .. d\{K-1\}} of
+\code{b - A} above \code{A} (as under \code{"additive"}). The source paper's sampled
+parameters map one to one: \code{B = log(b)}, \code{c1 = zd2}, \code{c2 = zd1},
+\code{A = zA}, \code{gB = -zfb}, \code{gp = zf} and \code{rho = zcorr} (with equal \code{sd_v} for
+the two accumulators).
 
 \code{lowest_threshold}: \code{"above_A"} keeps every confidence threshold above \code{A},
 \code{"free"} lets the lowest one lie below \code{A} as described above, and
@@ -195,6 +236,8 @@ MTLBA3 <- function() MTLBA(n_ratings = 3)
 # the same with both drifts positive and every threshold above A
 MTLBA3p <- function() MTLBA(n_ratings = 3, drifts = "positive",
                             lowest_threshold = "above_A")
+# the source paper's proportional parameterization
+MTLBA3prop <- function() MTLBA(n_ratings = 3, parameterization = "proportional")
 # two ratings plus don't know, threshold count
 MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
 # confidence guessing, more often on one accumulator than on the other

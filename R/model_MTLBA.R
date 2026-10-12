@@ -21,6 +21,15 @@
 # lowest threshold is T_1 = T_2 exp(-c_{K-1}), anywhere in (0, T_2), so d_1
 # may be negative (T_1 below A). The band functions take any threshold.
 #
+# Parameterization (parameterization = "additive" | "proportional"): the above
+# is "additive" (b = A + B, A absolute). "proportional" is the source paper's
+# nesting: B holds b itself, T_{K-1} = b c1, A = T_{K-1} A (K = 1: A = b A) and
+# each lower threshold a proportion of the one above, T_j = A + (T_{j+1} - A)
+# c_{K-j}, or T_1 = T_2 c_{K-1} when the lowest threshold is free (c's and A
+# proportions in (0, 1)). Ttransform translates such rows exactly into the
+# additive model's natural columns (mtlba_proportional; the compiled twin in
+# src/model_mtlba.h), so everything below sees only the additive model.
+#
 # Every response is one KERNEL: the density that the STOPPING accumulator s
 # reaches its threshold T_{s,j} at decision time dt = rt - t0 while the OTHER
 # accumulator's evidence e_o = start + drift * dt lies in its band
@@ -582,6 +591,35 @@ mtlba_thresholds <- function(pars, K) {
   if (K > 1) out[, 2:K] <- A + (b - A) * pars[, rating_threshold_names(K), drop = FALSE]
   out[, K + 1] <- b
   out
+}
+
+# Proportional parameterization -> natural additive columns, row-wise: pars
+# holds B = b, A and c1 .. c{K-1} as proportions (after their transforms);
+# returns pars with A the natural start-point range, b and the threshold
+# proportions d1 .. d{K-1} of B above A (column B, the criteria and everything
+# else unchanged). free: the lowest threshold nests on T_2 alone (K > 2; with
+# K = 2 the one threshold is T_1 = b c1, above A).
+mtlba_proportional <- function(pars, K, free) {
+  ok <- attr(pars, "ok")
+  b <- pars[, "B"]
+  if (K == 1) {
+    A <- b * pars[, "A"]
+    d <- NULL
+  } else {
+    P <- pars[, rating_criterion_names(K), drop = FALSE]
+    Ttop <- b * P[, 1]
+    A <- Ttop * pars[, "A"]
+    d <- matrix(0, nrow(pars), K - 1, dimnames = list(NULL, rating_threshold_names(K)))
+    d[, K - 1] <- (Ttop - A) / (b - A)
+    if (K > 2) for (j in (K - 2):1) {
+      p <- P[, K - j]
+      d[, j] <- if (j == 1 && free) ((A + (b - A) * d[, 2]) * p - A) / (b - A) else d[, j + 1] * p
+    }
+  }
+  pars[, "A"] <- A
+  pars <- cbind(pars[, !(colnames(pars) %in% c("b", colnames(d))), drop = FALSE], b = b, d)
+  if (!is.null(ok)) attr(pars, "ok") <- ok
+  pars
 }
 
 # log kernel per trial for explicit thresholds: accumulator s (1/2) reaches bs
@@ -1370,6 +1408,41 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'   for each accumulator. With `lowest_threshold = "free"` the band below
 #'   `A` uses the positive-drift probabilities.
 #'
+#' Parameterization (`parameterization`): the table above is `"additive"`
+#' (the default), with `b = A + B` and `A` absolute. `"proportional"` is the
+#' parameterization of the model's source paper and its DMC code, in which
+#' the start-point range and every confidence threshold are proportions, so
+#' they scale with `b`. The parameter names are the same; their meaning,
+#' transforms and defaults change:
+#'
+#' | **Parameter** | **Transform** | **Natural scale** | **Default** | **Interpretation** |
+#' |---------------|---------------|-------------------|-------------|--------------------|
+#' | *B*   | log    | \[0, Inf\] | log(1)     | The choice threshold `b` itself |
+#' | *c1*  | probit | \[0, 1\]   | qnorm(0.5) | Highest confidence threshold `T_{K-1}` as a proportion of `b` |
+#' | *A*   | probit | \[0, 1\]   | qnorm(0.5) | Maximum start point as a proportion of `T_{K-1}` (of `b` when `n_ratings = 1`) |
+#' | *ck*  | probit | \[0, 1\]   | qnorm(0.5) | Threshold `T_{K-k}` as a proportion of the one above it |
+#'
+#' Below the highest one, each confidence threshold lies between `A` and the
+#' threshold above it, `T_{K-k} = A + (T_{K-k+1} - A) * ck`, except a free
+#' lowest threshold, which is a proportion of `T_2` alone,
+#' `T_1 = T_2 * c_{K-1}`, and so may lie below `A` (the source paper's model;
+#' with `n_ratings = 2` the one confidence threshold is the highest, above
+#' `A`, and `lowest_threshold` makes no difference). Every other parameter,
+#' `gB` included, keeps its meaning. A formula such as `B ~ SA * lR` with
+#' `A ~ 1, c1 ~ lR, c2 ~ lR` therefore keeps the start-point range and the
+#' confidence thresholds at the same proportions of `b` across the levels of
+#' `SA`, and `A ~ 1` gives a different start-point range to each accumulator
+#' whenever `b` or `c1` differ between them. The likelihood is that of the
+#' additive model at the corresponding values (the translation is exact).
+#' Mapped parameters ([mapped_pars()], `map = TRUE` in [get_pars()] and the
+#' plots) report `A` as the natural start-point range, over the design cells
+#' it varies in (e.g. `A_lRnew` and `A_lRold`), `B` as `b`, and with
+#' `add_recalculated = TRUE` also `b` and the proportions `d1 .. d{K-1}` of
+#' `b - A` above `A` (as under `"additive"`). The source paper's sampled
+#' parameters map one to one: `B = log(b)`, `c1 = zd2`, `c2 = zd1`,
+#' `A = zA`, `gB = -zfb`, `gp = zf` and `rho = zcorr` (with equal `sd_v` for
+#' the two accumulators).
+#'
 #' `lowest_threshold`: `"above_A"` keeps every confidence threshold above `A`,
 #' `"free"` lets the lowest one lie below `A` as described above, and
 #' `"auto"` (the default) resolves to `"free"` under `rule = "BE"` and to
@@ -1473,6 +1546,10 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'   `"above_A"` under `rule = "TC"`), `"free"` (the lowest confidence
 #'   threshold may lie below `A`; balance of evidence only) or `"above_A"`.
 #'   See Details.
+#' @param parameterization `"additive"` (the default: `b = A + B`, the
+#'   confidence thresholds proportions of `B` above `A`) or `"proportional"`
+#'   (the source paper's: `B` is `b`, and `A` and the confidence thresholds are
+#'   nested proportions of `b`). See Details.
 #' @return A model list with all the necessary functions for EMC2 to sample.
 #' @examples
 #' # three ratings, balance of evidence (the source paper's model)
@@ -1480,6 +1557,8 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #' # the same with both drifts positive and every threshold above A
 #' MTLBA3p <- function() MTLBA(n_ratings = 3, drifts = "positive",
 #'                             lowest_threshold = "above_A")
+#' # the source paper's proportional parameterization
+#' MTLBA3prop <- function() MTLBA(n_ratings = 3, parameterization = "proportional")
 #' # two ratings plus don't know, threshold count
 #' MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
 #' # confidence guessing, more often on one accumulator than on the other
@@ -1490,7 +1569,8 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'                       gp ~ lR, gB ~ 1, pg1 ~ 1, pg2 ~ 1))
 #' @export
 MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator",
-                  gb_constraint = "none", drifts = "any", lowest_threshold = "auto") {
+                  gb_constraint = "none", drifts = "any", lowest_threshold = "auto",
+                  parameterization = "additive") {
   K <- rating_check_n(n_ratings)
   rating_check_dont_know(K, dont_know)
   rule <- match.arg(rule, c("BE", "TC"))
@@ -1503,15 +1583,19 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
     stop("MTLBA: lowest_threshold = \"free\" needs rule = \"BE\": under threshold counting a ",
          "threshold below the start point would be crossed at time zero (use \"above_A\" or \"auto\")")
   free <- lowest_threshold == "free" && K > 1
+  parameterization <- match.arg(parameterization, c("additive", "proportional"))
+  prop <- parameterization == "proportional"
+  crit <- rating_criterion_names(K)
   pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
-  list(
+  model <- list(
     type = "RACE",
     c_name = "MTLBA",
     # read by the C++ likelihood through attr(dadm, "c_options")
     c_options = c(n_ratings = K, dont_know = as.numeric(dont_know), TC = as.numeric(rule == "TC"),
                   guess_trial = as.numeric(guess == "trial"),
                   gb_constraint = match(gb_constraint, c("none", "own", "max")) - 1,
-                  drifts_any = as.numeric(drifts == "any"), free_lowest = as.numeric(free)),
+                  drifts_any = as.numeric(drifts == "any"), free_lowest = as.numeric(free),
+                  proportional = as.numeric(prop)),
     n_ratings = K,
     dont_know = dont_know,
     rule = rule,
@@ -1519,28 +1603,38 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
     gb_constraint = gb_constraint,
     drifts = drifts,
     lowest_threshold = lowest_threshold,
+    parameterization = parameterization,
     extra_responses = "RR",
     # guessing is off by default: gp = 0, with gB = .5 and the lowest rating guessed
-    p_types = c("v" = 1, "sv" = log(1), "B" = log(1), "A" = log(0), "t0" = log(0), "rho" = 0,
-                rating_p_types(K), "gp" = stats::qnorm(0), "gB" = stats::qnorm(0.5),
+    # proportional: A and the criteria are proportions (default .5), B = log b
+    p_types = c("v" = 1, "sv" = log(1), "B" = log(1), "A" = if (prop) stats::qnorm(0.5) else log(0),
+                "t0" = log(0), "rho" = 0,
+                if (prop) stats::setNames(rep(stats::qnorm(0.5), length(crit)), crit) else rating_p_types(K),
+                "gp" = stats::qnorm(0), "gB" = stats::qnorm(0.5),
                 stats::setNames(stats::qnorm(as.numeric(seq_along(pg) == 1)), pg)),
-    transform = list(func = c(v = "identity", sv = "exp", B = "exp", A = "exp", t0 = "exp",
-                              rho = "pnorm", rating_transform(K), gp = "pnorm", gB = "pnorm",
-                              stats::setNames(rep("pnorm", length(pg)), pg)),
+    transform = list(func = c(v = "identity", sv = "exp", B = "exp", A = if (prop) "pnorm" else "exp",
+                              t0 = "exp", rho = "pnorm",
+                              if (prop) stats::setNames(rep("pnorm", length(crit)), crit) else rating_transform(K),
+                              gp = "pnorm", gB = "pnorm", stats::setNames(rep("pnorm", length(pg)), pg)),
                      lower = c(rho = -1), upper = c(rho = 1)),
-    bound = list(minmax = cbind(v = c(-Inf, Inf), sv = c(0, Inf), A = c(1e-4, Inf),
+    # (bounds are also checked after Ttransform when simulating, where a proportional
+    # model's A column is the natural start-point range: hence (0, Inf) there)
+    bound = list(minmax = cbind(v = c(-Inf, Inf), sv = c(0, Inf), A = c(if (prop) 0 else 1e-4, Inf),
                                 B = c(0, Inf), t0 = c(0.05, Inf), rho = c(-1, 1),
-                                rating_bound(K)),
+                                if (prop) matrix(rep(c(0, 1), length(crit)), 2, dimnames = list(NULL, crit)) else
+                                  rating_bound(K)),
                  exception = c(A = 0)),
     Ttransform = function(pars, dadm) {
       ok <- attr(pars, "ok")
-      pars <- cbind(pars[, colnames(pars) != "b", drop = FALSE], b = pars[, "B"] + pars[, "A"])
-      pars <- rating_add_thresholds(pars, K)
-      # a free lowest threshold: T_1 = T_2 exp(-c_{K-1}), as a proportion of B above A
-      if (free) {
-        A <- pars[, "A"]; b <- pars[, "b"]
-        T2 <- if (K > 2) A + (b - A) * pars[, "d2"] else b
-        pars[, "d1"] <- (T2 * exp(-pars[, paste0("c", K - 1)]) - A) / (b - A)
+      if (prop) pars <- mtlba_proportional(pars, K, free) else {
+        pars <- cbind(pars[, colnames(pars) != "b", drop = FALSE], b = pars[, "B"] + pars[, "A"])
+        pars <- rating_add_thresholds(pars, K)
+        # a free lowest threshold: T_1 = T_2 exp(-c_{K-1}), as a proportion of B above A
+        if (free) {
+          A <- pars[, "A"]; b <- pars[, "b"]
+          T2 <- if (K > 2) A + (b - A) * pars[, "d2"] else b
+          pars[, "d1"] <- (T2 * exp(-pars[, paste0("c", K - 1)]) - A) / (b - A)
+        }
       }
       # the guess threshold as a proportion of B above A, after gb_constraint
       # (rows come two per trial; anything else, e.g. a one-row summary, takes its own gp)
@@ -1562,4 +1656,8 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
       log_likelihood_mtlba(pars, dadm, K, rule, dont_know, min_ll = min_ll, guess = guess,
                            gb_constraint = gb_constraint, drifts = drifts)
   )
+  # the natural start-point range replaces the proportion A: map = TRUE reports it
+  # over the cells it varies in (it scales with b and c1), not A's formula's
+  if (prop) model$recalculated_p_types <- "A"
+  model
 }

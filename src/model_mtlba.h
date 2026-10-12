@@ -25,6 +25,15 @@
 // P(both > 0). A free lowest threshold (c_options free_lowest, balance of
 // evidence only) is T_1 = T_2 exp(-c_{K-1}), possibly below A.
 //
+// Proportional parameterisation (c_options proportional = 1; absent: 0, the
+// additive model above): the columns B, A and c1 .. c{K-1} hold b itself and
+// proportions in (0, 1), T_{K-1} = b c1, A = T_{K-1} A (K = 1: A = b A), each
+// lower threshold nested on the one above, T_j = A + (T_{j+1} - A) c_{K-j}, or
+// T_1 = T_2 c_{K-1} when the lowest threshold is free. mtlba_trial_ll
+// translates these rows exactly into the additive columns (natural A,
+// B = b - A, criteria) before anything else reads them (mtlba_proportional),
+// so the kernel below only ever sees the additive model.
+//
 // The band is formed on the log scale: under "positive" with the sentinels
 // H(lowest) = Phi(-v/sv), S(lowest) = Phi(v/sv),
 // band * Phi(v/sv) = S(lo) - S(hi) = H(hi) - H(lo) (a threshold below A takes
@@ -88,6 +97,7 @@ struct MTLBASpec {
   int  gb_constraint = 0;      // guess threshold moves to b with gp: 0 none, 1 own gp, 2 max gp
   bool any         = false;    // drifts "any" (not both negative) rather than "positive"
   bool free_lowest = false;    // lowest threshold T_1 = T_2 exp(-c_{K-1}) (may be below A)
+  bool proportional = false;   // B, A, c columns are b and proportions (translated per call)
   std::vector<int>    col_c;   // c1 .. c{K-1}
   std::vector<int>    col_pg;  // pg1 .. pg{K-1}
   std::vector<double> rt;      // per trial
@@ -156,6 +166,7 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     if (on[i] == "gb_constraint") s.gb_constraint = (int)o[i];
     if (on[i] == "drifts_any") s.any = o[i] != 0;          // absent (older models): "positive"
     if (on[i] == "free_lowest") s.free_lowest = o[i] != 0;
+    if (on[i] == "proportional") s.proportional = o[i] != 0;   // absent (older models): additive
   }
   if (s.free_lowest && s.TC)
     Rcpp::stop("MTLBA: a free lowest threshold needs the balance-of-evidence rule");
@@ -1051,6 +1062,35 @@ struct MTLBAStopCache {
   }
 };
 
+// Proportional rows -> the additive model's columns, exactly (no root
+// finding): with b = B, top threshold T = b c1 and A = T A (K = 1: A = b A),
+// natural A, B = b - A, c1 = -log((T - A) / (b - A)) (K = 2 with a free lowest
+// threshold: T_1 = b exp(-c1), so c1 = -log(c1_prop)) and c_k = -log(c_k_prop)
+// for k >= 2 (T_j - A = (T_{j+1} - A) c_k above A; the free form
+// T_1 = T_2 exp(-c_{K-1}) below it: the same identity). Proportions in (0, 1)
+// give A < T < b; values out of bounds are voided by the caller.
+inline void mtlba_proportional(MTLBACols& p, int K, int n, std::vector<double>& A,
+                               std::vector<double>& B, std::vector<std::vector<double>>& c)
+{
+  A.resize(n); B.resize(n);
+  c.assign(K > 1 ? K - 1 : 0, std::vector<double>(n));
+  for (int r = 0; r < n; ++r) {
+    const double b = p.B[r];
+    if (K == 1) {
+      A[r] = b * p.A[r];
+    } else {
+      const double T = b * p.c[0][r];
+      A[r] = T * p.A[r];
+      c[0][r] = (K == 2 && p.free_lowest) ? -std::log(p.c[0][r]) : -std::log((T - A[r]) / (b - A[r]));
+      for (int k = 1; k < K - 1; ++k) c[k][r] = -std::log(p.c[k][r]);
+    }
+    B[r] = b - A[r];
+  }
+  p.A = A.data();
+  p.B = B.data();
+  for (int k = 0; k < K - 1; ++k) p.c[k] = c[k].data();
+}
+
 // Return codes of mtlba_trial_ll (the caller stops, outside any parallel region).
 enum { MTLBA_OK = 0, MTLBA_T0 = 2 };
 inline const char* mtlba_error_message(int code)
@@ -1063,9 +1103,10 @@ inline const char* mtlba_error_message(int code)
 // Observed trials: the response density (kernel, with guessing a mixture of
 // kernels); censored trials: the probability of stopping in the censored
 // window(s); truncated trials: minus log P(LT < rt < UT). rho is read from
-// accumulator 1's row (a trial-level parameter). Returns MTLBA_T0 if a censored
-// or truncated trial has unequal t0 (the caller stops, outside any parallel
-// region).
+// accumulator 1's row (a trial-level parameter). Proportional rows are first
+// translated into the additive columns (mtlba_proportional). Returns MTLBA_T0
+// if a censored or truncated trial has unequal t0 (the caller stops, outside
+// any parallel region).
 inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_ll,
                           double* __restrict__ ll_buf)
 {
@@ -1086,6 +1127,10 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
   p.pos = !s.any;
   p.free_lowest = s.free_lowest;
   const int K = s.K;
+  // per-call scratch (thread-local: one call per particle) for the translated columns
+  std::vector<double> propA, propB;
+  std::vector<std::vector<double>> propc;
+  if (s.proportional) mtlba_proportional(p, K, pt.base.nrow, propA, propB, propc);
   const bool gtrial = s.guess_trial;
   int code = MTLBA_OK;
   MTLBAStopCache cache;
