@@ -27,8 +27,7 @@ inline double beta_mean(double a, double b) {
 inline double beta_log_precision(double a, double b) {
   static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
   const double ab_sum = a + b;
-  const double result = 2.0 * std::log(ab_sum) +
-    std::log1p(ab_sum) - std::log(a) - std::log(b);
+  const double result = 2.0 * std::log(ab_sum) + std::log1p(ab_sum) - std::log(a) - std::log(b);
   if (!is_finite(result) || result > ceiling) {
     return ceiling;
   }
@@ -112,5 +111,31 @@ inline double shannon_surprise(double pred, double obs) {
 //     + (1.0 - pred_safe) * std::log(1.0 - pred_safe);
 //   return -entropy * inv_ln2;
 // }
+
+
+// Normalised discretised Beta(a, b) on a grid over [0, 1].
+// log_x[i] = log(x_i), log_1mx[i] = log1p(-x_i)   (precomputed once per grid)
+// Endpoints get zero mass, as dbeta_log returned -Inf at x <= 0 and x >= 1.
+inline void beta_prior_grid(const std::vector<double>& log_x,
+                            const std::vector<double>& log_1mx,
+                            double a, double b,
+                            std::vector<double>& out) {
+  const int gs = static_cast<int>(out.size());
+
+  // Invalid shape parameters: make it visible rather than silently returning zeros
+  if (!(a > 0.0) || !(b > 0.0) || !is_finite(a) || !is_finite(b)) {
+    std::fill(out.begin(), out.end(), std::numeric_limits<double>::quiet_NaN());
+    return;
+  }
+
+  double mx = -std::numeric_limits<double>::infinity();
+  for (int i = 1; i < gs - 1; ++i) {
+    out[i] = (a - 1.0) * log_x[i] + (b - 1.0) * log_1mx[i];
+    mx = std::max(mx, out[i]);
+  }
+  out[0] = out[gs - 1] = 0.0;
+  for (int i = 1; i < gs - 1; ++i) out[i] = std::exp(out[i] - mx);
+  normalise_inplace(out);
+}
 
 #endif // DBM_MATH_H
