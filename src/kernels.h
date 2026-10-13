@@ -1194,7 +1194,9 @@ struct BetaBinomialKernel : DBMBaseKernel {
                  }
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
                } else {
                  set_inactive(r);
                }
@@ -1263,8 +1265,10 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
                  }
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
-              } else {
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
+               } else {
                 set_inactive(r);
               }
 
@@ -1363,7 +1367,9 @@ public:
 
                  const double a_t = a0_col[r] + n_hit_;
                  const double b_t = b0_col[r] + (n_trial_ - n_hit_);
-                 set_active(r, beta_mean(a_t, b_t), beta_mode(a_t, b_t), beta_log_precision(a_t, b_t));
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
                } else {
                  set_inactive(r);
                }
@@ -1491,7 +1497,6 @@ public:
              std::vector<double>&       DBM_pred  = DBM_pred_;
 
              if (row_start == 0) {
-               DBM_post_.assign(gs, 0.0);
                DBM_post_pending_.assign(gs, 0.0);
                first_active_ = true;
                first_trial_row_ = -1;
@@ -1504,8 +1509,7 @@ public:
                  // at mask controls committing to stored value
                  // Last trial's pending posterior is committed:
                  // DBM_post_[i]  =  p(\gamma_{t-1} = \gamma_i | x_{1:t-1})
-                 DBM_post_ = DBM_post_pending_;
-                 post_history_[r] = DBM_post_;  // store committed posterior, to be able to rewind
+                 post_history_[r] = DBM_post_pending_;  // store committed posterior, to be able to rewind
 
                  // Beta prior: p0 ~ Beta(a,b)
                  // a = \mu0*s0, b = (1-\mu0)·s0
@@ -1530,7 +1534,8 @@ public:
                    // or it's the same as last (with probability 1-c):
                    // p(\gamma_t | x_{1:t-1}) = (1-c)*p(\gamma_{t-1} | x_{1:t-1}) + c*p0(\gamma_t)
                    // DBM_pred[i]             = (1-c)*DBM_post_[i]                + c*DBM_prior[i]
-                   for(int i = 0; i < gs; ++i) DBM_pred[i] = (1.0 - cp) * DBM_post_[i] + cp * DBM_prior[i];
+                   const double keep = 1.0 - cp;
+                   for(int i = 0; i < gs; ++i) DBM_pred[i] = keep * DBM_post_pending_[i] + cp * DBM_prior[i];
                    normalise_inplace(DBM_pred);  // ensure integration to one
                  }
 
@@ -1539,9 +1544,9 @@ public:
                  //   mean = \Sum_i \gamma_i*w_i  = P(x_t = 1 | x_{1:t-1})   (the prediction)
                  //   mode = \gamma_i at the largest w_i
                  //   log-precision = -log Var(\gamma_t),  Var = \Sum_i (\gamma_i - mean)**2 * w_i
-                 set_active(r, mean_discrete(prob_grid, DBM_pred),
-                            mode_discrete(prob_grid, DBM_pred),
-                            log_precision_discrete(prob_grid, DBM_pred));
+                 double mean, mode, log_precision;
+                 discrete_summary(prob_grid, DBM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                 set_active(r, mean, mode, log_precision);
 
                  // Carry forward current predictions until next observation nm
                  DBM_post_pending_ = DBM_pred;

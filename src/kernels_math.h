@@ -9,29 +9,70 @@
 
 // Mean, mode, and log-precision of Beta distribution
 // Used by Beta-binomial kernels
-inline double beta_mode(double a, double b) {
-  if (a == b)              return 0.5;
-  if (a < 1.0 || b < 1.0) return (a < b) ? 0.0 : 1.0;
-  return (a - 1.0) / (a + b - 2.0);
-}
-
-inline double beta_mean(double a, double b) {
-  return a / (a + b);
-}
+// inline double beta_mode(double a, double b) {
+//   if (a == b)              return 0.5;
+//   if (a < 1.0 || b < 1.0) return (a < b) ? 0.0 : 1.0;
+//   return (a - 1.0) / (a + b - 2.0);
+// }
+//
+// inline double beta_mean(double a, double b) {
+//   return a / (a + b);
+// }
 
 // inline double beta_variance(double a, double b) {
 //   const double ab_sum = a + b;
 //   return (a * b) / (ab_sum * ab_sum * (ab_sum + 1.0));
 // }
 
-inline double beta_log_precision(double a, double b) {
-  static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
-  const double ab_sum = a + b;
-  const double result = 2.0 * std::log(ab_sum) + std::log1p(ab_sum) - std::log(a) - std::log(b);
-  if (!is_finite(result) || result > ceiling) {
-    return ceiling;
+// inline double beta_log_precision(double a, double b) {
+//   static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
+//   const double ab_sum = a + b;
+//   const double result = 2.0 * std::log(ab_sum) + std::log1p(ab_sum) - std::log(a) - std::log(b);
+//   if (!is_finite(result) || result > ceiling) {
+//     return ceiling;
+//   }
+//   return result;
+// }
+
+// inline double beta_log_precision(double a, double b) {
+//   static const double eps = std::numeric_limits<double>::epsilon();
+//   static const double ceiling = -std::log(eps);
+//   const double s = a + b;
+//   const double variance = (a / s) * (b / s) / (s + 1.0);
+//
+//   if (!(variance > eps)) {
+//     return ceiling;
+//   }
+//
+//   return -std::log(variance);
+// }
+
+// overwrite inline
+inline void beta_summary(double a, double b,
+                         double& mean, double& mode,
+                         double& log_precision) {
+  static const double eps = std::numeric_limits<double>::epsilon();
+  static const double ceiling = -std::log(eps);
+
+  const double s = a + b;
+  const double inv_s = 1.0 / s;
+  const double p = a * inv_s;
+  const double q = b * inv_s;
+
+  // Mean
+  mean = p;
+
+  // Mode determination
+  if(a == b) {
+    mode = 0.5;
+  } else if(a < 1.0 || b < 1.0) {
+    mode = (a < b) ? 0.0 : 1.0;
+  } else {
+    mode = (a - 1.0) / (s - 2.0);
   }
-  return result;
+
+  const double variance = (p * q) / (s + 1.0);
+  log_precision = !(variance > eps) ? ceiling : -std::log(variance);
 }
 
 // Functions for discretised Beta distribution, used by DBM kernel
@@ -91,6 +132,44 @@ inline double log_precision_discrete(const std::vector<double>& x,
     return ceiling;
   }
   return result;
+}
+
+// inlined inplace calculation of discrete summary stats
+inline void discrete_summary(const std::vector<double>& x,
+                             const std::vector<double>& w,
+                             double& mean,
+                             double& mode,
+                             double& log_precision) {
+  static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
+
+    const int n = static_cast<int>(x.size());
+
+    mean = 0.0;
+    int mode_idx = 0;
+    double max_weight = w[0];
+
+    // First pass: mean and mode.
+    for (int i = 0; i < n; ++i) {
+      mean += x[i] * w[i];
+
+      // Strict comparison preserves the first maximum on ties.
+      if (w[i] > max_weight) {
+        max_weight = w[i];
+        mode_idx = i;
+      }
+    }
+    mode = x[mode_idx];
+
+    // Second pass: centered variance.
+    double variance = 0.0;
+    for (int i = 0; i < n; ++i) {
+      const double d = x[i] - mean;
+      variance += d * d * w[i];
+    }
+
+    variance = std::max(0.0, variance);
+    const double result = -std::log(variance);
+    log_precision = (!is_finite(result) || result > ceiling) ? ceiling : result;
 }
 
 
