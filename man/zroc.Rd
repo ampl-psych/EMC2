@@ -44,7 +44,8 @@ response \code{DK}. Default: taken from the model for an emc object, otherwise
 \code{FALSE}.}
 
 \item{post_predict}{Optional posterior predictives (from \code{predict()}): the
-zROC of each posterior draw is drawn as a thin line.}
+zROC of each posterior draw is drawn as a thin line, with the pointwise
+median and 95\% crosshairs.}
 
 \item{col}{Colours for the signal levels.}
 
@@ -53,12 +54,23 @@ zROC of each posterior draw is drawn as a thin line.}
 \value{
 \code{zroc()}: a data frame with columns for the \code{by} cell, the signal
 level, the criterion \code{k} and \code{zF}, \code{zH} (NA where a proportion is 0 or 1).
+\code{k} = 1 is the most liberal criterion (every response except the most
+confident of the first response level) and \code{k} = 2K - 1 the strictest
+(the most confident of the second level only): the reverse of the order
+of Weidemann and Kahana (2016) and of \code{\link[=croc]{croc()}}, whose point \code{k} is
+\code{zroc()}'s point \verb{2K - k} (the same values).
 }
 \description{
 Cumulative response probabilities from the most confident response of the
 second response level (e.g. "old") down to the most confident of the first,
 z-transformed, for each signal cell against the noise cell. Probabilities are
-pooled over subjects.
+pooled over subjects. \code{\link[=croc]{croc()}} gives the same points with the area, slope
+and curvature statistics, per subject with \code{by = "subjects"}, and for
+posterior predictives.
+}
+\details{
+\code{plot_zroc()} draws through \code{\link[=croc]{croc()}} and \code{\link[=plot_croc]{plot_croc()}} (\code{z = TRUE}); the axes cover the data and the predictions. It returns the
+\code{\link[=zroc]{zroc()}} tables of the data and of each draw.
 }
 \examples{
 dat <- data.frame(S = factor(rep(c("n", "s"), each = 6)),

@@ -152,7 +152,9 @@ plot_ratings <- function(input, post_predict = NULL, factors = NULL,
 #' Cumulative response probabilities from the most confident response of the
 #' second response level (e.g. "old") down to the most confident of the first,
 #' z-transformed, for each signal cell against the noise cell. Probabilities are
-#' pooled over subjects.
+#' pooled over subjects. [croc()] gives the same points with the area, slope
+#' and curvature statistics, per subject with `by = "subjects"`, and for
+#' posterior predictives.
 #'
 #' @inheritParams rating_summary
 #' @param signal_factor Factor distinguishing noise from signal trials.
@@ -160,6 +162,11 @@ plot_ratings <- function(input, post_predict = NULL, factors = NULL,
 #' @param by Further factors: one ROC per cell.
 #' @return `zroc()`: a data frame with columns for the `by` cell, the signal
 #'   level, the criterion `k` and `zF`, `zH` (NA where a proportion is 0 or 1).
+#'   `k` = 1 is the most liberal criterion (every response except the most
+#'   confident of the first response level) and `k` = 2K - 1 the strictest
+#'   (the most confident of the second level only): the reverse of the order
+#'   of Weidemann and Kahana (2016) and of [croc()], whose point `k` is
+#'   `zroc()`'s point `2K - k` (the same values).
 #' @examples
 #' dat <- data.frame(S = factor(rep(c("n", "s"), each = 6)),
 #'                   R = factor(rep(c("a", "a", "a", "b", "b", "b"), 2)),
@@ -194,9 +201,13 @@ zroc <- function(input, signal_factor, noise, by = NULL, n_ratings = NULL, dont_
 
 #' @rdname zroc
 #' @param post_predict Optional posterior predictives (from `predict()`): the
-#'   zROC of each posterior draw is drawn as a thin line.
+#'   zROC of each posterior draw is drawn as a thin line, with the pointwise
+#'   median and 95% crosshairs.
 #' @param col Colours for the signal levels.
 #' @param ... Further arguments passed to `plot()`.
+#' @details `plot_zroc()` draws through [croc()] and [plot_croc()] (`z =
+#'   TRUE`); the axes cover the data and the predictions. It returns the
+#'   [zroc()] tables of the data and of each draw.
 #' @export
 plot_zroc <- function(input, signal_factor, noise, by = NULL, post_predict = NULL,
                       n_ratings = NULL, dont_know = NULL, col = NULL, ...) {
@@ -209,25 +220,10 @@ plot_zroc <- function(input, signal_factor, noise, by = NULL, post_predict = NUL
     zp <- lapply(split(pp, pp$postn), zroc, signal_factor = signal_factor,
                  noise = noise, by = by, n_ratings = n_ratings, dont_know = dk)
   }
-  sig <- unique(zd$signal)
-  if (is.null(col)) col <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")[seq_along(sig)]
-  cells <- unique(zd$cell)
-  op <- graphics::par(mfrow = c(1, length(cells)), mar = c(4, 4, 2, .5))
-  on.exit(graphics::par(op))
-  lim <- range(c(zd$zF, zd$zH), na.rm = TRUE)
-  for (ce in cells) {
-    graphics::plot(NA, xlim = lim, ylim = lim, xlab = "z(false alarm)", ylab = "z(hit)",
-                   main = if (ce == "all") "" else ce, ...)
-    graphics::abline(0, 1, lty = 3, col = "grey")
-    for (i in seq_along(sig)) {
-      if (!is.null(zp)) for (z in zp) {
-        zz <- z[z$cell == ce & z$signal == sig[i], ]
-        graphics::lines(zz$zF, zz$zH, col = grDevices::adjustcolor(col[i], .15))
-      }
-      zz <- zd[zd$cell == ce & zd$signal == sig[i], ]
-      graphics::points(zz$zF, zz$zH, pch = 16, col = col[i], type = "b")
-    }
-    graphics::legend("topleft", legend = sig, col = col, pch = 16, bty = "n")
-  }
+  K <- if (is.null(n_ratings)) max(x$RR, na.rm = TRUE) else n_ratings
+  cr <- croc(x, signal_factor, noise, signal_response = levels(x$R)[2], post_predict = post_predict,
+             by = by, n_ratings = K, dont_know = dk)
+  cells <- unique(roc_key(cr, cr$zroc))
+  plot_croc(cr, z = TRUE, main = if (is.null(by)) "" else cells, col_data = col, col_pred = col, ...)
   invisible(list(data = zd, predicted = zp))
 }
