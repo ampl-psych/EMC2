@@ -29,8 +29,6 @@ inline TrendPhase parse_phase(const std::string& ph) {
 // =============================================================================
 // KernelSpec  —  mirrors emc2_kernel; pure C++ after construction
 // =============================================================================
-// enum class AtMode { Filter, Push };
-
 struct KernelSpec {
   // identity
   std::string kernel_id;
@@ -227,12 +225,9 @@ struct TrendRuntime {
 
   std::unordered_set<std::string> all_trend_targets() const {
     std::unordered_set<std::string> out;
-    for (const auto& b : plan->premap_bases)
-      out.insert(b.target_parameter);
-    for (const auto& b : plan->pretransform_bases)
-      out.insert(b.target_parameter);
-    for (const auto& b : plan->posttransform_bases)
-      out.insert(b.target_parameter);
+    for (const auto& b : plan->premap_bases) out.insert(b.target_parameter);
+    for (const auto& b : plan->pretransform_bases) out.insert(b.target_parameter);
+    for (const auto& b : plan->posttransform_bases) out.insert(b.target_parameter);
     return out;
   }
 
@@ -241,8 +236,7 @@ struct TrendRuntime {
   void reset_all_kernels();
 
   // Rcpp boundary — diagnostic only, not in hot path
-  Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt);
-  Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes);
+  Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes = std::vector<int>{1});
 
 private:
   void run_kernel(KernelRuntime& k_rt, ParamTable& pt, int row_start=0, int row_end=-1);
@@ -258,8 +252,7 @@ inline KernelParsView make_kernel_pars_view(const ParamTable& pt,
   KernelParsView view;
   view.n_rows = pt.n_trials;
   view.cols.resize(col_indices.size());
-  for (size_t i = 0; i < col_indices.size(); ++i)
-    view.cols[i] = &pt.base(0, col_indices[i]);
+  for(size_t i = 0; i < col_indices.size(); ++i) view.cols[i] = &pt.base(0, col_indices[i]);
   return view;
 }
 

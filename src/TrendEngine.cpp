@@ -112,67 +112,6 @@ static void build_nan_mask(KernelSpec& ks, const int n_active_trials)
   }
 }
 
-// static void build_first_level(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
-// {
-//   const int n_full = data.nrows();
-//   if (n_full <= 0) Rf_error("build_first_level: data has zero rows");
-//   const int n = (n_active_trials > 0 && n_active_trials < n_full) ? n_active_trials : n_full;  // <-- cap here
-//
-//   ks.first_level.assign(n, true);
-//
-//   if (ks.has_at) {
-//     if (!data.containsElementNamed(ks.at.c_str()))
-//       Rf_error("build_first_level: data has no column '%s'", ks.at.c_str());
-//     SEXP at_col = data[ks.at.c_str()];
-//     if (!Rf_inherits(at_col, "factor"))
-//       Rf_error("'at' column '%s' must be a factor", ks.at.c_str());
-//     if (Rf_length(at_col) != n_full)
-//       Rf_error("'at' column '%s' has wrong length", ks.at.c_str());
-//     const int* f = INTEGER(at_col);
-//     for (int i = 0; i < n; ++i)
-//       ks.first_level[i] = (f[i] == 1);
-//   }
-//
-//   ks.expand_idx.assign(n, 0);
-//   int count = 0;
-//   for (int i = 0; i < n; ++i) {
-//     if (ks.first_level[i]) ++count;
-//     ks.expand_idx[i] = count;
-//   }
-//   if (count == 0)
-//     Rf_error("build_first_level: no rows with first 'at' level found");
-//   for (int i = 0; i < n; ++i)
-//     if (ks.expand_idx[i] == 0)
-//       Rf_error("build_first_level: rows before first 'at' level");
-//
-//   // Filter mode - only pass rows corresponding to the first level of the at factor (default)
-//   if (ks.at_mode == AtMode::Filter) {
-//     // comp_index = first-level rows only
-//     ks.comp_index.clear();
-//     ks.comp_index.reserve(count);
-//     for (int i = 0; i < n; ++i)
-//       if (ks.first_level[i]) ks.comp_index.push_back(i);
-//
-//     // is_first_level_comp: all true (trivially, every comp row is first-level)
-//     ks.is_first_level_comp.assign(count, 1);
-//
-//   } else {
-//     // push = pass all rows, but only apply update to *next* first-level of at
-//     // push mode: comp_index = all rows
-//     ks.comp_index.resize(n);
-//     std::iota(ks.comp_index.begin(), ks.comp_index.end(), 0);
-//
-//     // is_first_level_comp: compressed boolean, same length as comp_index
-//     ks.is_first_level_comp.resize(n);
-//     for (int i = 0; i < n; ++i)
-//       ks.is_first_level_comp[i] = static_cast<uint8_t>(ks.first_level[i]);
-//   }
-//   // ks.comp_index.clear();
-//   // ks.comp_index.reserve(count);
-//   // for (int i = 0; i < n; ++i)
-//   //   if (ks.first_level[i]) ks.comp_index.push_back(i);
-// }
-
 static void build_kernel_input(KernelSpec& ks, const Rcpp::DataFrame& data, const int n_active_trials)
 {
   const int n_cov = (int)ks.cov_names.size();
@@ -1009,11 +948,6 @@ void TrendRuntime::sync_data_rows_from_plan(int row_start, int row_end)
 // TrendRuntime::all_kernel_outputs  — Rcpp boundary (diagnostic only)
 // =============================================================================
 
-Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt)
-{
-  return all_kernel_outputs(pt, std::vector<int>{1});
-}
-
 Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
                                                      const std::vector<int>& codes)
 {
@@ -1048,15 +982,14 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
     input_names.insert(input_names.end(), ks.cov_names.begin(),  ks.cov_names.end());
     input_names.insert(input_names.end(), ks.par_input.begin(),  ks.par_input.end());
 
-    for (int s = 0; s < k_rt.n_slots(); ++s) {
-      for (int code : codes) {
-        if (!k_rt.kernel_ptrs[s]->has_output_stream(code)) continue;
+    for(int s = 0; s < k_rt.n_slots(); ++s) {
+      for(int code : codes) {
+        if(!k_rt.kernel_ptrs[s]->has_output_stream(code)) continue;
         KernelOutput ko     = k_rt.kernel_ptrs[s]->get_output_stream(code);
         std::string  suffix = k_rt.kernel_ptrs[s]->output_stream_name(code);
 
-        if (ko.n_rows != n)
-          Rf_error("all_kernel_outputs '%s': stream rows != n_trials",
-                   ks.kernel_id.c_str());
+        if(ko.n_rows != n)
+          Rf_error("all_kernel_outputs '%s': stream rows != n_trials", ks.kernel_id.c_str());
 
         for (int c = 0; c < ko.n_cols; ++c) {
           const double* src = ko.data + c * ko.n_rows;
@@ -1065,9 +998,7 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
           // arity-1: slot s maps directly to input_names[s]
           // variadic: column c maps to input_names[c] (all inputs fed as one matrix)
           int name_idx      = k_rt.is_variadic() ? c : s;
-          std::string iname = (name_idx < (int)input_names.size())
-            ? input_names[name_idx]
-          : std::to_string(name_idx + 1);
+          std::string iname = (name_idx < (int)input_names.size()) ? input_names[name_idx] : std::to_string(name_idx + 1);
           cn[col] = ks.kernel_id + "." + iname + "." + suffix;
           ++col;
         }
