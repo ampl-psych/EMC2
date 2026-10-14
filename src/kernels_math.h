@@ -78,9 +78,7 @@ inline void beta_summary(double a, double b,
 // Functions for discretised Beta distribution, used by DBM kernel
 inline double dbeta_log(double x, double a, double b) {
   if (x <= 0.0 || x >= 1.0) return -std::numeric_limits<double>::infinity();
-  return (a - 1.0) * std::log(x)
-    + (b - 1.0) * std::log(1.0 - x)
-    - std::lgamma(a) - std::lgamma(b) + std::lgamma(a + b);
+  return (a - 1.0) * std::log(x) + (b - 1.0) * std::log(1.0 - x) - std::lgamma(a) - std::lgamma(b) + std::lgamma(a + b);
 }
 
 inline double dbeta_val(double x, double a, double b) {
@@ -88,9 +86,30 @@ inline double dbeta_val(double x, double a, double b) {
 }
 
 inline double normalise_inplace(std::vector<double>& v) {
+  // double s = 0.0;
+  // for (double x : v) s += x;
+  // if (s > 0.0) { double inv = 1.0 / s; for (double& x : v) x *= inv; }
+
+  // vectorise both passes
+  const std::size_t n = v.size();
+  double* const data = v.data();
+
   double s = 0.0;
-  for (double x : v) s += x;
-  if (s > 0.0) { double inv = 1.0 / s; for (double& x : v) x *= inv; }
+
+#pragma omp simd reduction(+:s)
+  for (std::size_t i = 0; i < n; ++i) {
+    s += data[i];
+  }
+
+  if (s > 0.0) {
+    const double inv = 1.0 / s;
+
+#pragma omp simd
+    for (std::size_t i = 0; i < n; ++i) {
+      data[i] *= inv;
+    }
+  }
+
   return s;
 }
 
@@ -144,30 +163,51 @@ inline void discrete_summary(const std::vector<double>& x,
 
     const int n = static_cast<int>(x.size());
 
-    mean = 0.0;
-    int mode_idx = 0;
+    // mean = 0.0;
+    // int mode_idx = 0;
+    // double max_weight = w[0];
+    //
+    // // First pass: mean and mode.
+    // for (int i = 0; i < n; ++i) {
+    //   mean += x[i] * w[i];
+    //
+    //   // Strict comparison preserves the first maximum on ties.
+    //   if (w[i] > max_weight) {
+    //     max_weight = w[i];
+    //     mode_idx = i;
+    //   }
+    // }
+    // mode = x[mode_idx];
+
+    double mean_sum = 0.0;
     double max_weight = w[0];
 
-    // First pass: mean and mode.
+// This is vectorisable
+#pragma omp simd reduction(+:mean_sum) reduction(max:max_weight)
     for (int i = 0; i < n; ++i) {
-      mean += x[i] * w[i];
-
-      // Strict comparison preserves the first maximum on ties.
-      if (w[i] > max_weight) {
-        max_weight = w[i];
-        mode_idx = i;
-      }
+      mean_sum += x[i] * w[i];
+      max_weight = std::max(max_weight, w[i]);
     }
-    mode = x[mode_idx];
+
+    mean = mean_sum;
+
+    // Recover the corresponding mode value
+    const auto it = std::find(w.begin(), w.end(), max_weight);
+    mode = x[static_cast<std::size_t>(it - w.begin())];
+
 
     // Second pass: centered variance.
     double variance = 0.0;
+    // for (int i = 0; i < n; ++i) {
+    //   const double d = x[i] - mean;
+    //   variance += d * d * w[i];
+    // }
+// This is vectorisable
+#pragma omp simd reduction(+:variance)
     for (int i = 0; i < n; ++i) {
       const double d = x[i] - mean;
       variance += d * d * w[i];
     }
-
-    variance = std::max(0.0, variance);
     const double result = -std::log(variance);
     log_precision = (!is_finite(result) || result > ceiling) ? ceiling : result;
 }

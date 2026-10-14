@@ -1543,6 +1543,7 @@ public:
                    // p(\gamma_t | x_{1:t-1}) = (1-c)*p(\gamma_{t-1} | x_{1:t-1}) + c*p0(\gamma_t)
                    // DBM_pred[i]             = (1-c)*DBM_post_[i]                + c*DBM_prior[i]
                    const double keep = 1.0 - cp;
+#pragma omp simd
                    for(int i = 0; i < gs; ++i) DBM_pred[i] = keep * DBM_post_pending_[i] + cp * DBM_prior[i];
                    normalise_inplace(DBM_pred);  // ensure integration to one
                  }
@@ -1584,6 +1585,7 @@ public:
                  //     DBM_post_pending_ currently holds DBM_pred, so multiply in place
                  //     and renormalise (the division by P(x_t | x_{1:t-1})).
                  const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
+#pragma omp simd
                  for (int i = 0; i < gs; ++i) DBM_post_pending_[i] *= like[i];
                  normalise_inplace(DBM_post_pending_);
                }
