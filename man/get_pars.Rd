@@ -81,6 +81,8 @@ Does not apply for \code{selection = "alpha"}}
 \item{chain}{Integer. Which of the chain(s) to return}
 
 \item{covariates}{Only needed with \code{plot} for priors and covariates in the design}
+
+\item{n_cores}{Integer. Number of cores to be used for mapping. Parallellisation is across chains, so maximally n_chains.}
 }
 \value{
 An mcmc.list object of the selected parameter types with the specified manipulations

@@ -35,6 +35,9 @@ covariates into accumulator-specific predictors. Each function must accept
 \verb{(nrow(dadm), length(cov_names))}, coding how each covariate contributes
 to each accumulator on each trial.}
 
+\item{base_args}{Arguments for specific bases. Currently only available
+for experimental bases.}
+
 \item{phase}{Character string; one of \code{"premap"}, \code{"pretransform"},
 \code{"posttransform"}. Controls when the trend is applied in the parameter
 computation pipeline. Defaults to \code{"premap"}.}

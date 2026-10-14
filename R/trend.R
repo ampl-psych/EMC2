@@ -151,6 +151,8 @@ make_kernel <- function(cov_names,
 #' @param phase Character string; one of `"premap"`, `"pretransform"`,
 #'   `"posttransform"`. Controls when the trend is applied in the parameter
 #'   computation pipeline. Defaults to `"premap"`.
+#' @param base_args Arguments for specific bases. Currently only available
+#'    for experimental bases.
 #'
 #' @return An object of class `emc2_base`.
 #'

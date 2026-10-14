@@ -369,6 +369,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' @param true_pars Set of `true_parameters` can be specified to apply flatten or use_par on a set of true parameters
 #' @param covariates Only needed with `plot` for priors and covariates in the design
 #' @param chain Integer. Which of the chain(s) to return
+#' @param n_cores Integer. Number of cores to be used for mapping. Parallellisation is across chains, so maximally n_chains.
 #'
 #' @return An mcmc.list object of the selected parameter types with the specified manipulations
 #' @export
