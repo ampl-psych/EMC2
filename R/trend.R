@@ -1465,31 +1465,31 @@ has_delta_rules <- function(model) {
 
 # Simulation --------------------------------------------------------------
 # New make_data_unconditional, but this one with persistent subject pipelines
-stack_designs <- function(designs_previous, designs_current) {
-  if (is.null(designs_previous)) {
-    return(designs_current)
-  }
-
-  out <- Map(
-    function(previous, current) {
-      if (is.null(previous) || is.null(current)) {
-        if (!identical(is.null(previous), is.null(current))) {
-          stop("Inconsistent NULL designs across context trials.")
-        }
-        return(NULL)
-      }
-      result <- rbind(previous, current)
-      attr(result, "parameter_design") <- attr(current, "parameter_design")
-      result
-    },
-    designs_previous, designs_current
-  )
-
-  names(out) <- names(designs_current)
-  out
-}
-
-
+# stack_designs <- function(designs_previous, designs_current) {
+#   if (is.null(designs_previous)) {
+#     return(designs_current)
+#   }
+#
+#   out <- Map(
+#     function(previous, current) {
+#       if (is.null(previous) || is.null(current)) {
+#         if (!identical(is.null(previous), is.null(current))) {
+#           stop("Inconsistent NULL designs across context trials.")
+#         }
+#         return(NULL)
+#       }
+#       result <- rbind(previous, current)
+#       attr(result, "parameter_design") <- attr(current, "parameter_design")
+#       result
+#     },
+#     designs_previous, designs_current
+#   )
+#
+#   names(out) <- names(designs_current)
+#   out
+# }
+#
+#
 # make_cache_key <- function(key_cols, dadm_slice) {
 #   key <- paste(sapply(key_cols, function(fc) {
 #     val <- dadm_slice[[fc]][1]  # only look at first row
@@ -2389,12 +2389,17 @@ make_data_unconditional <- function(data, pars, design, model,
                       fix = !is.null(optionals$shrink2bound))
     }
 
-    ## TODO - THE RACE FUNCTIONALITY IS NOW BROKEN. NEEDS TO BE ADAPTED TO MISSINGNESS=0!!
-    if (any(names(dadm_ctx) == "RACE")) {
-      Rrt <- RACE_rfun(dadm_ctx[context_current_idx, , drop = FALSE], pr, model_fun)
-    } else {
-      Rrt <- model_list$rfun(dadm_ctx[context_current_idx, , drop = FALSE], pr)
+    if("missingness" %in% names(dadm_ctx)) {
+      ok <- attr(pr, "ok")
+      if(is.null(ok)) ok <- rep(TRUE, nrow(pr))
+      missingness <- dadm_ctx[context_current_idx, 'missingness']
+      # Missingness==0 can exclude an accumulator, but never re-enable one.
+      participating <- is.na(missingness) | missingness != 0
+      attr(pr, "ok") <- ok & participating
     }
+
+    # Simulate response, rt
+    Rrt <- model_list$rfun(dadm_ctx[context_current_idx, , drop = FALSE], pr)
 
     stopifnot(nrow(Rrt) * n_acc == sum(context_current_idx))
     dfl[["R"]][cur_pos] <- as_codes("R", rep(Rrt[, "R"], each = n_acc), fac_levels)
