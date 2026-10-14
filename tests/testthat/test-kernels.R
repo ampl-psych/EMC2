@@ -884,11 +884,11 @@ test_that("tpm_Rcpp", {
 #   transforms = c(a = "identity", b = "pnorm")
 # #  base = "add"
 # )
-# kernel <- make_kernel('custom', 'covariate1', par_input='t0', custom_kernel = ck)
-# trend_custom <- make_trend(make_base('add', target_parameter='m', kernel=kernel))
+# kernel <- make_kernel('covariate1', type='custom', par_input='t0', custom_kernel = ck)
+# trend_custom <- make_trend(make_base(type='add', target_parameter='m', kernel=kernel))
 #
-
-##
+#
+# ##
 # kernel_pars <- c('m.a'=0.1, 'm.b'=1)
 # covariate1 <- c(NA, 1, 2, 0, 20, 2, 1)
 # t0 <- matrix(rep(0.2, length(covariate1)))
@@ -905,6 +905,6 @@ test_that("tpm_Rcpp", {
 #   }
 # }
 # all.equal(matrix(apply_kernel(kernel_pars, emc, input_pars=t0)), matrix(expected_output))
-
-
+#
+#
 
