@@ -831,19 +831,30 @@ design_model <- function(data,design,model=NULL,
   # Apply functions
   Ffunction_names <- character(0)
   if(!is.null(design$Ffunctions)) {
-    for(i in names(design$Ffunctions)) {
+    for(i in seq_along(design$Ffunctions)) {
       output <- design$Ffunctions[[i]](da)
-      if(is.list(output)) {
-        out_names <- names(output)
-        # don't overwrite existing columns
-        new_columns <- setdiff(out_names, names(da))
-        already_in_data <- intersect(out_names, names(da))
-        if(length(new_columns) > 0) da[, new_columns] <- output[new_columns]
-      } else {
-        out_names <- i
-        already_in_data <- if (i %in% names(da)) i else character(0)
-        if (!i %in% names(da)) da[, i] <- output   # don't overwrite existing columns
+
+      # Normalise to a named list of vectors
+      if(is.matrix(output)) {
+        cnames <- colnames(output)
+        if (is.null(cnames)) stop(sprintf("Ffunction '%s' returned a matrix without column names.", i))
+        output <- lapply(seq_len(ncol(output)), function(j) output[, j])
+        names(output) <- cnames
+      } else if(is.data.frame(output)) {
+        output <- as.list(output)
+      } else if(!is.list(output)) {
+        # vector — name must come from the function name
+        if (!nzchar(i)) stop("Unnamed Ffunction returned a vector; function must have a name.")
+        output <- stats::setNames(list(output), names(design$Ffunctions)[[i]])
       }
+      # output is now always a named list
+
+      out_names         <- names(output)
+      already_in_data   <- intersect(out_names, names(da))
+      new_columns       <- setdiff(out_names, names(da))
+
+      if (length(new_columns) > 0) da[, new_columns] <- output[new_columns]
+
       Ffunction_names <- c(Ffunction_names, out_names)
       attr(design$Ffunctions[[i]], "output_column_names") <- out_names
       attr(design$Ffunctions[[i]], "output_column_names_in_data") <- already_in_data

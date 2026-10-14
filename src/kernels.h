@@ -110,6 +110,7 @@ struct BaseKernel {
 protected:
   std::vector<double> out_;
   bool has_run_ = false;
+  int last_row_end = -1;  // -1 = never run
 
   // Remember expansion mapping (for 'at')
   // std::vector<int> expand_idx_;   // 1-based indices
@@ -129,38 +130,28 @@ public:
   virtual void run(const KernelParsView& kernel_pars,
                    const Mat& covariate,
                    const std::vector<uint8_t>& at_mask,
-                   const MatBool& nan_mask) = 0;
+                   const MatBool& nan_mask,
+                   int row_start = 0,
+                   int row_end   = -1) = 0;
+
+  int rows_computed() const { return last_row_end; }
 
   virtual void reset() {
+    last_row_end = -1;
     out_.clear();
     stream_buf_[0].clear();
     stream_buf_[1].clear();
     has_run_ = false;
   }
 
+  // default no-op for non-sequential kernels
+  virtual void rewind(int row_start) {}
 
   bool has_run() const { return has_run_; }
 
-  // const std::vector<double>& get_output() const { return out_; }
-
-  // void set_expand_idx(const std::vector<int>& idx) {
-  //   expand_idx_ = idx;
-  //   has_expand_idx_ = !expand_idx_.empty();
-  // }
-  // const std::vector<int>& expand_idx() const { return expand_idx_; }
-  // bool has_expand_idx() const { return has_expand_idx_; }
-
-  // // Expand compressed out_ (length n_comp) into full length using expand_idx
-  // void do_expand(const std::vector<int>& expand_idx) {
-  //   const int n_full = static_cast<int>(expand_idx.size());
-  //
-  //   out_.resize(n_full);  // keeps compressed data in [0..n_comp-1]
-  //
-  //   for (int i = n_full - 1; i >= 0; --i) {
-  //     int k = expand_idx[i] - 1;  // 1-based -> 0-based
-  //     out_[i] = out_[k];
-  //   }
-  // }
+  bool has_run_for(int row_end_requested) const {
+    return has_run_ && last_row_end == row_end_requested;
+  }
 
   // does this kernel have a stream for this code?
   virtual bool has_output_stream(int code) const {
@@ -182,16 +173,6 @@ public:
     return ko;
   }
 
-  // // single-stream getter, code=1 for main trajectory by default. code=2 for pes in delta, code=3 for xx in new kernels
-  // virtual Rcpp::NumericVector get_output_stream(int code) const {
-  //   using namespace Rcpp;
-  //   if (code != 1) {
-  //     stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
-  //   }
-  //   // out_ is already full-length at this point
-  //   return wrap(out_);  // copies to NumericVector
-  // }
-
   // Optional: name for each stream
   virtual std::string output_stream_name(int code) const {
     if (code == 1) return "covariate";
@@ -200,7 +181,10 @@ public:
 
 
 protected:
-  void mark_run_complete() { has_run_ = true; }
+  void mark_run_complete(int row_end) {
+    has_run_     = true;
+    last_row_end = row_end;
+  }
 };
 
 struct CustomKernel : BaseKernel {
@@ -221,7 +205,9 @@ public:
   void run(const KernelParsView& kernel_pars,
            const Mat& input,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              const int n        = input.nrow;
              const int n_pars   = static_cast<int>(kernel_pars.cols.size());
@@ -236,7 +222,7 @@ public:
              const int n_active = static_cast<int>(active.size());
              out_.assign(n, 0.0);
 
-             if (n_active == 0) { mark_run_complete(); return; }
+             if (n_active == 0) { mark_run_complete(row_end < 0 ? n : row_end); return; }
 
              // build compressed parameter matrix: n_active x n_pars
              Rcpp::NumericMatrix pars_comp(n_active, n_pars);
@@ -270,7 +256,7 @@ public:
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -282,22 +268,17 @@ struct SequentialKernel : BaseKernel {
 // All 1D delta kernels have scalar q and 1D pes_
 struct DeltaKernel : SequentialKernel {
 protected:
-  double q_ = NA_REAL;             // latest value
+  double q_ = NA_REAL;
+  double q_pending_ = NA_REAL;     // persists between incremental calls
   std::vector<double> pes_;        // PE per trial
-  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
-  // const uint8_t* is_first_level_comp_ = nullptr;  // null = filter mode
+  const int* q_reset_ = nullptr;   // null = no reset
 
 public:
   virtual ~DeltaKernel() {}
 
   void set_kernel_args(const KernelArgs& args) override {
     q_reset_ = args.q_reset;
-    // is_first_level_comp_ = args.is_first_level_comp;
   }
-
-  // const std::vector<double>& get_pes() const {
-  //   return pes_;
-  // }
 
   bool has_output_stream(int code) const override {
     return (code >= 1 && code <= 2);
@@ -310,44 +291,24 @@ public:
     Rcpp::stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
   }
 
-  // Rcpp::NumericVector get_output_stream(int code) const override {
-  //   using namespace Rcpp;
-  //
-  //   const int n_full = static_cast<int>(out_.size());
-  //
-  //   if (code == 1) {
-  //     // main trajectory: already full-length
-  //     return wrap(out_);
-  //   }
-  //
-  //   if (code == 2) {
-  //     NumericVector res(n_full);
-  //
-  //     if (!has_expand_idx_) {
-  //       // no 'at': one-to-one
-  //       if ((int)pes_.size() != n_full)
-  //         stop("DeltaKernel: pes_ length mismatch");
-  //       for (int i = 0; i < n_full; ++i) res[i] = pes_[i];
-  //     } else {
-  //       // with 'at': expand from compressed index
-  //       const auto& idx = expand_idx_;
-  //       if ((int)idx.size() != n_full)
-  //         stop("DeltaKernel: expand_idx length mismatch");
-  //       for (int i = 0; i < n_full; ++i) {
-  //         int k = idx[i] - 1;  // compressed index
-  //         res[i] = pes_[k];
-  //       }
-  //     }
-  //     return res;
-  //   }
-  //
-  //   stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
-  // }
-
   std::string output_stream_name(int code) const override {
     if (code == 1) return "Qvalue";
     if (code == 2) return "PE";
     throw std::runtime_error("DeltaKernel::output_stream_name: unsupported code");
+  }
+
+  void reset() override {
+    BaseKernel::reset();
+    q_         = NA_REAL;
+    q_pending_ = NA_REAL;
+    pes_.clear();
+  }
+
+  void rewind(int row_start) override {
+    q_         = out_[row_start];
+    q_pending_ = out_[row_start];
+    has_run_ = false;
+    last_row_end = row_start;
   }
 };
 
@@ -359,17 +320,20 @@ struct LinIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = covariate(r, 0); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = covariate(r, 0);
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -378,41 +342,47 @@ struct LinDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = -covariate(r, 0); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = -covariate(r, 0);
                out_[r] = last;
              }
 
-             mark_run_complete();
-           }
+             mark_run_complete(row_end < 0 ? n : row_end);
+            }
 };
 
 struct ExpDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 1) {
                Rcpp::stop("ExpDecrKernel expects 1 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* lambda_col = kernel_pars.cols[0];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = std::exp(-lambda_col[r] * covariate(r, 0)); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = std::exp(-lambda_col[r] * covariate(r, 0));
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -420,23 +390,26 @@ struct ExpIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 1) {
                Rcpp::stop("ExpIncrKernel expects 1 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* lambda_col = kernel_pars.cols[0];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = 1.0 - std::exp(-lambda_col[r] * covariate(r, 0)); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = 1.0 - std::exp(-lambda_col[r] * covariate(r, 0));
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -450,18 +423,21 @@ struct SLinKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 1) {
                Rcpp::stop("SLinKernel expects 1 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* k_col = kernel_pars.cols[0];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
                  const double x = covariate(r, 0);
                  if (is_finite(x)) {
@@ -474,7 +450,7 @@ struct SLinKernel : BaseKernel {
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 using SLinIncrKernel = SLinKernel<1>;
@@ -484,22 +460,26 @@ struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 1) {
                Rcpp::stop("PowDecrKernel expects 1 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* alpha_col = kernel_pars.cols[0];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = std::pow(1.0 + covariate(r, 0), -alpha_col[r]); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = std::pow(1.0 + covariate(r, 0), -alpha_col[r]);
                out_[r] = last;
              }
-             mark_run_complete();
+
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -507,23 +487,26 @@ struct PowIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 1) {
                Rcpp::stop("PowIncrKernel expects 1 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* alpha_col = kernel_pars.cols[0];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
-               if (at_mask[r]) { last = 1.0 - std::pow(1.0 + covariate(r, 0), -alpha_col[r]); }
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
+               if (at_mask[r]) last = 1.0 - std::pow(1.0 + covariate(r, 0), -alpha_col[r]);
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -531,18 +514,21 @@ struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("Poly2Kernel expects 2 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
                  const double x = covariate(r, 0);
                  last = a1_col[r] * x + a2_col[r] * x * x;
@@ -550,7 +536,7 @@ struct Poly2Kernel : BaseKernel {
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -558,19 +544,22 @@ struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Poly3Kernel expects 3 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
                  const double x  = covariate(r, 0);
                  const double x2 = x * x;
@@ -579,7 +568,7 @@ struct Poly3Kernel : BaseKernel {
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -587,20 +576,23 @@ struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Poly4Kernel expects 4 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
+             const int n   = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
              out_.resize(n);
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
              const double* a4_col = kernel_pars.cols[3];
-             double last = 0.0;
-             for (int r = 0; r < n; ++r) {
+             double last = (row_start > 0) ? out_[row_start - 1] : 0.0;
+             for (int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
                  const double x  = covariate(r, 0);
                  const double x2 = x * x;
@@ -610,7 +602,7 @@ struct Poly4Kernel : BaseKernel {
                out_[r] = last;
              }
 
-             mark_run_complete();
+             mark_run_complete(row_end < 0 ? n : row_end);
            }
 };
 
@@ -622,31 +614,38 @@ struct SimpleDelta : DeltaKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
-             const int n = covariate.nrow;
-             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(); return; }
 
-             out_.resize(n);
-             pes_.assign(n, NA_REAL);
+             const int n = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
+             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(end); return; }
 
              const double*  q0_col    = kernel_pars.cols[0];
              const double*  alpha_col = kernel_pars.cols[1];
              const double*  cov_ptr   = covariate.colptr(0);
              const uint8_t* nm        = nan_mask.colptr(0);
 
-             q_ = q0_col[0];
-             double q_pending = q_;
+             // initialise state only on first call
+             if (row_start == 0) {
+               q_         = q0_col[0];
+               q_pending_ = q_;
+               out_.resize(n);
+               pes_.assign(n, NA_REAL);
+             }
+             // else: q_ and q_pending_ carry over from previous call
 
-             for(int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // at_mask controls "commit" to pending Q-value
                  // ie., at the first level of `at`
-                 q_ = q_pending;
+                 q_ = q_pending_;
                  if (q_reset_ && q_reset_[r]) q_ = q0_col[r];
                }
 
@@ -654,14 +653,14 @@ struct SimpleDelta : DeltaKernel {
                out_[r] = q_;
 
                if(nm[r]) {
-                 // not-nan mask controls whether q_pending needs updating
+                 // not-nan mask controls whether q_pending_ needs updating
                  const double pe = cov_ptr[r] - q_;
                  pes_[r]         = pe;
-                 q_pending       = q_ + alpha_col[r] * pe;
+                 q_pending_      = q_ + alpha_col[r] * pe;
                }
              }
 
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -672,16 +671,16 @@ struct DeltaDecoupled : DeltaKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("DeltaDecoupled expects 3 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
              const int n = covariate.nrow;
-             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(); return; }
-
-             out_.resize(n);
-             pes_.assign(n, NA_REAL);
+             const int end = (row_end < 0) ? n : row_end;
+             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(end); return; }
 
              const double* q0_col     = kernel_pars.cols[0];
              const double* alpha_col  = kernel_pars.cols[1];
@@ -689,13 +688,17 @@ struct DeltaDecoupled : DeltaKernel {
              const double* cov_ptr    = covariate.colptr(0);
              const uint8_t* nm        = nan_mask.colptr(0);
 
-             q_ = q0_col[0];
-             double q_pending = q_;
+             if (row_start == 0) {
+               q_         = q0_col[0];
+               q_pending_ = q_;
+               out_.resize(n);
+               pes_.assign(n, NA_REAL);
+             }
 
-             for(int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // at_mask controls commit
-                 q_ = q_pending;
+                 q_ = q_pending_;
                  if (q_reset_ && q_reset_[r]) q_ = q0_col[r];
                }
 
@@ -705,10 +708,10 @@ struct DeltaDecoupled : DeltaKernel {
                  // not-nan mask controls update
                  const double x = cov_ptr[r];
                  pes_[r]        = x - q_;
-                 q_pending      = q_ + alpha_col[r] * x - lambda_col[r] * q_;
+                 q_pending_     = q_ + alpha_col[r] * x - lambda_col[r] * q_;
                }
              }
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -718,17 +721,17 @@ struct Delta2LR : DeltaKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Delta2LR expects 3 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
              const int n = covariate.nrow;
-             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(); return; }
-
-             out_.resize(n);
-             pes_.assign(n, NA_REAL);
+             const int end = (row_end < 0) ? n : row_end;
+             if (n <= 0) { out_.clear(); pes_.clear(); mark_run_complete(end); return; }
 
              const double* q0_col       = kernel_pars.cols[0];
              const double* alphaPos_col = kernel_pars.cols[1];
@@ -736,13 +739,17 @@ struct Delta2LR : DeltaKernel {
              const double*  cov_ptr   = covariate.colptr(0);
              const uint8_t* nm          = nan_mask.colptr(0);
 
-             q_ = q0_col[0];
-             double q_pending = q_;
+             if (row_start == 0) {
+               q_         = q0_col[0];
+               q_pending_ = q_;
+               out_.resize(n);
+               pes_.assign(n, NA_REAL);
+             }
 
-             for(int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // at_mask controls commit (i.e., first level)
-                 q_ = q_pending;
+                 q_ = q_pending_;
                  if (q_reset_ && q_reset_[r]) q_ = q0_col[r];
                }
                // all rows write out
@@ -752,24 +759,23 @@ struct Delta2LR : DeltaKernel {
                  const double pe    = cov_ptr[r] - q_;
                  const double alpha = (pe > 0.0) ? alphaPos_col[r] : alphaNeg_col[r];
                  pes_[r]            = pe;
-                 q_pending          = q_ + alpha * pe;
+                 q_pending_         = q_ + alpha * pe;
                }
              }
 
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
 // 2D PE kernel: separate from DeltaKernel
 struct Delta2Kernel : SequentialKernel {
-  double qFast_ = NA_REAL;
-  double qSlow_ = NA_REAL;
-  double q_     = NA_REAL;
-  const int* q_reset_ = nullptr;
-
-  void set_kernel_args(const KernelArgs& args) override {
-    q_reset_ = args.q_reset;
-  }
+  double qFast_    = NA_REAL;
+  double qSlow_    = NA_REAL;
+  double q_        = NA_REAL;
+  double qFast_pending_ = NA_REAL;
+  double qSlow_pending_ = NA_REAL;
+  double q_pending_     = NA_REAL;
+  const int* q_reset_   = nullptr;
 
   // [compressed trial][0 = fast PE, 1 = slow PE]
   std::vector<double> pes_fast_;
@@ -777,37 +783,50 @@ struct Delta2Kernel : SequentialKernel {
   std::vector<double> q_fast_;
   std::vector<double> q_slow_;
 
-  // One dedicated transpose buffer per secondary stream code.
-  // Indexed as: secondary_buf_[code - 2], i.e.:
-  //   code 2 (Qfast)   -> secondary_buf_[0]
-  //   code 3 (Qslow)   -> secondary_buf_[1]
-  //   code 4 (PEfast)  -> secondary_buf_[2]
-  //   code 5 (PEslow)  -> secondary_buf_[3]
-  // mutable std::vector<double> secondary_buf_[4];
+  void reset() override {
+    BaseKernel::reset();
+    qFast_ = qSlow_ = q_ = NA_REAL;
+    qFast_pending_ = qSlow_pending_ = q_pending_ = NA_REAL;
+    q_fast_.clear(); q_slow_.clear();
+    pes_fast_.clear(); pes_slow_.clear();
+  }
+
+  void rewind(int row_start) override {
+    qFast_         = q_fast_[row_start];
+    qSlow_         = q_slow_[row_start];
+    q_             = out_[row_start];
+    qFast_pending_ = qFast_;
+    qSlow_pending_ = qSlow_;
+    q_pending_     = q_;
+  }
+
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
+  }
+
 
   Delta2Kernel() {}
 
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
                           (int)kernel_pars.cols.size());
              }
 
              const int n = covariate.nrow;
+             const int end = (row_end < 0) ? n : row_end;
+
              if (n <= 0) {
                out_.clear(); q_fast_.clear(); q_slow_.clear();
                pes_fast_.clear(); pes_slow_.clear();
-               mark_run_complete(); return;
+               mark_run_complete(end); return;
              }
 
-             out_.resize(n);
-             q_fast_.resize(n);
-             q_slow_.resize(n);
-             pes_fast_.assign(n, NA_REAL);
-             pes_slow_.assign(n, NA_REAL);
 
              const double*  q0_col        = kernel_pars.cols[0];
              const double*  alphaFast_col = kernel_pars.cols[1];
@@ -816,17 +835,22 @@ struct Delta2Kernel : SequentialKernel {
              const double* cov_ptr    = covariate.colptr(0);
              const uint8_t* nm            = nan_mask.colptr(0);
 
-             qFast_ = qSlow_ = q_ = q0_col[0];
-             double qFast_pending = qFast_;
-             double qSlow_pending = qSlow_;
-             double q_pending     = q_;
+             if (row_start == 0) {
+               qFast_ = qSlow_ = q_ = q0_col[0];
+               qFast_pending_ = qSlow_pending_ = q_pending_ = q_;
+               out_.resize(n);
+               q_fast_.resize(n);
+               q_slow_.resize(n);
+               pes_fast_.assign(n, NA_REAL);
+               pes_slow_.assign(n, NA_REAL);
+             }
 
-             for(int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // control commit
-                 qFast_ = qFast_pending;
-                 qSlow_ = qSlow_pending;
-                 q_     = q_pending;
+                 qFast_ = qFast_pending_;
+                 qSlow_ = qSlow_pending_;
+                 q_     = q_pending_;
                  if (q_reset_ && q_reset_[r])
                    qFast_ = qSlow_ = q_ = q0_col[r];
                }
@@ -846,13 +870,13 @@ struct Delta2Kernel : SequentialKernel {
                  const double peSlow    = x - qSlow_;
                  pes_fast_[r]           = peFast;
                  pes_slow_[r]           = peSlow;
-                 qFast_pending          = qFast_ + alphaFast * peFast;
-                 qSlow_pending          = qSlow_ + alphaSlow * peSlow;
-                 q_pending              = (std::abs(qFast_pending - qSlow_pending) > dSwitch) ? qFast_pending : qSlow_pending;
+                 qFast_pending_          = qFast_ + alphaFast * peFast;
+                 qSlow_pending_          = qSlow_ + alphaSlow * peSlow;
+                 q_pending_              = (std::abs(qFast_pending_ - qSlow_pending_) > dSwitch) ? qFast_pending_ : qSlow_pending_;
                }
              }
 
-             mark_run_complete();
+             mark_run_complete(end);
            }
 
   bool has_output_stream(int code) const override {
@@ -889,6 +913,8 @@ struct RescorlaWagnerKernel : SequentialKernel {
 private:
   // Row-major internal storage: index as [r * n_covs_ + col]
   int n_covs_ = 0;
+  std::vector<double> q_cur_;      // state per covariate
+  std::vector<double> q_pending_;  // pending state per covariate
   std::vector<double> q_mat_;   // [n_comp * n_covs_]: Q-value per trial per covariate
   std::vector<double> pe_mat_;  // [n_comp * n_covs_]: compound PE for active covariates, NA otherwise
 
@@ -905,13 +931,22 @@ public:
     BaseKernel::reset();
     q_mat_.clear();
     pe_mat_.clear();
+    q_cur_.clear();
+    q_pending_.clear();
     n_covs_ = 0;
+  }
+
+  void rewind(int row_start) override {
+    for (int c = 0; c < n_covs_; ++c)
+      q_cur_[c] = q_pending_[c] = q_mat_[row_start * n_covs_ + c];
   }
 
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("RescorlaWagnerKernel expects 2 parameter columns (q0, alpha), got %d",
@@ -919,35 +954,38 @@ public:
              }
 
              const int n = covariate.nrow;
-             n_covs_     = covariate.ncol;
+             const int end   = (row_end < 0) ? n : row_end;
+             const int ncov = covariate.ncol;
 
-             if (n == 0 || n_covs_ == 0) {
+             if (n == 0 || ncov == 0) {
                q_mat_.clear(); pe_mat_.clear();
-               mark_run_complete(); return;
+               mark_run_complete(end); return;
              }
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
 
-             q_mat_.assign(n * n_covs_, NA_REAL);
-             pe_mat_.assign(n * n_covs_, NA_REAL);
+             if (row_start == 0) {
+               n_covs_ = ncov;
+               q_mat_.assign(n * ncov, NA_REAL);
+               pe_mat_.assign(n * ncov, NA_REAL);
+               q_cur_.assign(ncov, q0_col[0]);
+               q_pending_.assign(ncov, q0_col[0]);
+             }
 
-             std::vector<double> q_cur(n_covs_, q0_col[0]);
-             std::vector<double> q_pending(n_covs_);
-             q_pending = q_cur;
 
-             for(int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // at_mask controls committing
-                 q_cur = q_pending;
+                 q_cur_ = q_pending_;
                  if (q_reset_ && q_reset_[r]) {
                    const double q0_r = q0_col[r];
-                   for(int c = 0; c < n_covs_; ++c) q_cur[c] = q0_r;
+                   for(int c = 0; c < n_covs_; ++c) q_cur_[c] = q0_r;
                  }
                }
 
                // always write out
-               for(int c = 0; c < n_covs_; ++c) q_mat_[r * n_covs_ + c] = q_cur[c];
+               for(int c = 0; c < n_covs_; ++c) q_mat_[r * n_covs_ + c] = q_cur_[c];
 
                // accumulate compound Q over active (non-NaN) covariates
                double reward    = NA_REAL;
@@ -958,7 +996,7 @@ public:
                  if(nan_mask(r, c)) {
                    // not-nan_mask controls update
                    reward    = covariate(r, c);
-                   q_active += q_cur[c];
+                   q_active += q_cur_[c];
                    any_active = true;
                  }
                }
@@ -969,15 +1007,15 @@ public:
                  for (int c = 0; c < n_covs_; ++c) {
                    if(nan_mask(r, c)) {
                      pe_mat_[r * n_covs_ + c] = compound_pe;
-                     q_pending[c] = q_cur[c] + alpha * compound_pe;
+                     q_pending_[c] = q_cur_[c] + alpha * compound_pe;
                    } else {
-                     q_pending[c] = q_cur[c];
+                     q_pending_[c] = q_cur_[c];
                    }
                  }
                }
              }
 
-             mark_run_complete();
+             mark_run_complete(end);
            }
 
   bool has_output_stream(int code) const override {
@@ -1012,83 +1050,6 @@ public:
 };
 
 
-// // 2kernel adjusted
-// struct Delta2Kernel2 : Delta2Kernel {
-//   double qFast_ = NA_REAL;
-//   double qSlow_ = NA_REAL;
-//   double q_     = NA_REAL;
-//
-//   Delta2Kernel2() {}
-//
-//   void run(const KernelParsView& kernel_pars,
-//            const Rcpp::NumericMatrix& covariate,
-//            const std::vector<int>& comp_idx) override {
-//              if (kernel_pars.cols.size() != 4) {
-//                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
-//                           (int)kernel_pars.cols.size());
-//              }
-//
-//              int n_comp = comp_idx.size();
-//              out_.assign(n_comp, NA_REAL);
-//              q_fast_.assign(n_comp, NA_REAL);
-//              q_slow_.assign(n_comp, NA_REAL);
-//              pes_fast_.assign(n_comp, NA_REAL);
-//              pes_slow_.assign(n_comp, NA_REAL);
-//
-//              const double* q0_col        = kernel_pars.cols[0];
-//              const double* alphaFast_col = kernel_pars.cols[1];
-//              const double* propSlow_col  = kernel_pars.cols[2];
-//              const double* dSwitch_col   = kernel_pars.cols[3];
-//
-//              int row0 = comp_idx[0];
-//              out_[0] = qFast_ = qSlow_ = q_ = q0_col[row0];
-//              int current_kernel = 0; // 0 = fast, 1 = slow
-//
-//              for (int j = 0; j < n_comp - 1; ++j) {
-//                int r = comp_idx[j];
-//                double x = covariate(r,0);
-//                double peFast = NA_REAL;
-//                double peSlow = NA_REAL;
-//
-//                if (!ISNAN(x)) {
-//                  double alphaFast = alphaFast_col[r];
-//                  double propSlow  = propSlow_col[r];
-//                  double dSwitch   = dSwitch_col[r];
-//                  double alphaSlow = propSlow * alphaFast;
-//
-//                  peFast = x - qFast_;
-//                  peSlow = x - qSlow_;
-//
-//                  qFast_ += alphaFast * peFast;
-//                  qSlow_ += alphaSlow * peSlow;
-//
-//                  double diff = std::abs(qFast_ - qSlow_);
-//                  if(diff > dSwitch) {
-//                    current_kernel = 0; // fast kernel
-//                    q_ = qFast_;
-//                  } else {
-//                    if(current_kernel == 0) {
-//                      // was in fast mode, now moving to slow mode. Override Q-value of slow
-//                      qSlow_ = qFast_;
-//                    }
-//                    current_kernel = 1;
-//                    q_ = qSlow_;
-//                  }
-//                  // q_ = (diff > dSwitch) ? qFast_ : qSlow_;
-//                }
-//
-//                q_fast_[j+1] = qFast_;  // compressed index
-//                q_slow_[j+1] = qSlow_;
-//
-//                pes_fast_[j] = peFast;  // compressed index
-//                pes_slow_[j] = peSlow;
-//                out_[j + 1] = q_;
-//              }
-//
-//              mark_run_complete();
-//            }
-// };
-
 // =============================================================================
 // DBMBaseKernel
 // Streams: 1 = prediction mean, 2 = prediction mode, 3 = surprise (bits),
@@ -1099,26 +1060,48 @@ struct DBMBaseKernel : BaseKernel {
 protected:
   std::vector<double> pred_mean_;
   std::vector<double> pred_mode_;
-  mutable std::vector<double> surprise_;          // computed lazily
+  std::vector<double> surprise_;
   std::vector<double> pred_logprecision_;
-  std::vector<double> comp_obs_;                  // compressed observations, stored during run()
-  mutable bool surprise_computed_ = false;
-  const int* belief_reset_ = nullptr;             //
+  const int* belief_reset_ = nullptr;
+  std::vector<double> n_hit_history_;
+  std::vector<double> n_trial_history_;
 
-  void store_obs(const double* cov_ptr, int n, const std::vector<uint8_t>& at_mask) {
-    comp_obs_.resize(n);
-    for (int r = 0; r < n; ++r)
-      comp_obs_[r] = at_mask[r] ? cov_ptr[r] : std::numeric_limits<double>::quiet_NaN();
+  // incremental state — members, persist between run() calls
+  double n_hit_         = 0.0;
+  double n_trial_       = 0.0;
+  double n_hit_pending_   = 0.0;
+  double n_trial_pending_ = 0.0;
+  double last_mean_ = 0.0;
+  double last_mode_ = 0.0;
+  double last_lp_   = 0.0;
+
+  void init_streams(int n) {
+    last_mean_ = last_mode_ = last_lp_ = 0.0;
+    pred_mean_.resize(n);
+    pred_mode_.resize(n);
+    pred_logprecision_.resize(n);
+    surprise_.assign(n, NA_REAL);
   }
 
-  void ensure_surprise() const {
-    if (surprise_computed_) return;
-    const int n = static_cast<int>(pred_mean_.size());
-    surprise_.resize(n, std::numeric_limits<double>::quiet_NaN());
-    for (int r = 0; r < n; ++r)
-      if (!is_nan(comp_obs_[r]))
-        surprise_[r] = shannon_surprise(pred_mean_[r], comp_obs_[r]);
-    surprise_computed_ = true;
+  // active row: new prediction; surprise defaults to NA until an observation arrives
+  void set_active(int r, double mean, double mode, double lp) {
+    last_mean_ = pred_mean_[r]         = mean;
+    last_mode_ = pred_mode_[r]         = mode;
+    last_lp_   = pred_logprecision_[r] = lp;
+    surprise_[r] = NA_REAL;
+  }
+
+  // inactive row: carry forward, no surprise
+  void set_inactive(int r) {
+    pred_mean_[r]         = last_mean_;
+    pred_mode_[r]         = last_mode_;
+    pred_logprecision_[r] = last_lp_;
+    surprise_[r]          = NA_REAL;
+  }
+
+  // call only on active rows with a valid observation
+  void set_surprise(int r, double obs) {
+    surprise_[r] = shannon_surprise(last_mean_, obs);
   }
 
 public:
@@ -1128,8 +1111,20 @@ public:
     pred_mode_.clear();
     surprise_.clear();
     pred_logprecision_.clear();
-    comp_obs_.clear();
-    surprise_computed_ = false;
+    n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
+    last_mean_ = last_mode_ = last_lp_ = 0.0;
+    n_hit_history_.clear();
+    n_trial_history_.clear();
+  }
+
+  void rewind(int row_start) override {
+    n_hit_           = n_hit_history_[row_start];
+    n_trial_         = n_trial_history_[row_start];
+    n_hit_pending_   = n_hit_;
+    n_trial_pending_ = n_trial_;
+
+    has_run_ = false;
+    last_row_end = row_start;
   }
 
   bool has_output_stream(int code) const override {
@@ -1141,7 +1136,6 @@ public:
   }
 
   KernelOutput get_output_stream(int code) const override {
-    if (code == 3) ensure_surprise();
     const std::vector<double>* src = nullptr;
     if      (code == 1) src = &pred_mean_;
     else if (code == 2) src = &pred_mode_;
@@ -1158,10 +1152,6 @@ public:
     if (code == 4) return "log-precision";
     throw std::runtime_error("DBMBaseKernel::output_stream_name: unsupported code");
   }
-
-protected:
-  // keep out_ in sync with pred_mean_ for BaseKernel::get_output_stream (code=1)
-  void sync_out_to_mean() { out_ = pred_mean_; }
 };
 
 // =============================================================================
@@ -1173,56 +1163,57 @@ struct BetaBinomialKernel : DBMBaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 2)
                Rcpp::stop("BetaBinomialKernel expects 2 parameter columns (a0, b0), got %d",
                           (int)kernel_pars.cols.size());
 
              const int     n       = covariate.nrow;
+             const int     end     = (row_end < 0) ? n : row_end;
              const double* a0_col  = kernel_pars.cols[0];
              const double* b0_col  = kernel_pars.cols[1];
              const double* cov_ptr = covariate.colptr(0);
              const uint8_t* nm     = nan_mask.colptr(0);
 
-             pred_mean_.resize(n);
-             pred_mode_.resize(n);
-             pred_logprecision_.resize(n);
+             if (row_start == 0) {
+               n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
+               init_streams(n);
+               n_hit_history_.assign(n, 0.0);
+               n_trial_history_.assign(n, 0.0);
+             }
 
-             double n_hit = 0.0, n_trial = 0.0;
-             double n_hit_pending = 0.0, n_trial_pending = 0.0;
-             double last_mean = 0.0, last_mode = 0.0, last_lp = 0.0;
-
-             for(int r = 0; r < n; ++r) {
+             for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // at_mask controls commit
-                 n_hit   = n_hit_pending;
-                 n_trial = n_trial_pending;
+                 n_hit_   = n_hit_pending_;
+                 n_trial_ = n_trial_pending_;
+                 n_hit_history_[r]   = n_hit_;    // store after commit
+                 n_trial_history_[r] = n_trial_;
+
                  if(belief_reset_ && belief_reset_[r]) {
-                   n_hit = 0.0; n_trial = 0.0;
-                   n_hit_pending = 0.0; n_trial_pending = 0.0;
+                   n_hit_ = 0.0; n_trial_ = 0.0;
+                   n_hit_pending_ = 0.0; n_trial_pending_ = 0.0;
                  }
-                 const double a_t = a0_col[r] + n_hit;
-                 const double b_t = b0_col[r] + (n_trial - n_hit);
-                 last_mean = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
+                 const double a_t = a0_col[r] + n_hit_;
+                 const double b_t = b0_col[r] + (n_trial_ - n_hit_);
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
                } else {
-                 pred_mean_[r]         = last_mean;
-                 pred_mode_[r]         = last_mode;
-                 pred_logprecision_[r] = last_lp;
+                 set_inactive(r);
                }
 
                if(nm[r]) {
                  // not-nan mask controls update
-                 n_hit_pending   += cov_ptr[r];
-                 n_trial_pending += 1.0;
-                 }
+                 set_surprise(r, cov_ptr[r]);
+                 n_hit_pending_   += cov_ptr[r];
+                 n_trial_pending_ += 1.0;
+               }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -1235,7 +1226,9 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 3)
                Rcpp::stop("BetaBinomialDecayKernel expects 3 parameter columns "
@@ -1243,57 +1236,56 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
                             (int)kernel_pars.cols.size());
 
              const int     n         = covariate.nrow;
+             const int     end       = (row_end < 0) ? n : row_end;
              const double* a0_col    = kernel_pars.cols[0];
              const double* b0_col    = kernel_pars.cols[1];
              const double* decay_col = kernel_pars.cols[2];
              const double* cov_ptr   = covariate.colptr(0);
              const uint8_t* nm       = nan_mask.colptr(0);
 
-             pred_mean_.resize(n);
-             pred_mode_.resize(n);
-             pred_logprecision_.resize(n);
+             if (row_start == 0) {
+               n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
+               init_streams(n);
+               n_hit_history_.assign(n, 0.0);
+               n_trial_history_.assign(n, 0.0);
+             }
 
-             double n_hit = 0.0, n_trial = 0.0;
-             double n_hit_pending = 0.0, n_trial_pending = 0.0;
-             double last_mean = 0.0, last_mode = 0.0, last_lp = 0.0;
-
-             for(int r = 0; r < n; ++r) {
+             for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
+                 n_hit_history_[r]   = n_hit_pending_;    // store after commit
+                 n_trial_history_[r] = n_trial_pending_;
+
                  // control commit
                  // apply one step of decay to pending counts (one tick per trial)
                  const double df = std::exp(-1.0 / decay_col[r]);
-                 n_hit_pending   = df * n_hit_pending;
-                 n_trial_pending = df * n_trial_pending;
+                 n_hit_pending_   = df * n_hit_pending_;
+                 n_trial_pending_ = df * n_trial_pending_;
 
                  // then commit
-                 n_hit   = n_hit_pending;
-                 n_trial = n_trial_pending;
+                 n_hit_   = n_hit_pending_;
+                 n_trial_ = n_trial_pending_;
 
                  if (belief_reset_ && belief_reset_[r]) {
-                   n_hit = n_hit_pending = 0.0;
-                   n_trial = n_trial_pending = 0.0;
+                   n_hit_ = n_hit_pending_ = 0.0;
+                   n_trial_ = n_trial_pending_ = 0.0;
                  }
-                 const double a_t = a0_col[r] + n_hit;
-                 const double b_t = b0_col[r] + (n_trial - n_hit);
-                 last_mean = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
+                 const double a_t = a0_col[r] + n_hit_;
+                 const double b_t = b0_col[r] + (n_trial_ - n_hit_);
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
                } else {
-                 pred_mean_[r]         = last_mean;
-                 pred_mode_[r]         = last_mode;
-                 pred_logprecision_[r] = last_lp;
-               }
+                set_inactive(r);
+              }
 
                if(nm[r]) {
                  // trigger update
-                 n_hit_pending   += cov_ptr[r];
-                 n_trial_pending += 1.0;
+                 set_surprise(r, cov_ptr[r]);
+                 n_hit_pending_   += cov_ptr[r];
+                 n_trial_pending_ += 1.0;
                }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -1305,12 +1297,30 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 struct BetaBinomialWindowKernel : DBMBaseKernel {
 private:
   struct Event { double obs; int idx; };
+  std::deque<Event> buf_;
+  std::deque<Event> buf_pending_;
+  std::vector<std::deque<Event>> buf_history_;
 
 public:
+  void reset() override {
+    DBMBaseKernel::reset();
+    buf_.clear();
+    buf_pending_.clear();
+    buf_history_.clear();
+  }
+
+  void rewind(int row_start) override {
+    DBMBaseKernel::rewind(row_start);
+    buf_         = buf_history_[row_start];
+    buf_pending_ = buf_;
+  }
+
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 3)
                Rcpp::stop("BetaBinomialWindowKernel expects 3 parameter columns "
@@ -1318,65 +1328,67 @@ public:
                             (int)kernel_pars.cols.size());
 
              const int     n          = covariate.nrow;
+             const int     end        = (row_end < 0) ? n : row_end;
              const double* a0_col     = kernel_pars.cols[0];
              const double* b0_col     = kernel_pars.cols[1];
              const double* window_col = kernel_pars.cols[2];
              const double* cov_ptr    = covariate.colptr(0);
              const uint8_t* nm        = nan_mask.colptr(0);
 
-             pred_mean_.resize(n);
-             pred_mode_.resize(n);
-             pred_logprecision_.resize(n);
+             if (row_start == 0) {
+               n_hit_ = n_trial_ = n_hit_pending_ = n_trial_pending_ = 0.0;
+               buf_.clear(); buf_pending_.clear();
+               init_streams(n);
+               n_hit_history_.assign(n, 0.0);
+               n_trial_history_.assign(n, 0.0);
+               buf_history_.assign(n, std::deque<Event>{});
+             }
 
-             double n_hit = 0.0, n_trial = 0.0;
-             double n_hit_pending = 0.0, n_trial_pending = 0.0;
-             double last_mean = 0.0, last_mode = 0.0, last_lp = 0.0;
-             std::deque<Event> buf, buf_pending;
-
-             for(int r = 0; r < n; ++r) {
+             for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
                  // commit
-                 n_hit   = n_hit_pending;
-                 n_trial = n_trial_pending;
-                 buf     = buf_pending;
+                 n_hit_   = n_hit_pending_;
+                 n_trial_ = n_trial_pending_;
+                 buf_     = buf_pending_;
+
+                 buf_history_[r]         = buf_;
+                 n_hit_history_[r]       = n_hit_;
+                 n_trial_history_[r]     = n_trial_;
 
                  if (belief_reset_ && belief_reset_[r]) {
-                   n_hit = 0.0; n_trial = 0.0; buf.clear();
+                   n_hit_ = 0.0; n_trial_ = 0.0; buf_.clear();
                  }
 
                  const int w = static_cast<int>(window_col[r]);
-                 while (!buf.empty() && (r - buf.front().idx) > w) {
-                   n_hit   -= buf.front().obs;
-                   n_trial -= 1.0;
-                   buf.pop_front();
+                 while (!buf_.empty() && (r - buf_.front().idx) > w) {
+                   n_hit_   -= buf_.front().obs;
+                   n_trial_ -= 1.0;
+                   buf_.pop_front();
                  }
 
                  // snapshot pending from newly committed state
-                 buf_pending     = buf;
-                 n_hit_pending   = n_hit;
-                 n_trial_pending = n_trial;
+                 buf_pending_     = buf_;
+                 n_hit_pending_   = n_hit_;
+                 n_trial_pending_ = n_trial_;
 
-                 const double a_t = a0_col[r] + n_hit;
-                 const double b_t = b0_col[r] + (n_trial - n_hit);
-                 last_mean = pred_mean_[r]         = beta_mean(a_t, b_t);
-                 last_mode = pred_mode_[r]         = beta_mode(a_t, b_t);
-                 last_lp   = pred_logprecision_[r] = beta_log_precision(a_t, b_t);
+                 const double a_t = a0_col[r] + n_hit_;
+                 const double b_t = b0_col[r] + (n_trial_ - n_hit_);
+                 double mean, mode, log_precision;
+                 beta_summary(a_t, b_t, mean, mode, log_precision); // inline calculated
+                 set_active(r, mean, mode, log_precision);
                } else {
-                 pred_mean_[r]         = last_mean;
-                 pred_mode_[r]         = last_mode;
-                 pred_logprecision_[r] = last_lp;
+                 set_inactive(r);
                }
 
                if(nm[r]) {
-                 buf_pending.push_back({cov_ptr[r], r});
-                 n_hit_pending   += cov_ptr[r];
-                 n_trial_pending += 1.0;
+                 buf_pending_.push_back({cov_ptr[r], r});
+                 set_surprise(r, cov_ptr[r]);
+                 n_hit_pending_   += cov_ptr[r];
+                 n_trial_pending_ += 1.0;
                }
              }
 
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -1390,93 +1402,195 @@ public:
 struct DBMKernel : DBMBaseKernel {
 private:
   int grid_res_ = 100;
+  int grid_built_for_ = -1;
+  std::vector<double> DBM_post_;
+  std::vector<double> DBM_post_pending_;
+  std::vector<std::vector<double>> post_history_;
+  bool first_active_ = true;  // have we started yet?
+  int first_trial_row_ = -1;
+
+
+  std::vector<double> prob_grid_, x_like_, y_like_;
+  // Scratch vectors to write in posterior probabilities across the grid
+  // Resized in ensure_grid();
+  // DBM_prior_ : cache of the normalised Beta(a, b) prior, keyed on (a, b); see ensure_prior()
+  std::vector<double> DBM_prior_, DBM_pred_;
+
+  std::vector<double> log_x_, log_1mx_;                 // grid-only log terms
+  double cached_a_ = std::numeric_limits<double>::quiet_NaN();
+  double cached_b_ = std::numeric_limits<double>::quiet_NaN();
+  bool   prior_valid_ = false;
+
+  // Build a grid once, and calculate the dbeta_values once per grid.
+  // log p0(\gamma_i) = (a-1)*log(\gamma_i) + (b-1)*log(1-\gamma_i) - [ln\Gamma(a) + ln\Gamma(b) - ln\Gamma(a+b)]
+  // log(\gamma_i) and log(1-\gamma_i) depend only on i - so only on the grid, not on a or b -- precompute them once rather than each row.
+  // [ln\Gamma(a) + ln\Gamma(b) - ln\Gamma(a+b)]  is constant across i, so it cancels in the normalisation. It can be removed entirely.
+  void ensure_grid() {
+    if (grid_built_for_ == grid_res_) return;
+    const int gs = grid_res_ + 1;
+    prob_grid_.resize(gs); x_like_.resize(gs); y_like_.resize(gs);
+    log_x_.assign(gs, 0.0); log_1mx_.assign(gs, 0.0);
+    DBM_prior_.resize(gs); DBM_pred_.resize(gs);
+    for (int i = 0; i < gs; ++i) {
+      prob_grid_[i] = static_cast<double>(i) / (gs - 1);
+      x_like_[i]    = prob_grid_[i];
+      y_like_[i]    = 1.0 - prob_grid_[i];
+    }
+    for (int i = 1; i < gs - 1; ++i) {                  // endpoints unused
+      log_x_[i]   = std::log(prob_grid_[i]);            // log(\gamma_i)
+      log_1mx_[i] = std::log1p(-prob_grid_[i]);         // log(1-\gamma_i)
+    }
+    prior_valid_    = false;                            // grid changed -> cached prior is stale
+    grid_built_for_ = grid_res_;
+  }
+
+  // DBM_prior_ is now a cache keyed on (a, b), not scratch space
+  void ensure_prior(double a, double b) {
+    if (prior_valid_ && a == cached_a_ && b == cached_b_) return;
+    beta_prior_grid(log_x_, log_1mx_, a, b, DBM_prior_);  // <- calculates the Beta prior across the grid with a and b. See kernels_math.h
+    cached_a_ = a; cached_b_ = b; prior_valid_ = true;    // keep this in a cache and only recalculate when the prior changes.
+  }
+
 
 public:
+  void reset() override {
+    DBMBaseKernel::reset();
+    DBM_post_.clear();
+    DBM_post_pending_.clear();
+    first_active_ = true;
+    first_trial_row_ = -1;
+    post_history_.clear();
+  }
+
+  void rewind(int row_start) override {
+    if(post_history_[row_start].empty()) Rcpp::stop("DBMKernel::rewind: row %d is not a trial start", row_start);
+    DBM_post_pending_ = post_history_[row_start];
+    first_active_ = (first_trial_row_ < 0) || (row_start <= first_trial_row_);
+
+    has_run_ = false;
+    last_row_end = row_start;
+  }
+
   void set_kernel_args(const KernelArgs& args) override {
     DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
-    // if (args.is_first_level_comp != nullptr)
-    //   Rcpp::stop("DBMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 3)
                Rcpp::stop("DBMKernel expects 3 parameter columns (cp, mu0, s0), got %d",
                           (int)kernel_pars.cols.size());
 
              const int     n       = covariate.nrow;
+             const int     end     = (row_end < 0) ? n : row_end;
              const double* cp_col  = kernel_pars.cols[0];
              const double* mu0_col = kernel_pars.cols[1];
              const double* s0_col  = kernel_pars.cols[2];
              const double* cov_ptr = covariate.colptr(0);
              const uint8_t* nm     = nan_mask.colptr(0);
 
-             pred_mean_.resize(n);
-             pred_mode_.resize(n);
-             pred_logprecision_.resize(n);
-
+             // Grid is member of the kernel, no need to re-create it each run() call
+             ensure_grid();
              const int gs = grid_res_ + 1;
-             std::vector<double> prob_grid(gs), x_like(gs), y_like(gs);
-             for (int i = 0; i < gs; ++i) {
-               prob_grid[i] = static_cast<double>(i) / (gs - 1);
-               x_like[i]   = prob_grid[i];
-               y_like[i]   = 1.0 - prob_grid[i];
+             const std::vector<double>& prob_grid = prob_grid_;
+             const std::vector<double>& x_like    = x_like_;
+             const std::vector<double>& y_like    = y_like_;
+             std::vector<double>&       DBM_prior = DBM_prior_;
+             std::vector<double>&       DBM_pred  = DBM_pred_;
+
+             if (row_start == 0) {
+               DBM_post_pending_.assign(gs, 0.0);
+               first_active_ = true;
+               first_trial_row_ = -1;
+               init_streams(n);
+               post_history_.assign(n, std::vector<double>{});
              }
 
-             std::vector<double> DBM_post(gs), DBM_post_pending(gs);
-             double last_mean = 0.0, last_mode = 0.0, last_lp = 0.0;
-             bool first_active = true;
-
-             for(int r = 0; r < n; ++r) {
+             for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
-                 DBM_post = DBM_post_pending;
+                 // at mask controls committing to stored value
+                 // Last trial's pending posterior is committed:
+                 // DBM_post_[i]  =  p(\gamma_{t-1} = \gamma_i | x_{1:t-1})
+                 post_history_[r] = DBM_post_pending_;  // store committed posterior, to be able to rewind
 
-                 const double cp    = cp_col[r];
-                 const double mu0   = mu0_col[r];
-                 const double s0    = s0_col[r];
-                 const double a     = mu0 * s0;
-                 const double b     = (1.0 - mu0) * s0;
-                 const bool   reset = first_active || (belief_reset_ && belief_reset_[r]);
+                 // Beta prior: p0 ~ Beta(a,b)
+                 // a = \mu0*s0, b = (1-\mu0)·s0
+                 // DBM_prior[i] = p0(\gamma_i), normalised so that \Sum_i p0_i = 1
+                 const double cp  = cp_col[r];
+                 const double mu0 = mu0_col[r];
+                 const double s0  = s0_col[r];
+                 const double a   = mu0 * s0;
+                 const double b   = (1.0 - mu0) * s0;
 
-                 std::vector<double> DBM_prior(gs), DBM_pred(gs);
-                 for (int i = 0; i < gs; ++i) DBM_prior[i] = dbeta_val(prob_grid[i], a, b);
-                 normalise_inplace(DBM_prior);
+                 // Prior probability across grid values:
+                 // Prior p0(\gamma_i) = Beta(a, b) on the grid, normalised (cached on (a, b))
+                 ensure_prior(a, b);
 
-                 if (reset) {
+                 const bool reset = first_active_ || (belief_reset_ && belief_reset_[r]);
+                 if(reset) {
+                   // No memory (first trial or belief reset): pred = p0, i.e. c = 1
                    DBM_pred = DBM_prior;
                  } else {
-                   for (int i = 0; i < gs; ++i) DBM_pred[i] = (1.0 - cp) * DBM_post[i] + cp * DBM_prior[i];
-                   normalise_inplace(DBM_pred);
+                   //  --- TRANSITION -----------------------------------------------
+                   // The probability of gamma is a mixture: Either it's drawn from the prior (with probability c)
+                   // or it's the same as last (with probability 1-c):
+                   // p(\gamma_t | x_{1:t-1}) = (1-c)*p(\gamma_{t-1} | x_{1:t-1}) + c*p0(\gamma_t)
+                   // DBM_pred[i]             = (1-c)*DBM_post_[i]                + c*DBM_prior[i]
+                   const double keep = 1.0 - cp;
+#pragma omp simd
+                   for(int i = 0; i < gs; ++i) DBM_pred[i] = keep * DBM_post_pending_[i] + cp * DBM_prior[i];
+                   normalise_inplace(DBM_pred);  // ensure integration to one
                  }
 
-                 last_mean = pred_mean_[r]         = mean_discrete(prob_grid, DBM_pred);
-                 last_mode = pred_mode_[r]         = mode_discrete(prob_grid, DBM_pred);
-                 last_lp   = pred_logprecision_[r] = log_precision_discrete(prob_grid, DBM_pred);
+                 // --- PREDICTION -----------------------------------------------
+                 // Summaries of p(\gamma_t | x_{1:t-1}):
+                 //   mean = \Sum_i \gamma_i*w_i  = P(x_t = 1 | x_{1:t-1})   (the prediction)
+                 //   mode = \gamma_i at the largest w_i
+                 //   log-precision = -log Var(\gamma_t),  Var = \Sum_i (\gamma_i - mean)**2 * w_i
+                 double mean, mode, log_precision;
+                 discrete_summary(prob_grid, DBM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                 set_active(r, mean, mode, log_precision);
 
-                 // compute pending posterior
-                 if (!nm[r]) {
-                   DBM_post_pending = DBM_pred;
-                 } else {
-                   const double x = cov_ptr[r];
-                   const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
-                   for (int i = 0; i < gs; ++i) DBM_post_pending[i] = DBM_pred[i] * like[i];
-                   normalise_inplace(DBM_post_pending);
-                 }
+                 // Carry forward current predictions until next observation nm
+                 DBM_post_pending_ = DBM_pred;
 
-                 first_active = false;
+                 // We've started
+                 if(first_active_) first_trial_row_ = r;
+                 first_active_ = false;
                } else {
-                 pred_mean_[r]         = last_mean;
-                 pred_mode_[r]         = last_mode;
-                 pred_logprecision_[r] = last_lp;
+                 set_inactive(r);  // carry forward current beliefs
+               }
+
+               // ========================================================================
+               // OBSERVATION (nm): first non-NaN value of the trial, on any row
+               // ========================================================================
+               if(nm[r]) {
+                 // --- SURPRISE ---------------------------------------------------------
+                 //     S_t = -log2 P(x_t | x_{1:t-1})
+                 //         = -log2(\hat{p}_t)      if x = 1
+                 //         = -log2(1 - \hat{p}_t)  if x = 0, with \hat{p}_t = last_mean_
+                 const double x = cov_ptr[r];
+                 set_surprise(r, x);
+
+                 // --- BAYESIAN UPDATE ------------------------------------------
+                 //     p(\gamma_t | x_{1:t}) \propto \gamma^x (1-\gamma)^(1-x) * p(\gamma_t | x_{1:t-1})
+                 //     like[i] = \gamma_i      if x = 1   (x_like)
+                 //             = 1 - \gamma_i  if x = 0   (y_like)
+                 //     DBM_post_pending_ currently holds DBM_pred, so multiply in place
+                 //     and renormalise (the division by P(x_t | x_{1:t-1})).
+                 const std::vector<double>& like = (x == 1.0) ? x_like : y_like;
+#pragma omp simd
+                 for (int i = 0; i < gs; ++i) DBM_post_pending_[i] *= like[i];
+                 normalise_inplace(DBM_post_pending_);
                }
              }
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 
@@ -1490,6 +1604,11 @@ public:
 struct TPMKernel : DBMBaseKernel {
 private:
   int grid_res_ = 100;
+  std::vector<double> TPM_post_pending_;
+  bool first_active_  = true;
+  int  prev_active_r_ = -1;
+  std::vector<std::vector<double>> post_history_;
+  std::vector<int>                 prev_active_r_history_;
 
   struct TPMGrid {
     int resol = 0, n_combi = 0;
@@ -1531,97 +1650,209 @@ private:
     return g;
   }
 
+  int grid_built_for_ = -1;
+  TPMGrid grid_;
+  std::vector<double> TPM_pred_;
+  std::vector<double> TPM_prior_;
+  std::vector<double> beta_1d_;
+
+  double cached_a_ = std::numeric_limits<double>::quiet_NaN();
+  double cached_b_ = std::numeric_limits<double>::quiet_NaN();
+  bool prior_valid_ = false;
+
+  // Create grid
+  void ensure_grid() {
+    if (grid_built_for_ == grid_res_) return;
+
+    grid_ = build_grid(grid_res_);
+    TPM_pred_.resize(grid_.n_combi);
+    TPM_prior_.resize(grid_.n_combi);
+    beta_1d_.resize(grid_.resol);
+
+    prior_valid_ = false;
+    grid_built_for_ = grid_res_;
+  }
+
+  // Create prior -- calculate on grid where possible, and keep in cache.
+  void ensure_prior(double a, double b) {
+    if (prior_valid_ && a == cached_a_ && b == cached_b_) return;
+
+    const int resol = grid_.resol;
+
+    // The first row of p_XX contains the complete 1D grid.
+    for (int i = 0; i < resol; ++i) {
+      beta_1d_[i] = dbeta_val(grid_.p_XX[i], a, b);
+    }
+
+    for (int i0 = 0; i0 < resol; ++i0) {
+      const double beta_xy = beta_1d_[i0];
+      const int offset = i0 * resol;
+
+#pragma omp simd
+      for (int i1 = 0; i1 < resol; ++i1) {
+        TPM_prior_[offset + i1] = beta_1d_[i1] * beta_xy;
+      }
+    }
+
+    normalise_inplace(TPM_prior_);
+
+    cached_a_ = a;
+    cached_b_ = b;
+    prior_valid_ = true;
+  }
+
 public:
+  void reset() override {
+    DBMBaseKernel::reset();
+    TPM_post_pending_.clear();
+    first_active_  = true;
+    prev_active_r_ = -1;
+    post_history_.clear();
+    prev_active_r_history_.clear();
+  }
+
+  void rewind(int row_start) override {
+    if(row_start < 0 || static_cast<std::size_t>(row_start) >= post_history_.size() || post_history_[row_start].empty()) {
+      Rcpp::stop( "TPMKernel::rewind: row %d is not a recorded trial start", row_start);
+    }
+
+    TPM_post_pending_ = post_history_[row_start];
+    prev_active_r_ = prev_active_r_history_[row_start];
+    first_active_ = (prev_active_r_ < 0);
+
+    has_run_ = false;
+    last_row_end = row_start;
+
+  }
+
   void set_kernel_args(const KernelArgs& args) override {
     DBMBaseKernel::set_kernel_args(args);
     if (args.grid_res > 0) grid_res_ = args.grid_res;
-    // if (args.is_first_level_comp != nullptr)
-    //   Rcpp::stop("TPMKernel does not support at_mode = 'push'.");
   }
 
   void run(const KernelParsView& kernel_pars,
            const Mat& covariate,
            const std::vector<uint8_t>& at_mask,
-           const MatBool& nan_mask) override {
+           const MatBool& nan_mask,
+           int row_start = 0,
+           int row_end   = -1) override {
 
              if (kernel_pars.cols.size() != 3)
                Rcpp::stop("TPMKernel expects 3 parameter columns (cp, a0, b0), got %d",
                           (int)kernel_pars.cols.size());
 
              const int     n       = covariate.nrow;
+             const int     end     = (row_end < 0) ? n : row_end;
              const double* cp_col  = kernel_pars.cols[0];
              const double* a0_col  = kernel_pars.cols[1];
              const double* b0_col  = kernel_pars.cols[2];
              const double* cov_ptr = covariate.colptr(0);
              const uint8_t* nm     = nan_mask.colptr(0);
 
-             pred_mean_.resize(n);
-             pred_mode_.resize(n);
-             pred_logprecision_.resize(n);
+             ensure_grid();
 
-             const TPMGrid  grid    = build_grid(grid_res_);
-             const int      nc      = grid.n_combi;
+             const TPMGrid& grid = grid_;
+             const int nc = grid.n_combi;
+             std::vector<double>& TPM_pred = TPM_pred_;
+
              const double   inv_nm1 = 1.0 / (nc - 1.0);
 
-             std::vector<double> TPM_post(nc), TPM_post_pending(nc);
-             std::vector<double> TPM_pred(nc), TPM_update(nc);
-             double last_mean = 0.0, last_mode = 0.0, last_lp = 0.0;
-             bool   first_active  = true;
-             int    prev_active_r = -1;
+             if (row_start == 0) {
+               TPM_post_pending_.assign(nc, 0.0);
+               first_active_  = true;
+               prev_active_r_ = -1;
+               init_streams(n);
+               post_history_.assign(n, std::vector<double>{});
+               prev_active_r_history_.assign(n, -1);
+             }
 
-             for (int r = 0; r < n; ++r) {
+             for(int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
-                 TPM_post = TPM_post_pending;
+                 post_history_[r] = TPM_post_pending_;
+                 prev_active_r_history_[r] = prev_active_r_;
 
                  const double cp      = cp_col[r];
                  const double x       = cov_ptr[r];
-                 const bool   reset   = first_active || (belief_reset_ && belief_reset_[r]);
-                 const bool   prev_na = (prev_active_r < 0) || !nm[prev_active_r];
-                 const int    prev    = prev_na ? -1 : static_cast<int>(cov_ptr[prev_active_r]);
+                 const bool   reset   = first_active_ || (belief_reset_ && belief_reset_[r]);
+                 const bool   prev_na = (prev_active_r_ < 0) || !nm[prev_active_r_];
+                 const int    prev    = prev_na ? -1 : static_cast<int>(cov_ptr[prev_active_r_]);
                  const bool   curr_na = !nm[r];
                  const int    curr    = curr_na ? -1 : static_cast<int>(x);
 
-                 const double sum_post = std::accumulate(TPM_post.begin(), TPM_post.end(), 0.0);
 
                  if(reset) {
-                   for(int k = 0; k < nc; ++k) TPM_pred[k] = dbeta_val(grid.p_XX[k], a0_col[r], b0_col[r]) * dbeta_val(grid.p_XY[k], a0_col[r], b0_col[r]);
+                   ensure_prior(a0_col[r], b0_col[r]);
+                   TPM_pred = TPM_prior_;
                  } else {
-                   for(int k = 0; k < nc; ++k) TPM_pred[k] = (1.0 - cp) * TPM_post[k] + cp * (sum_post - TPM_post[k]) * inv_nm1;
-                 }
-                 normalise_inplace(TPM_pred);
+                   // this is all correct, but the loops over the grid can be vectorised:
+                   // const double sum_post = std::accumulate(TPM_post_pending_.begin(), TPM_post_pending_.end(), 0.0);
+                   // for(int k = 0; k < nc; ++k) TPM_pred[k] = (1.0 - cp) * TPM_post_pending_[k] + cp * (sum_post - TPM_post_pending_[k]) * inv_nm1;
+                   // normalise_inplace(TPM_pred);  // prior normalisation is done in ensure_prior()
 
-                 if(prev_na || reset) {
-                   last_mean = pred_mean_[r]         = mean_discrete(grid.mean_p, TPM_pred);
-                   last_mode = pred_mode_[r]         = mode_discrete(grid.mean_p, TPM_pred);
-                   last_lp   = pred_logprecision_[r] = log_precision_discrete(grid.mean_p, TPM_pred);
-                 } else {
-                   last_mean = pred_mean_[r]         = prev == 1 ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
-                   last_mode = pred_mode_[r]         = prev == 1 ? mode_discrete(grid.p_XX, TPM_pred) : mode_discrete(grid.p_XY, TPM_pred);
-                   last_lp   = pred_logprecision_[r] = prev == 1 ? log_precision_discrete(grid.p_XX, TPM_pred) : log_precision_discrete(grid.p_XY, TPM_pred);
+                   // vectorised std::accumulate:
+                   double sum_post = 0.0;
+#pragma omp simd reduction(+:sum_post)
+                   for (int k = 0; k < nc; ++k) {
+                     sum_post += TPM_post_pending_[k];
+                   }
+
+                   // vectorised grid update:
+                   const double keep = 1.0 - cp;
+#pragma omp simd
+                   for(int k = 0; k < nc; ++k) {
+                     const double post = TPM_post_pending_[k];
+                     TPM_pred[k] = keep * post + cp * (sum_post - post) * inv_nm1;
+                   }
+                   // and here we could also still pass a sum to get rid of one of the loops in normalise_inplace
+                   normalise_inplace(TPM_pred);
                  }
+
+                 double mean, mode, log_precision;
+                 if (prev_na || reset) {
+                   discrete_summary(grid.mean_p, TPM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                   set_active(r, mean, mode, log_precision);
+                 } else {
+                   const std::vector<double>& g = (prev == 1) ? grid.p_XX : grid.p_XY;
+                   discrete_summary(g, TPM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                   set_active(r, mean, mode, log_precision);
+                 }
+                 if (!curr_na) set_surprise(r, x);
+
+                 // Prediction summaries are finished.
+                 // Transfer prediction into the pending posterior without copying.
+                 // The old posterior becomes prediction scratch space for the next row.
+                 TPM_post_pending_.swap(TPM_pred);
 
                  // compute pending posterior
-                 if (curr_na || prev_na || reset) {
-                   TPM_post_pending = TPM_pred;
-                 } else {
-                   const std::vector<double>* lp = (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY) : (curr == 0 ? &grid.like_YX : &grid.like_XX);
-                   for (int k = 0; k < nc; ++k) TPM_update[k] = (1.0 - cp) * (*lp)[k] * TPM_post[k] + cp * (*lp)[k] * (sum_post - TPM_post[k]) * inv_nm1;
-                   normalise_inplace(TPM_update);
-                   std::swap(TPM_post_pending, TPM_update);
+                 if (!curr_na && !prev_na && !reset) {
+                   const std::vector<double>& like = (prev == 0) ? (curr == 0 ? grid.like_YY : grid.like_XY) : (curr == 0 ? grid.like_YX : grid.like_XX);
+
+                   double sum_update = 0.0;
+                   // One pass: likelihood multiplication + normalisation sum.
+#pragma omp simd reduction(+:sum_update)
+                   for (int k = 0; k < nc; ++k) {
+                     const double updated = TPM_post_pending_[k] * like[k];
+                     TPM_post_pending_[k] = updated;
+                     sum_update += updated;
+                   }
+
+                   // Second pass: normalise.
+                   if (sum_update > 0.0) {
+                     const double inv = 1.0 / sum_update;
+#pragma omp simd
+                     for (int k = 0; k < nc; ++k) {
+                       TPM_post_pending_[k] *= inv;
+                     }
+                   }
                  }
 
-                 first_active  = false;
-                 prev_active_r = r;
+                 first_active_  = false;
+                 prev_active_r_ = r;
                } else {
-                 pred_mean_[r]         = last_mean;
-                 pred_mode_[r]         = last_mode;
-                 pred_logprecision_[r] = last_lp;
+                 set_inactive(r);
                }
              }
-
-             store_obs(cov_ptr, n, at_mask);
-             sync_out_to_mean();
-             mark_run_complete();
+             mark_run_complete(end);
            }
 };
 

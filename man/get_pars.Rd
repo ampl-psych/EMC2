@@ -24,7 +24,8 @@ get_pars(
   type = NULL,
   true_pars = NULL,
   chain = NULL,
-  covariates = NULL
+  covariates = NULL,
+  n_cores = 1
 )
 }
 \arguments{

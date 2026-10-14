@@ -221,9 +221,12 @@ void c_do_bound(const ParamTable& pt,
 // ---------------------
 
 void c_do_transform(ParamTable& pt,
-                  const std::vector<TransformSpec>& specs)
+                  const std::vector<TransformSpec>& specs,
+                  int row_start,
+                  int row_end)
 {
-  const int nrow = pt.n_trials;
+  const int end = (row_end < 0) ? pt.n_trials : row_end;
+  const int T   = end - row_start;
 
   for (size_t j = 0; j < specs.size(); ++j) {
     const TransformSpec& sp = specs[j];
@@ -232,27 +235,27 @@ void c_do_transform(ParamTable& pt,
     const double lw         = sp.lower;
     const double up         = sp.upper;
 
-    double* __restrict__ col = &pt.base(0, col_idx);
+    double* __restrict__ col = &pt.base(row_start, col_idx);  // offset to row_start
 
     if (pt.col_is_constant[col_idx]) {
       // values are constant across trials - transform once, fill
-      double val = col[0];
+      double val = pt.base(0, col_idx);
       switch (sp.code) {
       case EXP:   val = std::exp(val) + lw; break;
       case PNORM: val = lw + (up - lw) * PNORM_STD(val, true, false); break;
       default: break;
       }
-      std::fill(col, col + nrow, val);
+      std::fill(col, col + T, val);
     } else {
       // values vary between trials - check all trials
       switch (c) {
       case EXP: {
-        vec_exp_offset(col, nrow, lw);
+        vec_exp_offset(col, T, lw);
         break;
       }
       case PNORM: {
       const double range = up - lw;
-      for (int i = 0; i < nrow; ++i) {
+      for (int i = 0; i < T; ++i) {
         col[i] = lw + range * PNORM_STD(col[i], true, false);
         // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
       }

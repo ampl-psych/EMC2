@@ -60,6 +60,8 @@ struct KernelSpec {
   std::vector<int> q_reset_col;   // length n_trials, or empty
   std::vector<int> belief_reset_col;
   KernelArgs       kernel_args;   // raw-pointer view; rebuilt via build_kernel_args()
+  std::string      q_reset_col_name;
+  std::string      belief_reset_col_name;
 
   // custom kernel pointer (R_NilValue if not custom)
   SEXP custom_fun = R_NilValue;
@@ -80,6 +82,15 @@ struct KernelSpec {
 };
 
 // =============================================================================
+// BaseArgs
+// =============================================================================
+
+struct BaseArgs {
+  std::string cond_par;   // parameter column name to condition on
+  int         cond_sign;  // +1 = positive, -1 = negative
+};
+
+// =============================================================================
 // BaseSpec  —  mirrors emc2_base; pure C++ after construction
 // =============================================================================
 
@@ -96,13 +107,23 @@ struct BaseSpec {
   // one Mat per named map entry; empty if no coding schemes
   bool             has_covariate_coding = false;
   std::vector<Mat> covariate_coding;
+
+  // conditional base args (used by lin_if_pos / lin_if_neg)
+  bool     has_cond_par = false;
+  BaseArgs base_args;
+  std::string      covariate_coding_name;
 };
+
 
 // =============================================================================
 // TrendPlan  —  owns all specs; built once per subject
 // =============================================================================
 
 struct TrendPlan {
+  // allow for incremental updating of data? Must be false when used in multithreading
+  // as this is an ummutable owner
+  bool incremental_mutable = false;
+
   std::unordered_map<std::string, KernelSpec> kernels;
 
   std::vector<BaseSpec> premap_bases;
@@ -122,6 +143,10 @@ struct TrendPlan {
   bool has_premap()        const { return !premap_bases.empty(); }
   bool has_pretransform()  const { return !pretransform_bases.empty(); }
   bool has_posttransform() const { return !posttransform_bases.empty(); }
+
+  // For updating in incremental data simulation
+  void enable_incremental_updates() { incremental_mutable = true; }
+  void patch_data_rows(const Rcpp::DataFrame& data, int row_start, int row_end, int src_row_start=0, int src_row_end=-1);
 
   // Returns a LogicalVector (Rcpp boundary — used by make_pipeline_cache)
   Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const;
@@ -170,6 +195,7 @@ struct BaseRuntime {
   const BaseSpec*    spec      = nullptr;
   KernelRuntime*     kernel_rt = nullptr;  // non-owning, into TrendRuntime::kernels
   std::vector<int>   base_par_indices;
+  int                cond_par_idx = -1;  // resolved in bind_all_to_paramtable; -1 if unused
 };
 
 struct TrendRuntime {
@@ -187,6 +213,8 @@ struct TrendRuntime {
   bool has_premap()        const { return plan->has_premap(); }
   bool has_pretransform()  const { return plan->has_pretransform(); }
   bool has_posttransform() const { return plan->has_posttransform(); }
+
+  void sync_data_rows_from_plan(int row_start, int row_end);
 
   const std::unordered_set<std::string>& premap_trend_params()       const { return plan->premap_params; }
   const std::unordered_set<std::string>& pretransform_trend_params()  const { return plan->pretransform_params; }
@@ -209,7 +237,7 @@ struct TrendRuntime {
   }
 
   void bind_all_to_paramtable(const ParamTable& pt);
-  void apply_base(BaseRuntime& base_rt, ParamTable& pt);
+  void apply_base(BaseRuntime& base_rt, ParamTable& pt, int row_start = 0, int row_end = -1);
   void reset_all_kernels();
 
   // Rcpp boundary — diagnostic only, not in hot path
@@ -217,7 +245,7 @@ struct TrendRuntime {
   Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes);
 
 private:
-  void run_kernel(KernelRuntime& k_rt, ParamTable& pt);
+  void run_kernel(KernelRuntime& k_rt, ParamTable& pt, int row_start=0, int row_end=-1);
 };
 
 // =============================================================================
