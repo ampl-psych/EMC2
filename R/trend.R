@@ -49,21 +49,6 @@
 #'   factor column name (e.g. `"lR"`), the kernel is applied only to entries
 #'   corresponding to the first level of that factor and fed forward to the
 #'   other levels. Defaults to `"lR"`. For DDMs, `at` should be set to `NULL`.
-#' @param at_mode Controls how the `at` factor is used during kernel computation.
-#'   \describe{
-#'     \item{`"filter"` (default)}{Only rows corresponding to the first level of
-#'       `at` are passed to the kernel. The resulting Q-value is then broadcast
-#'       to all other rows within the same trial. Use this when all accumulators
-#'       share the same covariate value on a given trial.}
-#'     \item{`"push"`}{All rows are passed to the kernel, allowing each
-#'       accumulator row to carry a different covariate value. Q-value updates
-#'       are computed per row but only take effect at the start of the
-#'       \emph{next} trial (i.e. the next first-level row of `at`), ensuring
-#'       that within-trial updates do not contaminate Q-values on other rows of
-#'       the same trial. Use this when covariate values differ across
-#'       accumulators within a trial (e.g. per-symbol feedback in RL models
-#'       with multiple accumulators).}
-#'   }
 #'
 #' @return An object of class `emc2_kernel`.
 #' @seealso [make_base()], [make_trend()], [trend_help()]
@@ -73,8 +58,7 @@ make_kernel <- function(cov_names,
                         par_input          = NULL,
                         kernel_args        = NULL,
                         custom_kernel      = NULL,
-                        at                 = "lR",
-                        at_mode            = "filter") {
+                        at                 = "lR") {
 
   # ---- validate kernel type ----
   known <- names(trend_help(type, return_types = TRUE)$kernels)
@@ -83,12 +67,6 @@ make_kernel <- function(cov_names,
 
   if (identical(type, "custom") && is.null(custom_kernel))
     stop("custom_kernel must be provided when type = 'custom'.")
-
-  # validate at_mode
-  if (!at_mode %in% c("filter", "push"))
-    stop("at_mode must be 'filter' or 'push'.")
-  if (at_mode == "push" && is.null(at))
-    stop("at_mode = 'push' requires 'at' to specify a factor column.")
 
   # ---- normalise cov_names / par_input ----
   if (is.null(cov_names)) cov_names <- character(0)
@@ -143,7 +121,6 @@ make_kernel <- function(cov_names,
       kernel_args        = kernel_args,
       kernel_pointer     = if (!is.null(custom_kernel)) custom_kernel$kernel_pointer else NULL,
       at                 = at,
-      at_mode            = at_mode,
       sequential         = type %in% .sequential_kernels(),
       # generic (unprefixed) — finalised to prefixed in make_trend()
       generic_pnames     = generic_pnames,
