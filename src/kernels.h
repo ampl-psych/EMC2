@@ -150,7 +150,7 @@ public:
   bool has_run() const { return has_run_; }
 
   bool has_run_for(int row_end_requested) const {
-    return last_row_end == row_end_requested;
+    return has_run_ && last_row_end == row_end_requested;
   }
 
   // does this kernel have a stream for this code?
@@ -307,6 +307,8 @@ public:
   void rewind(int row_start) override {
     q_         = out_[row_start];
     q_pending_ = out_[row_start];
+    has_run_ = false;
+    last_row_end = row_start;
   }
 };
 
@@ -1120,6 +1122,9 @@ public:
     n_trial_         = n_trial_history_[row_start];
     n_hit_pending_   = n_hit_;
     n_trial_pending_ = n_trial_;
+
+    has_run_ = false;
+    last_row_end = row_start;
   }
 
   bool has_output_stream(int code) const override {
@@ -1247,6 +1252,9 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
 
              for (int r = row_start; r < end; ++r) {
                if(at_mask[r]) {
+                 n_hit_history_[r]   = n_hit_pending_;    // store after commit
+                 n_trial_history_[r] = n_trial_pending_;
+
                  // control commit
                  // apply one step of decay to pending counts (one tick per trial)
                  const double df = std::exp(-1.0 / decay_col[r]);
@@ -1256,8 +1264,6 @@ struct BetaBinomialDecayKernel : DBMBaseKernel {
                  // then commit
                  n_hit_   = n_hit_pending_;
                  n_trial_ = n_trial_pending_;
-                 n_hit_history_[r]   = n_hit_;    // store after commit
-                 n_trial_history_[r] = n_trial_;
 
                  if (belief_reset_ && belief_reset_[r]) {
                    n_hit_ = n_hit_pending_ = 0.0;
@@ -1457,10 +1463,12 @@ public:
   }
 
   void rewind(int row_start) override {
-    if (post_history_[row_start].empty())
-      Rcpp::stop("DBMKernel::rewind: row %d is not a trial start", row_start);
+    if(post_history_[row_start].empty()) Rcpp::stop("DBMKernel::rewind: row %d is not a trial start", row_start);
     DBM_post_pending_ = post_history_[row_start];
     first_active_ = (first_trial_row_ < 0) || (row_start <= first_trial_row_);
+
+    has_run_ = false;
+    last_row_end = row_start;
   }
 
   void set_kernel_args(const KernelArgs& args) override {
@@ -1570,7 +1578,7 @@ public:
                  set_surprise(r, x);
 
                  // --- BAYESIAN UPDATE ------------------------------------------
-                 //     p(\gamma_t | x_{1:t}) \prop \gamma^x (1-\gamma)^(1-x) * p(\gamma_t | x_{1:t-1})
+                 //     p(\gamma_t | x_{1:t}) \propto \gamma^x (1-\gamma)^(1-x) * p(\gamma_t | x_{1:t-1})
                  //     like[i] = \gamma_i      if x = 1   (x_like)
                  //             = 1 - \gamma_i  if x = 0   (y_like)
                  //     DBM_post_pending_ currently holds DBM_pred, so multiply in place
@@ -1655,11 +1663,13 @@ public:
   }
 
   void rewind(int row_start) override {
-    DBMBaseKernel::rewind(row_start);
     TPM_post_         = post_history_[row_start];
     TPM_post_pending_ = TPM_post_;
     prev_active_r_    = prev_active_r_history_[row_start];
     first_active_     = false;
+
+    has_run_ = false;
+    last_row_end = row_start;
   }
 
   void set_kernel_args(const KernelArgs& args) override {

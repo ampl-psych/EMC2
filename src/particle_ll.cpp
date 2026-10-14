@@ -1439,12 +1439,14 @@ void step_subject_pipeline(
                                           sp->pm_col_to_base_idx,
                                           row_start, row_end);
 
-  // 2) Patch new parameter values into ParamTable
-  sp->param_table.patch_design_rows(new_designs, row_start, row_end);
+  // 2) Patch new parameter values into ParamTable.
+  // Note that src_rows and rows are the same in the single subject case
+  sp->param_table.patch_design_rows(new_designs, row_start, row_end, row_start, row_end);
 
   // 3) Patch data rows in trendplan & runtime (covariate values, nan_mask, at_mask, covariate_coding)
   if (sp->trend_plan) {
-    sp->trend_plan->patch_data_rows(new_data, row_start, row_end);
+    // Note that src_rows and rows are the same in the single subject case
+    sp->trend_plan->patch_data_rows(new_data, row_start, row_end, row_start, row_end);
     sp->trend_runtime->sync_data_rows_from_plan(row_start, row_end);
   }
 
@@ -1544,8 +1546,7 @@ void step_group_pipeline(
   const int n_ctx = new_data.nrows();
   for (int i = 0; i < designs_ctx.size(); ++i)
     if (!Rf_isNull(designs_ctx[i]) && Rcpp::NumericMatrix(designs_ctx[i]).nrow() != n_ctx)
-      Rcpp::stop("step_group_pipeline: design %d has %d rows, expected %d",
-                 i + 1, Rcpp::NumericMatrix(designs_ctx[i]).nrow(), n_ctx);
+      Rcpp::stop("step_group_pipeline: design %d has %d rows, expected %d", i + 1, Rcpp::NumericMatrix(designs_ctx[i]).nrow(), n_ctx);
 
 
   for (int s = 0; s < S; ++s) {

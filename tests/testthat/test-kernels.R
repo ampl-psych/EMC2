@@ -24,10 +24,83 @@ make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5, ...) {
   dat <- make_data(p_vector, this_design, n_trials = n_trials, covariates = covariates)
 
 
-  emc <- make_emc(dat, this_design, type='single')
+  emc <- make_emc(dat, this_design, type='single', compress=FALSE) # shut up...
   return(emc)
 }
 
+compare_kernel_outputs <- function(emc, kernel_pars, kernel_output_codes=1L) {
+  model <- emc[[1]]$model()
+  p_types <- names(model$p_types)
+  dadm <- emc[[1]]$data[[1]]
+  designs <- EMC2:::get_designs_expanded(dadm, model)
+  constants <- attr(dadm, "constants")
+  if(is.null(constants)) constants <- NA
+  transform <- model$transform
+  trend <- model$trend
+
+  p_vector <- sampled_pars(emc, doMap = FALSE)  # no kernel pars
+  p_vector[names(kernel_pars)] <- kernel_pars
+  particle_matrix <- t(p_vector)
+
+  filter_dadm <- function(dadm, rows) {
+    dadm[rows,] <- NA
+    dadm
+  }
+
+  # Create individual subject pipeline with no data (all set to NA)
+  ctx <- EMC2:::create_subject_pipeline(
+    pars      = particle_matrix,
+    designs   = designs,
+    transform = transform,
+    data      = filter_dadm(dadm, 1:nrow(dadm)),
+    pretransform = model$pre_transform,
+    constants = constants,
+    trend     = trend)
+
+  n <- nrow(dadm)
+  n_acc <- length(unique(dadm$lR))
+  for (i in seq(1, n, by = n_acc)) {
+    row_start <- i - 1L
+    if(row_start > 1) row_start <- row_start - 1L*n_acc  # also pass context
+    row_end   <- min(i + 1L, n)
+    dadm_passed <- filter_dadm(dadm, (row_start+2*n_acc+1L):nrow(dadm))
+    EMC2:::step_subject_pipeline(ctx,
+                                 new_designs=designs, dadm_passed,
+                                 row_start = row_start,
+                                 row_end = row_end)
+  }
+  # final step, only last trial, unfiltered dadm
+  EMC2:::step_subject_pipeline(ctx,
+                               new_designs=designs,
+                               dadm,
+                               row_start = row_start,
+                               row_end = row_end)
+
+  # new_result <- EMC2:::get_subject_pipeline_result(ctx)
+  new_result <- EMC2:::get_subject_pipeline_covariates(ctx, kernel_output_codes = kernel_output_codes)
+
+  ## compare with old get_pars_matrix
+  old_result <- EMC2:::get_pars_c_wrapper(
+    particle_matrix = particle_matrix,
+    data            = dadm,
+    constants       = constants,
+    designs         = designs,
+    bounds          = model$bound,
+    transforms      = model$transform,
+    pretransforms   = model$pre_transform,
+    trend           = trend,
+    return_all_pars = TRUE, return_kernel_matrix = TRUE, kernel_output_codes = kernel_output_codes
+  )[[1]]
+
+  shared_cols <- intersect(colnames(old_result), colnames(new_result))
+  old_aligned <- old_result[, shared_cols, drop = FALSE]
+  new_aligned <- new_result[, shared_cols, drop = FALSE]
+
+  #diffs     <- abs(old_aligned - new_aligned)
+  #max_diff  <- max(diffs, na.rm = TRUE)
+  list(single_run=old_aligned, stepwise_with_rewind=new_aligned)
+}
+#
 
 # lin_incr ----------------------------------------------------------------
 trend_lin_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'lin_incr')))
@@ -39,7 +112,7 @@ emc <- make_minimal_emc(trend_lin_incr)
 expected_output <- 1:5
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("lin_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # lin_decr ----------------------------------------------------------------
@@ -49,7 +122,7 @@ emc <- make_minimal_emc(trend_lin_decr)
 expected_output <- -(1:5)
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("lin_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # exp_decr ----------------------------------------------------------------
@@ -60,7 +133,7 @@ emc <- make_minimal_emc(trend_exp_decr, covariate1 = covariate1)
 expected_output <- exp(-exp(kernel_pars) * covariate1)
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("exp_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # exp_incr ----------------------------------------------------------------
@@ -71,7 +144,7 @@ emc <- make_minimal_emc(trend_exp_incr, covariate1 = covariate1)
 expected_output <- 1-exp(-exp(kernel_pars) * covariate1)
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("exp_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # slin_incr / slin_decr ---------------------------------------------------
@@ -105,7 +178,7 @@ emc <- make_minimal_emc(trend_pow_decr, covariate1 = covariate1)
 expected_output = (1 + covariate1)^(-exp(kernel_pars))
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("pow_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # pow_incr ----------------------------------------------------------------
@@ -116,7 +189,7 @@ emc <- make_minimal_emc(trend_pow_incr, covariate1 = covariate1)
 expected_output <- 1-(1 + covariate1)^(-exp(kernel_pars))
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("pow_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # poly2: Quadratic polynomial: k = d1 * c + d2 * c^2 -----------
@@ -127,7 +200,7 @@ emc <- make_minimal_emc(trend_poly2, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly2_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # poly3: Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 ----------
@@ -138,7 +211,7 @@ emc <- make_minimal_emc(trend_poly3, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly3_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 # poly4: Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4 ---------
@@ -149,7 +222,7 @@ emc <- make_minimal_emc(trend_poly4, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3+kernel_pars[[4]]*covariate1^4
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly4_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 
 
@@ -160,11 +233,14 @@ test_that("poly4_Rcpp", {
 trend_delta <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'delta')))
 kernel_pars <- c('m.q0'=0.5, 'm.alpha'=qnorm(0.2))
 covariate1 <- c(NA, 1, NA, 1, NA)
+# covariate1 <- c(1,0,1,0,1)
 emc <- make_minimal_emc(trend_delta, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.6, 0.6, 0.68)) # manually computed for this specific covariate + parameter vector
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+out <- compare_kernel_outputs(emc, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L))
 test_that("delta_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+  expect_equal(out$single_run, out$stepwise_with_rewind)
 })
 
 
@@ -175,8 +251,10 @@ covariate1 <- c(NA, 1, NA, 0, NA)
 emc <- make_minimal_emc(trend_delta2lr, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.75, 0.75, 0.5625)) # manually computed for this specific covariate + parameter vector
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+out <- compare_kernel_outputs(emc, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L))
 test_that("delta2lr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+  expect_equal(out$single_run, out$stepwise_with_rewind)
 })
 
 
@@ -210,8 +288,10 @@ covariate1 <- c(1, 1, 1, 1, 1)
 emc <- make_minimal_emc(trend_delta, covariate1 = covariate1, do_reset=c(F,F,T,F,F))
 expected_output <- matrix(c(0, 0.2, 0, 0.2, 0.36)) # manually computed for this specific covariate + parameter vector
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+out <- compare_kernel_outputs(emc, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L))
 test_that("delta_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+  expect_equal(out$single_run, out$stepwise_with_rewind)
 })
 
 
@@ -253,9 +333,7 @@ apply_kernel(kernel_pars, emc)
 # independent of the EMC2 trends framework
 
 # shared covariate vector (true mean roughly 0.3; includes NA)
-covariate1 <- c(
-  0, 1, 0, 0, 0, 0, 1, NA, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, NA, 0, 1, 0, 0
-)
+covariate1 <- c(0, 1, 0, 0, 0, 0, 1, NA, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, NA, 0, 1, 0, 0)
 
 make_minimal_emc_wrap <- function(kernel_name, output_code = 1L) {
   make_minimal_emc(
@@ -307,10 +385,15 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 snapshot_list[["uniform"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs = out
 )
+# kernel outputs check
+
 
 # test belief resetting
 reset_column <- rep(FALSE, times = length(covariate1))
@@ -342,10 +425,17 @@ true_out <- beta_binomial(
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
 all.equal(emc_out, true_out)
 identical(emc_out[1], emc_out[reset_idx])
+out <- compare_kernel_outputs(emc_reset, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 snapshot_list[["uniform_reset"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs = out
 )
+
+
+
+
 
 # informative prior: shape1 = mean * scale; shape2 = (1-mean) * scale
 kernel_pars <- c(
@@ -366,9 +456,12 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 snapshot_list[["informative"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs = out
 )
 
 # conclude with test snapshot
@@ -401,9 +494,11 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 # conclude with test snapshot
 test_that("beta_binomial_decay_Rcpp", {
-  expect_snapshot(list(manual = true_out, emc = emc_out))
+  expect_snapshot(list(manual = true_out, emc = emc_out, kernel_outputs=out))
 })
 
 
@@ -435,9 +530,12 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 snapshot_list[["uniform"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs=out
 )
 
 # test belief resetting
@@ -467,9 +565,14 @@ true_out <- beta_binomial(
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
 all.equal(emc_out, true_out)
 identical(emc_out[1], emc_out[reset_idx])
+
+out <- compare_kernel_outputs(emc_reset, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
+
 snapshot_list[["uniform_reset"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs=out
 )
 
 # conclude with test snapshot
@@ -509,6 +612,8 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 
 emc_out_bb <- sapply(
   X = output_codes,
@@ -554,6 +659,8 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 
 fixed_beta_out <- matrix(nrow = length(covariate1), ncol = length(output_types))
 colnames(fixed_beta_out) <- output_types
@@ -585,7 +692,8 @@ all.equal(emc_out, fixed_beta_out, tolerance = 1e-5)
 snapshot_list[["cp_1"]] <- list(
   manual = true_out,
   emc = emc_out,
-  fixed_beta = fixed_beta_out
+  fixed_beta = fixed_beta_out,
+  kernel_outputs=out
 )
 
 
@@ -609,10 +717,13 @@ emc_out <- sapply(
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
 all.equal(emc_out, true_out)
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
 
 snapshot_list[["cp_real"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs=out
 )
 
 # test belief resetting
@@ -642,9 +753,14 @@ true_out <- dbm(
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
 all.equal(emc_out, true_out)
 identical(emc_out[1], emc_out[reset_idx])
+
+out <- compare_kernel_outputs(emc$mean, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
+
 snapshot_list[["cp_real_reset"]] <- list(
   manual = true_out,
-  emc = emc_out
+  emc = emc_out,
+  kernel_outputs=out
 )
 
 # conclude with test snapshot
@@ -710,6 +826,9 @@ emc <- make_minimal_emc_wrap("tpm", output_code = 1L)
 kernel_pars <- c("m.cp" =  qnorm(0.2), "m.a0" = log(1), "m.b0" = log(1))
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
 
+out <- compare_kernel_outputs(emc, kernel_pars = kernel_pars, kernel_output_codes = c(1L,2L,3L,4L))
+all.equal(out$single_run, out$stepwise_with_rewind)
+
 # NB after thorough debugging, it turns out that the output from the Matlab toolbox
 # is offset by one index relative to our output. Specifically, in Matlab,
 # out.p1_mean(t) is the model's forecast for trial t+1, computed from data through
@@ -722,7 +841,8 @@ all.equal(emc_out[-1], true_out[-length(true_out)], tolerance = 1e-3)
 
 # conclude with test snapshot
 test_that("tpm_Rcpp", {
-  expect_snapshot(list(Matlab = true_out, emc = emc_out))
+  expect_snapshot(list(Matlab = true_out, emc = emc_out,
+                       kernel_outputs=out))
 })
 
 
