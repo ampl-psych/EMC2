@@ -5,6 +5,8 @@
 #include <Rcpp.h>
 #include <unordered_map>
 #include "LikelihoodContext.h"
+#include "AccumulatRBridge.h"
+#include <exception>
 
 // Utilities first — no dependencies on model types
 #include "utility_functions.h"
@@ -29,6 +31,11 @@
 #include "model_SS_RDEX.h"
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
 using namespace Rcpp;
+
+// [[Rcpp::export]]
+bool accumulatr_context_valid(SEXP context) {
+  return TYPEOF(context) == EXTPTRSXP && R_ExternalPtrAddr(context) != nullptr;
+}
 
 // =============================================================================
 // PipelineCache — pre-computed specs and masks for the parameter pipeline
@@ -602,7 +609,7 @@ namespace emc2 {
 
 struct LikelihoodContext::Impl {
   enum Model { MRI, MRI_AR1, ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT, MULTINOMIAL_PROBIT,
-               SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE };
+               SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE, ACCUMULATR };
 
   struct State {
     ParamTable pt;
@@ -614,6 +621,7 @@ struct LikelihoodContext::Impl {
     CensorSpec censor;
     TruncSpec trunc;
     SSSpec ss;
+    std::unique_ptr<AccumulatRBridge::Workspace> accumulatr;
     NumericMatrix pars; // CDM's native density functions use the Rcpp matrix ABI.
     double* pars_ptr = nullptr;
   };
@@ -637,6 +645,7 @@ struct LikelihoodContext::Impl {
   RaceModelSetup race{};
   ChoiceOnlySpec choice;
   MRISpec mri;
+  std::unique_ptr<AccumulatRBridge> accumulatr;
   Model model;
   std::string model_name;
   int n_parameters, n_rows, n_lR, n_trials, n_exp, n_threads;
@@ -691,47 +700,52 @@ struct LikelihoodContext::Impl {
       expand = data.attr("expand");
       n_exp = expand.size();
       expand_ptr = expand.begin();
-      const bool has_missingness = data.containsElementNamed("missingness");
-      const bool has_winner = data.containsElementNamed("winner");
-      IntegerVector missingness = has_missingness ? as<IntegerVector>(data["missingness"]) : IntegerVector();
-      LogicalVector winner = has_winner ? as<LogicalVector>(data["winner"]) : LogicalVector();
-      idx_all.reserve(n_rows);
-      if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
-      for (int i = 0; i < n_rows; ++i) {
-        if (has_missingness && !IntegerVector::is_na(missingness[i])) {
-          if (missingness[i] == 0) participating[i] = false;
-          continue;
-        }
-        idx_all.push_back(i);
-        if (has_winner) (winner[i] ? idx_win : idx_los).push_back(i);
-      }
-      if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" ||
-          type == "MULTINOMIAL_LOGIT" || type == "MULTINOMIAL_PROBIT") {
-        model = type == "ORDERED_PROBIT" ? ORDERED_PROBIT :
-                type == "ORDERED_LOGIT" ? ORDERED_LOGIT :
-                type == "MULTINOMIAL_LOGIT" ? MULTINOMIAL_LOGIT : MULTINOMIAL_PROBIT;
-        choice = make_choice_only_spec(pipeline.param_table, std::string(type));
-        levels = data["lR"];
-        levels_ptr = levels.begin();
-      } else if (type == "SSEXG" || type == "SSRDEX") {
-        model = type == "SSEXG" ? SSEXG : SSRDEX;
+      if (type == "AccumulatR") {
+        model = ACCUMULATR;
+        accumulatr.reset(new AccumulatRBridge(data, pipeline.param_table, bounds, min_ll));
       } else {
-        rts = data["rt"];
-        rts_ptr = rts.begin();
-        if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
-          model = type == "CDM" ? CDM : type == "PSDM" ? PSDM : PHSDM;
-          safe = false;
-          continuous_R = data["R"];
-          if (data.containsElementNamed("R2")) R2 = data["R2"];
-          if (data.containsElementNamed("R3")) R3 = data["R3"];
-          for (const auto& name : pipeline.keep_names)
-            keep_indices.push_back(pipeline.param_table.base_index_for(as<std::string>(name)));
+        const bool has_missingness = data.containsElementNamed("missingness");
+        const bool has_winner = data.containsElementNamed("winner");
+        IntegerVector missingness = has_missingness ? as<IntegerVector>(data["missingness"]) : IntegerVector();
+        LogicalVector winner = has_winner ? as<LogicalVector>(data["winner"]) : LogicalVector();
+        idx_all.reserve(n_rows);
+        if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
+        for (int i = 0; i < n_rows; ++i) {
+          if (has_missingness && !IntegerVector::is_na(missingness[i])) {
+            if (missingness[i] == 0) participating[i] = false;
+            continue;
+          }
+          idx_all.push_back(i);
+          if (has_winner) (winner[i] ? idx_win : idx_los).push_back(i);
+        }
+        if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" ||
+            type == "MULTINOMIAL_LOGIT" || type == "MULTINOMIAL_PROBIT") {
+          model = type == "ORDERED_PROBIT" ? ORDERED_PROBIT :
+                  type == "ORDERED_LOGIT" ? ORDERED_LOGIT :
+                  type == "MULTINOMIAL_LOGIT" ? MULTINOMIAL_LOGIT : MULTINOMIAL_PROBIT;
+          choice = make_choice_only_spec(pipeline.param_table, std::string(type));
+          levels = data["lR"];
+          levels_ptr = levels.begin();
+        } else if (type == "SSEXG" || type == "SSRDEX") {
+          model = type == "SSEXG" ? SSEXG : SSRDEX;
         } else {
-          model = type == "DDM" ? DDM : RACE;
-          race = make_race_setup(type, pipeline.param_table);
-          if (model == DDM) {
-            responses = data["R"];
-            responses_ptr = responses.begin();
+          rts = data["rt"];
+          rts_ptr = rts.begin();
+          if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
+            model = type == "CDM" ? CDM : type == "PSDM" ? PSDM : PHSDM;
+            safe = false;
+            continuous_R = data["R"];
+            if (data.containsElementNamed("R2")) R2 = data["R2"];
+            if (data.containsElementNamed("R3")) R3 = data["R3"];
+            for (const auto& name : pipeline.keep_names)
+              keep_indices.push_back(pipeline.param_table.base_index_for(as<std::string>(name)));
+          } else {
+            model = type == "DDM" ? DDM : RACE;
+            race = make_race_setup(type, pipeline.param_table);
+            if (model == DDM) {
+              responses = data["R"];
+              responses_ptr = responses.begin();
+            }
           }
         }
       }
@@ -754,7 +768,9 @@ struct LikelihoodContext::Impl {
         s.trend.reset(new TrendRuntime(clone_trend_runtime(*pipeline.trend_runtime, s.pt)));
       s.is_ok.assign(n_rows, 1);
       s.ll.resize(n_trials);
-      if (model == MRI || model == MRI_AR1) {
+      if (model == ACCUMULATR) {
+        s.accumulatr.reset(new AccumulatRBridge::Workspace(*accumulatr));
+      } else if (model == MRI || model == MRI_AR1) {
         for (int col : mri.col_means) s.means.push_back(s.pt.base.colptr(col));
       } else if (model == ORDERED_PROBIT || model == ORDERED_LOGIT) {
         s.cuts.resize(n_rows);
@@ -796,6 +812,15 @@ struct LikelihoodContext::Impl {
     std::fill(s.ll.begin(), s.ll.end(), model == DDM ? 1.0 : 0.0);
 
     switch (model) {
+    case ACCUMULATR: {
+      c_do_bound(s.pt, bounds, s.is_ok);
+      accumulatr->evaluate(s.pt, s.is_ok, *s.accumulatr, s.ll.data());
+      if (trialwise) return expand_clamp_sum(s.ll.data(), expand_ptr, n_exp, min_ll, trialwise);
+      double total = 0;
+      for (int trial = 0; trial < n_trials; ++trial)
+        total += (s.ll[trial] > min_ll ? s.ll[trial] : min_ll) * accumulatr->counts[trial];
+      return total;
+    }
     case MRI:
       c_log_likelihood_MRI_white(s.pt, mri, s.means, y_ptr, n_trials, s.ll.data());
       break;
@@ -864,6 +889,7 @@ struct LikelihoodContext::Impl {
         if (!trialwise) result[i] = sum;
       }
     } else {
+      std::exception_ptr error;
 #pragma omp parallel for schedule(static) num_threads(n_threads)
       for (int i = 0; i < n_particles; ++i) {
 #ifdef _OPENMP
@@ -871,10 +897,16 @@ struct LikelihoodContext::Impl {
 #else
         const int tid = 0;
 #endif
-        const double sum = evaluate_particle(*states[tid], particles, i, n_particles,
-                                             trialwise ? result + (ptrdiff_t)i * n_exp : nullptr);
-        if (!trialwise) result[i] = sum;
+        try {
+          const double sum = evaluate_particle(*states[tid], particles, i, n_particles,
+                                               trialwise ? result + (ptrdiff_t)i * n_exp : nullptr);
+          if (!trialwise) result[i] = sum;
+        } catch (...) {
+#pragma omp critical(emc_likelihood_error)
+          { if (!error) error = std::current_exception(); }
+        }
       }
+      if (error) std::rethrow_exception(error);
     }
   }
 };

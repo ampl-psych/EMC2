@@ -22,6 +22,7 @@ all: $(SHLIB)
 
 build_info.o: ../inst/include/build_info.h
 particle_ll.o sampler/likelihood.o: LikelihoodContext.h
+particle_ll.o: AccumulatRBridge.h
 
 sampler.o $(SAMPLER_OBJECTS): sampler/group.h sampler/infnt_factor.h \
   sampler/likelihood.h sampler/particle.h sampler/proposals.h sampler/random.h \

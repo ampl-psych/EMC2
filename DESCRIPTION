@@ -46,6 +46,7 @@ Suggests:
     DiagrammeR
 Config/testthat/edition: 3
 Imports: 
+    AccumulatR,
     abind,
     coda,
     graphics,
@@ -67,7 +68,7 @@ Imports:
     loo,
     WienR (>= 0.3-17),
 LinkingTo: 
-    Rcpp, RcppArmadillo
+    Rcpp, RcppArmadillo, AccumulatR
 SystemRequirements: C++17
 Depends: 
     R (>= 3.5.0)

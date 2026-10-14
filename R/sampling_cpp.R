@@ -22,6 +22,8 @@ native_likelihood_inputs <- function(pmwgs) {
       dadm <- dadms[[i]]
       if (!is.data.frame(dadm)) next
       model <- models[[i]]
+      if (identical(model$c_name, "AccumulatR"))
+        dadm <- .accumulatr_likelihood_data(dadm, model)
       designs <- attr(dadm, "designs")
       if (is.numeric(designs)) attr(dadm, "designs") <- attr(dadms[[designs]], "designs")
       columns <- which(shared == i)

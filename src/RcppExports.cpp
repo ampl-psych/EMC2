@@ -437,6 +437,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// accumulatr_context_valid
+bool accumulatr_context_valid(SEXP context);
+RcppExport SEXP _EMC2_accumulatr_context_valid(SEXP contextSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type context(contextSEXP);
+    rcpp_result_gen = Rcpp::wrap(accumulatr_context_valid(context));
+    return rcpp_result_gen;
+END_RCPP
+}
 // do_transform
 Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform);
 RcppExport SEXP _EMC2_do_transform(SEXP parsSEXP, SEXP transformSEXP) {
@@ -774,6 +785,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_compute_time_derivative", (DL_FUNC) &_EMC2_compute_time_derivative, 10},
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
+    {"_EMC2_accumulatr_context_valid", (DL_FUNC) &_EMC2_accumulatr_context_valid, 1},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},

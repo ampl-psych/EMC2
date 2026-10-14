@@ -461,10 +461,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- res$data
     trialwise_parameters <- res$trialwise_parameters
   } else {
-    data <- design_model(
-      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-      design,model,add_acc=F,compress=FALSE,verbose=FALSE,
-      rt_check=FALSE)
+    expanded_data <- model_expand_rows(
+      data, model, design$matchfun, simulate = TRUE,
+      covariates = design$Fcovariates
+    )
+    data <- design_model(expanded_data, design, model, add_acc = FALSE,
+                         compress = FALSE, verbose = FALSE, rt_check = FALSE)
     lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
 
     pars <- get_pars_oo(parameters, data, model())
@@ -482,10 +484,19 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
 
     pars <- model()$Ttransform(pars, data)
+    used <- NULL
+    if (identical(model_type(model), "AccumulatR")) {
+      recipe <- .accumulatr_runtime_recipe(model()$spec, data, model()$accumulatr_bridge)
+      sources <- recipe$source_names
+      cells <- which(!is.na(sources), arr.ind = TRUE)
+      used <- matrix(FALSE, nrow(pars), ncol(pars), dimnames = dimnames(pars))
+      used[cbind(cells[, 1], match(sources[cells], colnames(pars)))] <- TRUE
+    }
     if (!is.null(optionals$nobound)) {
       attr(pars,"ok") <- rep(TRUE,nrow(pars))
     } else {
-      pars <- fix_bound(pars, model()$bound, data$lR,fix=!is.null(optionals$shrink2bound))
+      pars <- fix_bound(pars, model()$bound, data$lR,
+                        fix=!is.null(optionals$shrink2bound), used=used)
     }
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){
@@ -519,6 +530,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       Rrt <- RACE_rfun(data, pars, model)
     } else Rrt <- model()$rfun(data,pars)
     dropNames <- c("lR","lM")
+    if (identical(model_type(model), "AccumulatR")) dropNames <- c(dropNames, "racer")
     if (!return_Ffunctions && !is.null(design$Ffunctions))
       dropNames <- c(dropNames,names(design$Ffunctions))
     # SSD is drawn at random per trial and cannot be re-derived from a function

@@ -197,14 +197,14 @@ void c_do_bound(const ParamTable& pt,
 
     if (pt.col_is_constant[bs.col_idx]) {
       // value is constant across trials - check the first, then fill ok with the result
-      const double v = col[0];
+      const double v = col[bs.begin];
       bool ok = (v > bs.min_val && v < bs.max_val);
       if (bs.has_exception) ok = ok || (v == bs.exception_val);
-      if (!ok) std::fill(res, res + nrows, 0);
+      if (!ok) std::fill(res + bs.begin, res + bs.end, 0);
     } else {
       // values vary across trials - check all
 #pragma omp simd
-      for (int i = 0; i < nrows; ++i) {
+      for (int i = bs.begin; i < bs.end; ++i) {
         const double v = col[i];
         bool ok = (v > min_v && v < max_v);
         if (has_exc) ok = ok || (v == exc_val);
@@ -348,6 +348,8 @@ std::vector<BoundSpec> make_bound_specs(Rcpp::NumericMatrix minmax,
 
       BoundSpec s;
       s.col_idx = base_idx;           // index into pt.base
+      s.begin = 0;
+      s.end = pt.base.nrow;
       s.min_val = minmax(0, j);
       s.max_val = minmax(1, j);
 

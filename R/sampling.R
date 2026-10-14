@@ -246,6 +246,8 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
+      if (identical(model$c_name, "AccumulatR"))
+        dadm <- .accumulatr_likelihood_data(dadm, model)
 
       backend   <- getOption("emc.ll_backend", default = "multiprocess")
       n_threads <- getOption("emc.n_threads", default = 1)

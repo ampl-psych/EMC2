@@ -105,6 +105,10 @@ construct_design_matrix <- function(frame_times, events, has_derivative, min_ons
     .Call(`_EMC2_construct_design_matrix`, frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
 }
 
+accumulatr_context_valid <- function(context) {
+    .Call(`_EMC2_accumulatr_context_valid`, context)
+}
+
 do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
