@@ -8,45 +8,6 @@
 #include "nan_check.h"
 
 // Mean, mode, and log-precision of Beta distribution
-// Used by Beta-binomial kernels
-// inline double beta_mode(double a, double b) {
-//   if (a == b)              return 0.5;
-//   if (a < 1.0 || b < 1.0) return (a < b) ? 0.0 : 1.0;
-//   return (a - 1.0) / (a + b - 2.0);
-// }
-//
-// inline double beta_mean(double a, double b) {
-//   return a / (a + b);
-// }
-
-// inline double beta_variance(double a, double b) {
-//   const double ab_sum = a + b;
-//   return (a * b) / (ab_sum * ab_sum * (ab_sum + 1.0));
-// }
-
-// inline double beta_log_precision(double a, double b) {
-//   static const double ceiling = -std::log(std::numeric_limits<double>::epsilon());
-//   const double ab_sum = a + b;
-//   const double result = 2.0 * std::log(ab_sum) + std::log1p(ab_sum) - std::log(a) - std::log(b);
-//   if (!is_finite(result) || result > ceiling) {
-//     return ceiling;
-//   }
-//   return result;
-// }
-
-// inline double beta_log_precision(double a, double b) {
-//   static const double eps = std::numeric_limits<double>::epsilon();
-//   static const double ceiling = -std::log(eps);
-//   const double s = a + b;
-//   const double variance = (a / s) * (b / s) / (s + 1.0);
-//
-//   if (!(variance > eps)) {
-//     return ceiling;
-//   }
-//
-//   return -std::log(variance);
-// }
-
 // overwrite inline
 inline void beta_summary(double a, double b,
                          double& mean, double& mode,
@@ -86,10 +47,6 @@ inline double dbeta_val(double x, double a, double b) {
 }
 
 inline double normalise_inplace(std::vector<double>& v) {
-  // double s = 0.0;
-  // for (double x : v) s += x;
-  // if (s > 0.0) { double inv = 1.0 / s; for (double& x : v) x *= inv; }
-
   // vectorise both passes
   const std::size_t n = v.size();
   double* const data = v.data();
@@ -163,22 +120,6 @@ inline void discrete_summary(const std::vector<double>& x,
 
     const int n = static_cast<int>(x.size());
 
-    // mean = 0.0;
-    // int mode_idx = 0;
-    // double max_weight = w[0];
-    //
-    // // First pass: mean and mode.
-    // for (int i = 0; i < n; ++i) {
-    //   mean += x[i] * w[i];
-    //
-    //   // Strict comparison preserves the first maximum on ties.
-    //   if (w[i] > max_weight) {
-    //     max_weight = w[i];
-    //     mode_idx = i;
-    //   }
-    // }
-    // mode = x[mode_idx];
-
     double mean_sum = 0.0;
     double max_weight = w[0];
 
@@ -198,11 +139,8 @@ inline void discrete_summary(const std::vector<double>& x,
 
     // Second pass: centered variance.
     double variance = 0.0;
-    // for (int i = 0; i < n; ++i) {
-    //   const double d = x[i] - mean;
-    //   variance += d * d * w[i];
-    // }
-// This is vectorisable
+
+// This is vectorisable as well
 #pragma omp simd reduction(+:variance)
     for (int i = 0; i < n; ++i) {
       const double d = x[i] - mean;

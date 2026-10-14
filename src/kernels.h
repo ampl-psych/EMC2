@@ -1604,7 +1604,6 @@ public:
 struct TPMKernel : DBMBaseKernel {
 private:
   int grid_res_ = 100;
-  std::vector<double> TPM_post_;
   std::vector<double> TPM_post_pending_;
   bool first_active_  = true;
   int  prev_active_r_ = -1;
@@ -1651,12 +1650,60 @@ private:
     return g;
   }
 
+  int grid_built_for_ = -1;
+  TPMGrid grid_;
+  std::vector<double> TPM_pred_;
+  std::vector<double> TPM_prior_;
+  std::vector<double> beta_1d_;
 
+  double cached_a_ = std::numeric_limits<double>::quiet_NaN();
+  double cached_b_ = std::numeric_limits<double>::quiet_NaN();
+  bool prior_valid_ = false;
+
+  // Create grid
+  void ensure_grid() {
+    if (grid_built_for_ == grid_res_) return;
+
+    grid_ = build_grid(grid_res_);
+    TPM_pred_.resize(grid_.n_combi);
+    TPM_prior_.resize(grid_.n_combi);
+    beta_1d_.resize(grid_.resol);
+
+    prior_valid_ = false;
+    grid_built_for_ = grid_res_;
+  }
+
+  // Create prior -- calculate on grid where possible, and keep in cache.
+  void ensure_prior(double a, double b) {
+    if (prior_valid_ && a == cached_a_ && b == cached_b_) return;
+
+    const int resol = grid_.resol;
+
+    // The first row of p_XX contains the complete 1D grid.
+    for (int i = 0; i < resol; ++i) {
+      beta_1d_[i] = dbeta_val(grid_.p_XX[i], a, b);
+    }
+
+    for (int i0 = 0; i0 < resol; ++i0) {
+      const double beta_xy = beta_1d_[i0];
+      const int offset = i0 * resol;
+
+#pragma omp simd
+      for (int i1 = 0; i1 < resol; ++i1) {
+        TPM_prior_[offset + i1] = beta_1d_[i1] * beta_xy;
+      }
+    }
+
+    normalise_inplace(TPM_prior_);
+
+    cached_a_ = a;
+    cached_b_ = b;
+    prior_valid_ = true;
+  }
 
 public:
   void reset() override {
     DBMBaseKernel::reset();
-    TPM_post_.clear();
     TPM_post_pending_.clear();
     first_active_  = true;
     prev_active_r_ = -1;
@@ -1665,13 +1712,17 @@ public:
   }
 
   void rewind(int row_start) override {
-    TPM_post_         = post_history_[row_start];
-    TPM_post_pending_ = TPM_post_;
-    prev_active_r_    = prev_active_r_history_[row_start];
-    first_active_     = false;
+    if(row_start < 0 || static_cast<std::size_t>(row_start) >= post_history_.size() || post_history_[row_start].empty()) {
+      Rcpp::stop( "TPMKernel::rewind: row %d is not a recorded trial start", row_start);
+    }
+
+    TPM_post_pending_ = post_history_[row_start];
+    prev_active_r_ = prev_active_r_history_[row_start];
+    first_active_ = (prev_active_r_ < 0);
 
     has_run_ = false;
     last_row_end = row_start;
+
   }
 
   void set_kernel_args(const KernelArgs& args) override {
@@ -1698,12 +1749,15 @@ public:
              const double* cov_ptr = covariate.colptr(0);
              const uint8_t* nm     = nan_mask.colptr(0);
 
-             const TPMGrid  grid    = build_grid(grid_res_);
-             const int      nc      = grid.n_combi;
+             ensure_grid();
+
+             const TPMGrid& grid = grid_;
+             const int nc = grid.n_combi;
+             std::vector<double>& TPM_pred = TPM_pred_;
+
              const double   inv_nm1 = 1.0 / (nc - 1.0);
 
              if (row_start == 0) {
-               TPM_post_.assign(nc, 0.0);
                TPM_post_pending_.assign(nc, 0.0);
                first_active_  = true;
                prev_active_r_ = -1;
@@ -1711,13 +1765,11 @@ public:
                post_history_.assign(n, std::vector<double>{});
                prev_active_r_history_.assign(n, -1);
              }
-             std::vector<double> TPM_pred(nc), TPM_update(nc);
 
              for(int r = row_start; r < end; ++r) {
                if (at_mask[r]) {
-                 TPM_post_ = TPM_post_pending_;
-                 post_history_[r]          = TPM_post_;
-                 prev_active_r_history_[r] = prev_active_r_;  // store *before* updating prev_active_r_
+                 post_history_[r] = TPM_post_pending_;
+                 prev_active_r_history_[r] = prev_active_r_;
 
                  const double cp      = cp_col[r];
                  const double x       = cov_ptr[r];
@@ -1727,35 +1779,71 @@ public:
                  const bool   curr_na = !nm[r];
                  const int    curr    = curr_na ? -1 : static_cast<int>(x);
 
-                 const double sum_post = std::accumulate(TPM_post_.begin(), TPM_post_.end(), 0.0);
 
                  if(reset) {
-                   for(int k = 0; k < nc; ++k) TPM_pred[k] = dbeta_val(grid.p_XX[k], a0_col[r], b0_col[r]) * dbeta_val(grid.p_XY[k], a0_col[r], b0_col[r]);
+                   ensure_prior(a0_col[r], b0_col[r]);
+                   TPM_pred = TPM_prior_;
                  } else {
-                   for(int k = 0; k < nc; ++k) TPM_pred[k] = (1.0 - cp) * TPM_post_[k] + cp * (sum_post - TPM_post_[k]) * inv_nm1;
-                 }
-                 normalise_inplace(TPM_pred);
+                   // this is all correct, but the loops over the grid can be vectorised:
+                   // const double sum_post = std::accumulate(TPM_post_pending_.begin(), TPM_post_pending_.end(), 0.0);
+                   // for(int k = 0; k < nc; ++k) TPM_pred[k] = (1.0 - cp) * TPM_post_pending_[k] + cp * (sum_post - TPM_post_pending_[k]) * inv_nm1;
+                   // normalise_inplace(TPM_pred);  // prior normalisation is done in ensure_prior()
 
+                   // vectorised std::accumulate:
+                   double sum_post = 0.0;
+#pragma omp simd reduction(+:sum_post)
+                   for (int k = 0; k < nc; ++k) {
+                     sum_post += TPM_post_pending_[k];
+                   }
+
+                   // vectorised grid update:
+                   const double keep = 1.0 - cp;
+#pragma omp simd
+                   for(int k = 0; k < nc; ++k) {
+                     const double post = TPM_post_pending_[k];
+                     TPM_pred[k] = keep * post + cp * (sum_post - post) * inv_nm1;
+                   }
+                   // and here we could also still pass a sum to get rid of one of the loops in normalise_inplace
+                   normalise_inplace(TPM_pred);
+                 }
+
+                 double mean, mode, log_precision;
                  if (prev_na || reset) {
-                   set_active(r, mean_discrete(grid.mean_p, TPM_pred),
-                              mode_discrete(grid.mean_p, TPM_pred),
-                              log_precision_discrete(grid.mean_p, TPM_pred));
+                   discrete_summary(grid.mean_p, TPM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                   set_active(r, mean, mode, log_precision);
                  } else {
                    const std::vector<double>& g = (prev == 1) ? grid.p_XX : grid.p_XY;
-                   set_active(r, mean_discrete(g, TPM_pred),
-                              mode_discrete(g, TPM_pred),
-                              log_precision_discrete(g, TPM_pred));
+                   discrete_summary(g, TPM_pred, mean, mode, log_precision);  // calculated in-place; shares arithmic
+                   set_active(r, mean, mode, log_precision);
                  }
                  if (!curr_na) set_surprise(r, x);
 
+                 // Prediction summaries are finished.
+                 // Transfer prediction into the pending posterior without copying.
+                 // The old posterior becomes prediction scratch space for the next row.
+                 TPM_post_pending_.swap(TPM_pred);
+
                  // compute pending posterior
-                 if (curr_na || prev_na || reset) {
-                   TPM_post_pending_ = TPM_pred;
-                 } else {
-                   const std::vector<double>* lp = (prev == 0) ? (curr == 0 ? &grid.like_YY : &grid.like_XY) : (curr == 0 ? &grid.like_YX : &grid.like_XX);
-                   for (int k = 0; k < nc; ++k) TPM_update[k] = (1.0 - cp) * (*lp)[k] * TPM_post_[k] + cp * (*lp)[k] * (sum_post - TPM_post_[k]) * inv_nm1;
-                   normalise_inplace(TPM_update);
-                   std::swap(TPM_post_pending_, TPM_update);
+                 if (!curr_na && !prev_na && !reset) {
+                   const std::vector<double>& like = (prev == 0) ? (curr == 0 ? grid.like_YY : grid.like_XY) : (curr == 0 ? grid.like_YX : grid.like_XX);
+
+                   double sum_update = 0.0;
+                   // One pass: likelihood multiplication + normalisation sum.
+#pragma omp simd reduction(+:sum_update)
+                   for (int k = 0; k < nc; ++k) {
+                     const double updated = TPM_post_pending_[k] * like[k];
+                     TPM_post_pending_[k] = updated;
+                     sum_update += updated;
+                   }
+
+                   // Second pass: normalise.
+                   if (sum_update > 0.0) {
+                     const double inv = 1.0 / sum_update;
+#pragma omp simd
+                     for (int k = 0; k < nc; ++k) {
+                       TPM_post_pending_[k] *= inv;
+                     }
+                   }
                  }
 
                  first_active_  = false;
