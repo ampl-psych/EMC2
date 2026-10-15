@@ -158,7 +158,7 @@ Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
                       int particles, Likelihoods& likelihood) {
   sampler = Rcpp::List(Rf_shallow_duplicate(sampler));
   Population pop(sampler);
-  SampleStore store(sampler["samples"]);
+  SampleStore store(static_cast<SEXP>(sampler["samples"]));
   Random rng;
   pop.state = pop.main.initialize(rng, start_mu, start_var);
 
@@ -212,8 +212,12 @@ class Chain {
  public:
   int iteration = 0;
   Chain(const Rcpp::List& args, Likelihoods& context)
-    : sampler(Rf_shallow_duplicate(args["sampler"])), store(sampler["samples"]),
-      rng(store.data.attr("rng")), pop(sampler), likelihood(context),
+    : sampler(Rf_shallow_duplicate(args["sampler"])),
+      // static_cast: an Rcpp proxy converts to SEXP and, through its template
+      // conversion, to the class itself (copy constructor); icpc finds the two
+      // constructors ambiguous.
+      store(static_cast<SEXP>(sampler["samples"])),
+      rng(static_cast<SEXP>(store.data.attr("rng"))), pop(sampler), likelihood(context),
       particle(rng, sampler, args["tune"], args["pm_settings"],
         Rcpp::as<std::string>(Rcpp::as<Rcpp::List>(args["tune"])["kernel"])) {
     pop.state = pop.main.single() ? pop.main.initialize(rng) : pop.main.read_state(store.last());
@@ -331,7 +335,7 @@ Rcpp::List sample_group(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter)
   GroupSampler group(sampler);
   Random rng;
   GroupState state = group.initialize(rng);
-  SampleStore store(sampler["samples"]);
+  SampleStore store(static_cast<SEXP>(sampler["samples"]));
   Rcpp::IntegerVector dims = alpha.attr("dim");
   const int p = dims[0], n = dims[1], draws = dims[2];
   store.group(state, 0);
