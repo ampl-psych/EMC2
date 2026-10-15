@@ -62,7 +62,7 @@ summary(fit_ddm)
 ```
 
 For more details please see the vignettes on the
-[website](https://ampl-psych.github.io/EMC2/articles). Or the original
+[website](https://ampl-psych.github.io/EMC2/articles/). Or the original
 paper: Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B.,
 Matzke, D., & Heathcote, A. EMC2: An R Package for cognitive models of
 choice. <https://doi.org/10.3758/s13428-025-02869-y>
