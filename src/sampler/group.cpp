@@ -170,6 +170,9 @@ GroupSampler::GroupSampler(const Rcpp::List& sampler) {
   Rcpp::IntegerVector groups = present(sampler, "par_group") ?
     Rcpp::as<Rcpp::IntegerVector>(sampler["par_group"]) :
     Rcpp::IntegerVector(p_, 1);
+  if (blocked.size() < static_cast<R_xlen_t>(p_) || groups.size() < static_cast<R_xlen_t>(p_))
+    Rcpp::stop("is_blocked (%d) and par_group (%d) must have one entry per parameter (%d)",
+               (int) blocked.size(), (int) groups.size(), (int) p_);
   std::vector<int> labels;
   std::vector<std::vector<arma::uword>> indices;
   std::vector<arma::uword> unblocked;

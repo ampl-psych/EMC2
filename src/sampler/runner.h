@@ -8,6 +8,7 @@ class Likelihoods;
 struct SamplerContexts {
   std::vector<std::unique_ptr<Likelihoods>> chains;
   int cores_per_chain;
+  bool warned_serial = false;   // parallel cores requested for a likelihood that must run on the R thread
 #ifndef _OPENMP
   bool warned_openmp = false;
 #endif

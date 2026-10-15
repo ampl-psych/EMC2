@@ -21,6 +21,7 @@ public:
   Likelihoods(const Likelihoods& other);
   ~Likelihoods();
   bool thread_safe() const;
+  std::string unsafe_reason() const;
   void one(int subject, const arma::mat& candidates, arma::vec& out, int component = 0);
 
   template<class Work> void for_each(Work work) {

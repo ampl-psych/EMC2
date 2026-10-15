@@ -263,6 +263,8 @@ arma::uword ParticleSampler::select(int s, int b, const arma::vec& likelihood) {
   arma::uword selected = 0;
   while (selected + 1 < weights.n_elem && threshold > weights[selected])
     threshold -= weights[selected++];
+  // rounding in the running subtraction can end on a zero-weight particle
+  while (selected > 0 && !(weights[selected] > 0)) --selected;
   if (!frozen_) update(subject.settings[b], weights, subject.counts, indices_[b].n_elem);
   return selected;
 }

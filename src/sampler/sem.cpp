@@ -107,7 +107,9 @@ void SEMSampler::moments(GroupState& state) const {
   state.tvinv = arma::diagmat(state.epsilon_inv);
   state.population_var = state.K * x_cov_ * state.K.t() + state.tvar;
   if (q_) {
-    const arma::mat structural = arma::solve(arma::eye(q_, q_) - state.B, arma::eye(q_, q_));
+    arma::mat structural;
+    if (!arma::solve(structural, arma::eye(q_, q_) - state.B, arma::eye(q_, q_)))
+      throw std::runtime_error("singular SEM structural matrix I - B");
     const arma::mat effects = state.K + state.lambda * structural * state.G;
     state.population_var = effects * x_cov_ * effects.t() + state.lambda * structural *
       group_inverse(state.delta_inv) * structural.t() * state.lambda.t() + state.tvar;
@@ -159,7 +161,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
       arma::diagmat(state.epsilon_inv) * state.lambda);
     const arma::mat eta_mean = eta_var * (state.lambda.t() * arma::diagmat(state.epsilon_inv) *
       (centered - x_ * state.K.t()).t() + b0.t() * state.delta_inv * state.G * x_.t());
-    const arma::mat root = arma::chol(eta_var, "lower");
+    arma::mat root;   // the non-throwing form: "singular" is what the retry loop looks for
+    if (!arma::chol(root, eta_var, "lower")) throw std::runtime_error("singular SEM factor-score covariance");
     arma::vec z(q_);
     for (arma::uword s = 0; s < n_; ++s) {
       for (double& value : z) value = rng.rnorm(0, 1);

@@ -23,6 +23,7 @@ class SampleStore {
     for (int k = 0; k < 17; ++k) if (present(data, keys[k])) {
       Rcpp::NumericVector values = data[keys[k]];
       fields[k] = values.begin();
+      lengths[k] = values.size();
     }
   }
   int index() const { return present(data, "idx") ? Rcpp::as<int>(data["idx"]) - 1 : 0; }
@@ -80,9 +81,15 @@ class SampleStore {
   const char* keys[17] = {"theta_mu", "theta_var", "a_half", "theta_u", "theta_s", "a_half_s", "alpha", "subj_ll",
                           "lambda", "eta", "epsilon_inv", "psi", "delta", "B", "K", "G", "delta_inv"};
   double* fields[17] = {};
+  R_xlen_t lengths[17] = {};
   template<class T> void put(int field, const T& value, int j) {
-    if (fields[field])
-      std::copy(value.begin(), value.end(), fields[field] + static_cast<size_t>(j) * value.n_elem);
+    if (!fields[field]) return;
+    const size_t offset = static_cast<size_t>(j) * value.n_elem;
+    if (offset + value.n_elem > static_cast<size_t>(lengths[field]))
+      throw std::runtime_error(std::string("the '") + keys[field] + "' array of the samples is too small for draw " +
+                               std::to_string(j + 1) + " (" + std::to_string(value.n_elem) + " values each, " +
+                               std::to_string(lengths[field]) + " in all)");
+    std::copy(value.begin(), value.end(), fields[field] + offset);
   }
 };
 
@@ -186,6 +193,8 @@ Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
     double threshold = rng.runif(0, total);
     arma::uword selected = 0;
     while (selected + 1 < weights.n_elem && (threshold -= weights[selected]) > 0) ++selected;
+    // rounding in the running subtraction can end on a zero-weight particle
+    while (selected > 0 && !(weights[selected] > 0)) --selected;
     alpha.col(s) = candidates[s].row(selected).t(); ll[s] = values[s][selected];
   }
   store.group(pop.state, 0); store.particles(alpha, ll, 0);
@@ -211,6 +220,7 @@ class Chain {
   std::vector<arma::vec> values;
  public:
   int iteration = 0;
+  // Constructed on the R thread (it draws from R's generator).
   Chain(const Rcpp::List& args, Likelihoods& context)
     : sampler(Rf_shallow_duplicate(args["sampler"])),
       // static_cast: an Rcpp proxy converts to SEXP and, through its template
@@ -220,6 +230,7 @@ class Chain {
       rng(static_cast<SEXP>(store.data.attr("rng"))), pop(sampler), likelihood(context),
       particle(rng, sampler, args["tune"], args["pm_settings"],
         Rcpp::as<std::string>(Rcpp::as<Rcpp::List>(args["tune"])["kernel"])) {
+    rng.mix(Random::r_words());
     pop.state = pop.main.single() ? pop.main.initialize(rng) : pop.main.read_state(store.last());
     Rcpp::List tune = args["tune"], on_singular = args["on_singular"];
     if (Rcpp::as<bool>(tune["do_scale"]))
@@ -281,9 +292,17 @@ SamplerContexts::~SamplerContexts() = default;
 Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
                         std::string stage, int iter, int cores_for_chains, bool verbose) {
   const int n = args.size(), concurrent = std::min(n, std::max(1, cores_for_chains));
+  if (static_cast<int>(contexts.chains.size()) < n)
+    Rcpp::stop("the sampler context holds %d chains but %d were given", (int) contexts.chains.size(), n);
 #ifdef _OPENMP
   const int threads = concurrent * contexts.cores_per_chain;
   const bool parallel = concurrent > 1 && contexts.chains[0]->thread_safe();
+  if (!contexts.warned_serial && !contexts.chains[0]->thread_safe() &&
+      (concurrent > 1 || contexts.cores_per_chain > 1)) {
+    Rcpp::warning("Chains and subjects run one at a time, ignoring cores_for_chains and cores_per_chain: %s.",
+                  contexts.chains[0]->unsafe_reason().c_str());
+    contexts.warned_serial = true;
+  }
 #else
   if (!contexts.warned_openmp && (concurrent > 1 || contexts.cores_per_chain > 1)) {
     Rcpp::warning("OpenMP is not available in this EMC2 build. Sampling will run serially, ignoring the requested parallel core settings.");

@@ -117,6 +117,14 @@ calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, typ
     .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads)
 }
 
+omp_runtime <- function() {
+    .Call(`_EMC2_omp_runtime`)
+}
+
+omp_release_pool <- function() {
+    .Call(`_EMC2_omp_release_pool`)
+}
+
 get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {
     .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
 }
