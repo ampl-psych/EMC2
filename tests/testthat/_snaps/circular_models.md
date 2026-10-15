@@ -47,7 +47,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # SDM simulates and initializes
@@ -100,7 +100,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # HSDM simulates and initializes
@@ -154,7 +154,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # PSDM simulates and initializes
@@ -206,7 +206,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # PHSDM simulates and initializes
@@ -259,6 +259,6 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 

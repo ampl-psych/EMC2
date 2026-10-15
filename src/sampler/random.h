@@ -13,13 +13,16 @@ namespace emc2 {
 // Seed and restore on the R thread. Each chain owns its engine and distribution state.
 class Random {
   std::mt19937_64 engine;
+  // The C++ library family: its distributions (gamma, binomial) are what make
+  // a stream library-specific. The version is left out so that a saved object
+  // continues its stream across compiler upgrades.
   static std::string format() {
 #if defined(_LIBCPP_VERSION)
-    return "libc++ " + std::to_string(_LIBCPP_VERSION);
+    return "libc++";
 #elif defined(__GLIBCXX__)
-    return "libstdc++ " + std::to_string(__GLIBCXX__);
+    return "libstdc++";
 #else
-    return "MSVC " + std::to_string(_MSC_VER);
+    return "MSVC";
 #endif
   }
   double spare = 0;

@@ -32,5 +32,6 @@ test_that("a threaded run, then threaded runs in forked children", {
     parallel::mccollect(job, wait = FALSE)
   }
   expect_false(is.null(res), label = "forked children returned (no hang)")
-  expect_equal(unlist(res[[1]]), c(10, 10))
+  # idx counts the init draw: 1 + 5 in the parent + 5 more in each child
+  expect_equal(unlist(res[[1]]), rep(emc[[1]]$samples$idx + 5, 2))
 })

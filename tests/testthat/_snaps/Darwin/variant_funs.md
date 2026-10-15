@@ -34,7 +34,7 @@
       compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
     Output
              MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      diag -400   1 5075     1 491    1 1064     1        573   -82  -562 -655
+      diag -483   1 3638     1 324    1  811     1        487  -163  -565 -649
     Message
       p_waic produced warnings, use waic_warnings() to inspect
 
@@ -44,10 +44,10 @@
       LNR_blocked[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -0.8034791 -1.0238329
-      m_lMd -0.3277423 -0.4290092
-      s     -1.0259435 -0.4402202
-      t0    -2.5499149 -1.6199128
+      m     -0.8266541 -0.8599759
+      m_lMd -0.3010900 -0.4941738
+      s     -1.0154122 -0.5942347
+      t0    -2.3922342 -1.8778012
 
 ---
 
@@ -55,18 +55,18 @@
       LNR_blocked[[1]]$samples$theta_mu[, idx]
     Output
                m      m_lMd          s         t0 
-      -0.8421076 -0.2267080 -0.7557078 -1.5410847 
+      -0.8416064 -0.2454263 -0.7879509 -1.7655813 
 
 ---
 
     Code
       LNR_blocked[[1]]$samples$theta_var[, , idx]
     Output
-                    m      m_lMd          s         t0
-      m     0.1579914 0.00000000 0.00000000 0.00000000
-      m_lMd 0.0000000 0.01308866 0.00000000 0.00000000
-      s     0.0000000 0.00000000 0.05507848 0.02764013
-      t0    0.0000000 0.00000000 0.02764013 0.33836474
+                     m      m_lMd            s           t0
+      m     0.04624816 0.00000000  0.000000000  0.000000000
+      m_lMd 0.00000000 0.01631634  0.000000000  0.000000000
+      s     0.00000000 0.00000000  0.031483966 -0.004607457
+      t0    0.00000000 0.00000000 -0.004607457  0.109357167
 
 ---
 
@@ -74,7 +74,7 @@
       compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
                 MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      blocked -368   1 3530     1 722    1 1415     1        693    29  -546 -663
+      blocked -302   1 1222     1 369    1  888     1        519  -149  -523 -668
     Message
       p_waic produced warnings, use waic_warnings() to inspect
 

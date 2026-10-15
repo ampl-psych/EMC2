@@ -36,7 +36,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # trend_shared
@@ -79,7 +79,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # premap trend works
@@ -123,7 +123,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # pretransform trend works
@@ -168,7 +168,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # posttransform trend works
@@ -212,7 +212,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # different trend base functions work
@@ -255,7 +255,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # polynomial trends work
@@ -301,7 +301,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # phase-specific trends work (premap, pretransform, posttransform)
@@ -345,7 +345,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # par_input trend uses t0 as input to m trend
@@ -385,7 +385,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # share works premap trend
@@ -430,7 +430,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # share works posttransform trend
@@ -476,7 +476,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # trend_conditional
@@ -585,7 +585,7 @@
       [1] TRUE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 # trend_covmap
@@ -628,6 +628,6 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 

@@ -35,7 +35,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 ---
@@ -110,7 +110,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 ---
@@ -175,7 +175,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 ---
@@ -250,7 +250,7 @@
       [1] FALSE
       
       attr(,"rng")$format
-      [1] "libc++ 170006"
+      [1] "libc++"
       
 
 ---
