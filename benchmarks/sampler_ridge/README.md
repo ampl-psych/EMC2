@@ -98,3 +98,54 @@ current sampler and 1.018 with automatic directions.
 The existing sample-kernel test passes, including the added check that
 directions stay fixed. Continuing a saved fit also preserves the directions,
 step sizes and particle kernel exactly.
+
+## DDM5 timing and implementation check
+
+The translation now caches P d and d' P d for every direction d, where P is
+the population-mean prior precision. Its prior ratio needs one dot product.
+It updates the group state only on acceptance and reuses the shift buffer.
+Scale moves write back only the changed coefficient. The directions remain
+cached across sampling batches.
+
+The optimized implementation produced identical saved draws to the first
+directional implementation on the first ridge dataset, a standard model with
+a correlated mean prior, SEM and an infinite-factor model. The existing
+sample-kernel continuation test also passes.
+
+`ddm5.R` compares commit `ea74eb2d` against the optimized directional sampler.
+It uses the saved DDM5 dataset from `ddm5_delta90_4x2/setup.rds`, with 30
+participants, 3,000 trials, diagonal population covariance, unchanged priors
+and bounds, and `rt_resolution = 1e-12`. Both runs use the same saved initial
+states, four chains with two cores each, 600 warmup iterations (including 100
+kernel-tuning iterations), and 1,000 retained iterations. The warmup length is
+fixed for the timing comparison. Both packages are installed builds on macOS.
+
+| Metric | Before | After |
+|---|---:|---:|
+| Warmup seconds | 5.010 | 5.102 |
+| Sampling seconds | 3.100 | 3.313 |
+| Total seconds, including setup | 8.172 | 8.479 |
+| Minimum bulk ESS/s, means | 21.91 | 21.65 |
+| Minimum bulk ESS/s, variances | 20.39 | 19.95 |
+| Minimum bulk ESS/s, participants | 26.76 | 9.72 |
+| Maximum Rhat | 1.02250 | 1.05005 |
+
+The new sampler took 3.8% longer in this repetition. Participant 23's `sv`
+had the lowest ESS after the change. These fits were not extended.
+
+Create the common input once with the baseline package loaded
+
+```r
+source("benchmarks/sampler_ridge/ddm5.R")
+saveRDS(prepare_ddm5(), "benchmarks/sampler_ridge/results/ddm5_input.rds")
+```
+
+In separate R sessions using each installed version, set `label` to `before`
+or `after` and run
+
+```r
+source("benchmarks/sampler_ridge/ddm5.R")
+input <- readRDS("benchmarks/sampler_ridge/results/ddm5_input.rds")
+result <- run_ddm5(input, label)
+saveRDS(result, paste0("benchmarks/sampler_ridge/results/ddm5_", label, ".rds"))
+```

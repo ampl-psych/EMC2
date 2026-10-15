@@ -94,8 +94,8 @@ struct Population {
 
 class JointMoves {
   Rcpp::List settings;
-  arma::vec step, loc, sum_step, sum_loc;
-  arma::mat directions;
+  arma::vec step, loc, sum_step, sum_loc, mean, curvature, shift;
+  arma::mat directions, prior_directions;
   std::vector<arma::mat> proposals;
   std::vector<arma::vec> values;
   int uses;
@@ -110,31 +110,44 @@ class JointMoves {
       uses(Rcpp::as<int>(init["uses"])) {
     do_location = group.location_move();
     if (!do_location) return;
-    if (present(init, "directions")) {
-      directions = Rcpp::as<arma::mat>(init["directions"]);
-      return;
-    }
     const int p = loc.n_elem;
     Rcpp::List prior = sampler["prior"];
     Rcpp::NumericVector variance = prior["theta_mu_var"];
+    Rcpp::NumericVector centre = prior["theta_mu_mean"];
+    mean.set_size(p); shift.set_size(p);
+    for (int j = 0; j < p; ++j) mean[j] = centre[j % centre.size()];
     arma::mat covariance(p, p, arma::fill::zeros);
     if (variance.hasAttribute("dim")) covariance = Rcpp::as<arma::mat>(variance);
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
-    const arma::mat root = arma::chol(covariance, "lower");
-    arma::mat precision(p, p, arma::fill::zeros);
-    if (present(tune, "lik_prec")) {
-      Rcpp::List likelihood = tune["lik_prec"];
-      for (SEXP x : likelihood) if (!Rf_isNull(x))
-        precision += Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
+    if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
+    else {
+      const arma::mat root = arma::chol(covariance, "lower");
+      arma::mat precision(p, p, arma::fill::zeros);
+      if (present(tune, "lik_prec")) {
+        Rcpp::List likelihood = tune["lik_prec"];
+        for (SEXP x : likelihood) if (!Rf_isNull(x))
+          precision += Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
+      }
+      precision = root.t() * precision * root;
+      precision.diag() += 1;
+      arma::vec eigenvalues;
+      arma::mat eigenvectors;
+      arma::eig_sym(eigenvalues, eigenvectors, arma::symmatu(precision));
+      directions = root * eigenvectors *
+        arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
+      loc.ones();
     }
-    precision = root.t() * precision * root;
-    precision.diag() += 1;
-    arma::vec eigenvalues;
-    arma::mat eigenvectors;
-    arma::eig_sym(eigenvalues, eigenvectors, arma::symmatu(precision));
-    directions = root * eigenvectors *
-      arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
-    loc.ones();
+    arma::mat precision;
+    if (present(prior, "theta_mu_invar")) {
+      Rcpp::NumericVector inverse = prior["theta_mu_invar"];
+      if (inverse.hasAttribute("dim")) precision = Rcpp::as<arma::mat>(inverse);
+      else {
+        precision.zeros(p, p);
+        for (int j = 0; j < p; ++j) precision(j, j) = inverse[j % inverse.size()];
+      }
+    } else precision = group_inverse(covariance);
+    prior_directions = precision * directions;
+    curvature = arma::sum(directions % prior_directions, 0).t();
   }
   void draw(Random& rng, Population& pop, arma::mat& alpha, arma::vec& ll, Likelihoods& likelihood, bool frozen) {
     const int p = pop.state.tvar.n_rows, n = alpha.n_cols;
@@ -143,14 +156,16 @@ class JointMoves {
       const bool scale = k < p;
       const int j = k % p;
       const double delta = rng.rnorm(0, scale ? step[j] : loc[j]);
-      const double factor = std::exp(delta);
-      GroupState proposed = pop.state;
+      const double factor = scale ? std::exp(delta) : 1;
+      GroupState proposed;
       double lp = 0;
-      arma::vec shift;
-      if (scale) lp = pop.main.affine(proposed, j, delta, 0);
-      else {
+      if (scale) {
+        proposed = pop.state;
+        lp = pop.main.affine(proposed, j, delta, 0);
+      } else {
         shift = delta * directions.col(j);
-        for (int q = 0; q < p; ++q) lp += pop.main.affine(proposed, q, 0, shift[q]);
+        lp = -delta * arma::dot(prior_directions.col(j), pop.state.tmu - mean) -
+          .5 * delta * delta * curvature[j];
       }
       for (int s = 0; s < n; ++s) {
         proposals[s] = alpha.col(s).t();
@@ -162,10 +177,17 @@ class JointMoves {
       double lr = lp;
       for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
       if (std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr) {
-        for (int s = 0; s < n; ++s) { alpha.col(s) = proposals[s].row(0).t(); ll[s] = values[s][0]; }
-        if (scale) accepted[j] = 1;
-        else accepted_loc[j] = 1;
-        pop.state = std::move(proposed);
+        for (int s = 0; s < n; ++s) ll[s] = values[s][0];
+        if (scale) {
+          for (int s = 0; s < n; ++s) alpha(j, s) = proposals[s](0, j);
+          accepted[j] = 1;
+          pop.state = std::move(proposed);
+        } else {
+          alpha.each_col() += shift;
+          pop.state.tmu += shift;
+          pop.state.subj_mu.each_col() += shift;
+          accepted_loc[j] = 1;
+        }
       }
     }
     if (!frozen) {

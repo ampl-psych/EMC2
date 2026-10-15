@@ -321,7 +321,7 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
   if(stage == "sample"){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
-  if(stage %in% c("adapt", "sample") && emc[[1]]$type != "single"){
+  if(stage %in% c("burn", "adapt", "sample") && emc[[1]]$type != "single"){
     emc <- create_lik_prec(emc, n_cores)
   }
   if(fixed) emc <- store_sample_kernel(emc)
