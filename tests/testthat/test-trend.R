@@ -38,7 +38,7 @@ LNR2cov <- make_emc(dat, design_base, compress = F, n_chains = 1, type = "single
 
 set.seed(123)
 test_that("trend", {
-  expect_snapshot(init_chains(LNR2cov, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR2cov, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 
@@ -63,7 +63,7 @@ LNR2cov_shared <- make_emc(dat, design_base_shared, compress = FALSE, n_chains =
 
 set.seed(123)
 test_that("trend_shared", {
-  expect_snapshot(init_chains(LNR2cov_shared, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR2cov_shared, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 trend_premap <- make_trend(make_base(type='lin', 'm', make_kernel(type='exp_incr', 'covariate1')),
@@ -83,7 +83,7 @@ LNR_premap <- make_emc(dat, design_premap, compress = FALSE, n_chains = 1, type 
 
 set.seed(123)
 test_that("premap trend works", {
-  expect_snapshot(init_chains(LNR_premap, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_premap, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 trend_pretrans <- make_trend(make_base(type='lin', 'm', make_kernel(type='delta', 'covariate1', at=NULL), phase='pretransform'),
@@ -103,7 +103,7 @@ LNR_pretrans <- make_emc(dat, design_pretrans, compress = FALSE, n_chains = 1, t
 
 set.seed(123)
 test_that("pretransform trend works", {
-  expect_snapshot(init_chains(LNR_pretrans, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_pretrans, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 trend_posttrans <- make_trend(make_base(type='lin','m',make_kernel(type='pow_decr', 'covariate1'), phase='posttransform'),
@@ -126,7 +126,7 @@ LNR_posttrans <- make_emc(dat, design_posttrans, compress = FALSE, n_chains = 1,
 
 set.seed(123)
 test_that("posttransform trend works", {
-  expect_snapshot(init_chains(LNR_posttrans, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_posttrans, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 trend_bases <- make_trend(make_base(type='centered', 'm', make_kernel(type='exp_incr', 'covariate1')),
@@ -146,7 +146,7 @@ LNR_bases <- make_emc(dat, design_bases, compress = FALSE, n_chains = 1, type = 
 
 set.seed(123)
 test_that("different trend base functions work", {
-  expect_snapshot(init_chains(LNR_bases, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_bases, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 
@@ -167,7 +167,7 @@ LNR_poly <- make_emc(dat, design_poly, compress = FALSE, n_chains = 1, type = "s
 
 set.seed(123)
 test_that("polynomial trends work", {
-  expect_snapshot(init_chains(LNR_poly, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_poly, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 ## New tests: phase-specific trends and par_input trends
@@ -195,7 +195,7 @@ LNR_phases <- make_emc(dat, design_phases, compress = FALSE, n_chains = 1, type 
 
 set.seed(123)
 test_that("phase-specific trends work (premap, pretransform, posttransform)", {
-  expect_snapshot(init_chains(LNR_phases, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_phases, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 # Trend where input is another parameter: use t0 as input to a trend on m
@@ -215,7 +215,7 @@ LNR_par_input <- make_emc(dat, design_par_input, compress = FALSE, n_chains = 1,
 
 set.seed(123)
 test_that("par_input trend uses t0 as input to m trend", {
-  expect_snapshot(init_chains(LNR_par_input, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_par_input, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 trend_shared_premap <- make_trend(make_base(type='add', 'm', kernel=make_kernel(type='poly3', 'covariate1')),
@@ -237,7 +237,7 @@ LNR_shared_premap <- make_emc(dat, design_shared_premap, compress = FALSE, n_cha
 
 set.seed(123)
 test_that("share works premap trend", {
-  expect_snapshot(init_chains(LNR_shared_premap, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_shared_premap, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 
@@ -258,7 +258,7 @@ LNR_shared_posttransform <- make_emc(dat, design_shared_posttransform, compress 
 
 set.seed(123)
 test_that("share works posttransform trend", {
-  expect_snapshot(init_chains(LNR_shared_posttransform, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_shared_posttransform, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 
@@ -291,7 +291,7 @@ test_that("trend_conditional", {
     p_vec, design_cond, n_trials = n_trials,
     conditional_on_data = FALSE,                 # force unconditional-on-data stepping
     return_trialwise_parameters = TRUE
-  )))
+  )), variant = Sys.info()[["sysname"]])
 })
 
 # Trend uses multiple same parameters and multiple inputs
@@ -313,7 +313,7 @@ LNR_multi <- make_emc(dat, design_mult, compress = FALSE, n_chains = 1, type = "
 
 set.seed(123)
 test_that("trend_multiple", {
-  expect_snapshot(init_chains(LNR_multi, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_multi, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 k1 <- make_kernel(type='delta', c('covariate1', 'covariate2'))
@@ -354,7 +354,7 @@ LNR_covmap <- make_emc(dat, design_base, compress = FALSE, n_chains = 1, type = 
 
 set.seed(123)
 test_that("trend_covmap", {
-  expect_snapshot(init_chains(LNR_covmap, particles = 3, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_covmap, particles = 3, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 

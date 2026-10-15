@@ -45,29 +45,29 @@ DDM_s <- make_emc(dat, design_DDM, compress = F, n_chains = 1)
 test_that("LNR", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(LNR_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_LNR, design_LNR, n_trials = 10))
+  expect_snapshot(init_chains(LNR_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_LNR, design_LNR, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 test_that("LBA", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(LBA_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_LBA, design_LBA, n_trials = 10))
+  expect_snapshot(init_chains(LBA_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_LBA, design_LBA, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 
 test_that("RDM", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(RDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_RDM, design_RDM, n_trials = 10))
+  expect_snapshot(init_chains(RDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_RDM, design_RDM, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 
 test_that("DDM", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(DDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_DDM, design_DDM, n_trials = 10))
+  expect_snapshot(init_chains(DDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_DDM, design_DDM, n_trials = 10), variant = Sys.info()[["sysname"]])
 })

@@ -1,0 +1,2 @@
+# configure.win copies this header as is; a CRLF checkout on Windows gives R CMD check a line-endings NOTE
+inst/include/build_info.h.win text eol=lf
