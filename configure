@@ -113,8 +113,12 @@ fi
 #  Platform detection — Accelerate framework (macOS only)                     #
 # --------------------------------------------------------------------------- #
 ACCELERATE_LIBS=""
+# R's LAPACK, BLAS and Fortran runtime, which R CMD check wants together; on
+# macOS the Accelerate framework supplies all three and $(FLIBS) would name a
+# gfortran runtime that is absent unless gfortran is installed.
+LINALG_LIBS='$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)'
 case "$(uname)" in
-  Darwin) ACCELERATE_LIBS="-framework Accelerate" ;;
+  Darwin) ACCELERATE_LIBS="-framework Accelerate"; LINALG_LIBS="$ACCELERATE_LIBS" ;;
 esac
 
 # --------------------------------------------------------------------------- #
@@ -208,6 +212,7 @@ sed \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
+  -e "s|@LINALG_LIBS@|${LINALG_LIBS}|g" \
   src/Makevars.in > src/Makevars
 
 echo "configure: src/Makevars written"
