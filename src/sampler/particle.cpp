@@ -115,6 +115,16 @@ ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const 
       value.epsilon = Rcpp::as<arma::vec>(setting["epsilon"]);
       value.proposal_counts = Rcpp::as<arma::vec>(setting["proposal_counts"]);
       value.acc_counts = Rcpp::as<arma::vec>(setting["acc_counts"]);
+      // Settings carried over from another kernel (check_sampling_settings
+      // resizes them) would otherwise fail deep in the adaptation arithmetic
+      const arma::uword k = proposals_;
+      if (value.mix.n_elem != k || value.epsilon.n_elem != k - 1 ||
+          value.proposal_counts.n_elem != k || value.acc_counts.n_elem != k)
+        Rcpp::stop("particle settings of subject %d (component %d) do not match the '%s' kernel: "
+                   "mix has %d entries, epsilon %d, counts %d/%d; expected %d, %d, %d/%d",
+                   i + 1, label, kernel_.c_str(), (int) value.mix.n_elem, (int) value.epsilon.n_elem,
+                   (int) value.proposal_counts.n_elem, (int) value.acc_counts.n_elem,
+                   (int) k, (int) k - 1, (int) k, (int) k);
       value.n_particles = number(setting, "n_particles");
       value.iter = number(setting, "iter", 1);
       value.local_uses = number(setting, "local_uses");
