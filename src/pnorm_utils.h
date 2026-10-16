@@ -3,8 +3,6 @@
 //
 // Compile-time precision modes via PNORM_MODE (set in src/Makevars):
 //
-//   PNORM_MODE 0  — R::pnorm, exact double precision
-//                   Requires Rcpp / R API. NOT thread-safe.
 //   PNORM_MODE 1  (default) — Hart (1968) rational approximation,
 //                   near-double precision (~1.2e-15 max abs error).
 //                   Two-branch: rational poly (|x| < 7.07) /
@@ -15,13 +13,12 @@
 //                   Branchless polynomial; best vectorisability.
 //                   Pure C++; thread-safe.
 //
-// qnorm (all modes except 0): Wichura AS241 (Appl. Stat. 37:477-484, 1988).
+// qnorm: Wichura AS241 (Appl. Stat. 37:477-484, 1988).
 //   Three-region rational approximation; full double precision in a single
 //   pass (~1e-15 max absolute error). No refinement step needed.
 //   Pure C++; thread-safe.
 //
 // Example Makevars lines:
-//   PKG_CXXFLAGS = -DPNORM_MODE=0   # exact R::pnorm (not thread-safe)
 //   PKG_CXXFLAGS = -DPNORM_MODE=1   # fast, near-double (default)
 //   PKG_CXXFLAGS = -DPNORM_MODE=2   # fastest, single-precision quality
 //
@@ -39,34 +36,12 @@
 #define PNORM_MODE 1  // default: Hart near-double, pure C++, thread-safe
 #endif
 
-// Rcpp is only needed for mode 0 (R::pnorm). Modes 1 and 2 are pure C++
-// and safe to call from worker threads.
-#if PNORM_MODE == 0
-#include <Rcpp.h>
-#endif
-
 // Large finite sentinel used in place of -inf for logp underflow in modes 1
 // and 2. Safe under -ffinite-math-only / -Ofast. Any log-likelihood floor
 // will treat this identically to -inf in practice.
 #define PNORM_LOG_ZERO (-1e30)
 
 namespace pnorm_detail {
-
-// ===========================================================================
-// MODE 0 — exact R::pnorm
-// Requires R API. NOT safe to call from non-main threads.
-// ===========================================================================
-
-#if PNORM_MODE == 0
-inline double exact_pnorm_std(double x, bool lower, bool logp)
-{
-  return R::pnorm(x, 0.0, 1.0, lower, logp);
-}
-inline double exact_qnorm_std(double p)
-{
-  return R::qnorm(p, 0.0, 1.0, true, false);
-}
-#endif
 
 // ===========================================================================
 // MODE 1 — Hart (1968) rational approximation
@@ -182,7 +157,6 @@ inline double as_pnorm_std(double x, bool lower, bool logp)
 // Domain: p in (0, 1). Returns ±Inf at boundaries.
 // ===========================================================================
 
-#if PNORM_MODE != 0
 namespace as241 {
 
 // Coefficients for the central region (|p - 0.5| <= 0.425)
@@ -281,7 +255,6 @@ inline double cpp_qnorm_std(double p)
 {
   return as241::qnorm(p);
 }
-#endif // PNORM_MODE != 0
 
 // ===========================================================================
 // Shared helpers
@@ -310,14 +283,10 @@ inline double fast_dlnorm(double t, double m, double s)
 
 #if   PNORM_MODE == 2
 #define PNORM_STD(x, lower, logp) pnorm_detail::as_pnorm_std((x), (lower), (logp))
-#define QNORM_STD(p)              pnorm_detail::cpp_qnorm_std((p))
-#elif PNORM_MODE == 1
-#define PNORM_STD(x, lower, logp) pnorm_detail::hart_pnorm_std((x), (lower), (logp))
-#define QNORM_STD(p)              pnorm_detail::cpp_qnorm_std((p))
 #else
-#define PNORM_STD(x, lower, logp) pnorm_detail::exact_pnorm_std((x), (lower), (logp))
-#define QNORM_STD(p)              pnorm_detail::exact_qnorm_std((p))
+#define PNORM_STD(x, lower, logp) pnorm_detail::hart_pnorm_std((x), (lower), (logp))
 #endif
+#define QNORM_STD(p)             pnorm_detail::cpp_qnorm_std((p))
 
 // ===========================================================================
 // PLNORM(t, m, s) — log-normal CDF, lower tail, no log
@@ -333,10 +302,8 @@ inline double pnorm_upper(double x)
 {
 #if   PNORM_MODE == 2
   return 1.0 - pnorm_detail::as7126::phi(x);
-#elif PNORM_MODE == 1
-  return pnorm_detail::hart::phi(-x);   // phi(-x) == upper tail
 #else
-  return R::pnorm(x, 0.0, 1.0, false, false);
+  return pnorm_detail::hart::phi(-x);   // phi(-x) == upper tail
 #endif
 }
 

@@ -1,3 +1,7 @@
 #!/bin/sh
-cp inst/include/build_info.h.win inst/include/build_info.h
+sh tools/check-linalg.sh "${R_HOME}/bin${R_ARCH_BIN}/R.exe" || exit 1
+cp inst/include/build_info.h.win inst/include/build_info.h || exit 1
 echo "configure.win: inst/include/build_info.h written"
+cp src/Makevars.win.in src/Makevars.win || exit 1
+sh tools/header-dependencies.sh >> src/Makevars.win || exit 1
+echo "configure.win: src/Makevars.win written"

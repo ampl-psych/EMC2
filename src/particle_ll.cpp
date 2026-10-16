@@ -664,11 +664,6 @@ struct LikelihoodContext::Impl {
     NumericMatrix initial(1, n_parameters);
     colnames(initial) = parameter_names;
     pretransforms = make_transform_specs(initial, pretransform_values);
-    for (const auto& transform : pretransforms)
-      if (transform.code == PNORM) safe = false;
-#if PNORM_MODE == 0
-    safe = false;
-#endif
     pipeline = make_pipeline_context(initial, data, constant_values, designs,
                                      transforms, pretransform_values, trend);
     cache = make_pipeline_cache(pipeline.param_table, designs, pipeline.transform_specs,
@@ -783,7 +778,7 @@ struct LikelihoodContext::Impl {
       double value = particles[sp.col_idx * n_particles + row];
       if (sp.code == EXP) value = sp.lower + std::exp(value);
       else if (sp.code == PNORM)
-        value = sp.lower + (sp.upper - sp.lower) * R::pnorm(value, 0.0, 1.0, 1, 0);
+        value = sp.lower + (sp.upper - sp.lower) * PNORM_STD(value, true, false);
       std::fill_n(s.pt.base.colptr(col), n_rows, value);
     }
     for (const auto& constant : constants)

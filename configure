@@ -30,7 +30,6 @@ for arg in "$@"; do
 configure options for EMC2:
 
   --with-pnorm-mode=N     Select pnorm implementation (default: 1):
-                            0  R::pnorm        exact, not thread-safe and slow
                             1  Hart (1968)     near-double precision (~1.2e-15),
                                                thread-safe  [default]
                             2  A&S 7.1.26      single-precision quality (~1.5e-7),
@@ -38,7 +37,6 @@ configure options for EMC2:
 
   --enable-fast-math      Add -ffast-math -fno-math-errno (default: disabled).
                           Improves speed but may affect floating-point semantics.
-                          Recommended only with --with-pnorm-mode=1 or =2.
 
   --native                Add -march=native (default: disabled).
                           Improves speed via architecture-specific optimizations.
@@ -58,9 +56,9 @@ EOF
     --with-pnorm-mode=*)
       PNORM_MODE="${arg#*=}"
       case "$PNORM_MODE" in
-        0|1|2) ;;
+        1|2) ;;
         *)
-          echo "configure: error: --with-pnorm-mode must be 0, 1, or 2 (got '$PNORM_MODE')" >&2
+          echo "configure: error: --with-pnorm-mode must be 1 or 2 (got '$PNORM_MODE')" >&2
           exit 1
           ;;
       esac
@@ -87,6 +85,7 @@ done
 #  R's compiler — split binary from embedded flags (e.g. "g++ -std=gnu++17") #
 # --------------------------------------------------------------------------- #
 R_BIN="${R_HOME:+${R_HOME}/bin/}R"
+sh tools/check-linalg.sh "$R_BIN" || exit 1
 CXX_FULL="$("$R_BIN" CMD config CXX17)"
 CXX_BIN="$(echo "$CXX_FULL"  | awk '{print $1}')"
 CXX_STD="$(echo "$CXX_FULL" | cut -s -d' ' -f2-) $("$R_BIN" CMD config CXX17STD)"
@@ -113,7 +112,6 @@ fi
 #  Platform detection — Accelerate framework (macOS only)                     #
 # --------------------------------------------------------------------------- #
 ACCELERATE_LIBS=""
-LINALG_LIBS='$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)'
 case "$(uname)" in
   Darwin) ACCELERATE_LIBS="-framework Accelerate" ;;
 esac
@@ -126,20 +124,6 @@ OMP_LIBS=""
 
 OMP_TMP="$(mktemp -d "${TMPDIR:-/tmp}/emc2-openmp.XXXXXX")" || exit 1
 trap 'rm -rf "$OMP_TMP"' EXIT HUP INT TERM
-
-# macOS R libraries may already link their own Fortran runtime.
-if [ "$(uname)" = Darwin ]; then
-  cat > "$OMP_TMP/linalg.cpp" <<'EOF'
-extern "C" void dpotrf_();
-extern "C" void dgemm_();
-int main() { dpotrf_(); dgemm_(); }
-EOF
-  if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS "$OMP_TMP/linalg.cpp" \
-        $("$R_BIN" CMD config LAPACK_LIBS) $("$R_BIN" CMD config BLAS_LIBS) \
-        $R_LDFLAGS -o "$OMP_TMP/linalg" 2>/dev/null; then
-    LINALG_LIBS='$(LAPACK_LIBS) $(BLAS_LIBS)'
-  fi
-fi
 
 cat > "$OMP_TMP/test.cpp" <<'OMPEOF'
 #include <omp.h>
@@ -227,10 +211,7 @@ sed \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
-  -e "s|@LINALG_LIBS@|${LINALG_LIBS}|g" \
   src/Makevars.in > src/Makevars
-
-echo "configure: src/Makevars written"
 
 # --------------------------------------------------------------------------- #
 #  Write inst/include/build_info.h from inst/include/build_info.h.in          #
@@ -248,3 +229,5 @@ sed \
   inst/include/build_info.h.in > inst/include/build_info.h
 
 echo "configure: inst/include/build_info.h written"
+sh tools/header-dependencies.sh >> src/Makevars || exit 1
+echo "configure: src/Makevars written"

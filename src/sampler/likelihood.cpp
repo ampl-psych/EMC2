@@ -249,6 +249,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
   const int p = Rcpp::as<int>(first["n_pars"]), n = Rcpp::as<int>(first["n_subjects"]);
   const int window = history_idx.size(), chains = emc.size(), N = window * chains;
   std::vector<arma::mat> draws(n, arma::mat(p, N));
+  std::vector<std::vector<int>> history(chains);
   for (int chain = 0; chain < chains; ++chain) {
     Rcpp::List sampler = emc[chain], samples = sampler["samples"];
     Rcpp::NumericVector alpha = samples["alpha"];
@@ -257,8 +258,9 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     std::vector<int> selected;
     for (int i = 0; i < stages.size(); ++i)
       if (stages[i] == "preburn" || stages[i] == "burn" || stages[i] == "adapt" || stages[i] == "sample") selected.push_back(i);
+    for (int i : history_idx) history[chain].push_back(selected[i - 1]);
     for (int i = 0; i < window; ++i) for (int s = 0; s < n; ++s)
-      std::copy_n(values + static_cast<size_t>(selected[history_idx[i] - 1]) * p * n + s * p,
+      std::copy_n(values + static_cast<size_t>(history[chain][i]) * p * n + s * p,
                   p, draws[s].colptr(chain * window + i));
   }
   arma::mat group_precision, group_mean;
@@ -266,6 +268,8 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
   if (group) {
     try {
       arma::mat covariance(p, p, arma::fill::zeros);
+      arma::vec precision_mean(p, arma::fill::zeros), precision_m2(p, arma::fill::zeros);
+      int count = 0;
       group_mean.zeros(p, n);
       GroupSampler population(first);
       for (int chain = 0; chain < chains; ++chain) {
@@ -279,16 +283,23 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
         state.u.zeros(random.nrow());
         Rcpp::NumericVector variance = samples["theta_var"];
         const double* variance_values = variance.begin();
-        for (int i : history_idx) {
-          covariance += arma::mat(const_cast<double*>(variance_values + static_cast<size_t>(i - 1) * p * p), p, p, false, true);
-          state.tmu += arma::vec(const_cast<double*>(mean_values + static_cast<size_t>(i - 1) * means.nrow()), means.nrow(), false, true);
-          if (random.nrow()) state.u += arma::vec(random.begin() + static_cast<size_t>(i - 1) * random.nrow(), random.nrow(), false, true);
+        for (int i : history[chain]) {
+          const arma::mat cov(const_cast<double*>(variance_values + static_cast<size_t>(i) * p * p), p, p, false, true);
+          covariance += cov;
+          const arma::vec precision = 1 / cov.diag(), delta = precision - precision_mean;
+          precision_mean += delta / ++count;
+          precision_m2 += delta % (precision - precision_mean);
+          state.tmu += arma::vec(const_cast<double*>(mean_values + static_cast<size_t>(i) * means.nrow()), means.nrow(), false, true);
+          if (random.nrow()) state.u += arma::vec(random.begin() + static_cast<size_t>(i) * random.nrow(), random.nrow(), false, true);
         }
         state.tmu /= window; state.u /= window;
         group_mean += population.subject_means(state);
       }
       covariance /= N; group_mean /= chains;
-      group = arma::inv_sympd(group_precision, covariance) && group_mean.is_finite() && group_mean.n_rows == group_precision.n_rows;
+      // Use draw-based curvature only when all marginal precisions have CV < .5.
+      const arma::vec cv = arma::sqrt(precision_m2 / (N - 1)) / precision_mean;
+      group = cv.is_finite() && cv.max() < .5 && arma::inv_sympd(group_precision, covariance) &&
+        group_mean.is_finite() && group_mean.n_rows == group_precision.n_rows;
     } catch (const std::exception&) { group = false; }
   }
   Likelihoods likelihood(ll_inputs, n_cores);

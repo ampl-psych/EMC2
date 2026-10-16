@@ -68,7 +68,7 @@ Imports:
     WienR (>= 0.3-17),
 LinkingTo: 
     Rcpp, RcppArmadillo
-SystemRequirements: C++17, GNU make
+SystemRequirements: C++17
 Depends: 
     R (>= 3.5.0)
 LazyData: true

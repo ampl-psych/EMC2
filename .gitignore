@@ -11,6 +11,7 @@ settings.json
 paper
 .positai
 src/Makevars
+src/Makevars.win
 inst/include/build_info.h
 tests/extratests
 /Forstmann_results/

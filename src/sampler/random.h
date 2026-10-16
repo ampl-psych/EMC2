@@ -15,11 +15,11 @@ class Random {
   std::mt19937_64 engine;
   static std::string format() {
 #if defined(_LIBCPP_VERSION)
-    return "libc++ " + std::to_string(_LIBCPP_VERSION);
+    return "libc++";
 #elif defined(__GLIBCXX__)
-    return "libstdc++ " + std::to_string(__GLIBCXX__);
+    return "libstdc++";
 #else
-    return "MSVC " + std::to_string(_MSC_VER);
+    return "MSVC";
 #endif
   }
   double spare = 0;

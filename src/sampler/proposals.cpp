@@ -161,7 +161,7 @@ ProposalBlock make_block(const Rcpp::List& samples, const std::string& type,
         const arma::vec values = alpha.slice(i).col(subject), errors = epsilon.col(i), means = mu.col(i);
         a.col(i) = values.elem(selected);
         arma::vec column = arma::join_cols(means.elem(selected), eta.slice(i).row(subject).t());
-        column = arma::join_cols(column, type == "infnt_factor" ? arma::vec(arma::log(errors.elem(selected))) : arma::vec(errors.elem(selected)));
+        column = arma::join_cols(column, arma::log(errors.elem(selected)));
         given.col(i) = arma::join_cols(column, arma::vectorise(loadings.slice(i).rows(selected)));
       }
       block.subjects.emplace_back(a, given);

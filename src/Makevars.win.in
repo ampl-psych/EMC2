@@ -1,3 +1,5 @@
+# Processed by configure.win into src/Makevars.win.
+
 # The C++ sources use C++17 (structured bindings, if constexpr); declare it so
 # toolchains whose default is older (e.g. Intel icpc on NCI Gadi) compile.
 CXX_STD = CXX17
@@ -16,12 +18,6 @@ OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
   particle_ll.o rCDM.o sampler.o transform_utils.o utility_functions.o $(SAMPLER_OBJECTS)
 
 all: $(SHLIB)
-
-HEADERS = $(wildcard *.h) $(wildcard sampler/*.h) $(wildcard ../inst/include/*.h) \
-  $(wildcard ../inst/include/EMC2/*.h)
-$(OBJECTS): $(HEADERS)
-
-.PHONY: all clean
 
 clean:
 	rm -f $(OBJECTS) $(SHLIB)
