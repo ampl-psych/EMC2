@@ -136,6 +136,7 @@ nn_cell <- function(model, mean = NULL, sd = NULL, constants = NULL, formula = N
   if (any(!(sd > 0))) stop(what, "prior sds must be positive (", paste(sp[!(sd > 0)], collapse = ", "), ")")
   box <- nn_box_table(des, reg, mean, sd, k)
   nn_refuse_box(box, reg, k, "the prior")
+  nn_warn_control_limits(box, reg, k, "the prior")
   pri <- suppressMessages(prior(des, type = "single", pmean = mean, psd = sd))
 
   ctl <- nn_control_model(reg, control, ml)
@@ -310,8 +311,10 @@ nn_to_natural <- function(x, func, lower, upper)
 #'   For a hierarchical prior the group-mean prior is checked; subjects
 #'   spread further, so passing is necessary, not sufficient.
 #' @param k Half-width in prior sds.
-#' @param refuse If `TRUE`, an error lists every parameter and cell whose
-#'   range leaves the region; if `FALSE`, the table is returned regardless.
+#' @param refuse If `TRUE` (the default), a warning lists every parameter and
+#'   cell whose range leaves the region (the rule is advisory: it never
+#'   stops a fit or an SBC); if `FALSE`, the table is returned silently.
+#' @param error If `TRUE`, the warning is an error instead.
 #' @return (Invisibly) a data frame with one row per network input and
 #'   design cell: the natural-scale range of the prior at +- `k` sd, the
 #'   training region, and whether the former lies inside the latter.
@@ -323,7 +326,7 @@ nn_to_natural <- function(x, func, lower, upper)
 #'              psd = c(v_lRa = .1, v_lRb = .1, B = .1, t0 = .1, A = .1))
 #' nn_in_box(des, pri)
 #' @export
-nn_in_box <- function(x, prior = NULL, k = 4, refuse = TRUE) {
+nn_in_box <- function(x, prior = NULL, k = 4, refuse = TRUE, error = FALSE) {
   if (inherits(x, "nn_cell")) {
     des <- x$design; mu <- x$mean; sdv <- x$sd
     if (missing(k)) k <- x$k
@@ -339,7 +342,7 @@ nn_in_box <- function(x, prior = NULL, k = 4, refuse = TRUE) {
   }
   reg <- nn_model_fun(des)()$nn
   box <- nn_box_table(des, reg, mu, sdv, k)
-  if (refuse) nn_refuse_box(box, reg, k, "the prior")
+  if (refuse) { nn_refuse_box(box, reg, k, "the prior", error = error); nn_warn_control_limits(box, reg, k, "the prior") }
   invisible(box)
 }
 
@@ -382,18 +385,47 @@ nn_box_table <- function(des, reg, mu, sdv, k) {
   out
 }
 
-nn_refuse_box <- function(box, reg, k, what) {
+# The training-region rule is a validation helper: it warns and never
+# enforces (a prior that leaves the region is the user's call; the warning
+# says what it costs). `error = TRUE` turns the warning into an error.
+nn_refuse_box <- function(box, reg, k, what, error = FALSE) {
   bad <- box[!box$inside, , drop = FALSE]
   if (!nrow(bad)) return(invisible(TRUE))
   lines <- sprintf("  %s%s: [%s, %s] vs training region [%s, %s]", bad$parameter,
                    ifelse(nzchar(bad$cell), paste0(" (", bad$cell, ")"), ""),
                    signif(bad$prior_lower, 4), signif(bad$prior_upper, 4),
                    signif(bad$box_lower, 4), signif(bad$box_upper, 4))
-  stop("Neural likelihood '", reg$label, "': ", what, " leaves the network's training region within +-",
-       k, " sd (natural scale):\n", paste(lines, collapse = "\n"),
-       "\nParameter vectors outside the region are rejected by the network, so a fit truncates the ",
-       "prior there and an SBC cannot be calibrated. Narrow or move the prior (see ?nn_cell).",
-       call. = FALSE)
+  msg <- paste0("Neural likelihood '", reg$label, "': ", what, " leaves the network's training region within +-",
+                k, " sd (natural scale):\n", paste(lines, collapse = "\n"),
+                "\nParameter vectors outside the region are rejected by the network, so a fit truncates the ",
+                "prior there and an SBC cannot be calibrated. Narrow or move the prior (see ?nn_cell).")
+  if (error) stop(msg, call. = FALSE)
+  warning(msg, call. = FALSE)
+  invisible(FALSE)
+}
+
+# A race card may state the limits of its analytic control (the twin's Wald:
+# the s range it is exact on, the largest v b / s^2 its CDF evaluates); a
+# prior whose +-k sd region reaches past them is warned about, so that a
+# control cell is not run where the control itself is wrong.
+nn_warn_control_limits <- function(box, reg, k, what) {
+  cl <- reg$control_limits
+  if (is.null(cl) || !nrow(box)) return(invisible(TRUE))
+  lo <- tapply(box$prior_lower, box$parameter, min); hi <- tapply(box$prior_upper, box$parameter, max)
+  msgs <- character(0)
+  if (!is.null(cl$s) && "s" %in% names(lo) && (lo[["s"]] < cl$s[1] || hi[["s"]] > cl$s[2]))
+    msgs <- c(msgs, sprintf("s reaches [%s, %s]; the analytic control is exact on [%s, %s]",
+                            signif(lo[["s"]], 4), signif(hi[["s"]], 4), cl$s[1], cl$s[2]))
+  if (!is.null(cl$vb_over_s2_max)) {
+    vb <- nn_vb_over_s2_max(lo, hi)
+    if (is.finite(vb) && vb > cl$vb_over_s2_max)
+      msgs <- c(msgs, sprintf("v b / s^2 reaches %s; the analytic control's CDF overflows above %s",
+                              signif(vb, 4), cl$vb_over_s2_max))
+  }
+  if (length(msgs))
+    warning("Neural likelihood '", reg$label, "': ", what, " passes the limits the card states for its ",
+            "analytic control within +-", k, " sd:\n  ", paste(msgs, collapse = "\n  "), call. = FALSE)
+  invisible(!length(msgs))
 }
 
 nn_format_box <- function(box) {
@@ -404,7 +436,8 @@ nn_format_box <- function(box) {
              inside = box$inside)
 }
 
-# run_sbc(): refuse a neural-likelihood design whose prior leaves the box.
+# run_sbc(): warn about a neural-likelihood design whose prior leaves the box
+# (never refuse: the rule is advisory).
 nn_sbc_box_check <- function(design_in, prior_in) {
   des <- if (inherits(design_in, "emc.design")) design_in else
     if (is.list(design_in) && length(design_in) == 1L && inherits(design_in[[1]], "emc.design"))
@@ -596,13 +629,22 @@ nn_mean_se <- function(v) {
 #'   as zero. `before_support` is the mass the network puts before the
 #'   support start (where the exact density is zero).
 #'
+#'   A card may state the time support it is valid on and the tolerance its
+#'   total mass is expected to meet (`support`, `mass_tolerance`; see
+#'   `vignette("neural-likelihood-cards")`). The grid then ends at the
+#'   support's upper end when that is below `rt_max`, and the summary
+#'   reports whether `|Z - 1|` is within the tolerance (`within_tolerance`).
+#'   A flow with identity tails integrates to one over the whole positive
+#'   time axis: mass beyond the spline range is in the tails, not lost.
+#'
 #' @param x An [nn_cell()], or a neural-likelihood model (then `...` go to
 #'   [nn_cell()]).
 #' @param theta A matrix of sampled-scale parameter vectors (columns named
 #'   by the cell's sampled parameters); default `n` draws from the cell
 #'   prior.
 #' @param n Number of prior draws when `theta` is `NULL`.
-#' @param rt_max Upper end of the rt grid (seconds).
+#' @param rt_max Upper end of the rt grid (seconds); capped at the card's
+#'   `support` upper end when it states one.
 #' @param n_grid Points per log-spaced grid.
 #' @param support `function(pars)` giving, for each row of a natural-scale
 #'   parameter matrix, the earliest possible time; default `t0` (or the
@@ -626,6 +668,8 @@ nn_total_mass <- function(x, theta = NULL, n = 50, rt_max = 20, n_grid = 1000, s
   des <- cell$design
   cells <- nn_cells(des)
   cells_dadm <- nn_cells_dadm(des, cells)
+  card_support <- nn_card_support(cell$reg)
+  if (is.finite(card_support$time[2]) && card_support$time[2] < rt_max) rt_max <- card_support$time[2]
   a_grid <- exp(seq(log(1e-3), log(rt_max), length.out = n_grid))
   trapz <- function(x, y) if (length(x) < 2) 0 else sum((y[-1] + y[-length(y)]) / 2 * diff(x))
   one <- function(i) {
@@ -655,9 +699,31 @@ nn_total_mass <- function(x, theta = NULL, n = 50, rt_max = 20, n_grid = 1000, s
                mean_log_Z_control = mean(mass$log_Z_control[r]),
                sd_log_Z_control = stats::sd(mass$log_Z_control[r]),
                sd_difference = stats::sd(d[r]), max_abs_difference = max(abs(d[r])),
-               max_before_support = max(mass$before_support[r]))))
+               max_before_support = max(mass$before_support[r]),
+               within_tolerance = if (is.na(card_support$tolerance)) NA else
+                 max(abs(exp(mass$log_Z[r]) - 1)) <= card_support$tolerance)))
   structure(list(summary = summ, mass = mass, theta = theta, rt_max = rt_max, label = cell$reg$label,
-                 control_label = cell$control_label), class = "nn_total_mass")
+                 control_label = cell$control_label, support = card_support), class = "nn_total_mass")
+}
+
+# The time support and mass tolerance a card states (vignette
+# "neural-likelihood-cards"): support$time = c(lower, upper) in seconds of
+# the network's time, mass_tolerance a number; defaults (0, Inf) and NA.
+nn_card_support <- function(reg) {
+  sup <- reg$card$support
+  time <- c(0, Inf)
+  if (!is.null(sup)) {
+    t <- if (is.list(sup)) sup$time else sup
+    if (!(is.numeric(t) && length(t) == 2L && t[1] >= 0 && t[1] < t[2]))
+      stop("Neural likelihood '", reg$label, "': the card's support must give time = c(lower, upper), ",
+           "0 <= lower < upper")
+    time <- as.numeric(t)
+  }
+  tol <- reg$card$mass_tolerance
+  if (!is.null(tol) && !(is.numeric(tol) && length(tol) == 1L && tol > 0))
+    stop("Neural likelihood '", reg$label, "': the card's mass_tolerance must be one positive number")
+  list(time = time, tolerance = if (is.null(tol)) NA_real_ else as.numeric(tol),
+       beyond = reg$card$beyond_support)
 }
 
 #' @export
@@ -666,6 +732,10 @@ print.nn_total_mass <- function(x, digits = 4, ...) {
       " prior draws (rt up to ", x$rt_max, " s); control: ", x$control_label, "\n", sep = "")
   print(format(x$summary, digits = digits), row.names = FALSE)
   cat("log Z constant in theta (sd ~0) is harmless; sd_difference separates the network from the grid.\n")
+  if (!is.null(x$support) && !is.na(x$support$tolerance))
+    cat("The card expects total mass 1 within ", x$support$tolerance, " on its support [",
+        x$support$time[1], ", ", x$support$time[2], "] s: ",
+        if (all(x$summary$within_tolerance)) "met" else "NOT met", "\n", sep = "")
   invisible(x)
 }
 

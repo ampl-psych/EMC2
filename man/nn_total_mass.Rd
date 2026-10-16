@@ -26,7 +26,8 @@ prior.}
 
 \item{n}{Number of prior draws when \code{theta} is \code{NULL}.}
 
-\item{rt_max}{Upper end of the rt grid (seconds).}
+\item{rt_max}{Upper end of the rt grid (seconds); capped at the card's
+\code{support} upper end when it states one.}
 
 \item{n_grid}{Points per log-spaced grid.}
 
@@ -64,6 +65,14 @@ the integral is a trapezoid sum. Densities are the ones a fit uses,
 floored at EMC2's \code{min_ll} (\code{1e-10}), so masses below about \code{1e-9} read
 as zero. \code{before_support} is the mass the network puts before the
 support start (where the exact density is zero).
+
+A card may state the time support it is valid on and the tolerance its
+total mass is expected to meet (\code{support}, \code{mass_tolerance}; see
+\code{vignette("neural-likelihood-cards")}). The grid then ends at the
+support's upper end when that is below \code{rt_max}, and the summary
+reports whether \verb{|Z - 1|} is within the tolerance (\code{within_tolerance}).
+A flow with identity tails integrates to one over the whole positive
+time axis: mass beyond the spline range is in the tails, not lost.
 }
 \examples{
 \donttest{

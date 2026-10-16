@@ -38,25 +38,52 @@ nle_cache <- new.env(parent = emptyenv())
 
 nle_dir <- function() system.file("extdata", "flownn", package = "EMC2", mustWork = TRUE)
 
-# sha256 where available (R >= 4.5), md5 otherwise; MANIFEST carries both.
+# The hash that pins a file: sha256 where R has it (tools::sha256sum, R >= 4.5),
+# md5 otherwise. MANIFEST carries a line per algorithm and file,
+# "<hash> <file> <algorithm>" (a line without the third field is sha256), so
+# that the shipped artefacts load on every R this package supports; an R
+# without sha256 and a MANIFEST without an md5 line is refused by name.
+nle_hash_algo <- function()
+  if (exists("sha256sum", envir = asNamespace("tools"), inherits = FALSE)) "sha256" else "md5"
+
 nle_file_hash <- function(path) {
-  if (exists("sha256sum", envir = asNamespace("tools"), inherits = FALSE))
-    unname(tools::sha256sum(path))
-  else unname(tools::md5sum(path))
+  if (nle_hash_algo() == "sha256") unname(tools::sha256sum(path)) else unname(tools::md5sum(path))
 }
 
-nle_manifest <- function() {
+# All pins: list(file = c(sha256 = , md5 = )).
+nle_manifest_all <- function() {
   lines <- readLines(file.path(nle_dir(), "MANIFEST"))
   lines <- lines[nzchar(lines)]
-  parts <- strsplit(lines, "[[:space:]]+")
-  stats::setNames(lapply(parts, function(p) p[1]), vapply(parts, `[`, "", 2))
+  parts <- strsplit(trimws(lines), "[[:space:]]+")
+  out <- list()
+  for (p in parts) {
+    algo <- if (length(p) >= 3L) p[3] else "sha256"
+    out[[p[2]]][[algo]] <- p[1]
+  }
+  out
 }
 
-nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint")
+# The pin for the hash this R computes, keyed by file (NULL where the MANIFEST
+# has no line for that algorithm).
+nle_manifest <- function() {
+  algo <- nle_hash_algo()
+  all <- nle_manifest_all()
+  stats::setNames(lapply(all, function(h) h[[algo]]), names(all))
+}
+
+nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint", "flow_scaled")
 nn_mlp_kinds <- c("regression_joint", "mlp_joint")
+# card versions this EMC2 reads (card_version; absent = 0). The format is
+# described in vignette("neural-likelihood-cards").
+nn_card_versions <- c(0, 1)
 nn_transform_codes <- c(identity = 0L, log = 1L, probit = 2L, zerobox = 3L)
-# card `model` field -> analytic twin (an EMC2 model function)
-nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA", CRDM = "CRDM")
+# card `model` field -> analytic twin (an EMC2 model function). DDMsc is the
+# scaled DDM card (kind flow_scaled), whose twin is the DDM.
+nn_twin_names <- c(DDM = "DDM", RDM = "RDM", LNR = "LNR", LBA = "LBA", CRDM = "CRDM", DDMsc = "DDM")
+# the DDM parameters a scaled card (flow_scaled) computes its inputs from, in
+# the order the compiled evaluator takes them (src/model_NN.h, sc_pars)
+nn_scaled_pars <- c("v", "a", "sv", "t0", "st0", "s", "Z", "SZ")
+nn_scaled_inputs_names <- c("kappa", "eta", "Z", "SZ")
 # network inputs a regression net may take besides its parameter contexts
 nn_data_inputs <- c("rt", "log_rt", "R")
 
@@ -132,9 +159,13 @@ nn_card <- function(res) {
   if (!is.null(hit) && identical(hit$sig, sig)) return(hit)
   sha <- nle_file_hash(path)
   if (!is.null(res$artefact)) {
+    algo <- nle_hash_algo()
     pinned <- nle_manifest()[[paste0(res$artefact, ".rds")]]
-    if (is.null(pinned) || !identical(pinned, sha))
-      stop("Artefact ", res$artefact, ".rds does not match the sha256 pinned in inst/extdata/flownn/MANIFEST")
+    if (is.null(pinned))
+      stop("Artefact ", res$artefact, ".rds cannot be checked on ", R.version.string, ": this R has no ",
+           "tools::sha256sum (R >= 4.5), and inst/extdata/flownn/MANIFEST carries no md5 line for it")
+    if (!identical(pinned, sha))
+      stop("Artefact ", res$artefact, ".rds does not match the ", algo, " pinned in inst/extdata/flownn/MANIFEST")
   }
   raw <- if (grepl("\\.rds$", path, ignore.case = TRUE)) readRDS(path) else
     if (grepl("\\.json$", path, ignore.case = TRUE)) nn_read_json(path) else
@@ -161,8 +192,10 @@ nn_normalise_card <- function(raw) {
     mlp
   }
   members <- if (!is.null(raw$members)) raw$members else list(raw)
+  version <- nn_card_version(raw, members[[1]])
   members <- lapply(members, function(m) {
     for (f in c("mlp", "flow_mlp", "classifier_mlp")) if (!is.null(m[[f]])) m[[f]] <- fix_mlp(m[[f]])
+    m$scaling <- nn_scaling_spec(m$scaling)
     nn_natural_context(m)
   })
   kinds <- vapply(members, nn_infer_kind, "")
@@ -173,10 +206,51 @@ nn_normalise_card <- function(raw) {
   members <- lapply(members, nn_fill_sampled_box)
   m1 <- members[[1]]
   for (m in members[-1])
-    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c", "pre"))
+    for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c", "pre",
+                "scaling"))
       if (!identical(m[[f]], m1[[f]])) stop("Ensemble members disagree on ", f)
   list(members = members, top = if (!is.null(raw$members)) raw[names(raw) != "members"] else NULL,
-       kind = kinds[1])
+       kind = kinds[1], version = version)
+}
+
+# The card's format version: `card_version` at the top level (or on the first
+# member), absent = 0 (every card written before the field existed). A version
+# this EMC2 does not read is refused by name rather than read as if it were
+# one it knows.
+nn_card_version <- function(raw, m1) {
+  v <- if (!is.null(raw$card_version)) raw$card_version else m1$card_version
+  if (is.null(v)) return(0)
+  if (!is.numeric(v) || length(v) != 1L || !is.finite(v))
+    stop("The card's card_version must be one number (", paste(nn_card_versions, collapse = ", "), ")")
+  if (!(v %in% nn_card_versions))
+    stop("Card version ", format(v), " is not supported by this EMC2, which reads card versions ",
+         paste(nn_card_versions, collapse = " and "), "; update EMC2, or export the card for a version it reads")
+  v
+}
+
+# The scaling rule of a scaled card (kind flow_scaled): a list with `kind`
+# ("ddm_unit": the network models the unit-scale decision time of a DDM with
+# a = s = 1 given kappa = v a / s^2, eta = sv a / s^2, Z and SZ) and, for
+# ddm_unit, `sz` ("proportion": the network's SZ is EMC2's start-point
+# proportion). Cards exported before the field was structured carry a
+# description beginning "ddm_unit"; it is read as that kind.
+nn_scaling_spec <- function(sc) {
+  if (is.null(sc)) return(NULL)
+  if (is.character(sc)) {
+    if (length(sc) == 1L && startsWith(sc, "ddm_unit")) sc <- list(kind = "ddm_unit")
+    else stop("The card's scaling is not understood: '", sc[1], "'")
+  }
+  if (!is.list(sc) || !is.character(sc$kind) || length(sc$kind) != 1L)
+    stop("The card's scaling must give a kind (e.g. list(kind = \"ddm_unit\"))")
+  if (sc$kind != "ddm_unit") stop("Unsupported scaling kind '", sc$kind, "' (this EMC2 knows ddm_unit)")
+  if (is.null(sc$pars)) sc$pars <- nn_scaled_pars
+  if (!identical(as.character(sc$pars), nn_scaled_pars))
+    stop("A ddm_unit scaling takes the DDM parameters ", paste(nn_scaled_pars, collapse = ", "),
+         " in that order")
+  if (is.null(sc$sz)) sc$sz <- "proportion"
+  if (!identical(sc$sz, "proportion"))
+    stop("A ddm_unit scaling's SZ convention must be \"proportion\" (see vignette(\"neural-likelihood-cards\"))")
+  sc
 }
 
 # A card whose inputs are on the natural scale (context_scale = "natural", no
@@ -206,7 +280,7 @@ nn_fill_sampled_box <- function(m) {
 }
 
 nn_infer_kind <- function(m) {
-  if (!is.null(m$flow_mlp) && !is.null(m$classifier_mlp)) "flow_joint"
+  if (!is.null(m$flow_mlp) && !is.null(m$classifier_mlp)) if (!is.null(m$scaling)) "flow_scaled" else "flow_joint"
   else if (!is.null(m$mlp) && !is.null(m$spline)) "flow_race"
   else if (!is.null(m$mlp)) if (identical(m$kind, "mlp_joint")) "mlp_joint" else "regression_joint"
   else stop("Cannot tell what kind of network this card holds (neither flow_mlp + classifier_mlp nor mlp)")
@@ -217,7 +291,7 @@ nn_infer_kind <- function(m) {
 nn_ptr <- function(reg) {
   key <- paste0("ptr:", reg$kind, ":", reg$sha256)
   ptr <- nle_cache[[key]]
-  valid <- !is.null(ptr) && switch(reg$kind, flow_joint = ddm_ptr_valid(ptr),
+  valid <- !is.null(ptr) && switch(reg$kind, flow_joint = , flow_scaled = ddm_ptr_valid(ptr),
                                    flow_race = flow_ptr_valid(ptr), mlp_lik_valid(ptr))
   if (!valid) {
     res <- if (!is.null(reg$artefact)) nn_shipped(reg$artefact) else list(path = reg$path)
@@ -226,7 +300,8 @@ nn_ptr <- function(reg) {
       stop("Neural-likelihood file ", res$path, " has changed since the model was registered ",
            "(sha256 ", reg$sha256, ", now ", hit$sha256, "); re-register it and re-make the design")
     mem <- hit$card$members
-    ptr <- switch(reg$kind, flow_joint = ddm_build_ensemble(mem), flow_race = flow_build(mem[[1]]),
+    ptr <- switch(reg$kind, flow_joint = , flow_scaled = ddm_build_ensemble(mem),
+                  flow_race = flow_build(mem[[1]]),
                   mlp_lik_build(mem[[1]], reg$lower_s, reg$upper_s, reg$oob))
     nle_cache[[key]] <- ptr
   }
@@ -338,10 +413,33 @@ nn_ptr <- function(reg) {
 #' (one parameter vector, trial-wise parameters, ensembles, the compiled
 #' likelihood); `min_ll` flooring applies after it.
 #'
+#' **Card versions.** A card states its format version in `card_version`
+#' (absent: version 0, every card written before the field existed); this
+#' EMC2 reads versions 0 and 1 and refuses any other by name. The format,
+#' field by field, is `vignette("neural-likelihood-cards", package =
+#' "EMC2")`; a version-1 card may also carry `support`, `mass_tolerance`
+#' and `beyond_support` (read by [nn_total_mass()]), `control_limits` (race
+#' cards: limits of the analytic control, warned about by [nn_cell()]) and
+#' `validation` (what the card passed; a version-1 card without one
+#' registers with a message). The golden vectors beside a card are checked
+#' by [nn_golden_check()].
+#'
 #' **Kinds.**
 #' * `"flow_joint"`: a spline flow for rt given parameters and response plus a
 #'   classifier for the response; a two-response joint model like [DDM].
 #'   `dfun`/`pfun` are the joint density and the defective CDF.
+#' * `"flow_scaled"`: the scaled DDM card (DDMnle): a joint flow over the
+#'   unit-scale decision time `u = (rt - t0) (s / a)^2` of a diffusion with
+#'   boundary 1 and noise 1, with inputs `kappa = v a / s^2`, `eta = sv a /
+#'   s^2`, `Z` and `SZ` (card field `scaling`, kind `ddm_unit`). The
+#'   rescaling by `a` and `s`, the shift by `t0` and the uniform `st0` window
+#'   (a difference of two of the network's CDFs) are applied exactly, on the R
+#'   path and in the compiled likelihood. The model is [DDM]'s in every other
+#'   respect (parameters, transforms, bounds, the exact zeros `sv = SZ = st0 =
+#'   0`, the simulator); `pars`, `exceptions`, `pre` and `hybrid` do not
+#'   apply, and `cdf` is `FALSE` (no CDF of rt is offered). `SZ` is the
+#'   start-point proportion throughout (see [nn_sz_convert()] for the
+#'   conventions).
 #' * `"flow_race"`: a spline flow for one accumulator's finishing time; a race
 #'   model like [RDM] (`dfun`/`pfun` per accumulator; the survivor function
 #'   of the losing accumulators needs the CDF, so `cdf = FALSE` is refused).
@@ -534,6 +632,21 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     stop(what, "pars would permute the network's inputs: '", pars[moved[1]], "' is input ",
          match(pars[moved[1]], ctx), " of the card but position ", moved[1], " of pars. ",
          "The network's order is ", paste(ctx, collapse = ", "), ".")
+  # A scaled card's inputs are computed from the DDM's parameters (scaling,
+  # see nn_scaling_spec); they are not parameters and cannot be renamed, fixed
+  # or shifted.
+  scaled <- kind == "flow_scaled"
+  if (scaled) {
+    if (!identical(ctx, nn_scaled_inputs_names))
+      stop(what, "a scaled DDM card's inputs must be ", paste(nn_scaled_inputs_names, collapse = ", "),
+           " in that order; the card has ", paste(ctx, collapse = ", "))
+    if (!identical(pars, ctx)) stop(what, "a scaled DDM card's inputs cannot be renamed (pars)")
+    if (!is.null(exceptions)) stop(what, "a scaled DDM card takes every DDM parameter; exceptions do not apply")
+    if (!is.null(pre)) stop(what, "a scaled DDM card applies t0 itself; pre does not apply")
+    if (!is.null(hybrid)) stop(what, "hybrid is for race flows")
+    if (!identical(m1$context_encoding, "zerobox"))
+      stop(what, "a scaled DDM card must have context_encoding \"zerobox\" (eta and SZ exact at 0)")
+  }
   tr_card <- m1$context_transforms
   if (!is.null(transforms)) {
     transforms <- stats::setNames(as.character(transforms), names(transforms))
@@ -588,8 +701,9 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
          if (is.null(tl$type)) "missing" else tl$type)
   pt <- tl$p_types
   if (!is.numeric(pt) || is.null(names(pt))) stop(what, "the twin has no named p_types")
-  notp <- setdiff(pars, names(pt))
-  if (length(notp)) stop(what, "network input(s) ", paste(notp, collapse = ", "),
+  notp <- setdiff(if (scaled) nn_scaled_pars else pars, names(pt))
+  if (length(notp)) stop(what, if (scaled) "the DDM parameter(s) " else "network input(s) ",
+                         paste(notp, collapse = ", "),
                          " are not parameters of the model (", paste(names(pt), collapse = ", "), ")")
   tr_filled <- fill_transform(NULL, function() list(p_types = pt, transform = tl$transform))
   defaults <- nn_natural(pt, tr_filled)
@@ -597,8 +711,9 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   # A zero-box DDM network is exact at sv = SZ = st0 = 0, so an omitted
   # parameter must mean exactly zero, as in the analytic DDM() (a positive
   # default would simulate one model and evaluate another). Checked whatever
-  # supplies the defaults (DDM, a hand-written twin, or p_types).
-  if (identical(m1$context_encoding, "zerobox") && kind == "flow_joint") {
+  # supplies the defaults (DDM, a hand-written twin, or p_types). A scaled
+  # card is exact at eta = 0 (sv = 0), SZ = 0 and, by construction, st0 = 0.
+  if (identical(m1$context_encoding, "zerobox") && kind %in% c("flow_joint", "flow_scaled")) {
     zp <- intersect(c("sv", "SZ", "st0"), names(pt))
     if (!all(is.infinite(pt[zp]) & pt[zp] < 0))
       stop(what, "a zero-box DDM network needs the defaults sv = SZ = st0 = -Inf (exactly zero)")
@@ -635,16 +750,18 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
            " contradicts the card, whose network models rt - ", card_pre, " (pre = \"", card_pre, "\")")
   }
   pre_pars <- nn_check_pre(pre, pars, defaults, box, what)
-  ignored <- setdiff(names(pt), c(pars, names(fixed), pre_pars))
+  ignored <- setdiff(names(pt), c(if (scaled) nn_scaled_pars else pars, names(fixed), pre_pars))
   if (length(ignored))
     stop(what, "the model's parameter(s) ", paste(ignored, collapse = ", "), " are not network inputs, ",
          "not used by pre and not fixed by exceptions: the network would ignore them")
 
   # --- CDF --------------------------------------------------------------------------
   is_mlp <- kind %in% nn_mlp_kinds
-  if (is.null(cdf)) cdf <- !is_mlp
+  if (is.null(cdf)) cdf <- !is_mlp && !scaled
   if (!is.logical(cdf) || length(cdf) != 1L || is.na(cdf)) stop(what, "cdf must be TRUE or FALSE")
   if (is_mlp && cdf) stop(what, "a ", kind, " network has no CDF (cdf must be FALSE)")
+  if (scaled && cdf)
+    stop(what, "a scaled DDM card offers no CDF of rt (its CDF is of the unit-scale time; cdf must be FALSE)")
   if (kind == "flow_race" && !cdf)
     stop(what, "a race needs the survivor function (1 - CDF) of the losing accumulators, ",
          "so a flow_race network without a CDF cannot be assembled into a race")
@@ -699,8 +816,18 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     else c(-Inf, Inf)
   }, numeric(2))
   lower <- stats::setNames(box$lower, pars); upper <- stats::setNames(box$upper, pars)
-  refuse_default <- pars[!nn_inside(pars, defaults[pars], lower, upper, closed)]
-  exception <- reg_exception(reg_fixed = fixed, zb = closed, tl = tl)
+  # inputs that are model parameters (all of them, except for a scaled card,
+  # whose kappa and eta are computed): a default outside the box is refused
+  in_pars <- intersect(pars, names(defaults))
+  refuse_default <- in_pars[!nn_inside(in_pars, defaults[in_pars], lower, upper, closed)]
+  exception <- reg_exception(reg_fixed = fixed, zb = intersect(closed, names(pt)), tl = tl)
+  if (scaled) {
+    # the DDM's own bounds and exceptions (sv = SZ = st0 = 0): the network's
+    # box on kappa, eta, Z and SZ is applied by the evaluator
+    if (is.null(twin_mm)) stop(what, "the twin of a scaled DDM card must carry bound$minmax")
+    minmax <- twin_mm
+    exception <- if (is.null(tl$bound$exception)) stats::setNames(numeric(0), character(0)) else tl$bound$exception
+  }
 
   card_meta <- m1[setdiff(names(m1), c("mlp", "flow_mlp", "classifier_mlp", "scaler",
                                         "classifier_scaler", "spline"))]
@@ -714,14 +841,135 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
     ll_floor = m1$ll_floor_log, oob = oob, n_members = length(card$members),
-    input_layout = m1$input_layout, card = card_meta,
+    input_layout = m1$input_layout, card = card_meta, card_version = card$version,
+    # a scaled card: the rule and the DDM parameters its inputs are computed from
+    scaled = scaled, scaling = if (scaled) m1$scaling, sc_pars = if (scaled) nn_scaled_pars,
+    # race cards may state the limits of the analytic control (vignette)
+    control_limits = nn_control_limits(m1, kind, what),
     # the analytic twin, the default control of the validation kit
     # (R/nn_validate.R): the name of an EMC2 model, a hand-written model
     # function, or NULL (p_types)
     twin = nn_twin_ref(twin))
   reg$native <- nn_native_spec(reg)
   class(reg) <- "emc_nn"
+  if (card$version >= 1 && is.null(m1$validation))
+    message(what, "the card records no validation (score bias, posterior shift, SBC); loading a network ",
+            "is not the same as being able to infer with it (see ?nn_cell)")
   nn_model_function(nn_model_list(reg, tl, minmax))
+}
+
+# The limits a race card may state for its analytic control (the RDM's Wald):
+# `control_limits = list(s = c(lower, upper), vb_over_s2_max = 354)`: the s
+# range the control is exact on and the largest v * b / s^2 its CDF (pWald)
+# evaluates without overflow. Recorded on the registration and used by the
+# validation kit (nn_cell) to warn; a box that reaches past the limit is noted
+# at registration, never refused (it is a property of the control).
+nn_control_limits <- function(m, kind, what) {
+  cl <- m$control_limits
+  if (is.null(cl)) return(NULL)
+  if (kind != "flow_race") stop(what, "control_limits are for race cards")
+  if (!is.list(cl)) stop(what, "control_limits must be a list (s = c(lower, upper), vb_over_s2_max = )")
+  if (!is.null(cl$s) && !(is.numeric(cl$s) && length(cl$s) == 2L && cl$s[1] < cl$s[2]))
+    stop(what, "control_limits$s must be c(lower, upper)")
+  if (!is.null(cl$vb_over_s2_max) && !(is.numeric(cl$vb_over_s2_max) && length(cl$vb_over_s2_max) == 1L &&
+                                       cl$vb_over_s2_max > 0))
+    stop(what, "control_limits$vb_over_s2_max must be one positive number")
+  cl
+}
+
+# The largest v * b / s^2 a natural-scale box (named lower/upper over v, B, A, s)
+# can reach; b = B + A. NA when a name is missing.
+nn_vb_over_s2_max <- function(lower, upper) {
+  if (!all(c("v", "B", "s") %in% names(lower))) return(NA_real_)
+  b <- upper[["B"]] + if ("A" %in% names(upper)) upper[["A"]] else 0
+  upper[["v"]] * b / lower[["s"]]^2
+}
+
+# ---------------------------------------------------------------------------
+# The SZ conventions (a contract; see vignette("neural-likelihood-cards"))
+# ---------------------------------------------------------------------------
+
+#' Convert Between the Start-Point Variability Conventions
+#'
+#' Three conventions for the DDM's start-point variability are in use, and
+#' every interface states which it takes:
+#' * `"proportion"`: EMC2's natural-scale `SZ`, a proportion in `[0, 1)` of
+#'   the width available at the start point `Z`; the value a model's
+#'   `p_types`/`transform` produce from the sampled probit, what the
+#'   simulator takes, and the input of the shipped DDM flows and the scaled
+#'   DDM card (`scaling$sz = "proportion"`).
+#' * `"width"`: the absolute relative width `sw = 2 * SZ * min(Z, 1 - Z)`
+#'   that [DDM()]'s `Ttransform` passes to its likelihood (WienR's `sw`).
+#'
+#' The two are exact inverses of each other at a given `Z`.
+#'
+#' @param x Values in the `from` convention.
+#' @param Z The relative start point, natural scale in (0, 1), recycled.
+#' @param from,to The conventions.
+#' @return `x` in the `to` convention.
+#' @examples
+#' nn_sz_convert(0.2, Z = 0.3, from = "proportion", to = "width")   # 2 * 0.2 * 0.3
+#' nn_sz_convert(0.12, Z = 0.3, from = "width", to = "proportion")
+#' @export
+nn_sz_convert <- function(x, Z, from = c("proportion", "width"), to = c("width", "proportion")) {
+  from <- match.arg(from); to <- match.arg(to)
+  if (from == to) return(x)
+  m <- 2 * pmin(Z, 1 - Z)
+  if (from == "proportion") x * m else ifelse(x > 0, x / m, 0)
+}
+
+# ---------------------------------------------------------------------------
+# Evaluation (R path): the scaled DDM card
+# ---------------------------------------------------------------------------
+
+# The network's four natural-scale inputs from the DDM's parameters (SZ as the
+# proportion, the registered model's convention).
+nn_scaled_inputs <- function(pars) {
+  s2 <- pars[, "s"]^2; a <- pars[, "a"]
+  cbind(kappa = pars[, "v"] * a / s2, eta = pars[, "sv"] * a / s2, Z = pars[, "Z"],
+        SZ = ifelse(pars[, "SZ"] > 0, pars[, "SZ"], 0))
+}
+
+# The likelihood of rt given the DDM's parameters through a scaled card: the
+# R reference of the compiled path (src/model_NN.h, nn_trial_ll_scaled), as
+# the NLE project's port/R/ddm_scaled.R ddm_sc_density(), which takes SZ as the
+# width (this function takes the proportion). `evaluator(U, u, R)` returns
+# list(pdf, cdf) of the unit-scale time u for the natural inputs U; the
+# default is the card's network; an analytic oracle serves the tests.
+#   f(rt) = c g(u1),                       c = (s/a)^2, u1 = (rt - t0) c   (st0 = 0)
+#   f(rt) = [G(u1) - G(max(u0, 0))] / st0, u0 = (rt - t0 - st0) c          (st0 > 0)
+#   f(rt) = 0                                                            (rt <= t0)
+# A window too narrow to difference (st0 < 1e-7 d) uses the density at its
+# midpoint.
+nn_eval_scaled <- function(reg, rt, R, pars, what = "pdf", evaluator = NULL) {
+  if (what != "pdf")
+    stop("Neural likelihood '", reg$label, "' (a scaled DDM card) offers no CDF of rt")
+  miss <- setdiff(nn_scaled_pars, colnames(pars))
+  if (length(miss)) stop("Neural likelihood '", reg$label, "' needs parameter(s) ",
+                         paste(miss, collapse = ", "), " which the model does not supply")
+  if (is.null(evaluator)) evaluator <- function(U, u, R) {
+    o <- ddm_ens_eval_trials_cpp(nn_ptr(reg), nn_context(U, reg), u, as.integer(R))
+    list(pdf = o[["pdf"]], cdf = o[["cdf"]])
+  }
+  n <- length(rt); out <- numeric(n); R <- as.integer(R)
+  U <- nn_scaled_inputs(pars)
+  c2 <- (pars[, "s"] / pars[, "a"])^2
+  d <- rt - pars[, "t0"]; st0 <- pars[, "st0"]
+  live <- !is.na(d) & d > 0
+  if (!any(live)) return(out)
+  narrow <- live & (st0 <= 0 | st0 < 1e-7 * d)
+  wide <- live & !narrow
+  if (any(narrow)) { i <- which(narrow)
+    um <- (d[i] - pmax(st0[i], 0) / 2) * c2[i]
+    out[i] <- c2[i] * evaluator(U[i, , drop = FALSE], um, R[i])$pdf }
+  if (any(wide)) { i <- which(wide)
+    u1 <- d[i] * c2[i]; u0 <- (d[i] - st0[i]) * c2[i]
+    pos <- u0 > 0
+    j <- c(seq_along(i), which(pos))
+    G <- evaluator(U[i[j], , drop = FALSE], c(u1, u0[pos]), R[i[j]])$cdf
+    G0 <- numeric(length(i)); G0[pos] <- G[length(i) + seq_len(sum(pos))]
+    out[i] <- pmax(G[seq_along(i)] - G0, 0) / st0[i] }
+  out
 }
 
 # The label of a card file: its file name, or for a file called card.* (one
@@ -927,7 +1175,14 @@ nn_model_list <- function(reg, tl, minmax) {
           twin_rfun(data, tp)
         },
     nn = reg)
-  if (joint) {
+  if (isTRUE(reg$scaled)) {
+    ml$dfun <- function(rt, R, pars) nn_eval_scaled(reg, rt, R, pars, "pdf")
+    ml$pfun <- function(rt, R, pars) nn_eval_scaled(reg, rt, R, pars, "cdf")
+    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) {
+      nn_check_data(dadm, reg)
+      log_likelihood_ddm(pars = pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
+  } else if (joint) {
     ml$dfun <- function(rt, R, pars) nn_eval_joint(reg, rt, R, pars, "pdf")
     ml$pfun <- function(rt, R, pars) nn_eval_joint(reg, rt, R, pars, "cdf")
     ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) {
@@ -960,9 +1215,12 @@ nn_model_function <- function(ml) {
 nn_native_spec <- function(reg) {
   if (is.function(reg$pre)) return(NULL)
   refuse <- reg$defaults[reg$refuse_default]
-  list(kind = reg$kind, label = reg$label, pars = reg$pars,
+  # the compiled evaluator of a scaled card is the joint flow's, with the
+  # `scaled` rule (src/model_NN.h): it computes the inputs from sc_pars
+  list(kind = if (isTRUE(reg$scaled)) "flow_joint" else reg$kind, label = reg$label, pars = reg$pars,
        transform_codes = reg$transform_codes,
        zerobox_c = reg$zerobox_c,
+       scaled = isTRUE(reg$scaled), sc_pars = if (isTRUE(reg$scaled)) reg$sc_pars else character(0),
        pre = if (is.null(reg$pre)) "" else reg$pre,
        hybrid = if (is.null(reg$hybrid)) "" else reg$hybrid,
        wald_pars = reg$wald$pars, wald_lower = reg$wald$lower, wald_upper = reg$wald$upper,
@@ -1085,6 +1343,27 @@ nn_refused_defaults <- function(reg, dadm) {
   intersect(reg$refuse_default, names(attr(dadm, "constants")))
 }
 
+# make_emc(): a neural likelihood with t0 sampled and the response times
+# floored to a resolution coarser than 1 ms. EMC2's default resolution
+# (1/60 s; applied by design_model() whether or not the data are compressed)
+# biases t0 by about -1.9 posterior sd at N = 100 even for the analytic
+# likelihood (the NLE project's measurement); the networks were validated at
+# 1e-3 and finer.
+nn_rt_resolution_warning <- function(design, rt_resolution) {
+  if (!is.function(design$model)) return(invisible(FALSE))
+  reg <- tryCatch(design$model()$nn, error = function(e) NULL)
+  if (is.null(reg) || is.null(rt_resolution) || !(rt_resolution > 1e-3 + 1e-12)) return(invisible(FALSE))
+  lhs <- vapply(design$Flist, function(f) as.character(stats::terms(f)[[2]]), "")
+  if (!("t0" %in% lhs)) return(invisible(FALSE))
+  warning("Neural likelihood '", reg$label, "': the response times are floored to a resolution of ",
+          format(rt_resolution), " s (make_emc's rt_resolution, ", format(1 / rt_resolution, digits = 3),
+          " Hz) while t0 is sampled. That floors every rt by up to ", format(1000 * rt_resolution, digits = 3),
+          " ms and biases t0 (about -1.9 posterior sd at N = 100 with the default 1/60 s, even for the ",
+          "analytic likelihood; compress = FALSE does not change the resolution). Use rt_resolution = 0.001 ",
+          "or finer.", call. = FALSE)
+  invisible(TRUE)
+}
+
 # Censoring and truncation are not wired for neural likelihoods; both paths
 # refuse such data (src/model_NN.h makes the same checks).
 nn_check_data <- function(dadm, reg) {
@@ -1131,11 +1410,11 @@ nle_artefact_info <- function(x) {
   cm <- reg$card
   step <- if (!is.null(cm$checkpoint_step)) cm$checkpoint_step else
     c(flow = cm$checkpoint_step_flow, classifier = cm$checkpoint_step_classifier)
-  cat(sprintf("EMC2 %s @ %s\n  artefact %s: budget=%s checkpoint_step=%s sha256=%s\n",
+  cat(sprintf("EMC2 %s @ %s\n  artefact %s: budget=%s checkpoint_step=%s %s=%s\n",
               as.character(utils::packageVersion("EMC2")), find.package("EMC2"),
               reg$label, if (is.null(cm$budget)) "?" else cm$budget,
               if (is.null(names(step))) paste(step, collapse = "/") else
                 paste(names(step), step, sep = "=", collapse = "/"),
-              reg$sha256))
+              nle_hash_algo(), reg$sha256))
   invisible(reg)
 }

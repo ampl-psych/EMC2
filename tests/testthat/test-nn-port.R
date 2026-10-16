@@ -31,7 +31,7 @@ test_that("artefacts are pinned and report what was loaded", {
   expect_identical(reg$context_names, c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0"))
   expect_equal(as.numeric(reg$card$checkpoint_step_flow), 72)
   expect_equal(register_nn_model("rdm_small")()$nn$card$checkpoint_step, 195)
-  expect_output(nle("nle_artefact_info")("rdm_small"), "sha256=")
+  expect_output(nle("nle_artefact_info")("rdm_small"), "(sha256|md5)=")
   expect_error(register_nn_model("no_such_artefact"), "No neural-likelihood artefact")
 })
 

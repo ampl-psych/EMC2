@@ -4,7 +4,7 @@
 \alias{nn_in_box}
 \title{Check that a Prior Lies Inside a Neural Likelihood's Training Region}
 \usage{
-nn_in_box(x, prior = NULL, k = 4, refuse = TRUE)
+nn_in_box(x, prior = NULL, k = 4, refuse = TRUE, error = FALSE)
 }
 \arguments{
 \item{x}{An \code{\link[=nn_cell]{nn_cell()}}, an \code{emc.design} of a neural-likelihood model, or
@@ -16,8 +16,11 @@ spread further, so passing is necessary, not sufficient.}
 
 \item{k}{Half-width in prior sds.}
 
-\item{refuse}{If \code{TRUE}, an error lists every parameter and cell whose
-range leaves the region; if \code{FALSE}, the table is returned regardless.}
+\item{refuse}{If \code{TRUE} (the default), a warning lists every parameter and
+cell whose range leaves the region (the rule is advisory: it never
+stops a fit or an SBC); if \code{FALSE}, the table is returned silently.}
+
+\item{error}{If \code{TRUE}, the warning is an error instead.}
 }
 \value{
 (Invisibly) a data frame with one row per network input and

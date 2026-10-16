@@ -170,11 +170,31 @@ models the smear itself. The rule is applied by the evaluator on every path
 (one parameter vector, trial-wise parameters, ensembles, the compiled
 likelihood); \code{min_ll} flooring applies after it.
 
+\strong{Card versions.} A card states its format version in \code{card_version}
+(absent: version 0, every card written before the field existed); this
+EMC2 reads versions 0 and 1 and refuses any other by name. The format,
+field by field, is \code{vignette("neural-likelihood-cards", package = "EMC2")}; a version-1 card may also carry \code{support}, \code{mass_tolerance}
+and \code{beyond_support} (read by \code{\link[=nn_total_mass]{nn_total_mass()}}), \code{control_limits} (race
+cards: limits of the analytic control, warned about by \code{\link[=nn_cell]{nn_cell()}}) and
+\code{validation} (what the card passed; a version-1 card without one
+registers with a message). The golden vectors beside a card are checked
+by \code{\link[=nn_golden_check]{nn_golden_check()}}.
+
 \strong{Kinds.}
 \itemize{
 \item \code{"flow_joint"}: a spline flow for rt given parameters and response plus a
 classifier for the response; a two-response joint model like \link{DDM}.
 \code{dfun}/\code{pfun} are the joint density and the defective CDF.
+\item \code{"flow_scaled"}: the scaled DDM card (DDMnle): a joint flow over the
+unit-scale decision time \code{u = (rt - t0) (s / a)^2} of a diffusion with
+boundary 1 and noise 1, with inputs \verb{kappa = v a / s^2}, \verb{eta = sv a / s^2}, \code{Z} and \code{SZ} (card field \code{scaling}, kind \code{ddm_unit}). The
+rescaling by \code{a} and \code{s}, the shift by \code{t0} and the uniform \code{st0} window
+(a difference of two of the network's CDFs) are applied exactly, on the R
+path and in the compiled likelihood. The model is \link{DDM}'s in every other
+respect (parameters, transforms, bounds, the exact zeros \code{sv = SZ = st0 = 0}, the simulator); \code{pars}, \code{exceptions}, \code{pre} and \code{hybrid} do not
+apply, and \code{cdf} is \code{FALSE} (no CDF of rt is offered). \code{SZ} is the
+start-point proportion throughout (see \code{\link[=nn_sz_convert]{nn_sz_convert()}} for the
+conventions).
 \item \code{"flow_race"}: a spline flow for one accumulator's finishing time; a race
 model like \link{RDM} (\code{dfun}/\code{pfun} per accumulator; the survivor function
 of the losing accumulators needs the CDF, so \code{cdf = FALSE} is refused).

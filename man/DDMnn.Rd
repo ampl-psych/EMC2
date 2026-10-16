@@ -57,6 +57,24 @@ check calibration and identifiability (parameter recovery, likelihood
 profiles, SBC) before drawing conclusions; \code{\link[=nn_cell]{nn_cell()}} and the validation
 kit run these checks against \link{DDM}.
 
+\strong{Calibration of \code{ddm_cap256w_c4}, and the t0 shift.} The artefact passes
+simulation-based calibration from N = 100 to 800 trials on every parameter
+(standardised bias within the 0.5 gate, coverage nominal), with one
+systematic feature: its t0 point estimates sit slightly high, by a shift
+that is constant on the log scale (about 0.002 at N = 800, i.e. 0.2\% of
+t0; rank uniformity fails from N = 200 while interval coverage stays
+nominal). \strong{No correction is applied by EMC2.} A fixed multiplicative
+correction of 0.00276 was proposed by the NLE project and reopened on
+2026-10-13, when an exact test with saved draws found it over-corrects at
+N = 800 (mean rank .534, KS p .007); an out-of-sample test of about 0.0019
+is pending, and the shift is reported here as unresolved. For a DDM with
+\code{sv}, \code{SZ} or \code{st0} free the scaled DDM card (DDMnle, a \code{"flow_scaled"}
+card registered with \code{\link[=register_nn_model]{register_nn_model()}}) replaces this artefact: it
+needs no t0 correction (t0 inside the envelope in all six variability
+models at N = 400). The record of the exact test is the NLE project's
+\code{sbc/t0corr_exact.R} and the progress log of
+\code{handover/ZERO_BOX_RETRAIN_PLAN.md}.
+
 \code{DDMnn(artefact)} is \code{register_nn_model(artefact, kind = "flow_joint", twin = DDM)()}; see \code{\link[=register_nn_model]{register_nn_model()}} for the contract.
 
 Wuth, J. (2026). \emph{Likelihood approximation in evidence accumulation

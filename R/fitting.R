@@ -1265,6 +1265,7 @@ make_emc <- function(data,design,model=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
+    nn_rt_resolution_warning(design[[i]], rt_resolution[i])
     if(is.null(attr(design[[i]], "custom_ll"))){
       # Censoring/truncation requested in design(TC = ...) but the data carry no
       # LT/UT/LC/UC/missingness columns (i.e. make_missing() was not applied,

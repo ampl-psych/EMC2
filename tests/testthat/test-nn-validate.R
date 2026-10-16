@@ -47,8 +47,8 @@ test_that("nn_cell builds matched network and control cells with named priors", 
   expect_false("st0" %in% names(nn_cell(function() DDMnn("ddm_st0zero"))$mean))
 })
 
-test_that("nn_cell and nn_in_box refuse priors that leave the training region", {
-  expect_error(nn_cell(RDMnn, mean = rdm_mean, sd = .5), "t0: \\[.*training region")
+test_that("nn_cell and nn_in_box warn about priors that leave the training region (never refuse)", {
+  expect_warning(nn_cell(RDMnn, mean = rdm_mean, sd = .5), "t0: \\[.*training region")
   expect_error(nn_cell(RDMnn, mean = unname(rdm_mean), sd = .1), "never matched by position")
   expect_error(nn_cell(RDMnn, mean = c(rdm_mean, x = 1), sd = .1), "names x")
   # an effect has no default prior
@@ -65,12 +65,29 @@ test_that("nn_cell and nn_in_box refuse priors that leave the training region", 
   des <- cell$design
   pri <- prior(des, type = "single", pmean = c(v = log(1.5), v_lRb = 0, B = 0, t0 = log(.2), A = log(.3)),
                psd = c(v = .1, v_lRb = .1, B = .1, t0 = .6, A = .1))
-  expect_error(nn_in_box(des, pri), "t0")
+  expect_warning(nn_in_box(des, pri), "t0")
+  expect_error(nn_in_box(des, pri, error = TRUE), "t0")
   tab <- nn_in_box(pri, refuse = FALSE)                 # the design is taken from the prior
   expect_identical(tab$parameter[!tab$inside], "t0")
-  expect_true(all(nn_in_box(des, pri, k = 1)$inside))
-  # run_sbc refuses before simulating anything
-  expect_error(suppressMessages(run_sbc(des, pri, replicates = 2, trials = 10)), "training region")
+  expect_true(all(suppressWarnings(nn_in_box(des, pri, k = 1))$inside))
+  # run_sbc's check warns before simulating anything, and does not stop the run
+  expect_warning(nle("nn_sbc_box_check")(des, pri), "training region")
+})
+
+test_that("a race card's control limits are read and warned about, never enforced", {
+  card <- readRDS(system.file("extdata", "flownn", "rdm_small.rds", package = "EMC2"))
+  card$control_limits <- list(s = c(0.5, 2), vb_over_s2_max = 354)
+  f <- tempfile(fileext = ".rds"); saveRDS(card, f)
+  m <- register_nn_model(f)
+  expect_equal(m()$nn$control_limits$vb_over_s2_max, 354)
+  # a prior on s that reaches below 0.5, with s sampled
+  expect_warning(nn_cell(m, formula = list(v ~ 0 + lR, B ~ 1, t0 ~ 1, A ~ 1, s ~ 1),
+                         mean = c(v_lRa = log(1.5), v_lRb = log(1), B = 0, t0 = log(.2), A = log(.3), s = log(.4)),
+                         sd = .05),
+                 "limits the card states for its analytic control")
+  card$control_limits <- list(s = "wide")
+  saveRDS(card, f)
+  expect_error(register_nn_model(f), "control_limits\\$s")
 })
 
 test_that("the control must take the network's parameters, defaults and transforms", {

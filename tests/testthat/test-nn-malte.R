@@ -280,10 +280,10 @@ test_that("nn_cell(functions = ): network and control designs; -Inf constants; e
   expect_equal(max(v$prior_upper), exp(log(2) + .5 + 4 * sqrt(.15^2 + .1^2)))
   set.seed(1); th <- nle("nn_cell_draws")(cell, 200)
   expect_true(all(abs(th[, "v"] + th[, "v_lMTRUE"] - log(2) - .5) <= 4 * sqrt(.15^2 + .1^2)))
-  # a prior that leaves the region is still refused
+  # a prior that leaves the region is warned about (the rule is advisory)
   sdv[["v"]] <- .3
-  expect_error(do.call(nn_cell, c(list(mk$hybrid, mean = p_c, sd = sdv, formula = f_c,
-                                       constants = c(amp_lDFALSE = -Inf)),
-                                  DES[c("Rlevels", "matchfun", "functions")], list(factors = DES$factors[-1]))),
-               "leaves the network's training region")
+  expect_warning(do.call(nn_cell, c(list(mk$hybrid, mean = p_c, sd = sdv, formula = f_c,
+                                         constants = c(amp_lDFALSE = -Inf)),
+                                    DES[c("Rlevels", "matchfun", "functions")], list(factors = DES$factors[-1]))),
+                 "leaves the network's training region")
 })

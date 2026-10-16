@@ -116,7 +116,7 @@ test_that("compiled likelihood == R path with omitted st0 and constant sv = -Inf
   set.seed(9)
   dat <- make_data(p, des, n_trials = 50)
   dat$rt[1] <- 0.2                                  # below t0: zero density when st0 = 0
-  emc <- suppressMessages(make_emc(dat, des, type = "single", compress = FALSE))
+  emc <- suppressMessages(make_emc(dat, des, type = "single", compress = FALSE, rt_resolution = 0.001))
   dadm <- emc[[1]]$data[[1]]
   ll_native <- c(EMC2:::calc_ll_manager(t(p), dadm, emc[[1]]$model))
   pars <- EMC2:::get_pars_matrix_oo(t(p), dadm, emc[[1]]$model)
@@ -126,7 +126,7 @@ test_that("compiled likelihood == R path with omitted st0 and constant sv = -Inf
   des2 <- suppressMessages(design(model = m, factors = list(subjects = 1, S = c("left", "right")),
                                   Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
                                   formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1)))
-  e2 <- suppressMessages(make_emc(dat, des2, type = "single", compress = FALSE))
+  e2 <- suppressMessages(make_emc(dat, des2, type = "single", compress = FALSE, rt_resolution = 0.001))
   q <- c(p, sv = log(.005))
   expect_equal(c(EMC2:::calc_ll_manager(t(q), e2[[1]]$data[[1]], e2[[1]]$model)), log(1e-10) * nrow(dat))
   q[["sv"]] <- -Inf
