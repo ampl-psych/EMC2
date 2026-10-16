@@ -88,6 +88,11 @@ holding the rating, an integer from 1 (lowest) to \code{n_ratings} (highest).\ta
 }
 
 
+The guess-rating probabilities (\verb{pg1 ..}, or \code{pq}) are bounded to \verb{(0, 1)}
+but also allowed at their defaults (\code{pg1 = 1}, the others 0), so a
+sampled value whose probability rounds to the other end (beyond about
+8.3 on the probit scale) is out of bounds.
+
 Confidence thresholds are \code{T_j = A + B * d_j} with proportions
 \verb{d_\{K-k\} = exp(-(c1 + ... + ck))}, so \verb{A < T_1 < ... < T_\{K-1\} < b}. With
 \code{lowest_threshold = "free"} the lowest threshold is instead

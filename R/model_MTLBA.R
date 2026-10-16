@@ -1410,6 +1410,11 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #' | *pgk* | probit | \[0, 1\]     | qnorm(0)   | Probability that a guess gives rating `k`, given it is not a lower rating |
 #' | *pq*  | probit | \[0, 1\]     | qnorm(0)   | With `guess_ratings = "binomial"`, in place of the `pg`: the binomial probability `q` of guessed ratings |
 #'
+#' The guess-rating probabilities (`pg1 ..`, or `pq`) are bounded to `(0, 1)`
+#' but also allowed at their defaults (`pg1 = 1`, the others 0), so a
+#' sampled value whose probability rounds to the other end (beyond about
+#' 8.3 on the probit scale) is out of bounds.
+#'
 #' Confidence thresholds are `T_j = A + B * d_j` with proportions
 #' `d_{K-k} = exp(-(c1 + ... + ck))`, so `A < T_1 < ... < T_{K-1} < b`. With
 #' `lowest_threshold = "free"` the lowest threshold is instead
@@ -1669,11 +1674,14 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
                      lower = c(rho = -1), upper = c(rho = 1)),
     # (bounds are also checked after Ttransform when simulating, where a proportional
     # model's A column is the natural start-point range: hence (0, Inf) there)
+    # the guess-rating probabilities (pg, or binomial pq) in (0, 1), each also allowed at its
+    # default (pg1 = 1, the others 0: a guess gives the lowest rating)
     bound = list(minmax = cbind(v = c(-Inf, Inf), sv = c(0, Inf), A = c(if (prop) 0 else 1e-4, Inf),
                                 B = c(0, Inf), t0 = c(0.05, Inf), rho = c(-1, 1),
                                 if (prop) matrix(rep(c(0, 1), length(crit)), 2, dimnames = list(NULL, crit)) else
-                                  rating_bound(K)),
-                 exception = c(A = 0)),
+                                  rating_bound(K),
+                                matrix(rep(c(0, 1), length(gr)), 2, dimnames = list(NULL, gr))),
+                 exception = c(A = 0, stats::setNames(as.numeric(seq_along(gr) == 1 & !binom), gr))),
     Ttransform = function(pars, dadm) {
       ok <- attr(pars, "ok")
       if (prop) pars <- mtlba_proportional(pars, K, free) else {

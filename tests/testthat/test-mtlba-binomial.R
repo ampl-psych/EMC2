@@ -84,6 +84,9 @@ test_that("binomial: factory (p_types, transforms, c_options); free default unch
     expect_identical(f$c_options[["binomial_guess"]], 0)
     expect_identical(names(f$p_types)[seq_along(pg) + length(f$p_types) - length(pg)], pg)
     expect_identical(unname(f$p_types[pg]), qnorm(as.numeric(seq_along(pg) == 1)))
+    # the pg bounded to (0, 1) and allowed at their defaults (pg1 = 1, the others 0)
+    expect_identical(unname(f$bound$minmax[, pg, drop = FALSE]), matrix(rep(c(0, 1), K - 1), 2))
+    expect_identical(unname(f$bound$exception[pg]), as.numeric(seq_along(pg) == 1))
     if (K == 1) {
       expect_identical(m$c_options[["binomial_guess"]], 0)   # one rating: nothing to guess
       expect_false("pq" %in% names(m$p_types))
@@ -93,11 +96,49 @@ test_that("binomial: factory (p_types, transforms, c_options); free default unch
     expect_identical(names(m$p_types), c(setdiff(names(f$p_types), pg), "pq"))
     expect_identical(m$p_types[["pq"]], -Inf)   # q = 0: guessing off guesses the lowest rating
     expect_identical(m$transform$func[["pq"]], "pnorm")
+    expect_identical(unname(m$bound$minmax[, "pq"]), c(0, 1))
+    expect_identical(m$bound$exception[["pq"]], 0)
+    expect_false(any(pg %in% colnames(m$bound$minmax)))
     expect_false(any(pg %in% names(m$transform$func)))
     expect_identical(MTLBA(K, guess_ratings = "binomial", parameterization = "proportional")$c_options[
       c("proportional", "binomial_guess")], c(proportional = 1, binomial_guess = 1))
   }
   expect_error(MTLBA(3, guess_ratings = "logit"))
+})
+
+test_that("guess-rating bounds: defaults in bounds, saturated probabilities out (free and binomial)", {
+  for (gr in c("free", "binomial")) {
+    db <- bin_design(3, gr = gr)
+    if (gr == "free") db$model <- local({ m0 <- db$model; function() {
+      m <- m0(); g <- c("pg1", "pg2"); m$transform$func[g] <- "pnorm"; m$transform$lower[g] <- 0; m$transform$upper[g] <- 1; m } })
+    p <- sampled_pars(db, doMap = FALSE); p[] <- 0
+    p[c("v", "v_lMTRUE", "B", "A", "t0", "gp")] <- c(1, 1.5, log(1.5), log(.5), log(.25), qnorm(.25))
+    p[grep("^c", names(p))] <- log(.6)
+    set.seed(5800)
+    dat <- make_data(p, db, n_trials = 30)
+    dadm <- EMC2:::design_model(dat, db, verbose = FALSE)
+    rat <- if (gr == "free") c("pg1_lRleft", "pg1_lRright", "pg2_lRleft", "pg2_lRright") else c("pq", "pq_lRright")
+    ext <- matrix(p, 3, length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
+    if (gr == "free") {
+      ext[1, rat] <- c(Inf, Inf, -Inf, -Inf)    # the defaults pg1 = 1, pg2 = 0: in
+      ext[2, rat] <- c(-Inf, -Inf, -Inf, -Inf)  # pg1 = 0: out
+      ext[3, rat] <- c(Inf, Inf, Inf, Inf)      # pg2 = 1: out
+    } else {
+      ext[1, rat] <- c(-Inf, 0); ext[2, rat] <- c(Inf, 0); ext[3, rat] <- c(0, 10)
+    }
+    ll <- EMC2:::calc_ll_manager(ext, dadm, db$model)
+    expect_gt(ll[1], 30 * log(1e-10))
+    expect_equal(ll[2:3], rep(nrow(dat) * log(1e-10), 2))
+  }
+  # a model without guessing keeps the default pg1 = 1 (constant) and is unaffected
+  des <- suppressMessages(design(factors = list(subjects = 1, S = c("l", "r")), Rlevels = c("l", "r"),
+    matchfun = function(d) d$S == d$lR, report_p_vector = FALSE, model = function() MTLBA(3),
+    formula = list(v ~ lM, B ~ 1, A ~ 1, t0 ~ 1, c1 ~ 1, c2 ~ 1)))
+  p <- c(v = 1, v_lMTRUE = 1.5, B = log(1.5), A = log(.5), t0 = log(.25), c1 = log(.6), c2 = log(.6))
+  set.seed(5801)
+  dat <- make_data(p, des, n_trials = 30)
+  expect_true(all(is.finite(EMC2:::calc_ll_manager(t(p), EMC2:::design_model(dat, des, verbose = FALSE), des$model,
+                                                    return_trialwise = TRUE) > log(1e-10))))
 })
 
 test_that("binomial: guess-rating probabilities are Binomial(K - 1, q), K = 2 .. 4, q from 0 to 1", {
@@ -171,7 +212,7 @@ test_that("binomial = free at the mapped pg, in R and C++; C++ = R; OpenMP ident
   }
 })
 
-test_that("binomial: C++ = R at q = 0 and 1 exactly and at non-finite pq", {
+test_that("binomial: q = 0 (the default, a bound exception) is in bounds, q = 1 and NaN are not; C++ = R", {
   for (K in c(2, 3)) for (rule in c("BE", "TC")) {
     db <- bin_design(K, rule, rho = TRUE)
     p <- bin_p(db, K, rho = -.5)
@@ -179,15 +220,21 @@ test_that("binomial: C++ = R at q = 0 and 1 exactly and at non-finite pq", {
     dat <- make_missing(make_data(p, db, n_trials = 40), LC = .45, UC = 1.6)
     dadm <- EMC2:::design_model(dat, db, verbose = FALSE, rt_resolution = 1e-6)
     ext <- matrix(p, nrow = 4, ncol = length(p), byrow = TRUE, dimnames = list(NULL, names(p)))
-    ext[1, c("pq", "pq_lRright")] <- c(-Inf, 0)    # q = 0: every guess is rating 1
-    ext[2, c("pq", "pq_lRright")] <- c(Inf, 0)     # q = 1: every guess is rating K
-    ext[3, c("pq", "pq_lRright")] <- c(-40, 80)    # q = 0 on one accumulator, 1 on the other
-    ext[4, "pq"] <- NaN
+    ext[1, c("pq", "pq_lRright")] <- c(-Inf, 0)    # q = 0: every guess is rating 1 (in bounds)
+    ext[2, c("pq", "pq_lRright")] <- c(Inf, 0)     # q = 1: out of bounds
+    ext[3, c("pq", "pq_lRright")] <- c(-40, 80)    # q = 0 on one accumulator, 1 on the other: out
+    ext[4, "pq"] <- NaN                            # out
     llc <- EMC2:::calc_ll_manager(ext, dadm, db$model, return_trialwise = TRUE)
     llr <- bin_tw_r(ext, dadm, db)
-    expect_lt(max(bin_err(llc[, 1:3], llr[, 1:3])), 1e-10)
-    expect_true(all(llc[, 1:3] >= log(1e-10)) && all(is.finite(llc)))
+    expect_lt(max(bin_err(llc[, 1], llr[, 1])), 1e-10)
+    expect_gt(mean(llc[, 1] > log(1e-10)), .5)   # in bounds (single trials may sit at the floor)
+    expect_equal(as.vector(llc[, 2:4]), rep(log(1e-10), 3 * nrow(llc)))
     expect_identical(bin_omp(EMC2:::calc_ll_manager(ext, dadm, db$model, return_trialwise = TRUE)), llc)
+    # q just inside 1 is in bounds and = R
+    ext[2, c("pq", "pq_lRright")] <- c(qnorm(1 - 1e-12), 0)
+    llc <- EMC2:::calc_ll_manager(ext[1:2, ], dadm, db$model, return_trialwise = TRUE)
+    expect_lt(max(bin_err(llc, bin_tw_r(ext[1:2, ], dadm, db))), 1e-10)
+    expect_gt(mean(llc[, 2] > log(1e-10)), .5)
   }
 })
 
