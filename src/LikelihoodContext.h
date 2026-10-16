@@ -28,6 +28,7 @@ public:
                 bool trialwise = false);
   int trial_count() const;
   bool thread_safe() const;
+  std::string unsafe_reason() const;   // why not, or ""
 
 private:
   struct Impl;

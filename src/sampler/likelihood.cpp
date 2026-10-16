@@ -68,10 +68,20 @@ Likelihoods::~Likelihoods() = default;
 bool Likelihoods::thread_safe() const {
   return std::all_of(safe.begin(), safe.end(), [](bool value) { return value; });
 }
+std::string Likelihoods::unsafe_reason() const {
+  for (const auto& subject : parts)
+    for (const auto& part : subject)
+      if (!part->context.thread_safe()) return part->context.unsafe_reason();
+  return "";
+}
 void Likelihoods::one(int subject, const arma::mat& candidates, arma::vec& out, int component) {
   out.zeros(candidates.n_rows);
+  bool found = false;
   for (auto& part : parts[subject])
-    if (!component || component == part->component) part->evaluate(candidates, out);
+    if (!component || component == part->component) { part->evaluate(candidates, out); found = true; }
+  // A block whose component no part carries would otherwise sample its prior
+  if (!found) throw std::runtime_error("no likelihood part for component " + std::to_string(component) +
+                                       " of subject " + std::to_string(subject + 1));
 }
 
 namespace {
@@ -257,6 +267,9 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     std::vector<int> selected;
     for (int i = 0; i < stages.size(); ++i)
       if (stages[i] == "preburn" || stages[i] == "burn" || stages[i] == "adapt" || stages[i] == "sample") selected.push_back(i);
+    for (int i : history_idx)
+      if (i < 1 || i > static_cast<int>(selected.size()))
+        Rcpp::stop("history index %d is outside the %d stored draws of chain %d", i, (int) selected.size(), chain + 1);
     for (int i = 0; i < window; ++i) for (int s = 0; s < n; ++s)
       std::copy_n(values + static_cast<size_t>(selected[history_idx[i] - 1]) * p * n + s * p,
                   p, draws[s].colptr(chain * window + i));

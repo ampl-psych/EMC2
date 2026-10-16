@@ -31,22 +31,22 @@ set.seed(123)
 test_that("CDM simulates and initializes", {
   cdm_data <- make_data(cdm_pars, cdm_design, n_trials = 4)
   cdm_emc <- make_snapshot_emc(cdm_data, cdm_design)
-  expect_snapshot(cdm_data)
-  expect_snapshot(init_chains(cdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(cdm_data, variant = Sys.info()[["sysname"]])
+  expect_snapshot(init_chains(cdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 test_that("SDM simulates and initializes", {
   sdm_data <- make_data(sdm_pars, sdm_design, n_trials = 4)
   sdm_emc <- make_snapshot_emc(sdm_data, sdm_design)
-  expect_snapshot(sdm_data)
-  expect_snapshot(init_chains(sdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(sdm_data, variant = Sys.info()[["sysname"]])
+  expect_snapshot(init_chains(sdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 test_that("HSDM simulates and initializes", {
   hsdm_data <- make_data(hsdm_pars, hsdm_design, n_trials = 4)
   hsdm_emc <- make_snapshot_emc(hsdm_data, hsdm_design)
-  expect_snapshot(hsdm_data)
-  expect_snapshot(init_chains(hsdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(hsdm_data, variant = Sys.info()[["sysname"]])
+  expect_snapshot(init_chains(hsdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 test_that("PSDM simulates and initializes", {
@@ -54,15 +54,15 @@ test_that("PSDM simulates and initializes", {
   set.seed(123)
   psdm_data <- make_data(psdm_pars, psdm_design, n_trials = 4)
   psdm_emc <- make_snapshot_emc(psdm_data, psdm_design)
-  expect_snapshot(psdm_data)
-  expect_snapshot(init_chains(psdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(psdm_data, variant = Sys.info()[["sysname"]])
+  expect_snapshot(init_chains(psdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 test_that("PHSDM simulates and initializes", {
   phsdm_data <- make_data(phsdm_pars, phsdm_design, n_trials = 4)
   phsdm_emc <- make_snapshot_emc(phsdm_data, phsdm_design)
-  expect_snapshot(phsdm_data)
-  expect_snapshot(init_chains(phsdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(phsdm_data, variant = Sys.info()[["sysname"]])
+  expect_snapshot(init_chains(phsdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })
 
 # trapz1d <- function(x, y) {

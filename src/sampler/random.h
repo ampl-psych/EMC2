@@ -13,13 +13,16 @@ namespace emc2 {
 // Seed and restore on the R thread. Each chain owns its engine and distribution state.
 class Random {
   std::mt19937_64 engine;
+  // The C++ library family: its distributions (gamma, binomial) are what make
+  // a stream library-specific. The version is left out so that a saved object
+  // continues its stream across compiler upgrades.
   static std::string format() {
 #if defined(_LIBCPP_VERSION)
-    return "libc++ " + std::to_string(_LIBCPP_VERSION);
+    return "libc++";
 #elif defined(__GLIBCXX__)
-    return "libstdc++ " + std::to_string(__GLIBCXX__);
+    return "libstdc++";
 #else
-    return "MSVC " + std::to_string(_MSC_VER);
+    return "MSVC";
 #endif
   }
   double spare = 0;
@@ -37,10 +40,27 @@ class Random {
       }
     }
     // A different C++ library starts a fresh stream from R's current seed.
-    std::array<uint32_t, 8> words;
-    for (auto& word : words) word = static_cast<uint32_t>(R::runif(0, 4294967296.0));
+    std::array<uint32_t, 8> words = r_words();
     std::seed_seq seed(words.begin(), words.end());
     engine.seed(seed);
+  }
+  // Eight words from R's generator; R thread only.
+  static std::array<uint32_t, 8> r_words() {
+    std::array<uint32_t, 8> words;
+    for (auto& word : words) word = static_cast<uint32_t>(R::runif(0, 4294967296.0));
+    return words;
+  }
+  // Reseed from the restored state and R's generator together, so that
+  // set.seed() before a run picks the stream, as it did when R drew every
+  // number, while a saved object still continues its own stream when the R
+  // seed is the same.
+  void mix(const std::array<uint32_t, 8>& words) {
+    std::array<uint32_t, 16> all;
+    std::copy(words.begin(), words.end(), all.begin());
+    for (size_t k = 8; k < all.size(); ++k) all[k] = static_cast<uint32_t>(engine());
+    std::seed_seq seed(all.begin(), all.end());
+    engine.seed(seed);
+    has_spare = false;
   }
   Rcpp::List state() const {
     std::ostringstream output;

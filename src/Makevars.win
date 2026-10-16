@@ -5,7 +5,8 @@ CXX_STD = CXX17
 # The sampler owns threading; Armadillo must not print from worker threads.
 PKG_CPPFLAGS = -I../inst/include -DPNORM_MODE=1 -DARMA_WARN_LEVEL=0 -DARMA_DONT_USE_OPENMP
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
-PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
+# No Fortran is compiled here, so $(FLIBS) is not linked.
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS)
 
 SAMPLER_OBJECTS = sampler/group.o sampler/infnt_factor.o sampler/likelihood.o \
   sampler/particle.o sampler/proposals.o sampler/runner.o sampler/sem.o
@@ -17,12 +18,11 @@ OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
 
 all: $(SHLIB)
 
-build_info.o: ../inst/include/build_info.h
-particle_ll.o sampler/likelihood.o: LikelihoodContext.h
-
-sampler.o $(SAMPLER_OBJECTS): sampler/group.h sampler/infnt_factor.h \
-  sampler/likelihood.h sampler/particle.h sampler/proposals.h sampler/random.h \
-  sampler/runner.h sampler/sem.h
+# Every object depends on every header: an in-place rebuild after a header
+# change must recompile all of them, or the link mixes stale and new objects.
+HEADERS = $(wildcard *.h) $(wildcard sampler/*.h) $(wildcard ../inst/include/*.h) \
+  $(wildcard ../inst/include/EMC2/*.h)
+$(OBJECTS): $(HEADERS)
 
 .PHONY: all clean
 

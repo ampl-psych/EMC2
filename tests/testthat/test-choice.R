@@ -40,27 +40,27 @@ p_mnp <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
 test_that("ordered_probit", {
   sdat <- make_data(p_ord_probit, d_ord_probit, n_trials = 10)
   ord_probit_s <- make_emc(sdat, d_ord_probit, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(ord_probit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_ord_probit, d_ord_probit, n_trials = 10))
+  expect_snapshot(init_chains(ord_probit_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_ord_probit, d_ord_probit, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 test_that("ordered_logit", {
   sdat <- make_data(p_ord_logit, d_ord_logit, n_trials = 10)
   ord_logit_s <- make_emc(sdat, d_ord_logit, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(ord_logit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_ord_logit, d_ord_logit, n_trials = 10))
+  expect_snapshot(init_chains(ord_logit_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_ord_logit, d_ord_logit, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 test_that("multinomial_logit", {
   sdat <- make_data(p_mnl, d_mnl, n_trials = 10)
   mnl_s <- make_emc(sdat, d_mnl, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(mnl_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_mnl, d_mnl, n_trials = 10))
+  expect_snapshot(init_chains(mnl_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_mnl, d_mnl, n_trials = 10), variant = Sys.info()[["sysname"]])
 })
 
 test_that("multinomial_probit", {
   sdat <- make_data(p_mnp, d_mnp, n_trials = 10)
   mnp_s <- make_emc(sdat, d_mnp, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(mnp_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_mnp, d_mnp, n_trials = 10))
+  expect_snapshot(init_chains(mnp_s, particles = 10, cores_per_chain = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
+  expect_snapshot(make_data(p_mnp, d_mnp, n_trials = 10), variant = Sys.info()[["sysname"]])
 })

@@ -4,17 +4,23 @@ native_models <- function(model) {
   lapply(model, function(x) if (is.function(x)) x() else x)
 }
 
+# Which likelihood (data set) each parameter belongs to. The sampler's blocks
+# and the likelihood parts must use the same index, so both take it from here.
+shared_likelihood_index <- function(pmwgs, models = native_models(pmwgs$model)) {
+  shared <- attr(pmwgs$data, "shared_ll_idx")
+  if (!is.null(shared)) return(shared)
+  par_names <- pmwgs$par_names
+  if (length(models) > 1L) match(sub("[|].*", "", par_names), unique(sub("[|].*", "", par_names)))
+  else rep(1L, length(par_names))
+}
+
 native_likelihood_inputs <- function(pmwgs) {
   models <- native_models(pmwgs$model)
   if (any(vapply(models, function(model) is.null(model$c_name), logical(1))))
     stop("Sampling requires a compiled likelihood")
   par_names <- pmwgs$par_names
-  shared <- attr(pmwgs$data, "shared_ll_idx")
+  shared <- shared_likelihood_index(pmwgs, models)
   joint <- length(models) > 1L
-  if (is.null(shared)) {
-    shared <- if (joint) match(sub("[|].*", "", par_names),
-                              unique(sub("[|].*", "", par_names))) else rep(1L, length(par_names))
-  }
   lapply(pmwgs$data, function(data) {
     dadms <- if (is.data.frame(data)) list(data) else data
     specs <- vector("list", length(dadms))
@@ -38,7 +44,7 @@ native_likelihood_inputs <- function(pmwgs) {
 prepare_native_stage <- function(pmwgs, stage, iter, particles, tune, on_singular) {
   if (pmwgs$type == "SEM") pmwgs <- normalise_SEM_prior(pmwgs)
   tune$components <- attr(pmwgs$data, "components")
-  tune$shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
+  tune$shared_ll_idx <- shared_likelihood_index(pmwgs)
   kernel <- if (is.null(tune$kernel)) stage else tune$kernel
   tune <- check_tune_settings(tune, pmwgs$n_pars, kernel, particles)
   tune$kernel <- kernel

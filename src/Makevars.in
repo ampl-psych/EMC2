@@ -6,8 +6,11 @@
 CXX_STD = CXX17
 
 # The sampler owns threading; Armadillo must not print from worker threads.
+# LINALG_LIBS is R's LAPACK/BLAS/Fortran-runtime triple, except on macOS, where
+# the Accelerate framework supplies all of them and $(FLIBS) would name a
+# gfortran runtime that is absent unless gfortran is installed (configure).
 PKG_CPPFLAGS = -I../inst/include -DPNORM_MODE=@PNORM_MODE@ -DARMA_WARN_LEVEL=0 -DARMA_DONT_USE_OPENMP
-PKG_LIBS     = @OMP_LIBS@ $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS) @ACCELERATE_LIBS@
+PKG_LIBS     = @OMP_LIBS@ @LINALG_LIBS@
 PKG_CXXFLAGS = @OMP_CXXFLAGS@ @EXTRA_CXXFLAGS@
 
 SAMPLER_OBJECTS = sampler/group.o sampler/infnt_factor.o sampler/likelihood.o \
@@ -20,12 +23,13 @@ OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
 
 all: $(SHLIB)
 
-build_info.o: ../inst/include/build_info.h
-particle_ll.o sampler/likelihood.o: LikelihoodContext.h
-
-sampler.o $(SAMPLER_OBJECTS): sampler/group.h sampler/infnt_factor.h \
-  sampler/likelihood.h sampler/particle.h sampler/proposals.h sampler/random.h \
-  sampler/runner.h sampler/sem.h
+# Every object depends on every header: an in-place rebuild after a header
+# change must recompile all of them, or the link mixes stale and new objects
+# (seen as a segfault in ParamTable after RaceSetup.h changed). $(wildcard) is
+# GNU make, declared in DESCRIPTION's SystemRequirements.
+HEADERS = $(wildcard *.h) $(wildcard sampler/*.h) $(wildcard ../inst/include/*.h) \
+  $(wildcard ../inst/include/EMC2/*.h)
+$(OBJECTS): $(HEADERS)
 
 .PHONY: all clean
 

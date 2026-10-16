@@ -4,10 +4,10 @@
       LNR_diag[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -0.8378073 -0.9872863
-      m_lMd -0.2876366 -0.5898393
-      s     -1.0249672 -0.6047458
-      t0    -2.3783442 -1.7427491
+      m     -0.9743351 -0.9833168
+      m_lMd -0.4386883 -0.5367333
+      s     -0.7338663 -0.5722065
+      t0    -1.8065456 -1.7854034
 
 ---
 
@@ -15,26 +15,26 @@
       LNR_diag[[1]]$samples$theta_mu[, idx]
     Output
                m      m_lMd          s         t0 
-      -0.9743222 -0.6134234 -0.7679532 -2.2539005 
+      -1.0061445 -0.5730070 -0.5592815 -1.7125241 
 
 ---
 
     Code
       LNR_diag[[1]]$samples$theta_var[, , idx]
     Output
-                     m      m_lMd          s       t0
-      m     0.02531788 0.00000000 0.00000000 0.000000
-      m_lMd 0.00000000 0.09894308 0.00000000 0.000000
-      s     0.00000000 0.00000000 0.03923812 0.000000
-      t0    0.00000000 0.00000000 0.00000000 0.106451
+                     m     m_lMd          s         t0
+      m     0.01563927 0.0000000 0.00000000 0.00000000
+      m_lMd 0.00000000 0.0125815 0.00000000 0.00000000
+      s     0.00000000 0.0000000 0.02627957 0.00000000
+      t0    0.00000000 0.0000000 0.00000000 0.02260007
 
 ---
 
     Code
       compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
     Output
-             MD wMD WAIC wWAIC  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      diag -579   1 9762     1 1090    1 1965     1        875   215  -614 -661
+             MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      diag -483   1 3638     1 324    1  811     1        487  -163  -565 -649
     Message
       p_waic produced warnings, use waic_warnings() to inspect
 
@@ -44,10 +44,10 @@
       LNR_blocked[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -0.9668625 -1.0003825
-      m_lMd -0.2819924 -0.5445420
-      s     -0.8501189 -0.5963007
-      t0    -1.9733013 -1.7466873
+      m     -0.8266541 -0.8599759
+      m_lMd -0.3010900 -0.4941738
+      s     -1.0154122 -0.5942347
+      t0    -2.3922342 -1.8778012
 
 ---
 
@@ -55,26 +55,26 @@
       LNR_blocked[[1]]$samples$theta_mu[, idx]
     Output
                m      m_lMd          s         t0 
-      -1.0052941 -1.5321301 -0.9540201 -1.8960213 
+      -0.8416064 -0.2454263 -0.7879509 -1.7655813 
 
 ---
 
     Code
       LNR_blocked[[1]]$samples$theta_var[, , idx]
     Output
-                      m     m_lMd          s         t0
-      m     0.003426314 0.0000000 0.00000000 0.00000000
-      m_lMd 0.000000000 0.7972991 0.00000000 0.00000000
-      s     0.000000000 0.0000000 0.02009918 0.02058433
-      t0    0.000000000 0.0000000 0.02058433 0.04993745
+                     m      m_lMd            s           t0
+      m     0.04624816 0.00000000  0.000000000  0.000000000
+      m_lMd 0.00000000 0.01631634  0.000000000  0.000000000
+      s     0.00000000 0.00000000  0.031483966 -0.004607457
+      t0    0.00000000 0.00000000 -0.004607457  0.109357167
 
 ---
 
     Code
       compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
-                MD wMD  WAIC wWAIC  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
-      blocked -527   1 68786     1 6464    1 10029     1       3565  2899  -620 -665
+                MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      blocked -302   1 1222     1 369    1  888     1        519  -149  -523 -668
     Message
       p_waic produced warnings, use waic_warnings() to inspect
 
@@ -84,10 +84,10 @@
       LNR_single[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -1.0064461 -0.7239915
-      m_lMd -0.3903504 -0.8186065
-      s     -0.5314815 -0.2610311
-      t0    -1.6904537 -1.8390487
+      m     -1.0103237 -1.0523847
+      m_lMd -0.3734309 -0.5476712
+      s     -0.3097086 -0.6119045
+      t0    -1.6697117 -1.7132085
 
 ---
 
@@ -95,7 +95,7 @@
       compare(list(single = LNR_single), stage = "preburn", cores_for_props = 1)
     Output
                MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single -390   1 1089     1 312    1  733     1        421  -109  -463 -530
+      single -135   1  882     1 485    1 1007     1        522   -36  -318 -558
     Message
       p_waic produced warnings, use waic_warnings() to inspect
 

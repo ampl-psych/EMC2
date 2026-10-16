@@ -113,8 +113,12 @@ fi
 #  Platform detection — Accelerate framework (macOS only)                     #
 # --------------------------------------------------------------------------- #
 ACCELERATE_LIBS=""
+# R's LAPACK, BLAS and Fortran runtime, which R CMD check wants together; on
+# macOS the Accelerate framework supplies all three and $(FLIBS) would name a
+# gfortran runtime that is absent unless gfortran is installed.
+LINALG_LIBS='$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)'
 case "$(uname)" in
-  Darwin) ACCELERATE_LIBS="-framework Accelerate" ;;
+  Darwin) ACCELERATE_LIBS="-framework Accelerate"; LINALG_LIBS="$ACCELERATE_LIBS" ;;
 esac
 
 # --------------------------------------------------------------------------- #
@@ -168,6 +172,24 @@ if [ -z "$OMP_LIBS" ]; then
 fi
 
 # --------------------------------------------------------------------------- #
+#  omp_pause_resource_all (OpenMP 5.0) — releases the runtime's thread pool,  #
+#  which makes a later fork safe with GNU libgomp (see omp_release_pool() in  #
+#  src/particle_ll.cpp). In libgomp from GCC 9, which still reports _OPENMP   #
+#  as 201511, so test by compiling and linking rather than on _OPENMP.        #
+# --------------------------------------------------------------------------- #
+OMP_PAUSE=0
+if [ -n "$OMP_LIBS" ]; then
+  cat > "$OMP_TMP/pause.cpp" <<'OMPEOF'
+#include <omp.h>
+int main() { return omp_pause_resource_all(omp_pause_hard); }
+OMPEOF
+  if $CXX_BIN $CXX_STD $R_CXXFLAGS $OMP_CXXFLAGS \
+        "$OMP_TMP/pause.cpp" $OMP_LIBS -o "$OMP_TMP/pause" 2>/dev/null; then
+    OMP_PAUSE=1
+  fi
+fi
+
+# --------------------------------------------------------------------------- #
 #  Summary                                                                     #
 # --------------------------------------------------------------------------- #
 echo "configure: EMC2 build configuration"
@@ -177,6 +199,7 @@ echo "  native        : $ENABLE_NATIVE"
 echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
 echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
 echo "  OpenMP libs   : ${OMP_LIBS:-disabled}"
+echo "  OpenMP pause  : $OMP_PAUSE"
 echo "  Compiler      : $CXX_BIN $CXX_STD"
 echo "  R CXXFLAGS    : $R_CXXFLAGS"
 
@@ -189,6 +212,7 @@ sed \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
+  -e "s|@LINALG_LIBS@|${LINALG_LIBS}|g" \
   src/Makevars.in > src/Makevars
 
 echo "configure: src/Makevars written"
@@ -203,6 +227,7 @@ sed \
   -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
   -e "s|@OMP_LIBS@|${OMP_LIBS_HEADER}|g" \
+  -e "s|@OMP_PAUSE@|${OMP_PAUSE}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
   inst/include/build_info.h.in > inst/include/build_info.h

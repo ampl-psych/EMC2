@@ -3,8 +3,15 @@
 #endif
 
 #include <Rcpp.h>
+#include "build_info.h"   // EMC2_OMP_PAUSE (configure)
+#if defined(_OPENMP) && (defined(__linux__) || defined(__APPLE__))
+#include <dlfcn.h>        // dladdr: which OpenMP runtime the entry points resolve to
+#define EMC2_OMP_DLADDR 1
+#endif
 #include <unordered_map>
 #include "LikelihoodContext.h"
+
+int omp_release_pool();   // defined below, after the likelihood
 
 // Utilities first — no dependencies on model types
 #include "utility_functions.h"
@@ -641,7 +648,8 @@ struct LikelihoodContext::Impl {
   std::string model_name;
   int n_parameters, n_rows, n_lR, n_trials, n_exp, n_threads;
   double min_ll;
-  bool safe = true;
+  bool safe = true;         // evaluation uses no R API, so worker threads may run it
+  std::string unsafe_reason;
 
   Impl(CharacterVector parameter_names, DataFrame data, NumericVector constant_values,
        List designs, String type, List bound_values, List transforms,
@@ -663,10 +671,8 @@ struct LikelihoodContext::Impl {
     NumericMatrix initial(1, n_parameters);
     colnames(initial) = parameter_names;
     pretransforms = make_transform_specs(initial, pretransform_values);
-    for (const auto& transform : pretransforms)
-      if (transform.code == PNORM) safe = false;
 #if PNORM_MODE == 0
-    safe = false;
+    safe = false; unsafe_reason = "this build uses R::pnorm (PNORM_MODE=0)";
 #endif
     pipeline = make_pipeline_context(initial, data, constant_values, designs,
                                      transforms, pretransform_values, trend);
@@ -679,7 +685,9 @@ struct LikelihoodContext::Impl {
 
     if (pipeline.trend_plan) {
       for (const auto& kernel : pipeline.trend_plan->kernels)
-        if (kernel.second.kernel_type == KernelType::Custom) safe = false;
+        if (kernel.second.kernel_type == KernelType::Custom) {
+          safe = false; unsafe_reason = "a custom trend kernel calls back into R";
+        }
     }
 
     if (type == "MRI" || type == "MRI_AR1") {
@@ -720,7 +728,7 @@ struct LikelihoodContext::Impl {
         rts_ptr = rts.begin();
         if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
           model = type == "CDM" ? CDM : type == "PSDM" ? PSDM : PHSDM;
-          safe = false;
+          safe = false; unsafe_reason = "the " + std::string(type) + " likelihood draws from R's generator";
           continuous_R = data["R"];
           if (data.containsElementNamed("R2")) R2 = data["R2"];
           if (data.containsElementNamed("R3")) R3 = data["R3"];
@@ -781,8 +789,8 @@ struct LikelihoodContext::Impl {
       if (col < 0) continue;
       double value = particles[sp.col_idx * n_particles + row];
       if (sp.code == EXP) value = sp.lower + std::exp(value);
-      else if (sp.code == PNORM)
-        value = sp.lower + (sp.upper - sp.lower) * R::pnorm(value, 0.0, 1.0, 1, 0);
+      else if (sp.code == PNORM)   // PNORM_STD, not R::pnorm: worker threads run this
+        value = sp.lower + (sp.upper - sp.lower) * PNORM_STD(value, true, false);
       std::fill_n(s.pt.base.colptr(col), n_rows, value);
     }
     for (const auto& constant : constants)
@@ -902,6 +910,7 @@ void LikelihoodContext::evaluate(const double* particles, int n_particles,
 }
 int LikelihoodContext::trial_count() const { return impl_->n_exp; }
 bool LikelihoodContext::thread_safe() const { return impl_->safe; }
+std::string LikelihoodContext::unsafe_reason() const { return impl_->unsafe_reason; }
 
 } // namespace emc2
 
@@ -932,7 +941,50 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                   bounds, transforms, pretransforms, min_ll, trend, n_threads);
   NumericMatrix result(return_trialwise ? context.trial_count() : 1, particle_matrix.nrow());
   context.evaluate(particle_matrix.begin(), particle_matrix.nrow(), result.begin(), return_trialwise);
+  omp_release_pool();
   return result;
+}
+
+// The shared object the OpenMP entry points of this library resolve to
+// (e.g. ".../libgomp.so.1", ".../libiomp5.so", ".../libomp.dylib"): "none"
+// without OpenMP, "" if it cannot be told.
+// [[Rcpp::export(rng = false)]]
+std::string omp_runtime() {
+#ifndef _OPENMP
+  return "none";
+#elif defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (dladdr((void*) &omp_get_max_threads, &info) && info.dli_fname) return std::string(info.dli_fname);
+  return "";
+#else
+  return "";
+#endif
+}
+
+// Release the OpenMP runtime's thread pool (omp_pause_resource_all). With GNU
+// libgomp a process that has opened a parallel region and then forks leaves
+// its children waiting on the parent's pool for ever, so fit() in forked
+// children (run_sbc(), mclapply()) after a fit in the session hung. Every
+// threaded entry point releases the pool before it returns; the next parallel
+// region rebuilds it (about 0.1 ms at 4 threads, 0.5 ms at 16). Only done with
+// libgomp: Intel's libiomp5 (2021.10) survives a fork without it and crashes in
+// the first parallel region after a hard pause. Returns 0 on success, 1 if the
+// runtime refused, 2 if called inside a parallel region (nothing done), -1 if
+// not available: not libgomp, or no omp_pause_resource_all in this build
+// (configure sets EMC2_OMP_PAUSE).
+// [[Rcpp::export(rng = false)]]
+int omp_release_pool() {
+#if defined(_OPENMP) && defined(EMC2_OMP_PAUSE) && EMC2_OMP_PAUSE && defined(EMC2_OMP_DLADDR)
+  Dl_info info;
+  if (!dladdr((void*) &omp_pause_resource_all, &info) || !info.dli_fname) return -1;
+  const std::string path(info.dli_fname);
+  const std::string::size_type slash = path.find_last_of('/');
+  if (path.find("gomp", slash == std::string::npos ? 0 : slash) == std::string::npos) return -1;
+  if (omp_in_parallel()) return 2;
+  return omp_pause_resource_all(omp_pause_hard) == 0 ? 0 : 1;
+#else
+  return -1;
+#endif
 }
 
 

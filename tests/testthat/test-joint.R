@@ -12,5 +12,5 @@ joint <- make_emc(list(data_in, data_in), list(a = design_in, b = design_in), pr
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 test_that("joint", {
-  expect_snapshot(init_chains(joint, particles = 10, cores_for_chains = 1)[[1]]$samples)
+  expect_snapshot(init_chains(joint, particles = 10, cores_for_chains = 1)[[1]]$samples, variant = Sys.info()[["sysname"]])
 })

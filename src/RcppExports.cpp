@@ -494,6 +494,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// omp_runtime
+std::string omp_runtime();
+RcppExport SEXP _EMC2_omp_runtime() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(omp_runtime());
+    return rcpp_result_gen;
+END_RCPP
+}
+// omp_release_pool
+int omp_release_pool();
+RcppExport SEXP _EMC2_omp_release_pool() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(omp_release_pool());
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_pars_c_wrapper
 List get_pars_c_wrapper(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes);
 RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
@@ -777,6 +795,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},
+    {"_EMC2_omp_runtime", (DL_FUNC) &_EMC2_omp_runtime, 0},
+    {"_EMC2_omp_release_pool", (DL_FUNC) &_EMC2_omp_release_pool, 0},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},

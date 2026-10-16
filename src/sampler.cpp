@@ -2,6 +2,14 @@
 #include "sampler/proposals.h"
 #include "sampler/likelihood.h"
 
+int omp_release_pool();   // particle_ll.cpp
+namespace {
+// Threaded entry points release the OpenMP pool on the way out (exceptions
+// included), so that a process forked afterwards does not hang on it with GNU
+// libgomp; see omp_release_pool().
+struct PoolRelease { ~PoolRelease() { omp_release_pool(); } };
+}
+
 // [[Rcpp::export]]
 Rcpp::List native_run_hyper(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter) {
   return emc2::sample_group(sampler, alpha, iter);
@@ -38,6 +46,7 @@ Rcpp::NumericVector native_group_means(Rcpp::List sampler, Rcpp::NumericMatrix m
 // [[Rcpp::export]]
 Rcpp::List native_lik_prec(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     Rcpp::List ll_inputs, int n_cores) {
+  PoolRelease release;
   return emc2::likelihood_precision(emc, history_idx, ll_inputs, n_cores);
 }
 
@@ -50,6 +59,7 @@ SEXP native_sampler_contexts(Rcpp::List inputs, int n_chains, int n_cores) {
 Rcpp::List native_run_chains(Rcpp::List args, SEXP cache, std::string stage,
                            int iter, int cores_for_chains, bool verboseProgress) {
   Rcpp::XPtr<emc2::SamplerContexts> contexts(cache);
+  PoolRelease release;
   return emc2::sample_chains(args, *contexts, stage, iter, cores_for_chains, verboseProgress);
 }
 
@@ -57,6 +67,9 @@ Rcpp::List native_run_chains(Rcpp::List args, SEXP cache, std::string stage,
 Rcpp::List native_init_chains(Rcpp::List emc, SEXP cache, SEXP start_mu,
                             SEXP start_var, int particles, bool force) {
   Rcpp::XPtr<emc2::SamplerContexts> contexts(cache);
+  PoolRelease release;
+  if (static_cast<int>(contexts->chains.size()) < emc.size())
+    Rcpp::stop("the sampler context holds %d chains but %d were given", (int) contexts->chains.size(), (int) emc.size());
   Rcpp::List out(emc.size());
   out.attr("names") = emc.attr("names");
   for (int c = 0; c < emc.size(); ++c)

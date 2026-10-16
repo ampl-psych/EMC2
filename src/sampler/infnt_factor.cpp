@@ -18,6 +18,19 @@ arma::mat precision_root(const arma::mat& precision) {
   return root;
 }
 
+// Draw from N(P^-1 b, P^-1) with P = root' root: solve root' y = b, then
+// root x = y + z. The non-throwing solves give the retry loop a "singular"
+// error where Armadillo's would stop the stage.
+arma::mat triangular_draw(const arma::mat& root, const arma::mat& linear, const arma::mat& z) {
+  arma::mat mean, out;
+  if (!arma::solve(mean, arma::trimatl(root.t()), linear))
+    throw std::runtime_error("singular factor precision");
+  const arma::mat shifted = mean + z;
+  if (!arma::solve(out, arma::trimatu(root), shifted))
+    throw std::runtime_error("singular factor precision");
+  return out;
+}
+
 }  // namespace
 
 InfiniteFactorSampler::InfiniteFactorSampler(const Rcpp::List& sampler)
@@ -92,8 +105,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
   const arma::mat eta_root = precision_root(eta_precision);
   arma::mat noise(n_, factors_);
   for (double& value : noise) value = rng.rnorm(0, 1);
-  next.eta = arma::solve(arma::trimatu(eta_root),
-    arma::solve(arma::trimatl(eta_root.t()), weighted_loadings.t() * centered) + noise.t()).t();
+  next.eta = triangular_draw(eta_root, weighted_loadings.t() * centered, noise.t()).t();
 
   const arma::vec mu_variance = 1 / (n_ * state.epsilon_inv + precision_);
   const arma::vec mu_mean = mu_variance % (state.epsilon_inv %
@@ -110,8 +122,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
     const arma::mat root = precision_root(precision);
     arma::vec z(factors_);
     for (double& value : z) value = rng.rnorm(0, 1);
-    next.lambda.row(j) = arma::solve(arma::trimatu(root),
-      arma::solve(arma::trimatl(root.t()), linear) + z).t();
+    next.lambda.row(j) = triangular_draw(root, linear, z).t();
   }
 
   for (arma::uword h = 0; h < factors_; ++h)
