@@ -392,7 +392,7 @@ calculate_subject_means_RE <- function(group_designs, tmu, random_designs = NULL
 
 scale_move_stages <- function(){
   opt <- getOption("emc.scale_move")
-  if(is.null(opt) || isTRUE(opt)) return(c("adapt", "sample"))
+  if(is.null(opt) || isTRUE(opt)) return(c("burn", "adapt", "sample"))
   if(isFALSE(opt)) return(character(0))
   as.character(opt)
 }

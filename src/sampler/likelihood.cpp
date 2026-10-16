@@ -121,16 +121,19 @@ std::optional<Quadratic> finite_difference(Likelihoods& likelihood, int subject,
   arma::mat H = arma::diagmat((2 * f0 - fp - fm) / arma::square(h));
   const int pairs = p * (p - 1) / 2;
   if (pairs) {
-    arma::mat candidates = arma::repmat(centre.t(), 2 * pairs, 1);
+    arma::mat candidates = arma::repmat(centre.t(), 4 * pairs, 1);
     int i = 0;
     for (int j = 0; j < p; ++j) for (int k = j + 1; k < p; ++k, ++i) {
       candidates(i, j) += h[j]; candidates(i, k) += h[k];
-      candidates(i + pairs, j) -= h[j]; candidates(i + pairs, k) -= h[k];
+      candidates(i + pairs, j) += h[j]; candidates(i + pairs, k) -= h[k];
+      candidates(i + 2 * pairs, j) -= h[j]; candidates(i + 2 * pairs, k) += h[k];
+      candidates(i + 3 * pairs, j) -= h[j]; candidates(i + 3 * pairs, k) -= h[k];
     }
     likelihood.one(subject, candidates, f);
     i = 0;
     for (int j = 0; j < p; ++j) for (int k = j + 1; k < p; ++k, ++i)
-      H(j, k) = H(k, j) = -(f[i] + f[i + pairs] - fp[j] - fm[j] - fp[k] - fm[k] + 2 * f0) / (2 * h[j] * h[k]);
+      H(j, k) = H(k, j) = -(f[i] - f[i + pairs] - f[i + 2 * pairs] +
+        f[i + 3 * pairs]) / (4 * h[j] * h[k]);
   }
   arma::vec gradient = (fp - fm) / (2 * h);
   for (double& x : H) if (!std::isfinite(x)) x = 0;

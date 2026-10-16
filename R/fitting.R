@@ -321,7 +321,7 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
   if(stage == "sample"){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
-  if(stage %in% c("adapt", "sample") && emc[[1]]$type != "single"){
+  if(stage %in% c("burn", "adapt", "sample") && emc[[1]]$type != "single"){
     emc <- create_lik_prec(emc, n_cores)
   }
   if(fixed) emc <- store_sample_kernel(emc)
@@ -351,7 +351,14 @@ restore_sample_kernel <- function(emc){
 create_lik_prec <- function(emc, n_cores){
   history_idx <- proposal_window(emc[[1]]$samples$idx)
   lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
-  for (i in seq_along(emc)) emc[[i]]$lik_prec <- lik_prec
+  for (i in seq_along(emc)) {
+    emc[[i]]$lik_prec <- lik_prec
+    sm <- attr(emc[[i]]$samples, "scale_move")
+    if (!is.null(sm)) {
+      sm$directions <- NULL
+      attr(emc[[i]]$samples, "scale_move") <- sm
+    }
+  }
   emc
 }
 
