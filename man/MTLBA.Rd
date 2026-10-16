@@ -12,7 +12,8 @@ MTLBA(
   gb_constraint = "none",
   drifts = "any",
   lowest_threshold = "auto",
-  parameterization = "additive"
+  parameterization = "additive",
+  guess_ratings = "free"
 )
 }
 \arguments{
@@ -45,6 +46,10 @@ See Details.}
 confidence thresholds proportions of \code{B} above \code{A}) or \code{"proportional"}
 (the source paper's: \code{B} is \code{b}, and \code{A} and the confidence thresholds are
 nested proportions of \code{b}). See Details.}
+
+\item{guess_ratings}{How a guessed rating is drawn: \code{"free"} (the default:
+\code{n_ratings - 1} probabilities \verb{pg1 .. pg\{K-1\}}) or \code{"binomial"}
+(\code{1 + Binomial(n_ratings - 1, q)}, one parameter \code{pq}). See Details.}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample.
@@ -79,6 +84,7 @@ holding the rating, an integer from 1 (lowest) to \code{n_ratings} (highest).\ta
    \emph{gB} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab Guess threshold as a proportion of \code{B} above \code{A} \cr
    \emph{pg1} \tab probit \tab [0, 1] \tab qnorm(1) \tab Probability that a guess gives rating 1 (the lowest) \cr
    \emph{pgk} \tab probit \tab [0, 1] \tab qnorm(0) \tab Probability that a guess gives rating \code{k}, given it is not a lower rating \cr
+   \emph{pq} \tab probit \tab [0, 1] \tab qnorm(0) \tab With \code{guess_ratings = "binomial"}, in place of the \code{pg}: the binomial probability \code{q} of guessed ratings \cr
 }
 
 
@@ -188,6 +194,21 @@ are \code{n_ratings - 1} such parameters, read from the chosen accumulator; with
 \code{dont_know} a guessed rating 1 is the don't-know response). If no
 triggering accumulator reaches its guess threshold first, the race ends by
 the stopping rule as usual.
+
+With \code{guess_ratings = "binomial"} the guessed rating is instead
+\code{1 + Binomial(n_ratings - 1, q)}, one parameter \code{pq} (\code{q = pnorm(pq)})
+replacing \verb{pg1 .. pg\{K-1\}}: rating \code{k} has probability
+\code{choose(K - 1, k - 1) * q^(k - 1) * (1 - q)^(K - k)}, so with three ratings
+\code{(1 - q)^2}, \verb{2 q (1 - q)} and \code{q^2}. \code{q} near 0 describes a participant
+whose guesses are mostly low ratings, \code{q} near 1 one whose guesses are
+mostly high, and \code{q = .5} guesses centred on the middle; what a single \code{q}
+cannot describe is a preference for the middle beyond the binomial's (the
+middle of three ratings has probability at most .5) or for both extremes
+over the middle. The likelihood is exactly that of the free (\code{"free"}, the
+default) model at the \code{pg} the binomial implies, \verb{pg_k = P(k) / P(>= k)},
+and these are reported with \code{add_recalculated = TRUE} (and by
+\code{\link[=mapped_pars]{mapped_pars()}}). The default \code{pq = qnorm(0)} guesses the lowest rating,
+as the free model's defaults do.
 \itemize{
 \item \code{guess = "accumulator"} (the default): the two accumulators trigger
 independently, each with its own probability \code{gp}, so \code{gp ~ lR} (or
@@ -238,6 +259,8 @@ MTLBA3p <- function() MTLBA(n_ratings = 3, drifts = "positive",
                             lowest_threshold = "above_A")
 # the source paper's proportional parameterization
 MTLBA3prop <- function() MTLBA(n_ratings = 3, parameterization = "proportional")
+# confidence guessing with binomial guessed ratings (one parameter pq)
+MTLBA3b <- function() MTLBA(n_ratings = 3, guess_ratings = "binomial")
 # two ratings plus don't know, threshold count
 MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
 # confidence guessing, more often on one accumulator than on the other

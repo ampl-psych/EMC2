@@ -383,7 +383,12 @@ in the MTLNR; `rule = "TC"` (threshold count) instead stops the race at the
 rates may be correlated (`rho`), an odd number of responses is possible
 (`dont_know = TRUE`), fast confidence guessing can be added (`gp`, `gB`,
 `pg1 ..`), and censoring or truncation of response times goes through
-`make_missing()`. The full parameterization is in `?MTLBA`.
+`make_missing()`. A guess's rating has its own probabilities (`pg1 ..`,
+`n_ratings - 1` of them), or with `guess_ratings = "binomial"` it is
+`1 + Binomial(n_ratings - 1, q)`, a single parameter `pq` (probit `q`) that
+says whether a participant's guesses are mostly low ratings (`q` near 0),
+mostly high (`q` near 1) or in between. The full parameterization is in
+`?MTLBA`.
 
 By default the MTLBA is the model of its source paper and of that paper's
 DMC code: the two drift rates are bivariate normal conditioned only on *not

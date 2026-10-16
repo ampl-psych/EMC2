@@ -744,6 +744,29 @@ mtlba_guess_pars <- function(pars, K, guess = "accumulator", gb_constraint = "no
   list(g = g, gb = pars[, "A"] + (pars[, "b"] - pars[, "A"]) * gB, lpg = lpg)
 }
 
+# Binomial guess ratings (guess_ratings = "binomial"): a guessed rating is
+# 1 + Binomial(K - 1, q), P(k) = choose(K - 1, k - 1) q^(k-1) (1 - q)^(K-k),
+# returned as the sequential pg_k = P(k) / P(>= k), k = 1 .. K - 1 (columns
+# pg1 .. pg{K-1}), the form mtlba_guess_pars and rMTLBA read. On the log scale
+# (the tails P(>= k) as log-sums of their terms) so q near 0 or 1 loses
+# nothing; where P(>= k) is 0 the conditional is irrelevant and set to 1. The
+# compiled twin is mtlba_binomial_pg in src/model_mtlba.h.
+mtlba_binomial_pg <- function(q, K) {
+  lq <- log(q); l1q <- log1p(-q)
+  lP <- sapply(1:K, function(k) log(choose(K - 1, k - 1)) + (if (k > 1) (k - 1) * lq else 0) +
+                 (if (k < K) (K - k) * l1q else 0))
+  lP <- matrix(lP, length(q))
+  pg <- matrix(1, length(q), K - 1, dimnames = list(NULL, paste0("pg", seq_len(K - 1))))
+  tail <- lP[, K]
+  for (k in (K - 1):1) {
+    tail <- mtlba_lse(lP[, k], tail)
+    pk <- exp(lP[, k] - tail)
+    pk[which(tail == -Inf)] <- 1
+    pg[, k] <- pk
+  }
+  pg
+}
+
 # Guess-threshold proportion under gb_constraint: gB + gc^2 (1 - gB), gc the
 # row's own trigger probability g ("own") or the larger of its trial's two
 # ("max"); g has two rows per trial.
@@ -1385,6 +1408,7 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #' | *gB*  | probit | \[0, 1\]     | qnorm(0.5) | Guess threshold as a proportion of `B` above `A` |
 #' | *pg1* | probit | \[0, 1\]     | qnorm(1)   | Probability that a guess gives rating 1 (the lowest) |
 #' | *pgk* | probit | \[0, 1\]     | qnorm(0)   | Probability that a guess gives rating `k`, given it is not a lower rating |
+#' | *pq*  | probit | \[0, 1\]     | qnorm(0)   | With `guess_ratings = "binomial"`, in place of the `pg`: the binomial probability `q` of guessed ratings |
 #'
 #' Confidence thresholds are `T_j = A + B * d_j` with proportions
 #' `d_{K-k} = exp(-(c1 + ... + ck))`, so `A < T_1 < ... < T_{K-1} < b`. With
@@ -1488,6 +1512,21 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #' `dont_know` a guessed rating 1 is the don't-know response). If no
 #' triggering accumulator reaches its guess threshold first, the race ends by
 #' the stopping rule as usual.
+#'
+#' With `guess_ratings = "binomial"` the guessed rating is instead
+#' `1 + Binomial(n_ratings - 1, q)`, one parameter `pq` (`q = pnorm(pq)`)
+#' replacing `pg1 .. pg{K-1}`: rating `k` has probability
+#' `choose(K - 1, k - 1) * q^(k - 1) * (1 - q)^(K - k)`, so with three ratings
+#' `(1 - q)^2`, `2 q (1 - q)` and `q^2`. `q` near 0 describes a participant
+#' whose guesses are mostly low ratings, `q` near 1 one whose guesses are
+#' mostly high, and `q = .5` guesses centred on the middle; what a single `q`
+#' cannot describe is a preference for the middle beyond the binomial's (the
+#' middle of three ratings has probability at most .5) or for both extremes
+#' over the middle. The likelihood is exactly that of the free (`"free"`, the
+#' default) model at the `pg` the binomial implies, `pg_k = P(k) / P(>= k)`,
+#' and these are reported with `add_recalculated = TRUE` (and by
+#' [mapped_pars()]). The default `pq = qnorm(0)` guesses the lowest rating,
+#' as the free model's defaults do.
 #' * `guess = "accumulator"` (the default): the two accumulators trigger
 #'   independently, each with its own probability `gp`, so `gp ~ lR` (or
 #'   `~ lM`) gives different amounts of guessing for the two choices. Under
@@ -1550,6 +1589,9 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'   confidence thresholds proportions of `B` above `A`) or `"proportional"`
 #'   (the source paper's: `B` is `b`, and `A` and the confidence thresholds are
 #'   nested proportions of `b`). See Details.
+#' @param guess_ratings How a guessed rating is drawn: `"free"` (the default:
+#'   `n_ratings - 1` probabilities `pg1 .. pg{K-1}`) or `"binomial"`
+#'   (`1 + Binomial(n_ratings - 1, q)`, one parameter `pq`). See Details.
 #' @return A model list with all the necessary functions for EMC2 to sample.
 #' @examples
 #' # three ratings, balance of evidence (the source paper's model)
@@ -1559,6 +1601,8 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #'                             lowest_threshold = "above_A")
 #' # the source paper's proportional parameterization
 #' MTLBA3prop <- function() MTLBA(n_ratings = 3, parameterization = "proportional")
+#' # confidence guessing with binomial guessed ratings (one parameter pq)
+#' MTLBA3b <- function() MTLBA(n_ratings = 3, guess_ratings = "binomial")
 #' # two ratings plus don't know, threshold count
 #' MTLBA2dk <- function() MTLBA(n_ratings = 2, dont_know = TRUE, rule = "TC")
 #' # confidence guessing, more often on one accumulator than on the other
@@ -1570,7 +1614,7 @@ mtlba_prepare_design <- function(trial_level = "rho")
 #' @export
 MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumulator",
                   gb_constraint = "none", drifts = "any", lowest_threshold = "auto",
-                  parameterization = "additive") {
+                  parameterization = "additive", guess_ratings = "free") {
   K <- rating_check_n(n_ratings)
   rating_check_dont_know(K, dont_know)
   rule <- match.arg(rule, c("BE", "TC"))
@@ -1585,8 +1629,12 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
   free <- lowest_threshold == "free" && K > 1
   parameterization <- match.arg(parameterization, c("additive", "proportional"))
   prop <- parameterization == "proportional"
+  guess_ratings <- match.arg(guess_ratings, c("free", "binomial"))
+  binom <- guess_ratings == "binomial" && K > 1
   crit <- rating_criterion_names(K)
   pg <- if (K > 1) paste0("pg", seq_len(K - 1)) else character(0)
+  # binomial: one p_type pq (q = pnorm(pq)) in place of pg1 .. pg{K-1}, which Ttransform adds
+  gr <- if (binom) "pq" else pg
   model <- list(
     type = "RACE",
     c_name = "MTLBA",
@@ -1595,7 +1643,7 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
                   guess_trial = as.numeric(guess == "trial"),
                   gb_constraint = match(gb_constraint, c("none", "own", "max")) - 1,
                   drifts_any = as.numeric(drifts == "any"), free_lowest = as.numeric(free),
-                  proportional = as.numeric(prop)),
+                  proportional = as.numeric(prop), binomial_guess = as.numeric(binom)),
     n_ratings = K,
     dont_know = dont_know,
     rule = rule,
@@ -1604,18 +1652,20 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
     drifts = drifts,
     lowest_threshold = lowest_threshold,
     parameterization = parameterization,
+    guess_ratings = guess_ratings,
     extra_responses = "RR",
     # guessing is off by default: gp = 0, with gB = .5 and the lowest rating guessed
+    # (binomial: q = 0)
     # proportional: A and the criteria are proportions (default .5), B = log b
     p_types = c("v" = 1, "sv" = log(1), "B" = log(1), "A" = if (prop) stats::qnorm(0.5) else log(0),
                 "t0" = log(0), "rho" = 0,
                 if (prop) stats::setNames(rep(stats::qnorm(0.5), length(crit)), crit) else rating_p_types(K),
                 "gp" = stats::qnorm(0), "gB" = stats::qnorm(0.5),
-                stats::setNames(stats::qnorm(as.numeric(seq_along(pg) == 1)), pg)),
+                stats::setNames(stats::qnorm(as.numeric(seq_along(gr) == 1 & !binom)), gr)),
     transform = list(func = c(v = "identity", sv = "exp", B = "exp", A = if (prop) "pnorm" else "exp",
                               t0 = "exp", rho = "pnorm",
                               if (prop) stats::setNames(rep("pnorm", length(crit)), crit) else rating_transform(K),
-                              gp = "pnorm", gB = "pnorm", stats::setNames(rep("pnorm", length(pg)), pg)),
+                              gp = "pnorm", gB = "pnorm", stats::setNames(rep("pnorm", length(gr)), gr)),
                      lower = c(rho = -1), upper = c(rho = 1)),
     # (bounds are also checked after Ttransform when simulating, where a proportional
     # model's A column is the natural start-point range: hence (0, Inf) there)
@@ -1644,6 +1694,9 @@ MTLBA <- function(n_ratings = 3, dont_know = FALSE, rule = "BE", guess = "accumu
       pars <- cbind(pars[, colnames(pars) != "gBc", drop = FALSE],
                     gBc = mtlba_gB_constrained(pars[, "gB"], g,
                                                if (paired) gb_constraint else sub("max", "own", gb_constraint)))
+      # binomial guess ratings: the sequential pg1 .. pg{K-1} implied by q
+      if (binom) pars <- cbind(pars[, !(colnames(pars) %in% pg), drop = FALSE],
+                               mtlba_binomial_pg(pars[, "pq"], K))
       if (!is.null(ok)) attr(pars, "ok") <- ok
       pars
     },

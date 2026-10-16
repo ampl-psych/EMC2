@@ -71,7 +71,11 @@
 // a guess with one gp (c_options guess_trial, BETE's mixture). A response is
 // then a weighted sum of up to four kernels, the censoring/truncation terms a
 // mixture over the trigger states with a triggering accumulator's thresholds
-// capped at gb. Rows with gp = 0 take the plain kernel.
+// capped at gb. Rows with gp = 0 take the plain kernel. Binomial guess ratings
+// (c_options binomial_guess = 1; absent: 0, free pg): one column pq holds q,
+// the guessed rating is 1 + Binomial(K - 1, q), and mtlba_trial_ll first
+// fills scratch columns with the sequential pg_k = P(k) / P(>= k) that
+// p.pg[] then points at (mtlba_binomial_pg).
 
 #include <Rcpp.h>
 #include <algorithm>
@@ -98,6 +102,8 @@ struct MTLBASpec {
   bool any         = false;    // drifts "any" (not both negative) rather than "positive"
   bool free_lowest = false;    // lowest threshold T_1 = T_2 exp(-c_{K-1}) (may be below A)
   bool proportional = false;   // B, A, c columns are b and proportions (translated per call)
+  bool binomial_guess = false; // guessed ratings 1 + Binomial(K - 1, q), q in column pq
+  int  col_pq  = -1;
   std::vector<int>    col_c;   // c1 .. c{K-1}
   std::vector<int>    col_pg;  // pg1 .. pg{K-1}
   std::vector<double> rt;      // per trial
@@ -146,8 +152,7 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     if (c < 0) break;
     s.col_pg.push_back(c);
   }
-  if (s.col_gp >= 0 && (s.col_gB < 0 || (int)s.col_pg.size() != s.K - 1))
-    Rcpp::stop("MTLBA: guessing needs gp, gB and pg1 .. pg%d", s.K - 1);
+  s.col_pq = find_col("pq");
 
   // rule and don't know: the model's c_options, stored on the data by design_model()
   SEXP opt = data.attr("c_options");
@@ -167,7 +172,12 @@ inline MTLBASpec make_mtlba_spec(const Rcpp::DataFrame& data, const ParamTable& 
     if (on[i] == "drifts_any") s.any = o[i] != 0;          // absent (older models): "positive"
     if (on[i] == "free_lowest") s.free_lowest = o[i] != 0;
     if (on[i] == "proportional") s.proportional = o[i] != 0;   // absent (older models): additive
+    if (on[i] == "binomial_guess") s.binomial_guess = o[i] != 0;   // absent (older models): free pg
   }
+  if (s.col_gp >= 0 && s.binomial_guess && (s.col_gB < 0 || s.col_pq < 0))
+    Rcpp::stop("MTLBA: binomial guessing needs gp, gB and pq");
+  if (s.col_gp >= 0 && !s.binomial_guess && (s.col_gB < 0 || (int)s.col_pg.size() != s.K - 1))
+    Rcpp::stop("MTLBA: guessing needs gp, gB and pg1 .. pg%d", s.K - 1);
   if (s.free_lowest && s.TC)
     Rcpp::stop("MTLBA: a free lowest threshold needs the balance-of-evidence rule");
   s.DK = opt_val("dont_know") != 0;
@@ -1091,6 +1101,34 @@ inline void mtlba_proportional(MTLBACols& p, int K, int n, std::vector<double>& 
   for (int k = 0; k < K - 1; ++k) p.c[k] = c[k].data();
 }
 
+// Binomial guess ratings: q per row -> the sequential pg_k = P(k) / P(>= k),
+// k = 1 .. K - 1, P(k) = choose(K - 1, k - 1) q^(k-1) (1 - q)^(K-k), on the log
+// scale with the tails P(>= k) as log-sums of their terms (the R twin's
+// arithmetic, mtlba_binomial_pg); pg_k = 1 where P(>= k) = 0.
+inline void mtlba_binomial_pg(MTLBACols& p, int K, int n, const double* q,
+                              std::vector<std::vector<double>>& pg)
+{
+  pg.assign(K - 1, std::vector<double>(n));
+  std::vector<double> lch(K), lP(K);
+  for (int k = 1; k <= K; ++k) {   // log choose(K - 1, k - 1), exact integer first
+    double c = 1.0;
+    for (int j = 1; j <= k - 1; ++j) c = c * (K - j) / j;
+    lch[k - 1] = std::log(c);
+  }
+  for (int r = 0; r < n; ++r) {
+    const double lq = std::log(q[r]), l1q = std::log1p(-q[r]);
+    for (int k = 1; k <= K; ++k)
+      lP[k - 1] = lch[k - 1] + (k > 1 ? (k - 1) * lq : 0.0) + (k < K ? (K - k) * l1q : 0.0);
+    double tail = lP[K - 1];
+    for (int k = K - 1; k >= 1; --k) {
+      tail = mtlba_lse(lP[k - 1], tail);
+      pg[k - 1][r] = (tail == R_NegInf) ? 1.0 : std::exp(lP[k - 1] - tail);
+    }
+  }
+  p.pg.clear();
+  for (int k = 0; k < K - 1; ++k) p.pg.push_back(pg[k].data());
+}
+
 // Return codes of mtlba_trial_ll (the caller stops, outside any parallel region).
 enum { MTLBA_OK = 0, MTLBA_T0 = 2 };
 inline const char* mtlba_error_message(int code)
@@ -1121,7 +1159,7 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
   if (s.col_gp >= 0) {
     p.gp = pt.base.colptr(s.col_gp);
     p.gB = pt.base.colptr(s.col_gB);
-    for (int col : s.col_pg) p.pg.push_back(pt.base.colptr(col));
+    if (!s.binomial_guess) for (int col : s.col_pg) p.pg.push_back(pt.base.colptr(col));
     p.gbc = s.gb_constraint;
   }
   p.pos = !s.any;
@@ -1131,6 +1169,9 @@ inline int mtlba_trial_ll(const MTLBASpec& s, const ParamTable& pt, double min_l
   std::vector<double> propA, propB;
   std::vector<std::vector<double>> propc;
   if (s.proportional) mtlba_proportional(p, K, pt.base.nrow, propA, propB, propc);
+  std::vector<std::vector<double>> binpg;
+  if (s.binomial_guess && s.col_gp >= 0 && K > 1)
+    mtlba_binomial_pg(p, K, pt.base.nrow, pt.base.colptr(s.col_pq), binpg);
   const bool gtrial = s.guess_trial;
   int code = MTLBA_OK;
   MTLBAStopCache cache;
