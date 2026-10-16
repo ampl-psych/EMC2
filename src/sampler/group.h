@@ -33,6 +33,9 @@ class GroupSampler {
   void draw(Random& rng, const arma::mat& alpha, GroupState& state) const;
   arma::mat subject_means(const GroupState& state) const;
   double affine(GroupState& state, arma::uword j, double log_scale, double shift) const;
+  double shear(GroupState& state, arma::uword j, arma::uword k, double delta) const;
+  double shear_precision(const GroupState& state, arma::uword j, arma::uword k) const;
+  const std::vector<arma::uvec>& covariance_blocks() const { return blocks_; }
   bool location_move() const { return location_; }
 
   int parameters() const { return p_; }

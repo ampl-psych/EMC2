@@ -94,8 +94,9 @@ struct Population {
 
 class JointMoves {
   Rcpp::List settings;
-  arma::vec step, loc, sum_step, sum_loc, mean, curvature, shift;
-  arma::mat directions, prior_directions;
+  arma::vec step, loc, shear, sum_step, sum_loc, sum_shear, mean, curvature, shift, information_total;
+  arma::mat directions, prior_directions, mean_precision, information;
+  std::vector<std::vector<arma::uword>> partners;
   std::vector<arma::mat> proposals;
   std::vector<arma::vec> values;
   int uses;
@@ -108,6 +109,11 @@ class JointMoves {
       sum_step(Rcpp::as<arma::vec>(init["log_step_sum"])),
       sum_loc(Rcpp::as<arma::vec>(init["log_loc_sum"])), proposals(n), values(n),
       uses(Rcpp::as<int>(init["uses"])) {
+    shear = Rcpp::as<arma::vec>(init["shear"]);
+    sum_shear = Rcpp::as<arma::vec>(init["log_shear_sum"]);
+    partners.resize(step.n_elem);
+    for (const auto& block : group.covariance_blocks())
+      for (auto j : block) for (auto k : block) if (j != k) partners[j].push_back(k);
     do_location = group.location_move();
     if (!do_location) return;
     const int p = loc.n_elem;
@@ -119,15 +125,19 @@ class JointMoves {
     arma::mat covariance(p, p, arma::fill::zeros);
     if (variance.hasAttribute("dim")) covariance = Rcpp::as<arma::mat>(variance);
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
+    arma::mat precision(p, p, arma::fill::zeros);
+    information.zeros(p, n);
+    if (present(tune, "lik_prec")) {
+      Rcpp::List likelihood = tune["lik_prec"];
+      for (int s = 0; s < n; ++s) if (!Rf_isNull(likelihood[s])) {
+        const arma::mat h = Rcpp::as<arma::mat>(Rcpp::List(likelihood[s])["prec"]);
+        precision += h;
+        information.col(s) = h.diag();
+      }
+    }
     if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
     else {
       const arma::mat root = arma::chol(covariance, "lower");
-      arma::mat precision(p, p, arma::fill::zeros);
-      if (present(tune, "lik_prec")) {
-        Rcpp::List likelihood = tune["lik_prec"];
-        for (SEXP x : likelihood) if (!Rf_isNull(x))
-          precision += Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
-      }
       precision = root.t() * precision * root;
       precision.diag() += 1;
       arma::vec eigenvalues;
@@ -137,7 +147,6 @@ class JointMoves {
         arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
       loc.ones();
     }
-    arma::mat precision;
     if (present(prior, "theta_mu_invar")) {
       Rcpp::NumericVector inverse = prior["theta_mu_invar"];
       if (inverse.hasAttribute("dim")) precision = Rcpp::as<arma::mat>(inverse);
@@ -146,6 +155,10 @@ class JointMoves {
         for (int j = 0; j < p; ++j) precision(j, j) = inverse[j % inverse.size()];
       }
     } else precision = group_inverse(covariance);
+    mean_precision = precision;
+    information_total.set_size(p);
+    for (int j = 0; j < p; ++j)
+      information_total[j] = arma::accu(information.row(j)) + mean_precision(j, j);
     prior_directions = precision * directions;
     curvature = arma::sum(directions % prior_directions, 0).t();
   }
@@ -190,10 +203,49 @@ class JointMoves {
         }
       }
     }
+    for (int j = 0; j < p; ++j) if (!partners[j].empty()) {
+      const auto k = partners[j][static_cast<size_t>(rng.runif(0, partners[j].size()))];
+      // Pivot near the participants that identify coefficient j. The source
+      // coordinate k stays fixed, so this pivot is identical on the reverse move.
+      double offset = 0;
+      double precision = pop.main.shear_precision(pop.state, j, k);
+      if (do_location) {
+        offset = arma::dot(information.row(j), pop.state.tmu[k] - alpha.row(k)) /
+          information_total[j];
+        precision += offset * offset * mean_precision(j, j);
+      }
+      const double delta = rng.rnorm(0, shear[j] / std::sqrt(precision));
+      const double change = delta * offset;
+      GroupState proposed = pop.state;
+      double lr = pop.main.shear(proposed, j, k, delta);
+      if (do_location) {
+        lr -= change * arma::dot(mean_precision.row(j), pop.state.tmu - mean) +
+          .5 * change * change * mean_precision(j, j);
+        proposed.tmu[j] += change;
+        proposed.subj_mu.row(j) += change;
+      }
+      for (int s = 0; s < n; ++s) {
+        proposals[s] = alpha.col(s).t();
+        proposals[s](0, j) += delta * (alpha(k, s) - pop.state.subj_mu(k, s)) + change;
+      }
+      likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
+      for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
+      const bool accepted = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
+      if (accepted) {
+        for (int s = 0; s < n; ++s) {
+          alpha(j, s) = proposals[s](0, j);
+          ll[s] = values[s][0];
+        }
+        pop.state = std::move(proposed);
+      }
+      if (!frozen) shear[j] *= std::exp(.1 * (accepted - .3));
+    }
     if (!frozen) {
       step %= arma::exp(.1 * (accepted - .3));
       if (do_location) loc %= arma::exp(.1 * (accepted_loc - .3));
-      if (++uses > 20) { sum_step += arma::log(step); sum_loc += arma::log(loc); }
+      if (++uses > 20) {
+        sum_step += arma::log(step); sum_loc += arma::log(loc); sum_shear += arma::log(shear);
+      }
     }
   }
   Rcpp::List finish() {
@@ -202,6 +254,7 @@ class JointMoves {
       std::copy(x.begin(), x.end(), target.begin());
     };
     save("step", step); save("loc", loc); save("log_step_sum", sum_step); save("log_loc_sum", sum_loc);
+    save("shear", shear); save("log_shear_sum", sum_shear);
     settings["uses"] = uses;
     if (do_location) settings["directions"] = Rcpp::wrap(directions);
     return settings;

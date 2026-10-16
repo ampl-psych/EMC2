@@ -163,6 +163,7 @@ GroupSampler::GroupSampler(const Rcpp::List& sampler) {
     }
   }
 
+  if (diagonal_gamma_) return;
   Rcpp::LogicalVector blocked = present(sampler, "is_blocked") &&
     Rf_xlength(sampler["is_blocked"]) > 0 ?
     Rcpp::as<Rcpp::LogicalVector>(sampler["is_blocked"]) :
@@ -195,6 +196,24 @@ GroupSampler::GroupSampler(const Rcpp::List& sampler) {
 }
 
 GroupSampler::~GroupSampler() = default;
+
+double GroupSampler::shear_precision(const GroupState& state, arma::uword j, arma::uword k) const {
+  // Both a_k and precision(j,j) are invariant under this shear, so the
+  // state-scaled normal proposal has the same density in either direction.
+  return 2 * v_ * state.tvinv(j, j) / state.a_half[k];
+}
+
+double GroupSampler::shear(GroupState& state, arma::uword j, arma::uword k, double delta) const {
+  // M = I + delta e_j e_k': det(M) = 1. Normal densities and Jacobians cancel;
+  // only the inverse-Wishart trace term changes, with a_half held fixed.
+  const double ratio = v_ / state.a_half[k] *
+    (2 * delta * state.tvinv(j, k) - delta * delta * state.tvinv(j, j));
+  state.tvar.row(j) += delta * state.tvar.row(k);
+  state.tvar.col(j) += delta * state.tvar.col(k);
+  state.tvinv.row(k) -= delta * state.tvinv.row(j);
+  state.tvinv.col(k) -= delta * state.tvinv.col(j);
+  return ratio;
+}
 
 arma::mat GroupSampler::fixed_means(const arma::vec& beta) const {
   arma::mat out(p_, n_);

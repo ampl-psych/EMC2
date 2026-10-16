@@ -1,0 +1,38 @@
+--- a/src/particle_ll.cpp
++++ b/src/particle_ll.cpp
+@@ -1,5 +1,6 @@
+ #include <Rcpp.h>
+ #include <algorithm>
++#include <memory>
+ #include <unordered_map>
+ #include <AccumulatR/api.hpp>
+ 
+@@ -757,7 +758,11 @@
+     const int rows_per_trial = runtime.nrow() / accumulatr_trials;
+     Rcpp::NumericVector trial_loglik(accumulatr_trials);
+     Rcpp::LogicalVector trial_ok(accumulatr_trials);
+-    const auto evaluate_accumulatr = accumulatr::loglik_trials_ccallable();
++    const auto& api = accumulatr::likelihood_api();
++    std::unique_ptr<accumulatr::PreparedLikelihood, decltype(api.destroy)> prepared(
++      api.prepare(native_context, data, runtime.nrow(), runtime.ncol(), min_ll), api.destroy);
++    std::unique_ptr<accumulatr::LikelihoodWorkspace, decltype(api.destroy_workspace)> workspace(
++      api.workspace(prepared.get()), api.destroy_workspace);
+ 
+     for (int i = 0; i < n_particles; ++i) {
+       std::fill(is_ok.begin(), is_ok.end(), 1);
+@@ -772,13 +777,8 @@
+       if (!all_valid) {
+         prepare_accumulatr_trial_ok(is_ok, rows_per_trial, trial_ok);
+       }
+-      evaluate_accumulatr(
+-        native_context,
+-        runtime,
+-        data,
+-        all_valid ? R_NilValue : static_cast<SEXP>(trial_ok),
+-        min_ll,
+-        trial_loglik.begin());
++      api.evaluate(prepared.get(), workspace.get(), runtime.begin(),
++        all_valid ? nullptr : trial_ok.begin(), trial_loglik.begin());
+ 
+       double total = 0.0;
+       for (int trial = 0; trial < accumulatr_trials; ++trial) {

@@ -387,6 +387,7 @@ calculate_subject_means_RE <- function(group_designs, tmu, random_designs = NULL
 
 # Interweaving moves: scale subject deviations, covariance and a_j together;
 # without a group design, also shift subjects and their group mean together.
+# Covariance blocks also receive shears of the deviations and covariance.
 # Each move receives an exact likelihood check. Step sizes adapt during
 # warmup and stay fixed during sampling.
 
@@ -398,16 +399,21 @@ scale_move_stages <- function(){
 }
 
 scale_move_init <- function(settings, par_names){
-  if(!is.null(settings)) return(settings)
   zero <- setNames(numeric(length(par_names)), par_names)
-  list(step = zero + .5, loc = zero + .2,
+  if(is.null(settings)) settings <- list(step = zero + .5, loc = zero + .2,
        log_step_sum = zero, log_loc_sum = zero, uses = 0)
+  if(is.null(settings$shear)) {
+    settings$shear <- zero + .5
+    settings$log_shear_sum <- zero
+  }
+  settings
 }
 
 scale_move_reset_tail <- function(settings){
   settings$uses <- 0
   settings$log_step_sum[] <- 0
   settings$log_loc_sum[] <- 0
+  settings$log_shear_sum[] <- 0
   settings
 }
 
@@ -417,6 +423,7 @@ scale_move_freeze <- function(settings){
   if(n >= 10){
     settings$step <- exp(settings$log_step_sum / n)
     settings$loc <- exp(settings$log_loc_sum / n)
+    settings$shear <- exp(settings$log_shear_sum / n)
   }
   settings
 }

@@ -25,7 +25,7 @@ test_that("the sample-stage proposals and tuning stay fixed", {
       fields <- c("epsilon", "mix", "n_particles")
       expect_identical(after[[s]][[1]][fields], before[[s]][[1]][fields])
     }
-    fields <- c("step", "loc", "directions")
+    fields <- c("step", "loc", "directions", "shear")
     expect_identical(attr(continued[[ch]]$samples, "scale_move")[fields],
                      attr(emc[[ch]]$samples, "scale_move")[fields])
   }
