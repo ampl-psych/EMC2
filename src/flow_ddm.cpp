@@ -412,3 +412,16 @@ void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf
   ddm_eval_core(mem, Theta_u.data(), ix.U(), ix.uid.data(), tn, R, m,
                 DdmOut{pdf.data(), nullptr, log_pdf, p_R.data()});
 }
+
+// Scaled DDM card (inputs kappa, eta, Z, SZ; NLE handover/SCALED_DDM_PLAN.md): log density and
+// defective CDF of the unit-scale time, both computed in one pass (model_NN.h, nn_trial_ll_scaled).
+void nle_ddm_native_full(const DdmEnsemble* e, const double* th, int m, const int* tf,
+                         const double* tfc, const double* tn, const int* R, double* log_pdf,
+                         double* cdf) {
+  std::vector<const DdmModel*> mem;
+  for (const DdmModel& d : e->members) mem.push_back(&d);
+  std::vector<double> Theta_u, pdf(m), p_R(m);
+  const nle::RowIndex ix = nle::index_net_rows(th, m, e->members[0].n_ctx, tf, tfc, Theta_u);
+  ddm_eval_core(mem, Theta_u.data(), ix.U(), ix.uid.data(), tn, R, m,
+                DdmOut{pdf.data(), cdf, log_pdf, p_R.data()});
+}

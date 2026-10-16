@@ -33,6 +33,11 @@ int nle_mlp_n_ctx(const MlpLik* m);
 void nle_ddm_native(const DdmEnsemble* e, const double* th, int m, const int* tf,
                     const double* tfc, const double* tn, const int* R, double* log_pdf);
 
+// The same, with the defective CDF P(time <= tn, R | theta) as well (scaled DDM cards).
+void nle_ddm_native_full(const DdmEnsemble* e, const double* th, int m, const int* tf,
+                         const double* tfc, const double* tn, const int* R, double* log_pdf,
+                         double* cdf);
+
 // Plain-MLP likelihood (mlp_lik.cpp; regression_joint and mlp_joint cards):
 // log p(tn, R | theta) per row, R in {1, 2}. Rows outside the training box
 // get the network's out-of-box value (-Inf, or the card's log floor).

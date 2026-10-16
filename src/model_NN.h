@@ -12,6 +12,10 @@
 //   hybrid flow_race: a row whose hybrid parameter (e.g. the pulse height amp)
 //               is exactly 0 is the closed-form Wald (nle_wald.h) and never
 //               reaches the network
+//   scaled flow_joint (DDMnle): the card models the unit-scale time u = (rt - t0)(s/a)^2 given
+//               kappa = v a / s^2, eta = sv a / s^2, Z, SZ; c = (s/a)^2 and the uniform st0
+//               window are exact: f = c g(u) (st0 = 0), [G(u1) - G(u0)] / st0 (st0 > 0),
+//               as port/R/ddm_scaled.R's ddm_sc_density() (the R reference)
 // Bounds, expansion and clamping are the pipeline's, as for other models.
 // This reproduces the R path (dfun/pfun via log_likelihood_ddm/race), which
 // stays the reference; the one numerical difference is that the survivor is
@@ -39,6 +43,8 @@ struct NnCheck {        // a run-time refusal (see nn_check_pars() in R)
 struct NnSpec {
   bool race = false;                       // flow_race; else a joint (two-response) network
   bool mlp_kind = false;                   // regression_joint / mlp_joint (plain MLP)
+  bool scaled = false;                     // scaled DDM card (see the header)
+  int sc_col[8] = {-1, -1, -1, -1, -1, -1, -1, -1};   // v, a, sv, t0, st0, s, Z, SZ
   const MlpLik* mlp = nullptr;
   const DdmEnsemble* ddm = nullptr;
   const FlowModel* flow = nullptr;
@@ -64,6 +70,8 @@ struct NnScratch {
   std::vector<int> rows, wrows;
   std::vector<double> th, tn, wtn, lp, lsf, ll_row;
   std::vector<int> Rr;
+  std::vector<double> cdf;
+  std::vector<int> sc_kind, sc_row;        // scaled: request kind (0 pdf, 1 G(u1), 2 G(u0)), trial
   std::vector<unsigned char> want;
 };
 
@@ -115,6 +123,19 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   if (s.race) { s.flow = nle_flow_handle(ptr); s.nc = nle_flow_n_ctx(s.flow); }
   else if (s.mlp_kind) { s.mlp = nle_mlp_handle(ptr); s.nc = nle_mlp_n_ctx(s.mlp); }
   else        { s.ddm = nle_ddm_handle(ptr);   s.nc = nle_ddm_n_ctx(s.ddm); }
+  s.scaled = nn.containsElementNamed("scaled") && as<bool>(nn["scaled"]);
+  if (s.scaled) {
+    if (s.race || s.mlp_kind) stop(what + "only a joint flow can be a scaled DDM card");
+    if (s.nc != 4) stop(what + "a scaled DDM card takes 4 inputs (kappa, eta, Z, SZ)");
+    CharacterVector sp = nn["sc_pars"];
+    if (sp.size() != 8) stop(what + "sc_pars must name v, a, sv, t0, st0, s, Z, SZ");
+    for (int j = 0; j < 8; ++j) {
+      auto it = pt.name_to_base_idx.find(as<std::string>(sp[j]));
+      if (it == pt.name_to_base_idx.end())
+        stop(what + "the model does not supply '" + as<std::string>(sp[j]) + "'");
+      s.sc_col[j] = it->second;
+    }
+  }
   CharacterVector pars = nn["pars"];
   IntegerVector codes = nn["transform_codes"];
   NumericVector zc = nn.containsElementNamed("zerobox_c") ? NumericVector(nn["zerobox_c"])
@@ -126,15 +147,17 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   for (int j = 0; j < s.nc; ++j) {
     const std::string p = as<std::string>(pars[j]);
     auto it = pt.name_to_base_idx.find(p);
-    if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply input '" + p + "'");
+    if (s.scaled) it = pt.name_to_base_idx.end();      // inputs are computed, not columns
+    else if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply input '" + p + "'");
     if (codes[j] < 0 || codes[j] > 3) stop(what + "unknown transform code for input '" + p + "'");
     if (codes[j] == 3 && !(zc[j] > 0.0 && std::isfinite(zc[j])))
       stop(what + "zerobox input '" + p + "' has no positive constant");
-    s.col.push_back(it->second);
+    s.col.push_back(s.scaled ? -1 : it->second);
     s.tf.push_back(codes[j]);
     s.tfc.push_back(codes[j] == 3 ? zc[j] : NAN);
   }
   const std::string pre = as<std::string>(nn["pre"]);
+  if (!pre.empty() && s.scaled) stop(what + "a scaled DDM card takes t0 itself; pre must be empty");
   if (!pre.empty()) {
     auto it = pt.name_to_base_idx.find(pre);
     if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply pre parameter '" + pre + "'");
@@ -220,10 +243,62 @@ inline void nn_check_refusals(const NnSpec& s, const ParamTable& pt) {
   }
 }
 
+// Scaled DDM card: one network call for all trials' densities (st0 = 0, or a window too narrow
+// to difference) and CDF pairs (st0 > 0). Mirrors ddm_sc_density() in port/R/ddm_scaled.R.
+inline void nn_trial_ll_scaled(const NnSpec& s, const ParamTable& pt, NnScratch& w, double* ll_trial) {
+  const double *V = pt.base.colptr(s.sc_col[0]), *A = pt.base.colptr(s.sc_col[1]),
+               *SV = pt.base.colptr(s.sc_col[2]), *T0 = pt.base.colptr(s.sc_col[3]),
+               *ST0 = pt.base.colptr(s.sc_col[4]), *S = pt.base.colptr(s.sc_col[5]),
+               *Z = pt.base.colptr(s.sc_col[6]), *SZ = pt.base.colptr(s.sc_col[7]);
+  std::fill(ll_trial, ll_trial + s.n_trials, R_NegInf);
+  w.rows.clear(); w.tn.clear(); w.Rr.clear(); w.sc_kind.clear(); w.sc_row.clear();
+  std::vector<double>& th = w.th;
+  th.clear();
+  // requests in row order; theta kept row-major here, transposed below
+  for (int r = 0; r < s.n_rows; ++r) {
+    const double d = s.rt[r] - T0[r];
+    if (!(d > 0.0)) continue;                         // before onset: zero density
+    const double s2 = S[r] * S[r], c2 = s2 / (A[r] * A[r]);
+    const double un[4] = {V[r] * A[r] / s2, SV[r] * A[r] / s2, Z[r], SZ[r] > 0.0 ? SZ[r] : 0.0};
+    const double st0 = ST0[r];
+    auto push = [&](int kind, double u) {
+      th.insert(th.end(), un, un + 4); w.tn.push_back(u); w.Rr.push_back(s.R[r]);
+      w.sc_kind.push_back(kind); w.sc_row.push_back(r);
+    };
+    if (st0 <= 0.0 || st0 < 1e-7 * d) push(0, (d - std::max(st0, 0.0) / 2.0) * c2);
+    else {
+      push(1, d * c2);
+      const double u0 = (d - st0) * c2;
+      if (u0 > 0.0) push(2, u0);
+    }
+  }
+  const int m = (int)w.tn.size();
+  if (m == 0) return;
+  w.lp.resize(m); w.cdf.resize(m);
+  std::vector<double>& thc = w.wtn;                  // column-major copy (network order)
+  thc.resize((size_t)m * 4);
+  for (int i = 0; i < m; ++i)
+    for (int j = 0; j < 4; ++j) thc[(size_t)j * m + i] = th[(size_t)i * 4 + j];
+  nle_ddm_native_full(s.ddm, thc.data(), m, s.tf.data(), s.tfc.data(), w.tn.data(), w.Rr.data(),
+                      w.lp.data(), w.cdf.data());
+  for (int i = 0; i < m; ++i) {
+    const int r = w.sc_row[i];
+    if (w.sc_kind[i] == 0) {
+      const double s2 = S[r] * S[r];
+      ll_trial[r] = std::log(s2 / (A[r] * A[r])) + w.lp[i];
+    } else if (w.sc_kind[i] == 1) {
+      const bool has0 = i + 1 < m && w.sc_kind[i + 1] == 2 && w.sc_row[i + 1] == r;
+      const double G0 = has0 ? w.cdf[i + 1] : 0.0;
+      ll_trial[r] = std::log(std::max(w.cdf[i] - G0, 0.0) / ST0[r]);
+    }
+  }
+}
+
 // Trial log-likelihoods of one mapped particle into ll_trial (n_trials),
 // before bounds and clamping. Reentrant.
 inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
                         double min_ll, double* ll_trial) {
+  if (s.scaled) { nn_trial_ll_scaled(s, pt, w, ll_trial); return; }
   const double* pre = s.pre_col >= 0 ? pt.base.colptr(s.pre_col) : nullptr;
   // rows the network evaluates: time > 0 (else zero density / CDF, as the
   // R path's dfun/pfun) and, in a race, accumulators taking part
