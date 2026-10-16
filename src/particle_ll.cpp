@@ -5,6 +5,7 @@
 #include <Rcpp.h>
 #include <unordered_map>
 #include "LikelihoodContext.h"
+#include "openmp.h"
 
 // Utilities first — no dependencies on model types
 #include "utility_functions.h"
@@ -924,6 +925,7 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                     CharacterVector p_types, double min_ll,
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                                     bool return_trialwise = false, int n_threads = -1) {
+  emc2::OpenMPPoolRelease release;
 #ifndef _OPENMP
   if (n_threads > 1)
     Rcpp::warning("calc_ll_multithreaded: OpenMP not available, running single-threaded.");

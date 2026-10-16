@@ -1,6 +1,7 @@
 #include "sampler/runner.h"
 #include "sampler/proposals.h"
 #include "sampler/likelihood.h"
+#include "openmp.h"
 
 // [[Rcpp::export]]
 Rcpp::List native_run_hyper(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter) {
@@ -38,6 +39,7 @@ Rcpp::NumericVector native_group_means(Rcpp::List sampler, Rcpp::NumericMatrix m
 // [[Rcpp::export]]
 Rcpp::List native_lik_prec(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     Rcpp::List ll_inputs, int n_cores) {
+  emc2::OpenMPPoolRelease release;
   return emc2::likelihood_precision(emc, history_idx, ll_inputs, n_cores);
 }
 
@@ -49,6 +51,7 @@ SEXP native_sampler_contexts(Rcpp::List inputs, int n_chains, int n_cores) {
 // [[Rcpp::export]]
 Rcpp::List native_run_chains(Rcpp::List args, SEXP cache, std::string stage,
                            int iter, int cores_for_chains, bool verboseProgress) {
+  emc2::OpenMPPoolRelease release;
   Rcpp::XPtr<emc2::SamplerContexts> contexts(cache);
   return emc2::sample_chains(args, *contexts, stage, iter, cores_for_chains, verboseProgress);
 }
@@ -56,6 +59,7 @@ Rcpp::List native_run_chains(Rcpp::List args, SEXP cache, std::string stage,
 // [[Rcpp::export]]
 Rcpp::List native_init_chains(Rcpp::List emc, SEXP cache, SEXP start_mu,
                             SEXP start_var, int particles, bool force) {
+  emc2::OpenMPPoolRelease release;
   Rcpp::XPtr<emc2::SamplerContexts> contexts(cache);
   Rcpp::List out(emc.size());
   out.attr("names") = emc.attr("names");

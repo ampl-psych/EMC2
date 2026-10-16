@@ -17,12 +17,9 @@ OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
 
 all: $(SHLIB)
 
-build_info.o: ../inst/include/build_info.h
-particle_ll.o sampler/likelihood.o: LikelihoodContext.h
-
-sampler.o $(SAMPLER_OBJECTS): sampler/group.h sampler/infnt_factor.h \
-  sampler/likelihood.h sampler/particle.h sampler/proposals.h sampler/random.h \
-  sampler/runner.h sampler/sem.h
+HEADERS = $(wildcard *.h) $(wildcard sampler/*.h) $(wildcard ../inst/include/*.h) \
+  $(wildcard ../inst/include/EMC2/*.h)
+$(OBJECTS): $(HEADERS)
 
 .PHONY: all clean
 

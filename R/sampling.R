@@ -198,6 +198,9 @@ check_mix <- function(mix = NULL, stage) {
     } else{
       stop("mix settings are not compatible with stage")
     }
+  } else if(length(mix) > length(default_mix)){
+    mix <- mix[seq_along(default_mix)]
+    mix <- mix/sum(mix)
   }
   return(mix)
 }
@@ -215,6 +218,8 @@ check_epsilon <- function(epsilon, n_pars, mix) {
     # Every subsequent phase at most adds one epsilon
   } else if(length(epsilon) < (length(mix) -1)){
     epsilon <- c(epsilon, epsilon[length(epsilon)])
+  } else if(length(epsilon) > (length(mix) - 1)){
+    epsilon <- epsilon[seq_len(length(mix) - 1)]
   }
   return(epsilon)
 }
@@ -230,6 +235,8 @@ check_prop_performance <- function(prop_performance, stage){
     } else{
       stop("prop_performance settings are not compatible with stage")
     }
+  } else if(length(prop_performance) > length(default_mix)){
+    prop_performance <- prop_performance[seq_along(default_mix)]
   }
   return(round(prop_performance))
 }

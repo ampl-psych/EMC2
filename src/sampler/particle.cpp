@@ -251,8 +251,9 @@ arma::uword ParticleSampler::select(int s, int b, const arma::vec& likelihood) {
     throw std::runtime_error("particle weights are not finite");
   double threshold = rng.runif(0, total);
   arma::uword selected = 0;
-  while (selected + 1 < weights.n_elem && threshold > weights[selected])
+  while (selected + 1 < weights.n_elem && threshold >= weights[selected])
     threshold -= weights[selected++];
+  while (weights[selected] == 0) --selected;
   if (!frozen_) update(subject.settings[b], weights, subject.counts, indices_[b].n_elem);
   return selected;
 }
