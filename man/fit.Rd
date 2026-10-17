@@ -109,6 +109,33 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 
 \code{iter} (integer): The number of MCMC samples to collect.
 
+\code{cull} (\code{TRUE} or a list; \code{burn} and \code{sample} stages): chain culling. After
+each check, a chain whose log posterior over the comparison window (the subject
+log-likelihoods plus the group density of the subject parameters, under one group mean
+and covariance shared by all chains) is held below the best chain's by more than
+\code{chain_gap} units and \code{chain_z} within-chain spreads, or a single subject in a chain
+whose parameters another chain would improve on under this chain's own group
+parameters by more than \code{cell_gap} units and \code{cell_z} spreads, is flagged; once
+flagged on \code{persistence} consecutive checks it is respawned from a draw of a better
+chain. The window is the last two thirds of the stage once it holds \code{min_window}
+iterations (a short window mistakes the chains' slow wandering for a held-apart mode),
+or \code{window} iterations if given. In \code{sample} the stage then restarts after
+\code{reburn} discarded iterations and the tries count over, at most \code{max_culls} times
+per stage. Defaults: \verb{persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5, cell_gap = 5, cell_z = 3, max_culls = 2, reburn = 100}. Culls are recorded in
+\code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes the lower mode
+is spurious; with a genuinely multimodal posterior it favours the mode most chains
+found.
+
+\code{max_flat_loc} (numeric; \code{sample} stage): the flat test. The medians of the first
+\code{flat_p1} and last \code{flat_p2} (default thirds) of the stage, pooled over chains, may
+differ by at most this many interquartile ranges for the group means (the largest
+drift) and the subject parameters (their \code{flat_quantile}, default the .99 quantile);
+\code{flat_selection} (default \code{c("mu", "alpha")}, also \code{"LL"}) chooses the series. A
+drift within \code{flat_mcse} (default 2) Monte Carlo standard errors of zero passes, so
+the test cannot fail on noise alone. A value of 0.3 keeps a stage running while it is
+still settling. \code{max_sample_iter} (integer) keeps only the last that many draws of
+the sample stage, so a long run is judged on its recent window.
+
 Chains share fixed likelihood inputs in one process. Each chain has its own
 native RNG, seeded from R, with its state saved in the samples for resuming fits.
 Resuming with a different C++ library seeds fresh chain RNGs from R.

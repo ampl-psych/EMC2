@@ -40,6 +40,28 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
     stop_criteria$selection <- if(type != "single") c('alpha', 'mu') else 'alpha'
   }
+  # Chain culling (burn and sample) and the flat test (sample); see ?fit
+  if(!is.null(stop_criteria$cull)){
+    if(!stage %in% c("burn", "sample")) stop("`cull` applies to the burn and sample stages")
+    stop_criteria$cull <- cull_defaults(stop_criteria$cull)
+  }
+  if(!is.null(stop_criteria$max_flat_loc)){
+    if(stage != "sample") stop("`max_flat_loc` applies to the sample stage")
+    if(is.null(stop_criteria$flat_selection)) stop_criteria$flat_selection <- c("mu", "alpha")
+    if(type == "single") stop_criteria$flat_selection <- setdiff(stop_criteria$flat_selection, "mu")
+    if(is.null(stop_criteria$flat_p1)) stop_criteria$flat_p1 <- 1/3
+    if(is.null(stop_criteria$flat_p2)) stop_criteria$flat_p2 <- 1/3
+    if(is.null(stop_criteria$flat_quantile)) stop_criteria$flat_quantile <- c(mu = 1, alpha = .99, LL = 1)
+    if(is.null(stop_criteria$flat_mcse)) stop_criteria$flat_mcse <- 2
+    if(stop_criteria$flat_p1 <= 0 || stop_criteria$flat_p1 > 1 || stop_criteria$flat_p2 <= 0 || stop_criteria$flat_p2 > 1)
+      stop("flat_p1 and flat_p2 must be in (0, 1]")
+    if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL")))
+      stop("flat_selection must be one or more of: mu, alpha, LL")
+  }
+  if(!is.null(stop_criteria$max_sample_iter)){
+    if(stage != "sample") stop("`max_sample_iter` applies to the sample stage")
+    if(stop_criteria$max_sample_iter < 10) stop("max_sample_iter must be at least 10")
+  }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
   return(stop_criteria)
@@ -106,6 +128,8 @@ run_emc <- function(emc, stage, stop_criteria,
   total_iters_stage <- chain_n(emc)[,stage][1]
   if(stage != "preburn"){
     iter <- stop_criteria[["iter"]] + total_iters_stage
+    if(!is.null(stop_criteria$max_sample_iter) && iter > stop_criteria$max_sample_iter)
+      stop("`max_sample_iter` is below the iterations requested, which could never be reached")
   } else{
     iter <- stop_criteria[["iter"]]
   }
@@ -152,10 +176,40 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       emc <- sub_emc
     }
+    if(stage == "sample" && !is.null(stop_criteria$max_sample_iter)){
+      emc <- trim_sample_stage(emc, stop_criteria$max_sample_iter)
+    }
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
                                verbose, progress)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
+    # Chain culling: a chain (or one subject in one chain) held in a worse
+    # mode than the others is respawned from a better chain; in sample the
+    # stage then restarts, with the tries counter, after a short re-burn.
+    if(!progress$done && !is.null(stop_criteria$cull) && emc[[1]]$init){
+      cull <- stop_criteria$cull
+      n_culls <- if(is.null(progress$n_culls)) 0L else progress$n_culls
+      if(n_culls < cull$max_culls){
+        diag <- cull_diagnostics(emc, stage, cull)
+        progress$cull_state <- update_cull_state(progress$cull_state, diag, length(emc))
+        act <- apply_culls(emc, diag, stage, cull, progress$cull_state)
+        if(length(act$done)){
+          emc <- act$emc
+          emc[[1]]$culls <- c(emc[[1]]$culls, act$done)
+          progress$n_culls <- n_culls + 1L
+          progress$cull_state <- NULL
+          if(verbose) for(d in act$done) message(sprintf("Cull %d of %d: %s of chain %d respawned from chain %d (log posterior %.0f below, z = %.1f)",
+            progress$n_culls, cull$max_culls, if(is.na(d$subject)) "the state" else paste("subject", d$subject), d$chain, d$donor, d$gap, d$z))
+          if(stage == "sample"){
+            emc <- cull_restart(emc, cull$reburn, verbose, verboseProgress, particle_factor, search_width,
+                                cores_per_chain, cores_for_chains, n_blocks, on_singular, .context)
+            iter <- stop_criteria[["iter"]] + chain_n(emc)[1, stage]
+            progress$trys <- 0L; progress$iters_total <- 0
+            if(verbose) message("Sample stage restarted after the cull")
+          }
+        }
+      }
+    }
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
@@ -175,6 +229,10 @@ run_emc <- function(emc, stage, stop_criteria,
       ess_message <- NULL
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
         ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
+      }
+      if(!is.null(progress$flat) && length(progress$flat)){
+        ess_message <- paste0(ess_message, " | drift=", paste(sprintf("%s %.2f", names(progress$flat),
+          vapply(progress$flat, function(f) f$drift, 0)), collapse = ", "))
       }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
@@ -382,6 +440,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
   }
+  cull_state <- progress$cull_state; n_culls <- progress$n_culls
   gd <- check_gd(emc, stage, stop_criteria$max_gd, stop_criteria$mean_gd,
                  omit_mpsrf = stop_criteria$omit_mpsrf, selection = selection,
                  gd_quantile = stop_criteria$gd_quantile)
@@ -421,12 +480,19 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
     adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
   }
-  done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
-  if(es_done & gd$gd_done & adapted & !iter_done){
+  # The flat test: the stage must not still be drifting between its first and last thirds
+  flat <- NULL; flat_ok <- TRUE
+  if(stage == "sample" && !is.null(stop_criteria$max_flat_loc) && total_iters_stage >= 30){
+    flat <- flat_diagnostics(emc, stage, stop_criteria$flat_selection, stop_criteria$flat_p1,
+                             stop_criteria$flat_p2, stop_criteria$flat_quantile)
+    flat_ok <- flat_done(flat, stop_criteria$max_flat_loc, stop_criteria$flat_mcse)
+  } else if(stage == "sample" && !is.null(stop_criteria$max_flat_loc)) flat_ok <- FALSE
+  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok) | (trys_done & iter_done)
+  if(es_done & gd$gd_done & adapted & flat_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   if (trys_done & iter_done) {
-    if(!(es_done & gd$gd_done & enough_unique)){
+    if(!(es_done & gd$gd_done & enough_unique & flat_ok)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
@@ -436,7 +502,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   return(list(emc = gd$emc, done = done, step_size = step_size,
               trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
-              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
+              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
+              flat = flat, cull_state = cull_state, n_culls = n_culls))
 }
 
 # The Rhats a stop rule reads (split_rhat()), subject-level ones from the
@@ -1004,4 +1071,33 @@ restore_duplicates <- function(emc) {
     emc[[i]]$samples <- samples
   }
   return(emc)
+}
+
+
+# Keep at most max_sample_iter draws of the sample stage (the flat test's window)
+trim_sample_stage <- function(emc, max_sample_iter){
+  n <- chain_n(emc)[1, "sample"]
+  if(n <= max_sample_iter) return(emc)
+  subset(emc, stage = "sample", filter = n - max_sample_iter, keep_stages = TRUE)
+}
+
+# After a cull in the sample stage: keep only the respawned last draw, run
+# `reburn` discarded iterations with the fixed sample kernel, and keep only
+# the last draw again, so the stage starts afresh from settled states.
+cull_restart <- function(emc, reburn, verbose, verboseProgress, particle_factor, search_width,
+                         cores_per_chain, cores_for_chains, n_blocks, on_singular, context){
+  last_only <- function(emc) subset(emc, stage = "sample", filter = chain_n(emc)[1, "sample"] - 1, keep_stages = TRUE)
+  emc <- last_only(emc)
+  if(reburn > 0){
+    emc <- add_proposals(emc, "sample", cores_per_chain * cores_for_chains, n_blocks)
+    sub_emc <- run_native_chains(emc, stage = "sample", iter = reburn, verbose = verbose,
+                                 verboseProgress = verboseProgress, particle_factor = particle_factor,
+                                 search_width = search_width, n_cores = cores_per_chain,
+                                 cores_for_chains = cores_for_chains, on_singular = on_singular, context = context)
+    class(sub_emc) <- "emc"
+    emc <- concat_emc(emc, sub_emc, reburn, "sample")
+    emc <- last_only(emc)
+  }
+  class(emc) <- "emc"
+  emc
 }
