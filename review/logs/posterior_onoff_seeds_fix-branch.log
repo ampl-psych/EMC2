@@ -1,0 +1,28 @@
+Processing data set 1
+Likelihood speedup factor: 8 (420 unique trials)
+  frozen loc: 3.023 3.242 2.815 2.974  step: 1.034 0.245 0.113 0.116 
+Processing data set 1
+Likelihood speedup factor: 8 (420 unique trials)
+Processing data set 1
+Likelihood speedup factor: 8 (420 unique trials)
+Processing data set 1
+Likelihood speedup factor: 8 (420 unique trials)
+  frozen loc: 2.46 3.242 2.46 3.222  step: 1.54 0.199 0.107 0.129 
+on11-off11   mu        4 params | |z| max 1.79, n>2: 0, mean z -0.06 | sd ratio 0.94-0.98 | median ESS 9172 / 7207
+on12-off12   mu        4 params | |z| max 2.60, n>2: 1, mean z +0.26 | sd ratio 0.94-1.04 | median ESS 7841 / 8630
+on13-off13   mu        4 params | |z| max 1.45, n>2: 0, mean z -0.12 | sd ratio 0.96-1.02 | median ESS 8436 / 8742
+off11-off13 (null) mu        4 params | |z| max 1.29, n>2: 0, mean z -0.25 | sd ratio 1.00-1.06 | median ESS 7207 / 8742
+on11-on13 (null) mu        4 params | |z| max 0.61, n>2: 0, mean z -0.20 | sd ratio 0.97-1.02 | median ESS 9172 / 8436
+pooled 3v3   mu        4 params | |z| max 1.37, n>2: 0, mean z +0.06 | sd ratio 0.96-1.00 | median ESS 25551 / 24614
+on11-off11   sigma2    4 params | |z| max 1.40, n>2: 0, mean z -0.36 | sd ratio 1.10-2.20 | median ESS 4496 / 3277
+on12-off12   sigma2    4 params | |z| max 1.35, n>2: 0, mean z -0.38 | sd ratio 0.92-1.28 | median ESS 4270 / 3954
+on13-off13   sigma2    4 params | |z| max 0.76, n>2: 0, mean z +0.35 | sd ratio 0.81-1.43 | median ESS 4865 / 3681
+off11-off13 (null) sigma2    4 params | |z| max 1.14, n>2: 0, mean z +0.22 | sd ratio 0.52-1.06 | median ESS 3277 / 3681
+on11-on13 (null) sigma2    4 params | |z| max 1.05, n>2: 0, mean z -0.48 | sd ratio 0.73-1.41 | median ESS 4496 / 4865
+pooled 3v3   sigma2    4 params | |z| max 0.94, n>2: 0, mean z -0.20 | sd ratio 1.05-1.20 | median ESS 13631 / 10911
+on11-off11   alpha    16 params | |z| max 2.68, n>2: 1, mean z -0.00 | sd ratio 0.83-1.01 | median ESS 3266 / 1730
+on12-off12   alpha    16 params | |z| max 3.75, n>2: 7, mean z -0.15 | sd ratio 0.95-1.03 | median ESS 2474 / 2213
+on13-off13   alpha    16 params | |z| max 1.82, n>2: 0, mean z +0.02 | sd ratio 0.93-1.06 | median ESS 2929 / 2096
+off11-off13 (null) alpha    16 params | |z| max 2.67, n>2: 1, mean z -0.00 | sd ratio 0.99-1.23 | median ESS 1730 / 2096
+on11-on13 (null) alpha    16 params | |z| max 1.07, n>2: 0, mean z -0.01 | sd ratio 0.96-1.02 | median ESS 3266 / 2929
+pooled 3v3   alpha    16 params | |z| max 1.54, n>2: 0, mean z -0.04 | sd ratio 0.94-1.01 | median ESS 8861 / 6262
