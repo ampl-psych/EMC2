@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <exception>
 #include <memory>
+#include <cmath>
+#include <limits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -121,20 +123,34 @@ class JointMoves {
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
     if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
     else {
-      const arma::mat root = arma::chol(covariance, "lower");
+      // Directions are built once per stage (and once for the sample-kernel
+      // tail); the R side clears them only at a stage boundary, so loc keeps
+      // adapting across steps within a stage.
+      arma::mat root;
+      if (!arma::chol(root, arma::symmatu(covariance), "lower")) {
+        // Not positive definite: a square root from the clamped eigenvalues.
+        arma::vec values; arma::mat vectors;
+        if (!arma::eig_sym(values, vectors, arma::symmatu(covariance)) || !values.is_finite())
+          Rcpp::stop("the prior covariance of the group means (theta_mu_var) could not be factorised for the joint location move");
+        const double floor = std::sqrt(std::numeric_limits<double>::epsilon()) * std::max(values.max(), 1.0);
+        root = vectors * arma::diagmat(arma::sqrt(arma::clamp(values, floor, arma::datum::inf)));
+      }
       arma::mat precision(p, p, arma::fill::zeros);
       if (present(tune, "lik_prec")) {
         Rcpp::List likelihood = tune["lik_prec"];
-        for (SEXP x : likelihood) if (!Rf_isNull(x))
-          precision += Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
+        for (SEXP x : likelihood) if (!Rf_isNull(x)) {
+          const arma::mat part = Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
+          if (part.is_finite()) precision += part;
+        }
       }
       precision = root.t() * precision * root;
       precision.diag() += 1;
       arma::vec eigenvalues;
       arma::mat eigenvectors;
-      arma::eig_sym(eigenvalues, eigenvectors, arma::symmatu(precision));
-      directions = root * eigenvectors *
-        arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
+      if (arma::eig_sym(eigenvalues, eigenvectors, arma::symmatu(precision)) && eigenvalues.is_finite())
+        directions = root * eigenvectors *
+          arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
+      else directions = root;   // no usable curvature: prior-scaled axes
       loc.ones();
     }
     arma::mat precision;

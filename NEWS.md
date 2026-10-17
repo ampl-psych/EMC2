@@ -2,6 +2,7 @@
 
 ## Sampler
 
+-   The joint location move's curvature-guided directions are built once per stage (and once more when the sample kernel is tuned) instead of at every step, so their step sizes adapt continuously within a stage and the frozen sample-stage step is a converged value. A prior covariance of the group means that cannot be Cholesky-factorised falls back to an eigenvalue square root, and unusable curvature falls back to prior-scaled axes, instead of stopping with an Armadillo error.
 -   `adapt` and `sample` now use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. `preburn` and `burn` retain the search kernel. `options(emc.sampler = "legacy")` restores the previous sampler for comparison.
 -   Independent particle draws now follow their mixture probabilities without forcing a draw from every component. Parameter blocks update sequentially, and shared likelihoods are counted once.
 -   Forked sampling now advances L'Ecuyer-CMRG streams between batches and uses separate participant substreams.

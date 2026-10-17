@@ -30,3 +30,26 @@ test_that("the sample-stage proposals and tuning stay fixed", {
                      attr(emc[[ch]]$samples, "scale_move")[fields])
   }
 })
+
+# The joint location move's directions are built once per stage: kept across
+# the steps of burn, rebuilt when the stage changes, so that loc adapts
+# continuously instead of restarting at every step.
+test_that("joint translation directions persist within a stage", {
+  skip_on_cran()
+  old <- options(emc.adapt_converge = FALSE); on.exit(options(old))
+  dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2], ]
+  dat$subjects <- droplevels(dat$subjects)
+  des <- design(data = dat, model = LNR, matchfun = function(d) d$S == d$lR,
+                formula = list(m ~ lM, s ~ 1, t0 ~ 1), report_p_vector = FALSE)
+  sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standard")
+  set.seed(7); emc <- make_emc(dat, des, rt_resolution = 0.05, n_chains = 2)
+  emc <- run_emc(emc, "preburn", sc("preburn", list(iter = 10)), cores_for_chains = 1, step_size = 25, verbose = FALSE)
+  set.seed(1); one <- run_emc(emc, "burn", sc("burn", list(iter = 25)), cores_for_chains = 1, step_size = 25, verbose = FALSE)
+  set.seed(1); three <- run_emc(emc, "burn", sc("burn", list(iter = 75)), cores_for_chains = 1, step_size = 25, verbose = FALSE)
+  d1 <- attr(one[[1]]$samples, "scale_move")$directions
+  d3 <- attr(three[[1]]$samples, "scale_move")$directions
+  expect_equal(dim(d1), c(4, 4))
+  expect_identical(d3, d1)
+  adapt <- run_emc(three, "adapt", sc("adapt", list(iter = 25)), cores_for_chains = 1, step_size = 25, verbose = FALSE)
+  expect_false(identical(attr(adapt[[1]]$samples, "scale_move")$directions, d3))
+})

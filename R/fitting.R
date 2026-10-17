@@ -322,7 +322,11 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
   if(stage %in% c("burn", "adapt", "sample") && emc[[1]]$type != "single"){
-    emc <- create_lik_prec(emc, n_cores)
+    # The joint location move's directions are rebuilt only when the stage
+    # changes (and when the sample kernel is tuned, which starts a "sample"
+    # kernel on an adapt object), so that their step sizes keep adapting
+    # across the steps of a stage instead of restarting at every step.
+    emc <- create_lik_prec(emc, n_cores, reset_directions = stage != get_last_stage(emc))
   }
   if(fixed) emc <- store_sample_kernel(emc)
   return(emc)
@@ -348,13 +352,13 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-create_lik_prec <- function(emc, n_cores){
+create_lik_prec <- function(emc, n_cores, reset_directions = TRUE){
   history_idx <- proposal_window(emc[[1]]$samples$idx)
   lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
   for (i in seq_along(emc)) {
     emc[[i]]$lik_prec <- lik_prec
     sm <- attr(emc[[i]]$samples, "scale_move")
-    if (!is.null(sm)) {
+    if (reset_directions && !is.null(sm)) {
       sm$directions <- NULL
       attr(emc[[i]]$samples, "scale_move") <- sm
     }
