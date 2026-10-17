@@ -1,0 +1,44 @@
+EMC2 from: /opt/emc2/lib-pr202/EMC2 
+NULL
+EMC2 build configuration
+  PNORM_MODE  : 1
+  fast-math   : no
+  native      : no
+  CXXFLAGS    : 
+  Accelerate  : 
+  OMP_CXXFLAGS: -fopenmp
+  OMP pause   : 1
+  OMP runtime : /usr/lib/x86_64-linux-gnu/libgomp.so.1 
+
+==== A. set.seed() before a run on a fresh (uninitialised) object ====
+seed 1 == seed 1 (reproduces): TRUE 
+seed 1 == seed 2 (should be FALSE): FALSE 
+
+==== B. set.seed() before a run on an initialised object (resume) ====
+same seed reproduces: TRUE 
+different seed changes the draws (should be TRUE): FALSE 
+
+==== C. cores 1x1 vs 2x2 bit-identical (LNR) ====
+1x1 == 2x2: TRUE 
+
+==== D. probit-scaled Z (DDM) threaded and bit-identical across core settings ====
+Parameter(s) SZ, st0, sv not specified in formula and assumed constant.
+elapsed 1x1 0.9s, 1x4 1.5s, 2x2 0.8s (threaded if 1x4 and 2x2 are clearly faster)
+1x1 == 1x4: TRUE  1x1 == 2x2: TRUE 
+pretransform of Z: v_Sleft identity, v_Sright identity, a identity, a_Eneutral identity, a_Eaccuracy identity, t0 identity, Z identity 
+
+==== E. CDM: warns once that it runs serially? ====
+warnings: Chains and subjects run one at a time, ignoring cores_for_chains and cores_per_chain: the CDM likelihood draws from R's generator. 
+
+==== F. on_singular$on_exhausted from earlier scripts ====
+$max_retries
+[1] 2
+
+Warning message:
+`on_singular$on_exhausted` is ignored: after `max_retries` failed draws the stage stops with the error 
+
+==== G. the joint moves fire: stages, directions, loc adaptation ====
+after preburn scale_move attr: FALSE 
+Error in round(sm$loc, 3) : non-numeric argument to mathematical function
+Calls: cat -> paste
+Execution halted

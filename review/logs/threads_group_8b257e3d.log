@@ -1,0 +1,21 @@
+EMC2 from: /opt/emc2/lib-8b257e3d/EMC2 
+
+==== DDM with probit Z: are subject threads used? (8 subjects, 20 preburn iterations) ====
+Parameter(s) SZ, st0, sv not specified in formula and assumed constant.
+DDM transforms: v identity, a exp, sv exp, t0 exp, st0 exp, s exp, Z pnorm, SZ pnorm 
+cores_for_chains=1 cores_per_chain=1: elapsed 3.5s user 6.0s (user/elapsed = 1.70)
+  bit-identical to 1x1: TRUE 
+cores_for_chains=1 cores_per_chain=4: elapsed 2.8s user 5.2s (user/elapsed = 1.87)
+  bit-identical to 1x1: TRUE 
+cores_for_chains=2 cores_per_chain=2: elapsed 2.1s user 3.7s (user/elapsed = 1.79)
+  bit-identical to 1x1: TRUE 
+
+==== LNR, 8 subjects: thread use ====
+cores_for_chains=1 cores_per_chain=1: elapsed 2.1s user 2.1s (user/elapsed = 0.99)
+cores_for_chains=1 cores_per_chain=4: elapsed 2.4s user 4.2s (user/elapsed = 1.75)
+cores_for_chains=2 cores_per_chain=2: elapsed 1.4s user 2.7s (user/elapsed = 1.93)
+
+==== group design: location move must be off, scale move on ====
+Error in group_design(list(m ~ x), data = sub4, subject_design = des4,  : 
+  unused argument (covariates = cov)
+Execution halted

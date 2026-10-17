@@ -1,0 +1,55 @@
+EMC2 from: /opt/emc2/lib-8b257e3d/EMC2 
+NULL
+EMC2 build configuration
+  PNORM_MODE  : 1
+  fast-math   : no
+  native      : no
+  CXXFLAGS    : 
+  Accelerate  : 
+  OMP_CXXFLAGS: -fopenmp
+
+==== A. set.seed() before a run on a fresh (uninitialised) object ====
+seed 1 == seed 1 (reproduces): TRUE 
+seed 1 == seed 2 (should be FALSE): FALSE 
+
+==== B. set.seed() before a run on an initialised object (resume) ====
+same seed reproduces: TRUE 
+different seed changes the draws (should be TRUE): FALSE 
+
+==== C. cores 1x1 vs 2x2 bit-identical (LNR) ====
+1x1 == 2x2: TRUE 
+
+==== D. probit-scaled Z (DDM) threaded and bit-identical across core settings ====
+Parameter(s) SZ, st0, sv not specified in formula and assumed constant.
+elapsed 1x1 0.8s, 1x4 0.9s, 2x2 0.6s (threaded if 1x4 and 2x2 are clearly faster)
+1x1 == 1x4: TRUE  1x1 == 2x2: TRUE 
+pretransform of Z: v_Sleft identity, v_Sright identity, a identity, a_Eneutral identity, a_Eaccuracy identity, t0 identity, Z identity 
+
+==== E. CDM: warns once that it runs serially? ====
+warnings: <none> 
+
+==== F. on_singular$on_exhausted from earlier scripts ====
+Error in EMC2:::resolve_on_singular(list(max_retries = 2, on_exhausted = "carry_forward")) : 
+  unknown `on_singular` field(s): on_exhausted. Valid fields: max_retries
+[1] "Error in EMC2:::resolve_on_singular(list(max_retries = 2, on_exhausted = \"carry_forward\")) : \n  unknown `on_singular` field(s): on_exhausted. Valid fields: max_retries\n"
+attr(,"class")
+[1] "try-error"
+attr(,"condition")
+<simpleError in EMC2:::resolve_on_singular(list(max_retries = 2, on_exhausted = "carry_forward")): unknown `on_singular` field(s): on_exhausted. Valid fields: max_retries>
+
+==== G. the joint moves fire: stages, directions, loc adaptation ====
+after preburn scale_move attr: FALSE 
+after burn: uses = 60  loc = 2.718 2.46 2.46 3.004  directions: 4x4 
+lik_prec present after burn: FALSE 
+after adapt+tail: uses = 100  loc = 2.826 2.812 2.883 2.544  step = 1.698 0.163 0.204 0.134 
+directions (rows = parameters, cols = moves):
+       [,1]   [,2]   [,3]   [,4]
+[1,] -0.002  0.017  0.002  0.005
+[2,] -0.011 -0.018  0.006  0.004
+[3,]  0.024  0.003  0.011 -0.001
+[4,]  0.031 -0.007 -0.006  0.003
+sample stage keeps directions/loc/step fixed: TRUE 
+draws differ with the joint moves on vs off: TRUE 
+
+==== H. type with a group design: location move off, scale move on ====
+done

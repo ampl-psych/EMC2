@@ -1,0 +1,1481 @@
+x Installed roxygen2 is older than the version used with this package
+i You have "7.3.1" but you need "7.3.3"
+i Loading EMC2
+Writing 'EMC2-package.Rd'
+Writing 'run_emc.Rd'
+-- R CMD check results ----------------------------------------- EMC2 3.4.1 ----
+Duration: 5m 59.1s
+
+> checking tests ...
+  See below...
+
+> checking top-level files ... WARNING
+  A complete check needs the 'checkbashisms' script.
+  See section 'Configure and cleanup' in the 'Writing R Extensions'
+  manual.
+
+> checking R files for syntax errors ... WARNING
+  Warning in Sys.setlocale("LC_CTYPE", "en_US.UTF-8") :
+    OS reports request to set locale to "en_US.UTF-8" cannot be honored
+
+> checking package dependencies ... NOTE
+  Package suggested but not available for checking: 'DiagrammeR'
+
+> checking installed package size ... NOTE
+    installed size is 36.5Mb
+    sub-directories of 1Mb or more:
+      R      1.3Mb
+      libs  34.3Mb
+
+> checking for future file timestamps ... NOTE
+  unable to verify current time
+
+> checking compilation flags used ... NOTE
+  Compilation used the following non-portable flag(s):
+    '-mno-omit-leaf-frame-pointer'
+
+-- Test failures ------------------------------------------------- testthat ----
+
+> # This file is part of the standard setup for testthat.
+> # It is recommended that you do not modify it.
+> #
+> # Where should you do additional test configuration?
+> # Learn more about the roles of various files in:
+> # * https://r-pkgs.org/tests.html
+> # * https://testthat.r-lib.org/reference/test_package.html#special-files
+> 
+> library(testthat)
+> library(EMC2)
+
+Attaching package: 'EMC2'
+
+The following object is masked from 'package:testthat':
+
+    compare
+
+> 
+> test_check("EMC2")
+Starting 2 test processes
+[ FAIL 58 | WARN 0 | SKIP 0 | PASS 343 ]
+
+== Failed tests ================================================================
+-- Failure ('test-S3.R:8:3'): priorS3 ------------------------------------------
+Snapshot of code has changed:
+old[2:10] vs new[2:10]
+    prior
+  Output
+    Mean and variance of the prior on the transformed parameters: 
+-   m ~ <U+0001D441>(0, 1)
++   m ~ <U+0001D441>(0, 1)
+-   m_lMd ~ <U+0001D441>(0, 1)
++   m_lMd ~ <U+0001D441>(0, 1)
+-   s ~ <U+0001D441>(0, 1)
++   s ~ <U+0001D441>(0, 1)
+-   t0 ~ <U+0001D441>(0, 1)
++   t0 ~ <U+0001D441>(0, 1)
+    
+    For detailed info use summary(<prior>)
+
+* Run `testthat::snapshot_accept('S3')` to accept the change.
+* Run `testthat::snapshot_review('S3')` to interactively review the change.
+-- Failure ('test-choice.R:43:3'): ordered_probit ------------------------------
+Snapshot of code has changed:
+     old                         | new                                         
+ [4]   $alpha                    |   $alpha                      [4]           
+ [5]   , , 1                     |   , , 1                       [5]           
+ [6]                             |                               [6]           
+ [7]                           1 -                             1 [7]           
+ [8]   location_Slow  -0.7422707 -   location_Slow   0.632994088 [8]           
+ [9]   location_Smid   0.7732297 -   location_Smid   0.823194736 [9]           
+[10]   location_Shigh  0.6825030 -   location_Shigh -0.020759102 [10]          
+[11]   cut_lRlow      -0.2179361 -   cut_lRlow      -0.006242723 [11]          
+[12]   cut_lRmid      -0.6387820 -   cut_lRmid       0.374871513 [12]          
+[13]                             |                               [13]          
+ ... ...                           ...                           and 2 more ...
+
+     old           | new                                  
+[20]   1 -35.53273 -                       [17]           
+                   -   $subj_ll            [18]           
+                   -          [,1]         [19]           
+                   -   1 -35.23802         [20]           
+                   -                       [21]           
+                   -   $idx                [22]           
+                   -   [1] 1               [23]           
+                   -                       [24]           
+                   -   attr(,"rng")        [25]           
+                   -   attr(,"rng")$engine [26]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:44:3'): ordered_probit ------------------------------
+Snapshot of code has changed:
+old[2:34] vs new[2:34]
+    make_data(p_ord_probit, d_ord_probit, n_trials = 10)
+  Output
+       trials subjects    S    R
+-   1       1        1  low  low
++   1       1        1  low  mid
+-   4       2        1  low  low
++   4       2        1  low  mid
+    7       3        1  low  low
+-   10      4        1  low  mid
++   10      4        1  low  low
+-   13      5        1  low  mid
++   13      5        1  low  low
+-   16      6        1  low  mid
++   16      6        1  low high
+-   19      7        1  low  low
++   19      7        1  low  mid
+and 23 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:50:3'): ordered_logit -------------------------------
+Snapshot of code has changed:
+     old                          | new                              
+ [5]   , , 1                      |   , , 1                      [5] 
+ [6]                              |                              [6] 
+ [7]                            1 |                            1 [7] 
+ [8]   location_Sleft  -0.5126331 -   location_Sleft  -0.3165003 [8] 
+ [9]   location_Sright  0.8401962 -   location_Sright  0.3925489 [9] 
+[10]   cut              0.6442838 -   cut              0.9509542 [10]
+[11]                              |                              [11]
+[12]                              |                              [12]
+[13]   $stage                     |   $stage                     [13]
+
+     old           | new                                  
+[18]   1 -13.18434 -                       [15]           
+                   -   $subj_ll            [16]           
+                   -          [,1]         [17]           
+                   -   1 -12.89028         [18]           
+                   -                       [19]           
+                   -   $idx                [20]           
+                   -   [1] 1               [21]           
+                   -                       [22]           
+                   -   attr(,"rng")        [23]           
+                   -   attr(,"rng")$engine [24]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:51:3'): ordered_logit -------------------------------
+Snapshot of code has changed:
+old[3:17] vs new[3:17]
+  Output
+       trials subjects     S     R
+    1       1        1  left  left
+-   3       2        1  left right
++   3       2        1  left  left
+-   5       3        1  left right
++   5       3        1  left  left
+    7       4        1  left  left
+    9       5        1  left  left
+-   11      6        1  left right
++   11      6        1  left  left
+    13      7        1  left  left
+    15      8        1  left  left
+and 5 more ...
+
+     old                              | new                                  
+[18]   27     14        1 right right |   27     14        1 right right [18]
+[19]   29     15        1 right right |   29     15        1 right right [19]
+[20]   31     16        1 right right |   31     16        1 right right [20]
+[21]   33     17        1 right  left -   33     17        1 right right [21]
+[22]   35     18        1 right right -   35     18        1 right  left [22]
+[23]   37     19        1 right right |   37     19        1 right right [23]
+[24]   39     20        1 right right |   39     20        1 right right [24]
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:57:3'): multinomial_logit ---------------------------
+Snapshot of code has changed:
+     old                          | new                                        
+ [7]                            1 -   $alpha                    [4]            
+ [8]   utility_Sleft   0.02412719 -   , , 1                     [5]            
+ [9]   utility_Sright -2.74441709 -                             [6]            
+[10]   utility_Sup     0.54761193 -                           1 [7]            
+                                  -   utility_Sleft  -0.9697304 [8]            
+                                  -   utility_Sright -0.6724982 [9]            
+                                  -   utility_Sup    -0.5152295 [10]           
+                                  -                             [11]           
+                                  -                             [12]           
+                                  -   $stage                    [13]           
+ ... ...                            ...                         and 22 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:58:3'): multinomial_logit ---------------------------
+Snapshot of code has changed:
+old[3:34] vs new[3:34]
+  Output
+       trials subjects     S     R
+    1       1        1  left    up
+-   4       2        1  left right
++   4       2        1  left    up
+-   7       3        1  left right
++   7       3        1  left  left
+    10      4        1  left  left
+-   13      5        1  left    up
++   13      5        1  left right
+-   16      6        1  left    up
++   16      6        1  left right
+-   19      7        1  left right
++   19      7        1  left    up
+    22      8        1  left    up
+and 22 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:64:3'): multinomial_probit --------------------------
+Snapshot of code has changed:
+     old                         | new                                        
+ [8]   utility_Sleft   0.1730763 -   , , 1                     [5]            
+ [9]   utility_Sright -0.1974613 -                             [6]            
+[10]   utility_Sup     2.4566301 -                           1 [7]            
+                                 -   utility_Sleft   2.0127412 [8]            
+                                 -   utility_Sright -0.8563085 [9]            
+                                 -   utility_Sup    -0.5793573 [10]           
+                                 -                             [11]           
+                                 -                             [12]           
+                                 -   $stage                    [13]           
+                                 -   [1] "init"                [14]           
+ ... ...                           ...                         and 21 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-choice.R:65:3'): multinomial_probit --------------------------
+Snapshot of code has changed:
+old[2:34] vs new[2:34]
+    make_data(p_mnp, d_mnp, n_trials = 10)
+  Output
+       trials subjects     S     R
+-   1       1        1  left  left
++   1       1        1  left right
+-   4       2        1  left    up
++   4       2        1  left right
+-   7       3        1  left right
++   7       3        1  left  left
+-   10      4        1  left    up
++   10      4        1  left right
+-   13      5        1  left  left
++   13      5        1  left right
+    16      6        1  left  left
+    19      7        1  left    up
+and 23 more ...
+
+* Run `testthat::snapshot_accept('choice')` to accept the change.
+* Run `testthat::snapshot_review('choice')` to interactively review the change.
+-- Failure ('test-circular_models.R:35:3'): CDM simulates and initializes ------
+Snapshot of code has changed:
+     old                | new                              
+ [5]   , , 1            |   , , 1            [5]           
+ [6]                    |                    [6]           
+ [7]                  1 |                  1 [7]           
+ [8]   v      0.6730084 -   v      0.6932240 [8]           
+ [9]   theta  0.1647118 -   theta  0.1113893 [9]           
+[10]   a     -0.2286852 -   a      1.9223461 [10]          
+[11]   t0    -0.4854718 -   t0    -0.4194931 [11]          
+[12]   s     -0.3349777 -   s     -0.6502625 [12]          
+[13]   sv     0.3168479 -   sv     0.6248522 [13]          
+[14]                    |                    [14]          
+ ... ...                  ...                and 2 more ...
+
+     old           | new                           
+[20]          [,1] -   [1] "init"   [17]           
+[21]   1 -47.61282 -                [18]           
+                   -   $subj_ll     [19]           
+                   -         [,1]   [20]           
+                   -   1 940.4575   [21]           
+                   -                [22]           
+                   -   $idx         [23]           
+                   -   [1] 1        [24]           
+                   -                [25]           
+                   -   attr(,"rng") [26]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:41:3'): SDM simulates and initializes ------
+Snapshot of code has changed:
+old vs new
+  Code
+    sdm_data
+  Output
+-     trials subjects         R        rt        R2
++     trials subjects         R        rt         R2
+-   1      1        1 0.8859462 0.6333035 2.6895510
++   1      1        1 1.8818365 0.4143769  1.1943024
+-   2      2        1 1.2606809 0.3453745 0.4989501
++   2      2        1 0.8412711 0.2884618  2.0282985
+-   3      3        1 1.1413576 0.5874518 2.2878413
++   3      3        1 2.0069796 0.4088464  0.5811047
+-   4      4        1 2.1124296 0.4434894 1.9875732
++   4      4        1 2.8849888 0.5791998 -1.6205748
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:42:3'): SDM simulates and initializes ------
+Snapshot of code has changed:
+     old                 | new                               
+ [5]   , , 1             |   , , 1             [5]           
+ [6]                     |                     [6]           
+ [7]                   1 |                   1 [7]           
+ [8]   v       0.2905103 -   v      -0.3284776 [8]           
+ [9]   theta1  0.4004717 -   theta1 -0.4872888 [9]           
+[10]   theta2 -1.9158174 -   theta2  1.1088965 [10]          
+[11]   a       0.5236415 -   a      -1.0897344 [11]          
+[12]   t0      2.6656195 -   t0     -1.7426924 [12]          
+[13]   s       1.0530416 -   s      -0.6733382 [13]          
+[14]   sv     -1.4946516 -   sv     -0.8024253 [14]          
+ ... ...                   ...                 and 3 more ...
+
+     old          | new                           
+[21]         [,1] -   [1] "init"   [18]           
+[22]   1 -92.1034 -                [19]           
+                  -   $subj_ll     [20]           
+                  -          [,1]  [21]           
+                  -   1 -9.519611  [22]           
+                  -                [23]           
+                  -   $idx         [24]           
+                  -   [1] 1        [25]           
+                  -                [26]           
+                  -   attr(,"rng") [27]           
+ ... ...            ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:48:3'): HSDM simulates and initializes -----
+Snapshot of code has changed:
+old vs new
+  Code
+    hsdm_data
+  Output
+-     trials subjects        R        rt        R2         R3
++     trials subjects        R        rt        R2        R3
+-   1      1        1 1.821304 0.3140800 1.7436259 -0.1250342
++   1      1        1 0.574094 0.3913082 0.7128921 0.8010675
+-   2      2        1 1.672926 0.4395042 0.9739164  0.2621289
++   2      2        1 1.615180 0.3659974 1.5141805 0.2176336
+-   3      3        1 2.110135 0.4217394 1.7526926  1.6678593
++   3      3        1 1.445171 0.6970832 2.3527451 0.6900170
+-   4      4        1 1.280640 0.3519383 1.8401769  0.8536089
++   4      4        1 1.954707 0.6656947 1.8688518 0.1625373
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:49:3'): HSDM simulates and initializes -----
+Snapshot of code has changed:
+     old                 | new                               
+ [5]   , , 1             |   , , 1             [5]           
+ [6]                     |                     [6]           
+ [7]                   1 |                   1 [7]           
+ [8]   v       1.3253250 -   v       0.8130878 [8]           
+ [9]   theta1  0.2410887 -   theta1 -0.8673735 [9]           
+[10]   theta2 -0.2696486 -   theta2  0.3181094 [10]          
+[11]   theta3 -1.3040563 -   theta3 -0.8379451 [11]          
+[12]   a      -1.4577938 -   a       0.7652788 [12]          
+[13]   t0     -1.4830809 -   t0     -0.4617856 [13]          
+[14]   s      -0.4383813 -   s       1.4519962 [14]          
+ ... ...                   ...                 and 4 more ...
+
+     old           | new                                  
+[23]   1 -37.77559 -                       [20]           
+                   -   $subj_ll            [21]           
+                   -          [,1]         [22]           
+                   -   1 -46.35298         [23]           
+                   -                       [24]           
+                   -   $idx                [25]           
+                   -   [1] 1               [26]           
+                   -                       [27]           
+                   -   attr(,"rng")        [28]           
+                   -   attr(,"rng")$engine [29]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:58:3'): PSDM simulates and initializes -----
+Snapshot of code has changed:
+     old                 | new                              
+ [4]   $alpha            |   $alpha           [4]           
+ [5]   , , 1             |   , , 1            [5]           
+ [6]                     |                    [6]           
+ [7]                   1 -                  1 [7]           
+ [8]   v      1.09900070 -   v     -1.0290899 [8]           
+ [9]   theta  2.46578576 -   theta -1.3172580 [9]           
+[10]   a      0.01986150 -   a     -1.0981288 [10]          
+[11]   t0    -0.99358606 -   t0     0.3453506 [11]          
+[12]   s     -0.34020721 -   s     -1.3688316 [12]          
+[13]   sv     0.04050694 -   sv     1.3113456 [13]          
+ ... ...                   ...                and 3 more ...
+
+     old           | new                           
+[20]          [,1] -   [1] "init"   [17]           
+[21]   1 -50.77214 -                [18]           
+                   -   $subj_ll     [19]           
+                   -         [,1]   [20]           
+                   -   1 -92.1034   [21]           
+                   -                [22]           
+                   -   $idx         [23]           
+                   -   [1] 1        [24]           
+                   -                [25]           
+                   -   attr(,"rng") [26]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:64:3'): PHSDM simulates and initializes ----
+Snapshot of code has changed:
+old[2:8] vs new[2:8]
+    phsdm_data
+  Output
+      trials subjects        R        rt       R2
+-   1      1        1 2.185560 0.3386887 1.976002
++   1      1        1 1.663235 0.3417021 1.570305
+-   2      2        1 2.073026 0.4544274 1.273449
++   2      2        1 1.412181 0.8946906 1.474041
+-   3      3        1 1.329916 0.4246930 2.197339
++   3      3        1 1.100029 0.3236143 1.267284
+-   4      4        1 1.162111 0.6650170 2.742994
++   4      4        1 1.400125 0.3133078 1.115703
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-circular_models.R:65:3'): PHSDM simulates and initializes ----
+Snapshot of code has changed:
+     old                 | new                                
+ [4]   $alpha            |   $alpha             [4]           
+ [5]   , , 1             |   , , 1              [5]           
+ [6]                     |                      [6]           
+ [7]                   1 -                    1 [7]           
+ [8]   v       0.7677234 -   v      -2.21172596 [8]           
+ [9]   theta1 -0.4616785 -   theta1 -0.42975050 [9]           
+[10]   theta2  0.5979320 -   theta2 -0.04117070 [10]          
+[11]   a      -0.7161771 -   a      -0.34872272 [11]          
+[12]   t0     -0.7645011 -   t0     -0.18000539 [12]          
+[13]   s      -0.9509113 -   s      -0.03596062 [13]          
+ ... ...                   ...                  and 4 more ...
+
+     old          | new                           
+[21]         [,1] -   [1] "init"   [18]           
+[22]   1 -66.2827 -                [19]           
+                  -   $subj_ll     [20]           
+                  -          [,1]  [21]           
+                  -   1 -68.04822  [22]           
+                  -                [23]           
+                  -   $idx         [24]           
+                  -   [1] 1        [25]           
+                  -                [26]           
+                  -   attr(,"rng") [27]           
+ ... ...            ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+-- Failure ('test-fMRI.R:59:3'): fmri_emc --------------------------------------
+Snapshot of code has changed (variant 'Linux'):
+     old                    | new                                   
+ [4]   $alpha               |   $alpha                [4]           
+ [5]   , , 1                |   , , 1                 [5]           
+ [6]                        |                         [6]           
+ [7]                      1 -                       1 [7]           
+ [8]   accuracy  0.15719342 -   accuracy -2.200903490 [8]           
+ [9]   cond1    -2.06540724 -   cond1    -0.684631680 [9]           
+[10]   rt       -0.44054688 -   rt       -0.922354936 [10]          
+[11]   constant  0.00395328 -   constant  0.007481264 [11]          
+[12]   rho      -0.53711605 -   rho      -0.506452051 [12]          
+[13]   sd       -0.01260453 -   sd        0.228361496 [13]          
+ ... ...                      ...                     and 3 more ...
+
+     old          | new                           
+[20]         [,1] -   [1] "init"   [17]           
+[21]   1 -178.386 -                [18]           
+                  -   $subj_ll     [19]           
+                  -          [,1]  [20]           
+                  -   1 -172.0255  [21]           
+                  -                [22]           
+                  -   $idx         [23]           
+                  -   [1] 1        [24]           
+                  -                [25]           
+                  -   attr(,"rng") [26]           
+ ... ...            ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('Linux/fMRI')` to accept the change.
+* Run `testthat::snapshot_review('Linux/fMRI')` to interactively review the change.
+-- Failure ('test-fit.R:29:3'): fit --------------------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:5] vs new[2:5]
+    LNR_s[[1]]$samples$theta_mu[, idx]
+  Output
+             m      m_lMd          s         t0 
+-   -0.6308263 -0.4802072 -0.7449961 -1.9080191 
++   -1.0824472 -0.6007791 -0.3123476 -1.4008726 
+
+* Run `testthat::snapshot_accept('Linux/fit')` to accept the change.
+* Run `testthat::snapshot_review('Linux/fit')` to interactively review the change.
+-- Failure ('test-fit.R:32:3'): fit --------------------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:8] vs new[2:8]
+    LNR_s[[1]]$samples$alpha[, , idx]
+  Output
+                as1t       bd6t
+-   m     -0.8307674 -0.9766605
++   m     -0.8787994 -1.0039270
+-   m_lMd -0.3306725 -0.5221614
++   m_lMd -0.3360241 -0.6691432
+-   s     -0.9839537 -0.5429114
++   s     -0.9439336 -0.4494021
+-   t0    -2.3930315 -1.7182731
++   t0    -2.1171940 -1.6292988
+
+* Run `testthat::snapshot_accept('Linux/fit')` to accept the change.
+* Run `testthat::snapshot_review('Linux/fit')` to interactively review the change.
+-- Failure ('test-fit.R:35:3'): fit --------------------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old vs new
+  Code
+    LNR_s[[1]]$samples$theta_var[, , idx]
+  Output
+-                   m       m_lMd           s          t0
++                    m        m_lMd            s          t0
+-   m      0.30300233 -0.01158801  0.00787444  0.09748783
++   m      0.025885324 -0.006375181 -0.007286091  0.02655269
+-   m_lMd -0.01158801  0.03984819 -0.03219729 -0.08606545
++   m_lMd -0.006375181  0.034642988 -0.011449045 -0.10321743
+-   s      0.00787444 -0.03219729  0.10256198  0.04678079
++   s     -0.007286091 -0.011449045  0.055942484  0.01600899
+-   t0     0.09748783 -0.08606545  0.04678079  0.22295069
++   t0     0.026552693 -0.103217430  0.016008987  0.43200888
+
+* Run `testthat::snapshot_accept('Linux/fit')` to accept the change.
+* Run `testthat::snapshot_review('Linux/fit')` to interactively review the change.
+-- Failure ('test-joint.R:15:3'): joint ----------------------------------------
+Snapshot of code has changed:
+old[2:63] vs new[2:63]
+    init_chains(joint, particles = 10, cores_for_chains = 1)[[1]]$samples
+  Output
+    $theta_mu
+-                 [,1]
++                   [,1]
+-   a|m     -0.9685927
++   a|m     -2.200903490
+-   a|m_lMd  0.7061091
++   a|m_lMd -0.684631680
+-   a|s      1.4890213
++   a|s     -0.922354936
+-   a|t0    -1.8150926
++   a|t0     0.007481264
+-   b|m      0.3304096
++   b|m     -0.506452051
+-   b|m_lMd -1.1421557
++   b|m_lMd  0.228361496
+and 52 more ...
+
+old[66:94] vs new[65:107]
+    
+    $subj_ll
+              [,1]
+-   as1t -1649.391
++   as1t -24201.59
+-   bd6t -1647.818
++   bd6t -22710.85
+-   bl1t -1581.759
++   bl1t -31924.58
+    
+-   $last_theta_var_inv
++   $idx
+-             [,1]       [,2]       [,3]       [,4]       [,5]        [,6]
++   [1] 1
+-   [1,] 20.109106  2.1036418  5.4707734  1.4382122 -2.3036699   3.4535920
++   
+and 34 more ...
+
+* Run `testthat::snapshot_accept('joint')` to accept the change.
+* Run `testthat::snapshot_review('joint')` to interactively review the change.
+-- Failure ('test-group.R:34:3'): groups ---------------------------------------
+Snapshot of code has changed:
+     old                      | new                                     
+ [3] Output                   | Output                   [3]            
+ [4]   $theta_mu              |   $theta_mu              [4]            
+ [5]                     [,1] |                     [,1] [5]            
+ [6]   v           -1.3281425 -   v            0.6969745 [6]            
+ [7]   v_S1         1.0258987 -   v_S1        -0.2458906 [7]            
+ [8]   v_S1_age     0.2762936 -   v_S1_age     1.3630075 [8]            
+ [9]   v_S1_group1  0.4197705 -   v_S1_group1  1.2174913 [9]            
+[10]   a           -0.1671602 -   a           -1.2718293 [10]           
+[11]   a_age        0.5914033 -   a_age       -0.9699973 [11]           
+[12]   a_Eneutral   0.4708718 -   a_Eneutral  -0.1115010 [12]           
+ ... ...                        ...                      and 65 more ...
+
+     old              | new                             
+[80]   $subj_ll       -                  [79]           
+[81]             [,1] -   $subj_ll       [80]           
+[82]   as1t -18626.38 -             [,1] [81]           
+[83]   bd6t -19521.16 -   as1t -18650.94 [82]           
+[84]   bl1t -19388.26 -   bd6t -19548.95 [83]           
+[85]   hsft -19525.92 -   bl1t -19410.79 [84]           
+[86]   hsgt -19315.41 -   hsft -19525.92 [85]           
+[87]   kd6t -19479.53 -   hsgt -19548.95 [86]           
+[88]   kd9t -19411.20 -   kd6t -19548.95 [87]           
+[89]   kh6t -19017.90 -   kd9t -19548.95 [88]           
+ ... ...                ...              and 38 more ...
+
+* Run `testthat::snapshot_accept('group')` to accept the change.
+* Run `testthat::snapshot_review('group')` to interactively review the change.
+-- Failure ('test-model_functions.R:48:3'): LNR --------------------------------
+Snapshot of code has changed:
+old[2:53] vs new[2:53]
+    init_chains(LNR_s, particles = 10, cores_per_chain = 1)[[1]]$samples
+  Output
+    $theta_mu
+-                     [,1]
++                       [,1]
+-   m           -0.9685927
++   m           -2.200903490
+-   m_lMd        0.7061091
++   m_lMd       -0.684631680
+-   m_Eneutral   1.4890213
++   m_Eneutral  -0.922354936
+-   m_Eaccuracy -1.8150926
++   m_Eaccuracy  0.007481264
+-   s            0.3304096
++   s           -0.506452051
+-   t0          -1.1421557
++   t0           0.228361496
+and 42 more ...
+
+old[55:72] vs new[54:85]
+    [1] "init"
+    
+    $subj_ll
+-              [,1]
++             [,1]
+-   as1t -1119.9841
++   as1t -18598.82
+-   bd6t  -849.3553
++   bd6t -17737.45
+    
+-   $last_theta_var_inv
++   $idx
+-             [,1]       [,2]       [,3]      [,4]      [,5]      [,6]
++   [1] 1
+-   [1,] 17.928942  9.9292394 -2.6234713 -2.086301  5.400555 -5.341685
++   
+and 23 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:49:3'): LNR --------------------------------
+Snapshot of code has changed:
+old[2:124] vs new[2:124]
+    make_data(p_LNR, design_LNR, n_trials = 10)
+  Output
+        trials subjects        E     S     R        rt
+-   1        1     as1t    speed  left right 0.6621568
++   1        1     as1t    speed  left right 0.2205870
+-   3        2     as1t    speed  left right 0.2057630
++   3        2     as1t    speed  left right 0.2044928
+-   5        3     as1t    speed  left right 0.2148357
++   5        3     as1t    speed  left right 0.3362203
+-   7        4     as1t    speed  left  left 0.3104419
++   7        4     as1t    speed  left right 0.3325519
+-   9        5     as1t    speed  left  left 0.3391626
++   9        5     as1t    speed  left right 0.2099414
+-   11       6     as1t    speed  left right 0.3029197
++   11       6     as1t    speed  left right 1.1700398
+-   13       7     as1t    speed  left right 1.3993717
++   13       7     as1t    speed  left right 0.3562358
+and 113 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:55:3'): LBA --------------------------------
+Snapshot of code has changed:
+old[2:68] vs new[2:68]
+    init_chains(LBA_s, particles = 10, cores_per_chain = 1)[[1]]$samples
+  Output
+    $theta_mu
+-                     [,1]
++                       [,1]
+-   v           -0.9685927
++   v           -2.200903490
+-   v_lMd        0.7061091
++   v_lMd       -0.684631680
+-   sv_lMTRUE    1.4890213
++   sv_lMTRUE   -0.922354936
+-   B           -1.8150926
++   B            0.007481264
+-   B_Eneutral   0.3304096
++   B_Eneutral  -0.506452051
+-   B_Eaccuracy -1.1421557
++   B_Eaccuracy  0.228361496
+and 57 more ...
+
+old[70:100] vs new[69:113]
+    [1] "init"
+    
+    $subj_ll
+-              [,1]
++             [,1]
+-   as1t -14281.188
++   as1t -17460.68
+-   bd6t  -8083.852
++   bd6t -17055.86
+    
+-   $last_theta_var_inv
++   $idx
+-              [,1]      [,2]       [,3]      [,4]       [,5]      [,6]
++   [1] 1
+-    [1,] 26.028515  6.224107 -1.3572503 -3.811330   3.070339 -3.657354
++   
+and 36 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:56:3'): LBA --------------------------------
+Snapshot of code has changed:
+old[2:124] vs new[2:124]
+    make_data(p_LBA, design_LBA, n_trials = 10)
+  Output
+        trials subjects        E     S     R        rt
+-   1        1     as1t    speed  left  left 1.4633807
++   1        1     as1t    speed  left right 1.4849495
+-   3        2     as1t    speed  left  left 1.4760285
++   3        2     as1t    speed  left  left 1.1589450
+-   5        3     as1t    speed  left  left 1.1592134
++   5        3     as1t    speed  left  left 0.8931547
+-   7        4     as1t    speed  left right 1.0073454
++   7        4     as1t    speed  left  left 1.2780041
+-   9        5     as1t    speed  left  left 1.1259135
++   9        5     as1t    speed  left right 1.3151443
+-   11       6     as1t    speed  left  left 1.0885685
++   11       6     as1t    speed  left  left 1.5556591
+-   13       7     as1t    speed  left  left 0.9759322
++   13       7     as1t    speed  left  left 1.6294829
+and 113 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:63:3'): RDM --------------------------------
+Snapshot of code has changed:
+old[2:68] vs new[2:68]
+    init_chains(RDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples
+  Output
+    $theta_mu
+-                     [,1]
++                       [,1]
+-   v           -0.9685927
++   v           -2.200903490
+-   v_lMd        0.7061091
++   v_lMd       -0.684631680
+-   s_lMTRUE     1.4890213
++   s_lMTRUE    -0.922354936
+-   B           -1.8150926
++   B            0.007481264
+-   B_Eneutral   0.3304096
++   B_Eneutral  -0.506452051
+-   B_Eaccuracy -1.1421557
++   B_Eaccuracy  0.228361496
+and 57 more ...
+
+old[71:100] vs new[70:113]
+    
+    $subj_ll
+               [,1]
+-   as1t -13319.641
++   as1t -10760.256
+-   bd6t  -8344.067
++   bd6t  -9612.871
+    
+-   $last_theta_var_inv
++   $idx
+-              [,1]      [,2]       [,3]      [,4]       [,5]      [,6]
++   [1] 1
+-    [1,] 26.028515  6.224107 -1.3572503 -3.811330   3.070339 -3.657354
++   
+-    [2,]  6.224107 22.834612  1.1572385 -1.918507  -6.426290 -1.390907
++   $last_theta_var_inv
+and 35 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:64:3'): RDM --------------------------------
+Snapshot of code has changed:
+old[2:124] vs new[2:124]
+    make_data(p_RDM, design_RDM, n_trials = 10)
+  Output
+        trials subjects        E     S     R        rt
+-   1        1     as1t    speed  left  left 0.9280160
++   1        1     as1t    speed  left  left 1.4186377
+-   3        2     as1t    speed  left  left 0.9009727
++   3        2     as1t    speed  left  left 1.1125060
+-   5        3     as1t    speed  left  left 1.0128159
++   5        3     as1t    speed  left right 1.0072296
+-   7        4     as1t    speed  left  left 0.9078842
++   7        4     as1t    speed  left  left 0.8725135
+-   9        5     as1t    speed  left  left 0.8838565
++   9        5     as1t    speed  left  left 0.8209857
+-   11       6     as1t    speed  left  left 0.8349570
++   11       6     as1t    speed  left  left 1.1445884
+-   13       7     as1t    speed  left  left 0.8541628
++   13       7     as1t    speed  left  left 0.8586974
+and 113 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:71:3'): DDM --------------------------------
+Snapshot of code has changed:
+old[2:68] vs new[2:68]
+    init_chains(DDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples
+  Output
+    $theta_mu
+-                     [,1]
++                       [,1]
+-   v_Sleft     -0.9685927
++   v_Sleft     -2.200903490
+-   v_Sright     0.7061091
++   v_Sright    -0.684631680
+-   a            1.4890213
++   a           -0.922354936
+-   a_Eneutral  -1.8150926
++   a_Eneutral   0.007481264
+-   a_Eaccuracy  0.3304096
++   a_Eaccuracy -0.506452051
+-   t0          -1.1421557
++   t0           0.228361496
+and 57 more ...
+
+old[71:100] vs new[70:113]
+    
+    $subj_ll
+              [,1]
+-   as1t -3601.088
++   as1t -18623.31
+-   bd6t -3112.817
++   bd6t -18559.05
+    
+-   $last_theta_var_inv
++   $idx
+-              [,1]      [,2]       [,3]      [,4]       [,5]      [,6]
++   [1] 1
+-    [1,] 26.028515  6.224107 -1.3572503 -3.811330   3.070339 -3.657354
++   
+-    [2,]  6.224107 22.834612  1.1572385 -1.918507  -6.426290 -1.390907
++   $last_theta_var_inv
+and 35 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-model_functions.R:72:3'): DDM --------------------------------
+Snapshot of code has changed:
+old[2:124] vs new[2:124]
+    make_data(p_DDM, design_DDM, n_trials = 10)
+  Output
+        trials subjects        E     S     R        rt
+-   1        1     as1t    speed  left right 0.4918896
++   1        1     as1t    speed  left  left 0.3277104
+-   2        2     as1t    speed  left  left 2.1635739
++   2        2     as1t    speed  left  left 0.5322672
+-   3        3     as1t    speed  left  left 0.2698151
++   3        3     as1t    speed  left right 1.1488573
+-   4        4     as1t    speed  left  left 0.6766773
++   4        4     as1t    speed  left  left 0.5196910
+-   5        5     as1t    speed  left  left 0.3295339
++   5        5     as1t    speed  left right 0.5914356
+-   6        6     as1t    speed  left  left 0.9199389
++   6        6     as1t    speed  left  left 0.5333167
+-   7        7     as1t    speed  left  left 0.5543087
++   7        7     as1t    speed  left right 0.3395506
+and 113 more ...
+
+* Run `testthat::snapshot_accept('model_functions')` to accept the change.
+* Run `testthat::snapshot_review('model_functions')` to interactively review the change.
+-- Failure ('test-plot_pars.R:4:3'): plot_pars ---------------------------------
+Snapshot of `testcase` to 'plot_pars/density-plots.svg' has changed
+* Locate check directory
+* Copy 'tests/testthat/_snaps/plot_pars/density-plots.new.svg' to local test directory
+* Run `testthat::snapshot_review('plot_pars/')` to review changes
+Backtrace:
+    x
+ 1. \-vdiffr::expect_doppelganger(...) at test-plot_pars.R:4:3
+ 2.   +-base::withCallingHandlers(...)
+ 3.   \-testthat::expect_snapshot_file(...)
+-- Failure ('test-plot_pars.R:5:3'): plot_pars ---------------------------------
+Snapshot of `testcase` to 'plot_pars/density-alpha.svg' has changed
+* Locate check directory
+* Copy 'tests/testthat/_snaps/plot_pars/density-alpha.new.svg' to local test directory
+* Run `testthat::snapshot_review('plot_pars/')` to review changes
+Backtrace:
+    x
+ 1. \-vdiffr::expect_doppelganger(...) at test-plot_pars.R:5:3
+ 2.   +-base::withCallingHandlers(...)
+ 3.   \-testthat::expect_snapshot_file(...)
+-- Failure ('test-plot_fit.R:10:3'): plot_fit ----------------------------------
+Snapshot of `testcase` to 'plot_fit/dens-plot-fit.svg' has changed
+* Locate check directory
+* Copy 'tests/testthat/_snaps/plot_fit/dens-plot-fit.new.svg' to local test directory
+* Run `testthat::snapshot_review('plot_fit/')` to review changes
+Backtrace:
+    x
+ 1. \-vdiffr::expect_doppelganger(...) at test-plot_fit.R:10:3
+ 2.   +-base::withCallingHandlers(...)
+ 3.   \-testthat::expect_snapshot_file(...)
+-- Failure ('test-plot_fit.R:11:3'): plot_fit ----------------------------------
+Snapshot of `testcase` to 'plot_fit/stat-plot-fit.svg' has changed
+* Locate check directory
+* Copy 'tests/testthat/_snaps/plot_fit/stat-plot-fit.new.svg' to local test directory
+* Run `testthat::snapshot_review('plot_fit/')` to review changes
+Backtrace:
+    x
+ 1. \-vdiffr::expect_doppelganger(...) at test-plot_fit.R:11:3
+ 2.   +-base::withCallingHandlers(...)
+ 3.   \-testthat::expect_snapshot_file(...)
+-- Failure ('test-trend.R:41:3'): trend ----------------------------------------
+Snapshot of code has changed:
+     old                 | new                                
+ [4]   $alpha            |   $alpha             [4]           
+ [5]   , , 1             |   , , 1              [5]           
+ [6]                     |                      [6]           
+ [7]                   1 -                    1 [7]           
+ [8]   m      -0.9685927 -   m      -1.36774406 [8]           
+ [9]   m_lMd   0.7061091 -   m_lMd   0.46788378 [9]           
+[10]   s       1.4890213 -   s       0.09752209 [10]          
+[11]   t0     -1.8150926 -   t0     -1.14520023 [11]          
+[12]   m.d_ei  0.3304096 -   m.d_ei -0.35773166 [12]          
+[13]   m.w    -1.1421557 -   m.w    -0.41101991 [13]          
+ ... ...                   ...                  and 3 more ...
+
+     old          | new                                  
+[21]   1 -77.5491 -                       [18]           
+                  -   $subj_ll            [19]           
+                  -         [,1]          [20]           
+                  -   1 -142.361          [21]           
+                  -                       [22]           
+                  -   $idx                [23]           
+                  -   [1] 1               [24]           
+                  -                       [25]           
+                  -   attr(,"rng")        [26]           
+                  -   attr(,"rng")$engine [27]           
+ ... ...            ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:66:3'): trend_shared ---------------------------------
+Snapshot of code has changed:
+     old                     | new                                   
+ [5]   , , 1                 |   , , 1                 [5]           
+ [6]                         |                         [6]           
+ [7]                       1 |                       1 [7]           
+ [8]   m          -0.9685927 -   m          -0.3577317 [8]           
+ [9]   m_lMd       0.7061091 -   m_lMd      -0.4110199 [9]           
+[10]   s           1.4890213 -   s           0.5610492 [10]          
+[11]   t0         -1.8150926 -   t0         -0.4639669 [11]          
+[12]   m.d_ei      0.3304096 -   m.d_ei     -1.0441508 [12]          
+[13]   m_lMd.d_pd -1.1421557 -   m_lMd.d_pd -1.2839131 [13]          
+[14]   m.w         0.1571934 -   m.w        -0.4741711 [14]          
+ ... ...                       ...                     and 4 more ...
+
+     old           | new                           
+[22]          [,1] -   [1] "init"   [19]           
+[23]   1 -116.3506 -                [20]           
+                   -   $subj_ll     [21]           
+                   -         [,1]   [22]           
+                   -   1 -437.165   [23]           
+                   -                [24]           
+                   -   $idx         [25]           
+                   -   [1] 1        [26]           
+                   -                [27]           
+                   -   attr(,"rng") [28]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:86:3'): premap trend works ---------------------------
+Snapshot of code has changed:
+     old                       | new                                      
+ [4]   $alpha                  |   $alpha                   [4]           
+ [5]   , , 1                   |   , , 1                    [5]           
+ [6]                           |                            [6]           
+ [7]                         1 -                          1 [7]           
+ [8]   m            -0.9685927 -   m             0.63254892 [8]           
+ [9]   m_lMd         0.7061091 -   m_lMd        -1.48897661 [9]           
+[10]   s             1.4890213 -   s            -0.29546742 [10]          
+[11]   t0           -1.8150926 -   t0           -1.36774406 [11]          
+[12]   m_lMd.d1      0.3304096 -   m_lMd.d1      0.46788378 [12]          
+[13]   m_lMd.d1_lR2 -1.1421557 -   m_lMd.d1_lR2  0.09752209 [13]          
+ ... ...                         ...                        and 6 more ...
+
+     old           | new                           
+[23]          [,1] -   [1] "init"   [20]           
+[24]   1 -41.33223 -                [21]           
+                   -   $subj_ll     [22]           
+                   -         [,1]   [23]           
+                   -   1 -254.027   [24]           
+                   -                [25]           
+                   -   $idx         [26]           
+                   -   [1] 1        [27]           
+                   -                [28]           
+                   -   attr(,"rng") [29]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:106:3'): pretransform trend works --------------------
+Snapshot of code has changed:
+     old                   | new                                  
+ [4]   $alpha              |   $alpha               [4]           
+ [5]   , , 1               |   , , 1                [5]           
+ [6]                       |                        [6]           
+ [7]                     1 -                      1 [7]           
+ [8]   m       -0.96859273 -   m       -2.200903490 [8]           
+ [9]   m_lMd    0.70610908 -   m_lMd   -0.684631680 [9]           
+[10]   s        1.48902132 -   s       -0.922354936 [10]          
+[11]   t0      -1.81509255 -   t0       0.007481264 [11]          
+[12]   s.w      0.33040958 -   s.w     -0.506452051 [12]          
+[13]   s.w_lR2 -1.14215571 -   s.w_lR2  0.228361496 [13]          
+ ... ...                     ...                    and 7 more ...
+
+     old           | new                                  
+[25]   1 -26.77631 -                       [22]           
+                   -   $subj_ll            [23]           
+                   -          [,1]         [24]           
+                   -   1 -447.3555         [25]           
+                   -                       [26]           
+                   -   $idx                [27]           
+                   -   [1] 1               [28]           
+                   -                       [29]           
+                   -   attr(,"rng")        [30]           
+                   -   attr(,"rng")$engine [31]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:129:3'): posttransform trend works -------------------
+Snapshot of code has changed:
+     old                  | new                                 
+ [4]   $alpha             |   $alpha              [4]           
+ [5]   , , 1              |   , , 1               [5]           
+ [6]                      |                       [6]           
+ [7]                    1 -                     1 [7]           
+ [8]   m       -0.9685927 -   m        0.63254892 [8]           
+ [9]   m_lMd    0.7061091 -   m_lMd   -1.48897661 [9]           
+[10]   s        1.4890213 -   s       -0.29546742 [10]          
+[11]   t0      -1.8150926 -   t0      -1.36774406 [11]          
+[12]   s.w      0.3304096 -   s.w      0.46788378 [12]          
+[13]   s.w_lR2 -1.1421557 -   s.w_lR2  0.09752209 [13]          
+ ... ...                    ...                   and 6 more ...
+
+     old           | new                                  
+[24]   1 -196.1552 -                       [21]           
+                   -   $subj_ll            [22]           
+                   -          [,1]         [23]           
+                   -   1 -311.7646         [24]           
+                   -                       [25]           
+                   -   $idx                [26]           
+                   -   [1] 1               [27]           
+                   -                       [28]           
+                   -   attr(,"rng")        [29]           
+                   -   attr(,"rng")$engine [30]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:149:3'): different trend base functions work ---------
+Snapshot of code has changed:
+     old                 | new                               
+ [5]   , , 1             |   , , 1             [5]           
+ [6]                     |                     [6]           
+ [7]                   1 |                   1 [7]           
+ [8]   m      -0.9685927 -   m      -0.3577317 [8]           
+ [9]   m_lMd   0.7061091 -   m_lMd  -0.4110199 [9]           
+[10]   s       1.4890213 -   s       0.5610492 [10]          
+[11]   t0     -1.8150926 -   t0     -0.4639669 [11]          
+[12]   m.d_ei  0.3304096 -   m.d_ei -1.0441508 [12]          
+[13]   s.d_ed -1.1421557 -   s.d_ed -1.2839131 [13]          
+[14]   m.w     0.1571934 -   m.w    -0.4741711 [14]          
+ ... ...                   ...                 and 4 more ...
+
+     old           | new                                  
+[23]   1 -62.64883 -                       [20]           
+                   -   $subj_ll            [21]           
+                   -          [,1]         [22]           
+                   -   1 -351.5437         [23]           
+                   -                       [24]           
+                   -   $idx                [25]           
+                   -   [1] 1               [26]           
+                   -                       [27]           
+                   -   attr(,"rng")        [28]           
+                   -   attr(,"rng")$engine [29]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:170:3'): polynomial trends work ----------------------
+Snapshot of code has changed:
+     old                 | new                               
+ [5]   , , 1             |   , , 1             [5]           
+ [6]                     |                     [6]           
+ [7]                   1 |                   1 [7]           
+ [8]   m     -0.96859273 -   m     -0.29546742 [8]           
+ [9]   m_lMd  0.70610908 -   m_lMd -1.36774406 [9]           
+[10]   s      1.48902132 -   s      0.46788378 [10]          
+[11]   t0    -1.81509255 -   t0     0.09752209 [11]          
+[12]   m.d1   0.33040958 -   m.d1  -1.14520023 [12]          
+[13]   m.d2  -1.14215571 -   m.d2  -0.35773166 [13]          
+[14]   m.d3   0.15719342 -   m.d3  -0.41101991 [14]          
+ ... ...                   ...                 and 7 more ...
+
+     old           | new                                  
+[26]   1 -167.7708 -                       [23]           
+                   -   $subj_ll            [24]           
+                   -          [,1]         [25]           
+                   -   1 -442.6779         [26]           
+                   -                       [27]           
+                   -   $idx                [28]           
+                   -   [1] 1               [29]           
+                   -                       [30]           
+                   -   attr(,"rng")        [31]           
+                   -   attr(,"rng")$engine [32]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:198:3'): phase-specific trends work (premap, pretransform, posttransform) --
+Snapshot of code has changed:
+     old                  | new                                
+ [5]   , , 1              |   , , 1              [5]           
+ [6]                      |                      [6]           
+ [7]                    1 |                    1 [7]           
+ [8]   m       -0.9685927 -   m        0.5610492 [8]           
+ [9]   m_lMd    0.7061091 -   m_lMd   -0.4639669 [9]           
+[10]   s        1.4890213 -   s       -1.0441508 [10]          
+[11]   t0      -1.8150926 -   t0      -1.2839131 [11]          
+[12]   s.d_ed   0.3304096 -   s.d_ed  -0.4741711 [12]          
+[13]   t0.d_pi -1.1421557 -   t0.d_pi  0.4473851 [13]          
+[14]   m.w      0.1571934 -   m.w     -1.6782806 [14]          
+ ... ...                    ...                  and 5 more ...
+
+     old           | new                           
+[23]          [,1] -   [1] "init"   [20]           
+[24]   1 -308.3678 -                [21]           
+                   -   $subj_ll     [22]           
+                   -         [,1]   [23]           
+                   -   1 -368.254   [24]           
+                   -                [25]           
+                   -   $idx         [26]           
+                   -   [1] 1        [27]           
+                   -                [28]           
+                   -   attr(,"rng") [29]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:218:3'): par_input trend uses t0 as input to m trend --
+Snapshot of code has changed:
+     old                | new                              
+ [5]   , , 1            |   , , 1            [5]           
+ [6]                    |                    [6]           
+ [7]                  1 |                  1 [7]           
+ [8]   m     -0.9685927 -   m      0.2283615 [8]           
+ [9]   m_lMd  0.7061091 -   m_lMd -0.7077546 [9]           
+[10]   s      1.4890213 -   s     -0.6641719 [10]          
+[11]   t0    -1.8150926 -   t0    -0.6424486 [11]          
+[12]   m.w    0.3304096 -   m.w    0.6325489 [12]          
+[13]                    |                    [13]          
+[14]                    |                    [14]          
+ ... ...                  ...                and 1 more ...
+
+     old           | new                                  
+[20]   1 -32.93429 -                       [17]           
+                   -   $subj_ll            [18]           
+                   -          [,1]         [19]           
+                   -   1 -349.7577         [20]           
+                   -                       [21]           
+                   -   $idx                [22]           
+                   -   [1] 1               [23]           
+                   -                       [24]           
+                   -   attr(,"rng")        [25]           
+                   -   attr(,"rng")$engine [26]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:240:3'): share works premap trend --------------------
+Snapshot of code has changed:
+     old                 | new                                
+ [4]   $alpha            |   $alpha             [4]           
+ [5]   , , 1             |   , , 1              [5]           
+ [6]                     |                      [6]           
+ [7]                   1 -                    1 [7]           
+ [8]   m     -0.53711605 -   m     -2.200903490 [8]           
+ [9]   m_lMd -0.01260453 -   m_lMd -0.684631680 [9]           
+[10]   s      0.17625437 -   s     -0.922354936 [10]          
+[11]   t0    -1.58368027 -   t0     0.007481264 [11]          
+[12]   shrd   0.46779179 -   shrd  -0.506452051 [12]          
+[13]   m.d2   1.19461175 -   m.d2   0.228361496 [13]          
+ ... ...                   ...                  and 7 more ...
+
+     old           | new                           
+[24]          [,1] -   [1] "init"   [21]           
+[25]   1 -155.3032 -                [22]           
+                   -   $subj_ll     [23]           
+                   -         [,1]   [24]           
+                   -   1 -460.517   [25]           
+                   -                [26]           
+                   -   $idx         [27]           
+                   -   [1] 1        [28]           
+                   -                [29]           
+                   -   attr(,"rng") [30]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:261:3'): share works posttransform trend -------------
+Snapshot of code has changed:
+     old                 | new                                
+ [5]   $alpha            |   $alpha             [5]           
+ [6]   , , 1             |   , , 1              [6]           
+ [7]                     |                      [7]           
+ [8]                   1 -                    1 [8]           
+ [9]   m     -0.53711605 -   m     -2.200903490 [9]           
+[10]   m_lMd -0.01260453 -   m_lMd -0.684631680 [10]          
+[11]   s      0.17625437 -   s     -0.922354936 [11]          
+[12]   t0    -1.58368027 -   t0     0.007481264 [12]          
+[13]   shrd   0.46779179 -   shrd  -0.506452051 [13]          
+[14]   m.d2   1.19461175 -   m.d2   0.228361496 [14]          
+ ... ...                   ...                  and 7 more ...
+
+     old           | new                           
+[25]          [,1] -   [1] "init"   [22]           
+[26]   1 -81.23054 -                [23]           
+                   -   $subj_ll     [24]           
+                   -         [,1]   [25]           
+                   -   1 -460.517   [26]           
+                   -                [27]           
+                   -   $idx         [28]           
+                   -   [1] 1        [29]           
+                   -                [30]           
+                   -   attr(,"rng") [31]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:316:3'): trend_multiple ------------------------------
+Snapshot of code has changed:
+     old                       | new                                      
+ [4]   $alpha                  |   $alpha                   [4]           
+ [5]   , , 1                   |   , , 1                    [5]           
+ [6]                           |                            [6]           
+ [7]                         1 -                          1 [7]           
+ [8]   m            -0.9685927 -   m             0.63254892 [8]           
+ [9]   m_lMd         0.7061091 -   m_lMd        -1.48897661 [9]           
+[10]   s             1.4890213 -   s            -0.29546742 [10]          
+[11]   t0           -1.8150926 -   t0           -1.36774406 [11]          
+[12]   m.d_ei        0.3304096 -   m.d_ei        0.46788378 [12]          
+[13]   m.q0         -1.1421557 -   m.q0          0.09752209 [13]          
+ ... ...                         ...                        and 6 more ...
+
+     old           | new                                  
+[24]   1 -70.30806 -                       [21]           
+                   -   $subj_ll            [22]           
+                   -          [,1]         [23]           
+                   -   1 -323.6487         [24]           
+                   -                       [25]           
+                   -   $idx                [26]           
+                   -   [1] 1               [27]           
+                   -                       [28]           
+                   -   attr(,"rng")        [29]           
+                   -   attr(,"rng")$engine [30]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-trend.R:357:3'): trend_covmap --------------------------------
+Snapshot of code has changed:
+     old                   | new                                 
+ [5]   , , 1               |   , , 1               [5]           
+ [6]                       |                       [6]           
+ [7]                     1 |                     1 [7]           
+ [8]   m        -0.9685927 -   m        -0.3577317 [8]           
+ [9]   m_lMd     0.7061091 -   m_lMd    -0.4110199 [9]           
+[10]   s         1.4890213 -   s         0.5610492 [10]          
+[11]   t0       -1.8150926 -   t0       -0.4639669 [11]          
+[12]   m.q0      0.3304096 -   m.q0     -1.0441508 [12]          
+[13]   m.alpha  -1.1421557 -   m.alpha  -1.2839131 [13]          
+[14]   m.w_map1  0.1571934 -   m.w_map1 -0.4741711 [14]          
+ ... ...                     ...                   and 4 more ...
+
+     old           | new                                  
+[23]   1 -23.19228 -                       [20]           
+                   -   $subj_ll            [21]           
+                   -          [,1]         [22]           
+                   -   1 -414.5588         [23]           
+                   -                       [24]           
+                   -   $idx                [25]           
+                   -   [1] 1               [26]           
+                   -                       [27]           
+                   -   attr(,"rng")        [28]           
+                   -   attr(,"rng")$engine [29]           
+ ... ...             ...                   and 11 more ...
+
+* Run `testthat::snapshot_accept('trend')` to accept the change.
+* Run `testthat::snapshot_review('trend')` to interactively review the change.
+-- Failure ('test-variant_funs.R:33:3'): run_diag ------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:8] vs new[2:8]
+    LNR_diag[[1]]$samples$alpha[, , idx]
+  Output
+                as1t       bd6t
+-   m     -0.8378073 -0.9872863
++   m     -0.8742363 -0.9785764
+-   m_lMd -0.2876366 -0.5898393
++   m_lMd -0.2965658 -0.5602339
+-   s     -1.0249672 -0.6047458
++   s     -0.9798234 -0.4843890
+-   t0    -2.3783442 -1.7427491
++   t0    -2.1389809 -1.7534901
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:36:3'): run_diag ------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:5] vs new[2:5]
+    LNR_diag[[1]]$samples$theta_mu[, idx]
+  Output
+             m      m_lMd          s         t0 
+-   -0.9743222 -0.6134234 -0.7679532 -2.2539005 
++   -0.9890690 -0.4104113 -0.8712380 -2.3921945 
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:39:3'): run_diag ------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old vs new
+  Code
+    LNR_diag[[1]]$samples$theta_var[, , idx]
+  Output
+-                  m      m_lMd          s       t0
++                  m      m_lMd         s        t0
+-   m     0.02531788 0.00000000 0.00000000 0.000000
++   m     0.09954155 0.00000000 0.0000000 0.0000000
+-   m_lMd 0.00000000 0.09894308 0.00000000 0.000000
++   m_lMd 0.00000000 0.07862346 0.0000000 0.0000000
+-   s     0.00000000 0.00000000 0.03923812 0.000000
++   s     0.00000000 0.00000000 0.1577758 0.0000000
+-   t0    0.00000000 0.00000000 0.00000000 0.106451
++   t0    0.00000000 0.00000000 0.0000000 0.2433913
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:42:3'): run_diag ------------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:7] vs new[2:7]
+    compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
+  Output
+           MD wMD WAIC wWAIC  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+-   diag -579   1 9762     1 1090    1 1965     1        875   215  -614 -661
++   diag -561   1  435     1 -101    1  176     1        277  -378  -588 -655
+  Message
+    p_waic produced warnings, use waic_warnings() to inspect
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:57:3'): run_blocked ---------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:8] vs new[2:8]
+    LNR_blocked[[1]]$samples$alpha[, , idx]
+  Output
+                as1t       bd6t
+-   m     -0.9668625 -1.0003825
++   m     -1.1233175 -0.9066997
+-   m_lMd -0.2819924 -0.5445420
++   m_lMd -0.5929587 -0.6799364
+-   s     -0.8501189 -0.5963007
++   s     -0.2405244 -0.2725696
+-   t0    -1.9733013 -1.7466873
++   t0    -1.5216516 -1.6350518
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:60:3'): run_blocked ---------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:5] vs new[2:5]
+    LNR_blocked[[1]]$samples$theta_mu[, idx]
+  Output
+             m      m_lMd          s         t0 
+-   -1.0052941 -1.5321301 -0.9540201 -1.8960213 
++   -1.1927461 -0.3426858 -0.2197650 -1.7439733 
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:63:3'): run_blocked ---------------------------
+Snapshot of code has changed (variant 'Linux'):
+old vs new
+  Code
+    LNR_blocked[[1]]$samples$theta_var[, , idx]
+  Output
+-                   m     m_lMd          s         t0
++                 m    m_lMd             s            t0
+-   m     0.003426314 0.0000000 0.00000000 0.00000000
++   m     0.1389807 0.000000  0.0000000000  0.0000000000
+-   m_lMd 0.000000000 0.7972991 0.00000000 0.00000000
++   m_lMd 0.0000000 0.109167  0.0000000000  0.0000000000
+-   s     0.000000000 0.0000000 0.02009918 0.02058433
++   s     0.0000000 0.000000  0.0098177839 -0.0004267608
+-   t0    0.000000000 0.0000000 0.02058433 0.04993745
++   t0    0.0000000 0.000000 -0.0004267608  0.0366649592
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:66:3'): run_blocked ---------------------------
+Snapshot of code has changed (variant 'Linux'):
+old vs new
+  Code
+    compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
+  Output
+-             MD wMD  WAIC wWAIC  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
++            MD wMD WAIC wWAIC  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+-   blocked -527   1 68786     1 6464    1 10029     1       3565  2899  -620 -665
++   blocked -92   1 1107     1 1061    1 1908     1        847   214   -11 -632
+  Message
+    p_waic produced warnings, use waic_warnings() to inspect
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:80:3'): run_single ----------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:8] vs new[2:8]
+    LNR_single[[1]]$samples$alpha[, , idx]
+  Output
+                as1t       bd6t
+-   m     -1.0064461 -0.7239915
++   m     -0.7366292 -1.1336370
+-   m_lMd -0.3903504 -0.8186065
++   m_lMd -0.3021742 -0.4370055
+-   s     -0.5314815 -0.2610311
++   s     -0.9945926 -0.3421105
+-   t0    -1.6904537 -1.8390487
++   t0    -2.5239522 -1.5081425
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+-- Failure ('test-variant_funs.R:83:3'): run_single ----------------------------
+Snapshot of code has changed (variant 'Linux'):
+old[2:7] vs new[2:7]
+    compare(list(single = LNR_single), stage = "preburn", cores_for_props = 1)
+  Output
+             MD wMD WAIC wWAIC DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+-   single -390   1 1089     1 312    1  733     1        421  -109  -463 -530
++   single -391   1  330     1 275    1  721     1        446  -171  -464 -618
+  Message
+    p_waic produced warnings, use waic_warnings() to inspect
+
+* Run `testthat::snapshot_accept('Linux/variant_funs')` to accept the change.
+* Run `testthat::snapshot_review('Linux/variant_funs')` to interactively review the change.
+
+[ FAIL 58 | WARN 0 | SKIP 0 | PASS 343 ]
+Error: Test failures
+Execution halted
+
+1 error x | 2 warnings x | 4 notes x
+
+ERRORS 1 WARNINGS 2 NOTES 4 

@@ -1,0 +1,54 @@
+EMC2 from: /opt/emc2/lib-8b257e3d/EMC2 
+
+==== test-resume.R (from PR #202) ====
+resume: .....1Processing data set 1
+......
+
+== Failed ======================================================================
+-- 1. Error ('test-resume.R:15:3'): particle settings are resized to the kernel 
+Error in `EMC2:::resolve_on_singular(list(max_retries = 2, on_exhausted = "carry_forward"))`: unknown `on_singular` field(s): on_exhausted. Valid fields: max_retries
+Backtrace:
+    x
+ 1. +-testthat::expect_warning(...) at test-resume.R:15:3
+ 2. | \-testthat:::expect_condition_matching(...)
+ 3. |   \-testthat:::quasi_capture(...)
+ 4. |     +-testthat (local) .capture(...)
+ 5. |     | \-base::withCallingHandlers(...)
+ 6. |     \-rlang::eval_bare(quo_get_expr(.quo), quo_get_env(.quo))
+ 7. \-EMC2:::resolve_on_singular(list(max_retries = 2, on_exhausted = "carry_forward"))
+
+== DONE ========================================================================
+           file context                                        test nb failed
+1 test-resume.R  resume particle settings are resized to the kernel  5      0
+2 test-resume.R  resume     more adapt after the sample-kernel tail  6      0
+  skipped error warning  user system  real passed
+1   FALSE  TRUE       0 0.113   0.00 0.115      5
+2   FALSE FALSE       0 2.151   0.11 2.036      6
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    result
+1                `mix` has length 3, not length 3., 10, 3, 10, 23, 3, 23, 10, 10, 36, 37, particle settings are resized to the kernel, sum(mix) (`actual`) not equal to 1 (`expected`).\n\n, 11, 3, 11, 27, 3, 27, 11, 11, 36, 38, particle settings are resized to the kernel, EMC2:::check_epsilon(c(0.5, 0.6, 0.7), 10, mix) has length 2, not length 2., 12, 3, 12, 64, 3, 64, 12, 12, 36, 37, particle settings are resized to the kernel, EMC2:::check_prop_performance(c(1, 2, 3, 4), "sample") has length 4, not length 4., 13, 3, 13, 74, 3, 74, 13, 13, 36, 37, particle settings are resized to the kernel, EMC2:::check_prop_performance(c(1, 2, 3, 4), "burn") has length 3, not length 3., 14, 3, 14, 72, 3, 72, 14, 14, 36, 37, particle settings are resized to the kernel
+2 attr(emc[[1]]$samples, "pm_settings")[[1]][[1]]$mix has length 4, not length 4., 32, 3, 32, 71, 3, 71, 32, 32, 36, 37, more adapt after the sample-kernel tail, is.null(emc[[1]]$sample_kernel) is not FALSE\n\n, 33, 3, 33, 47, 3, 47, 33, 33, 36, 38, more adapt after the sample-kernel tail, Success has been forced, 35, 3, 35, 102, 3, 102, 35, 35, 36, 39, more adapt after the sample-kernel tail, chain_n(more)[1, "adapt"] is not strictly more than `n_adapt`. Difference: 300, 36, 3, 36, 47, 3, 47, 36, 36, 36, 38, more adapt after the sample-kernel tail, Success has been forced, 37, 3, 37, 97, 3, 97, 37, 37, 36, 39, more adapt after the sample-kernel tail, Success has been forced, 40, 3, 40, 95, 3, 95, 40, 40, 36, 39, more adapt after the sample-kernel tail
+
+==== test-omp-fork.R (from PR #202) ====
+omp-fork: 1Processing data set 1
+..
+
+== Failed ======================================================================
+-- 1. Error ('test-omp-fork.R:9:3'): the OpenMP runtime is reported and the pool
+Error in `eval(code, test_env)`: object 'omp_runtime' not found
+
+== DONE ========================================================================
+             file  context
+1 test-omp-fork.R omp-fork
+2 test-omp-fork.R omp-fork
+                                                                 test nb failed
+1 the OpenMP runtime is reported and the pool release is libgomp-only  0      0
+2               a threaded run, then threaded runs in forked children  2      0
+  skipped error warning  user system  real passed
+1   FALSE  TRUE       0 0.009  0.000 0.010      0
+2   FALSE FALSE       0 0.243  0.012 0.387      2
+                                                                                                                                                                                                                                                                                                                                      result
+1                                                                                                                                                                                                                                                                                                                                       NULL
+2 forked children returned (no hang) is not FALSE\n\n, 34, 3, 34, 74, 3, 74, 34, 34, 36, 38, a threaded run, then threaded runs in forked children, unlist(res[[1]]) (`actual`) not equal to rep(emc[[1]]$samples$idx + 5, 2) (`expected`).\n\n, 36, 3, 36, 66, 3, 66, 36, 36, 36, 38, a threaded run, then threaded runs in forked children
+
+==== fork hang check without the helper functions: threaded run, then mclapply fits ====
+forked children returned: TRUE  after 0 s; result: 11,11  expected: 11 

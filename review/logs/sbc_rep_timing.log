@@ -1,0 +1,75 @@
+EMC2 from: /opt/emc2/lib-8b257e3d/EMC2 
+
+ Sampled Parameters: 
+[1] "v"        "v_lMTRUE" "B"        "t0"       "A"       
+
+ Design Matrices: 
+$v
+    lM v v_lMTRUE
+  TRUE 1        1
+ FALSE 1        0
+
+$B
+ B
+ 1
+
+$t0
+ t0
+  1
+
+$sv
+ sv
+  1
+
+$A
+ A
+ 1
+
+
+ Sampled Parameters: 
+[1] "v"   "a"   "t0"  "Z"   "sv"  "SZ"  "st0"
+
+ Design Matrices: 
+$v
+ v
+ 1
+
+$a
+ a
+ 1
+
+$t0
+ t0
+  1
+
+$s
+ s
+ 1
+
+$Z
+ Z
+ 1
+
+$sv
+ sv
+  1
+
+$SZ
+ SZ
+  1
+
+$st0
+ st0
+   1
+
+Running data set 1
+LBA_vignette: one replicate (20 subjects, 100 trials/cell, 3 chains x 1 core) took 2.1 min; rank_mu: 0.0367245454988649 0.939300826567874 0.0202980698202431 0.881664934627028 0.615983599412508
+  wrote: rep_1.rds 1,220 bytes
+Warning message:
+In par(oldpar) : calling par(new=TRUE) with no plot
+Running data set 1
+DDM_Z_vignette: one replicate (20 subjects, 100 trials/cell, 3 chains x 1 core) took 52.1 min; rank_mu: 0.0765203729624973 0.25573271423528 0.2911675839697 0.870737529752383 0.625311873834975 0.195920745668092 0.940512394471502
+  wrote: rep_1.rds 1,574 bytes
+Warning messages:
+1: In par(oldpar) : calling par(new=TRUE) with no plot
+2: In par(oldpar) : calling par(new=TRUE) with no plot

@@ -1,0 +1,150 @@
+Starting 2 test processes
+RACE: 
+SEM: .................
+S3: 1....
+circular_models: .23456.789
+choice: abcdefgh
+fMRI: .i
+fit: jkl
+compare: ...
+joint: m
+group: ....n
+kernels: .....................
+make_design: ..
+make_emc: .....
+likelihoods: ...............
+memory_saver: ..
+map: .....................
+pairs_posterior: .
+plot_chains: .
+model_functions: opqrstuv
+plot_pars: wx
+plot_relations: ..
+plot_fit: .yz
+plot_ss_if: .
+plot_ss_srrt: .
+profile: .
+recover_SBC: .........................................
+sample-kernel: ............
+sbc_robust: ......
+stop-rule: ..
+stopS-cens: ...................................
+sbc_calibration_pvalues: .................
+stopS: ....................................................
+trend: ABCDEFGHIJK.LM
+variant_funs: NOPQRSTUVW
+stopS-trend: ........................................................................
+
+== Failed ======================================================================
+-- 1. Failure ('test-S3.R:8:3'): priorS3 ---------------------------------------
+Snapshot of code has changed:
+old[2:10] vs new[2:10]
+    prior
+  Output
+    Mean and variance of the prior on the transformed parameters: 
+-   m ~ <U+0001D441>(0, 1)
++   m ~ <U+0001D441>(0, 1)
+-   m_lMd ~ <U+0001D441>(0, 1)
++   m_lMd ~ <U+0001D441>(0, 1)
+-   s ~ <U+0001D441>(0, 1)
++   s ~ <U+0001D441>(0, 1)
+-   t0 ~ <U+0001D441>(0, 1)
++   t0 ~ <U+0001D441>(0, 1)
+    
+    For detailed info use summary(<prior>)
+
+* Run `testthat::snapshot_accept('S3')` to accept the change.
+* Run `testthat::snapshot_review('S3')` to interactively review the change.
+
+-- 2. Failure ('test-circular_models.R:35:3'): CDM simulates and initializes ---
+Snapshot of code has changed:
+     old                | new                              
+ [5]   , , 1            |   , , 1            [5]           
+ [6]                    |                    [6]           
+ [7]                  1 |                  1 [7]           
+ [8]   v      0.6730084 -   v      0.6932240 [8]           
+ [9]   theta  0.1647118 -   theta  0.1113893 [9]           
+[10]   a     -0.2286852 -   a      1.9223461 [10]          
+[11]   t0    -0.4854718 -   t0    -0.4194931 [11]          
+[12]   s     -0.3349777 -   s     -0.6502625 [12]          
+[13]   sv     0.3168479 -   sv     0.6248522 [13]          
+[14]                    |                    [14]          
+ ... ...                  ...                and 2 more ...
+
+     old           | new                           
+[20]          [,1] -   [1] "init"   [17]           
+[21]   1 -47.61282 -                [18]           
+                   -   $subj_ll     [19]           
+                   -         [,1]   [20]           
+                   -   1 940.4575   [21]           
+                   -                [22]           
+                   -   $idx         [23]           
+                   -   [1] 1        [24]           
+                   -                [25]           
+                   -   attr(,"rng") [26]           
+ ... ...             ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+
+-- 3. Failure ('test-circular_models.R:41:3'): SDM simulates and initializes ---
+Snapshot of code has changed:
+old vs new
+  Code
+    sdm_data
+  Output
+-     trials subjects         R        rt        R2
++     trials subjects         R        rt         R2
+-   1      1        1 0.8859462 0.6333035 2.6895510
++   1      1        1 1.8818365 0.4143769  1.1943024
+-   2      2        1 1.2606809 0.3453745 0.4989501
++   2      2        1 0.8412711 0.2884618  2.0282985
+-   3      3        1 1.1413576 0.5874518 2.2878413
++   3      3        1 2.0069796 0.4088464  0.5811047
+-   4      4        1 2.1124296 0.4434894 1.9875732
++   4      4        1 2.8849888 0.5791998 -1.6205748
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+
+-- 4. Failure ('test-circular_models.R:42:3'): SDM simulates and initializes ---
+Snapshot of code has changed:
+     old                 | new                               
+ [5]   , , 1             |   , , 1             [5]           
+ [6]                     |                     [6]           
+ [7]                   1 |                   1 [7]           
+ [8]   v       0.2905103 -   v      -0.3284776 [8]           
+ [9]   theta1  0.4004717 -   theta1 -0.4872888 [9]           
+[10]   theta2 -1.9158174 -   theta2  1.1088965 [10]          
+[11]   a       0.5236415 -   a      -1.0897344 [11]          
+[12]   t0      2.6656195 -   t0     -1.7426924 [12]          
+[13]   s       1.0530416 -   s      -0.6733382 [13]          
+[14]   sv     -1.4946516 -   sv     -0.8024253 [14]          
+ ... ...                   ...                 and 3 more ...
+
+     old          | new                           
+[21]         [,1] -   [1] "init"   [18]           
+[22]   1 -92.1034 -                [19]           
+                  -   $subj_ll     [20]           
+                  -          [,1]  [21]           
+                  -   1 -9.519611  [22]           
+                  -                [23]           
+                  -   $idx         [24]           
+                  -   [1] 1        [25]           
+                  -                [26]           
+                  -   attr(,"rng") [27]           
+ ... ...            ...            and 12 more ...
+
+* Run `testthat::snapshot_accept('circular_models')` to accept the change.
+* Run `testthat::snapshot_review('circular_models')` to interactively review the change.
+
+-- 5. Failure ('test-circular_models.R:48:3'): HSDM simulates and initializes --
+Snapshot of code has changed:
+old vs new
+  Code
+    hsdm_data
+  Output
+-     trials subjects        R        rt        R2         R3
++     trials subjects        R        rt        R2        R3
+-   1      1        1 1.821304 0.3140800 1.7436259 -0.1250342
++   1      1        1 0.574094 0.3913082 0.7128921 0.8010675

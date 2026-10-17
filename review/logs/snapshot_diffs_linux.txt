@@ -1,0 +1,52 @@
+=== diff choice.md choice.new.md (first 12 lines)
+9,14c9,14
+<                               1
+<       location_Slow  -0.7422707
+<       location_Smid   0.7732297
+<       location_Shigh  0.6825030
+<       cut_lRlow      -0.2179361
+<       cut_lRmid      -0.6387820
+---
+>                                 1
+>       location_Slow   0.632994088
+>       location_Smid   0.823194736
+>       location_Shigh -0.020759102
+=== diff Linux/fit.md Linux/fit.new.md (first 12 lines)
+7c7
+<       -0.6308263 -0.4802072 -0.7449961 -1.9080191 
+---
+>       -1.0824472 -0.6007791 -0.3123476 -1.4008726 
+15,18c15,18
+<       m     -0.8307674 -0.9766605
+<       m_lMd -0.3306725 -0.5221614
+<       s     -0.9839537 -0.5429114
+<       t0    -2.3930315 -1.7182731
+---
+>       m     -0.8787994 -1.0039270
+>       m_lMd -0.3360241 -0.6691432
+=== diff joint.md joint.new.md (first 12 lines)
+7,15c7,15
+<                     [,1]
+<       a|m     -0.9685927
+<       a|m_lMd  0.7061091
+<       a|s      1.4890213
+<       a|t0    -1.8150926
+<       b|m      0.3304096
+<       b|m_lMd -1.1421557
+<       b|s      0.1571934
+<       b|t0    -2.0654072
+---
+>                       [,1]
+=== diff group.md group.new.md (first 12 lines)
+72,80c72,80
+<       v           -1.3281425
+<       v_S1         1.0258987
+<       v_S1_age     0.2762936
+<       v_S1_group1  0.4197705
+<       a           -0.1671602
+<       a_age        0.5914033
+<       a_Eneutral   0.4708718
+<       a_Eaccuracy -2.6353917
+<       t0           0.3548543
+---
+>       v            0.6969745
