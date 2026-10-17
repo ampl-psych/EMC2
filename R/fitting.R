@@ -57,7 +57,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(is.null(stop_criteria$flat_p1)) stop_criteria$flat_p1 <- 1/3
     if(is.null(stop_criteria$flat_p2)) stop_criteria$flat_p2 <- 1/3
     if(is.null(stop_criteria$flat_quantile)) stop_criteria$flat_quantile <- c(mu = 1, alpha = .99, LL = 1, subj_ll = .99)
-    if(is.null(stop_criteria$flat_mcse)) stop_criteria$flat_mcse <- 2
+    if(is.null(stop_criteria$flat_mcse)) stop_criteria$flat_mcse <- 0
     if(stop_criteria$flat_p1 <= 0 || stop_criteria$flat_p1 > 1 || stop_criteria$flat_p2 <= 0 || stop_criteria$flat_p2 > 1)
       stop("flat_p1 and flat_p2 must be in (0, 1]")
     if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL", "subj_ll")))
@@ -236,8 +236,10 @@ run_emc <- function(emc, stage, stop_criteria,
         ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
       }
       if(!is.null(progress$flat) && length(progress$flat)){
-        ess_message <- paste0(ess_message, " | drift=", paste(sprintf("%s %.2f", names(progress$flat),
-          vapply(progress$flat, function(f) f$drift, 0)), collapse = ", "))
+        ess_message <- paste0(ess_message, " | drift(se)=", paste(sprintf("%s %.2f(%.2f)", names(progress$flat),
+          vapply(progress$flat, function(f) f$drift, 0), vapply(progress$flat, function(f) f$mcse, 0)), collapse = ", "))
+        wess <- vapply(progress$flat, function(f) if(is.null(f$ess) || !is.finite(f$ess)) Inf else f$ess, 0)
+        if(any(wess < 20 * length(emc))) ess_message <- paste0(ess_message, sprintf(" | window ESS %.0f: too short to tell a wave from a trend", min(wess)))
       }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL

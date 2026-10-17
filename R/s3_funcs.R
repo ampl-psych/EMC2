@@ -577,11 +577,16 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' differ by at most this many interquartile ranges for the group means and the summed
 #' log-likelihood (the largest drift) and for the subject parameters and per-subject
 #' log-likelihoods (their ``flat_quantile``, default the .99 quantile); ``flat_selection``
-#' (default ``c("mu", "alpha", "LL", "subj_ll")``) chooses the series. A
-#' drift within ``flat_mcse`` (default 2) Monte Carlo standard errors of zero passes, so
-#' the test cannot fail on noise alone. A value of 0.3 keeps a stage running while it is
-#' still settling. ``max_sample_iter`` (integer) keeps only the last that many draws of
-#' the sample stage, so a long run is judged on its recent window.
+#' (default ``c("mu", "alpha", "LL", "subj_ll")``) chooses the series. A value of 0.3
+#' keeps a stage running while it is still settling; on a stationary chain the test then
+#' also demands roughly 200 effective draws in the window, since smaller differences
+#' between the thirds are noise. ``flat_mcse`` (default 0, off) lets a drift within that
+#' many Monte Carlo standard errors of zero pass instead. The progress line reports each
+#' drift with its Monte Carlo error, and the window's effective sample size when that is
+#' under 20 per chain, where a slow wave and a trend cannot be told apart (see
+#' ``chain_diagnostics()``). ``max_sample_iter``
+#' (integer) keeps only the last that many draws of the sample stage, so a long run is
+#' judged on its recent window.
 #'
 #' Chains share fixed likelihood inputs in one process. Each chain has its own
 #' native RNG, seeded from R, with its state saved in the samples for resuming fits.

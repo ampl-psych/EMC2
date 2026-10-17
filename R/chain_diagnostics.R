@@ -136,8 +136,8 @@ print.emc.diagnostics <- function(x, ...){
   print(x$chains, row.names = FALSE, digits = 3)
   if(nrow(x$cells)) { cat("\nSubject-by-chain cells another chain would improve on:\n"); print(x$cells, row.names = FALSE, digits = 3) }
   else cat("\nNo subject-by-chain cell flagged.\n")
-  if(length(x$flat)) { cat("\nFlat test (drift between the first and last thirds, in IQRs; mcse in the same units):\n")
-    print(do.call(rbind, lapply(names(x$flat), function(n) data.frame(selection = n, drift = x$flat[[n]]$drift, mcse = x$flat[[n]]$mcse, worst = x$flat[[n]]$worst))), row.names = FALSE, digits = 3) }
+  if(length(x$flat)) { cat("\nFlat test (drift between the first and last thirds, in IQRs; mcse in the same units;\n  ess: effective size of the worst series over the window, summed over chains):\n")
+    print(do.call(rbind, lapply(names(x$flat), function(n) data.frame(selection = n, drift = x$flat[[n]]$drift, mcse = x$flat[[n]]$mcse, ess = x$flat[[n]]$ess, worst = x$flat[[n]]$worst))), row.names = FALSE, digits = 3) }
   if(!is.null(x$culls)) { cat("\nCulls applied:\n"); print(do.call(rbind, lapply(x$culls, as.data.frame)), row.names = FALSE) }
   invisible(x)
 }
@@ -206,13 +206,21 @@ cull_diagnostics <- function(emc, stage, cull){
 # Drift of one series: |median(first third) - median(last third)| over the
 # median of the two thirds' IQRs, and the Monte Carlo error of that
 # difference in the same units
-flat_series <- function(x, p1, p2){
-  n <- length(x); if(n < 10) return(c(drift = NA, mcse = NA))
+# One series pooled over `nch` chains iteration-major (chain varies fastest).
+# drift: |median(first part) - median(last part)| in IQRs. mcse: the Monte Carlo
+# error of that difference in the same units, with the effective sizes summed
+# over the chains' own sub-series (an interleaved series misleads the ESS
+# estimator). ess: the effective size of the whole window, summed over chains;
+# below about 20 per chain the window holds too few autocorrelation times to
+# tell a slow wave from a trend, and the mcse says so.
+flat_series <- function(x, p1, p2, nch = 1){
+  n <- length(x); if(n < 10 * nch) return(c(drift = NA, mcse = NA, ess = NA))
   a <- x[seq_len(max(1, round(n * p1)))]; b <- x[(n - max(1, round(n * p2)) + 1):n]
   iqr <- max(median(c(stats::IQR(a), stats::IQR(b))), 1e-8)
-  ess <- function(v) tryCatch(as.numeric(coda::effectiveSize(v)), error = function(e) length(v))
-  mcse <- sqrt((1.25 * sd(a))^2 / max(ess(a), 1) + (1.25 * sd(b))^2 / max(ess(b), 1)) / iqr
-  c(drift = abs(median(a) - median(b)) / iqr, mcse = mcse)
+  ess1 <- function(v) tryCatch(as.numeric(coda::effectiveSize(v)), error = function(e) length(v))
+  ess <- function(v) max(sum(vapply(seq_len(nch), function(c) ess1(v[seq(c, length(v), by = nch)]), 0)), 1)
+  mcse <- sqrt((1.25 * sd(a))^2 / ess(a) + (1.25 * sd(b))^2 / ess(b)) / iqr
+  c(drift = abs(median(a) - median(b)) / iqr, mcse = mcse, ess = ess(x))
 }
 
 # Series pooled across chains, iteration-major (the first third of every
@@ -239,7 +247,7 @@ pooled_matrix <- function(emc, selection, stage){
 }
 
 flat_diagnostics <- function(emc, stage, selection, p1, p2, quantile){
-  out <- list()
+  out <- list(); nch <- length(emc)
   for(sel in selection){
     m <- pooled_matrix(emc, sel, stage); if(is.null(m) || nrow(m) < 10) next
     if(sel %in% c("alpha", "subj_ll")){ # medians and IQRs vectorised; the Monte Carlo error from a sample of columns
@@ -247,20 +255,22 @@ flat_diagnostics <- function(emc, stage, selection, p1, p2, quantile){
       qa <- apply(a, 2, quantile, c(.25, .5, .75)); qb <- apply(b, 2, quantile, c(.25, .5, .75))
       iqr <- pmax(apply(rbind(qa[3, ] - qa[1, ], qb[3, ] - qb[1, ]), 2, median), 1e-8)
       drift <- abs(qa[2, ] - qb[2, ]) / iqr
-      cols <- unique(round(seq(1, ncol(m), length.out = min(50, ncol(m)))))
-      mcse <- median(apply(m[, cols, drop = FALSE], 2, function(x) flat_series(x, p1, p2)[["mcse"]]), na.rm = TRUE)
+      cols <- unique(c(which.max(drift), round(seq(1, ncol(m), length.out = min(50, ncol(m))))))
+      fs <- apply(m[, cols, drop = FALSE], 2, flat_series, p1 = p1, p2 = p2, nch = nch)
+      mcse <- median(fs["mcse", ], na.rm = TRUE); ess <- fs["ess", 1]
     } else {
-      fs <- apply(m, 2, flat_series, p1 = p1, p2 = p2); drift <- fs["drift", ]; mcse <- max(fs["mcse", ], na.rm = TRUE)
+      fs <- apply(m, 2, flat_series, p1 = p1, p2 = p2, nch = nch); drift <- fs["drift", ]
+      mcse <- max(fs["mcse", ], na.rm = TRUE); ess <- fs["ess", which.max(drift)]
     }
     q <- if(!is.null(quantile[sel])) quantile[[sel]] else 1
     stat <- if(q >= 1) max(drift, na.rm = TRUE) else unname(stats::quantile(drift, q, na.rm = TRUE))
-    out[[sel]] <- list(drift = stat, mcse = mcse, worst = colnames(m)[which.max(drift)], quantile = q, all = drift)
+    out[[sel]] <- list(drift = stat, mcse = mcse, ess = unname(ess), worst = colnames(m)[which.max(drift)], quantile = q, all = drift)
   }
   out
 }
 
-# TRUE when every selection's drift is within max_flat_loc, or within
-# flat_mcse Monte Carlo errors of zero (so the test cannot fail on noise alone)
+# TRUE when every selection's drift is within max_flat_loc, or (flat_mcse > 0)
+# within flat_mcse Monte Carlo errors of zero
 flat_done <- function(flat, max_flat_loc, flat_mcse){
   if(!length(flat)) return(TRUE)
   all(vapply(flat, function(f) !is.finite(f$drift) || f$drift <= max_flat_loc || f$drift <= flat_mcse * f$mcse, logical(1)))
@@ -340,3 +350,41 @@ update_cull_state <- function(state, diag, nch){
   state$cell_count <- new
   state
 }
+
+#' Thin a Fitted Object to a Target Effective Sample Size
+#'
+#' Keeps ``factor`` times ``target`` draws of ``stage`` pooled over the chains,
+#' evenly spaced, so the thinning interval is the pooled stage length over
+#' ``factor * target``. A parameter whose effective sample size is below
+#' ``factor * target`` keeps nearly all of it (its autocorrelation time exceeds the
+#' interval), one at ``target`` keeps about nine tenths for the default factor of
+#' 2, and better-mixed parameters are capped near ``factor * target``. Nothing is
+#' removed when the stage is already that short. The other stages are kept as they
+#' are. The interval and the effective sizes of ``selection`` before and after are
+#' recorded in ``emc[[1]]$thinning``.
+#'
+#' @param emc An emc object
+#' @param target Numeric. The effective sample size to retain (default 3000)
+#' @param stage Character. The stage to thin (default "sample")
+#' @param selection Character vector. Parameter types whose effective sizes are reported
+#' @param factor Numeric. Draws kept per unit of ``target`` (default 2)
+#' @return The thinned emc object
+#' @examples
+#' thinned <- thin_to_ess(samples_LNR, target = 20)
+#' thinned[[1]]$thinning
+#' @export
+thin_to_ess <- function(emc, target = 3000, stage = "sample", selection = c("mu", "alpha"), factor = 2){
+  if(!is.numeric(target) || length(target) != 1 || target <= 0) stop("`target` must be a single positive number")
+  if(!is.numeric(factor) || length(factor) != 1 || factor < 1) stop("`factor` must be a single number of at least 1")
+  selection <- selection[vapply(selection, function(s) !is.null(emc[[1]]$samples[[switch(s, mu = "theta_mu", Sigma = "theta_var", s)]]), logical(1))]
+  ess_of <- function(x) { v <- unlist(lapply(selection, function(s) ess_summary(x, selection = s, stage = stage, stat = NULL)))
+    if(!length(v)) return(c(min = NA, median = NA, max = NA)); c(min = min(v), median = stats::median(v), max = max(v)) }
+  n <- unname(chain_n(emc)[1, stage]); nch <- length(emc)
+  keep <- min(n, ceiling(factor * target / nch))
+  before <- ess_of(emc)
+  if(keep < n) emc <- subset(emc, stage = stage, length.out = keep, keep_stages = TRUE)
+  emc[[1]]$thinning <- list(stage = stage, target = target, factor = factor, n_before = n, n_after = keep,
+                            interval = n / keep, ess_before = before, ess_after = if(keep < n) ess_of(emc) else before)
+  emc
+}
+

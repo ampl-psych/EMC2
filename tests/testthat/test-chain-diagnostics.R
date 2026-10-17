@@ -19,7 +19,7 @@ test_that("cull settings are validated", {
   expect_equal(sc("burn", list(cull = list(min_window = 400)))$cull$min_window, 400)
   expect_error(sc("burn", list(max_flat_loc = .3)), "sample stage")
   s <- sc("sample", list(max_flat_loc = .3))
-  expect_equal(s$flat_selection, c("mu", "alpha", "LL", "subj_ll")); expect_equal(s$flat_mcse, 2)
+  expect_equal(s$flat_selection, c("mu", "alpha", "LL", "subj_ll")); expect_equal(s$flat_mcse, 0)
   expect_error(sc("sample", list(max_flat_loc = .3, flat_selection = "theta")), "flat_selection")
 })
 
@@ -31,6 +31,34 @@ test_that("flat statistics see drift and the flat test passes on noise", {
   expect_gt(f[["drift"]], 1)
   expect_true(EMC2:::flat_done(list(mu = list(drift = .5, mcse = .4)), .3, 2))   # within 2 mcse of zero
   expect_false(EMC2:::flat_done(list(mu = list(drift = .5, mcse = .1)), .3, 2))
+  expect_false(EMC2:::flat_done(list(mu = list(drift = .5, mcse = .4)), .3, 0))  # floor off
+})
+
+test_that("the Monte Carlo error and the window ESS are summed over the chains' own series", {
+  set.seed(2)
+  ar1 <- function(n, rho){ x <- numeric(n); x[1] <- rnorm(1); for(t in 2:n) x[t] <- rho * x[t - 1] + rnorm(1, 0, sqrt(1 - rho^2)); x }
+  pool <- function(chains) as.vector(t(sapply(chains, identity)))          # iteration-major: chain varies fastest
+  white <- pool(replicate(4, rnorm(1500), simplify = FALSE))
+  f <- EMC2:::flat_series(white, 1/3, 1/3, nch = 4)
+  expect_gt(f[["ess"]], 5000)
+  # mcse of a median difference between thirds of 2000 independent draws, in IQR units: about 1.25*sqrt(2/2000)/1.35
+  expect_lt(abs(f[["mcse"]] - 1.25 * sqrt(2 / 2000) / 1.349), .02)
+  slow <- pool(replicate(4, ar1(1500, .99), simplify = FALSE))
+  g <- EMC2:::flat_series(slow, 1/3, 1/3, nch = 4)
+  expect_lt(g[["ess"]], 150)                                               # about 4 x 1500 / 199
+  expect_gt(g[["mcse"]], 5 * f[["mcse"]])                                   # the autocorrelation is in the error
+})
+
+test_that("thin_to_ess keeps factor * target pooled draws and records what it did", {
+  e <- thin_to_ess(samples_LNR, target = 15)       # 3 chains x 50 draws; keep 2 * 15 / 3 = 10 per chain
+  expect_equal(unname(chain_n(e)[, "sample"]), rep(10, 3))
+  th <- e[[1]]$thinning
+  expect_equal(th$n_before, 50); expect_equal(th$n_after, 10); expect_equal(th$interval, 5)
+  expect_true(all(is.finite(th$ess_before))); expect_true(all(is.finite(th$ess_after)))
+  expect_lte(th$ess_after[["max"]], th$ess_before[["max"]] + 1e-8)
+  same <- thin_to_ess(samples_LNR, target = 3000)  # already shorter than 6000 pooled draws: untouched
+  expect_equal(unname(chain_n(same)[, "sample"]), rep(50, 3)); expect_equal(same[[1]]$thinning$interval, 1)
+  expect_error(thin_to_ess(samples_LNR, target = -1), "target")
 })
 
 test_that("stuck chains and subjects are found, respawned and culled", {
