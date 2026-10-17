@@ -43,7 +43,12 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   # Chain culling (burn and sample) and the flat test (sample); see ?fit
   if(!is.null(stop_criteria$cull)){
     if(!stage %in% c("burn", "sample")) stop("`cull` applies to the burn and sample stages")
+    given <- if(is.list(stop_criteria$cull)) names(stop_criteria$cull) else character(0)
     stop_criteria$cull <- cull_defaults(stop_criteria$cull)
+    # In burn a false cull costs nothing but one chain's diversity, so the
+    # comparison starts earlier there than in sample, where it restarts the stage.
+    if(!is.null(stop_criteria$cull) && stage == "burn" && !"min_window" %in% given)
+      stop_criteria$cull$min_window <- 250L
   }
   if(!is.null(stop_criteria$max_flat_loc)){
     if(stage != "sample") stop("`max_flat_loc` applies to the sample stage")

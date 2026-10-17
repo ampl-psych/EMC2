@@ -562,8 +562,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' parameters by more than ``cell_gap`` units and ``cell_z`` spreads, is flagged; once
 #' flagged on ``persistence`` consecutive checks it is respawned from a draw of a better
 #' chain. The window is the last two thirds of the stage once it holds ``min_window``
-#' iterations (a short window mistakes the chains' slow wandering for a held-apart mode),
-#' or ``window`` iterations if given. In ``sample`` the stage then restarts after
+#' iterations (500 in sample, 250 in burn, where a false cull costs nothing but one
+#' chain's diversity; a short window mistakes the chains' slow wandering for a held-apart
+#' mode), or ``window`` iterations if given. In ``sample`` the stage then restarts after
 #' ``reburn`` discarded iterations and the tries count over, at most ``max_culls`` times
 #' per stage. Defaults: ``persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5,
 #' cell_gap = 5, cell_z = 3, max_culls = 2, reburn = 100``. Culls are recorded in
