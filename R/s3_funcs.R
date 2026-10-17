@@ -573,9 +573,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``max_flat_loc`` (numeric; ``sample`` stage): the flat test. The medians of the first
 #' ``flat_p1`` and last ``flat_p2`` (default thirds) of the stage, pooled over chains, may
-#' differ by at most this many interquartile ranges for the group means (the largest
-#' drift) and the subject parameters (their ``flat_quantile``, default the .99 quantile);
-#' ``flat_selection`` (default ``c("mu", "alpha")``, also ``"LL"``) chooses the series. A
+#' differ by at most this many interquartile ranges for the group means and the summed
+#' log-likelihood (the largest drift) and for the subject parameters and per-subject
+#' log-likelihoods (their ``flat_quantile``, default the .99 quantile); ``flat_selection``
+#' (default ``c("mu", "alpha", "LL", "subj_ll")``) chooses the series. A
 #' drift within ``flat_mcse`` (default 2) Monte Carlo standard errors of zero passes, so
 #' the test cannot fail on noise alone. A value of 0.3 keeps a stage running while it is
 #' still settling. ``max_sample_iter`` (integer) keeps only the last that many draws of

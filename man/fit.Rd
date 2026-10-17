@@ -128,9 +128,10 @@ found.
 
 \code{max_flat_loc} (numeric; \code{sample} stage): the flat test. The medians of the first
 \code{flat_p1} and last \code{flat_p2} (default thirds) of the stage, pooled over chains, may
-differ by at most this many interquartile ranges for the group means (the largest
-drift) and the subject parameters (their \code{flat_quantile}, default the .99 quantile);
-\code{flat_selection} (default \code{c("mu", "alpha")}, also \code{"LL"}) chooses the series. A
+differ by at most this many interquartile ranges for the group means and the summed
+log-likelihood (the largest drift) and for the subject parameters and per-subject
+log-likelihoods (their \code{flat_quantile}, default the .99 quantile); \code{flat_selection}
+(default \code{c("mu", "alpha", "LL", "subj_ll")}) chooses the series. A
 drift within \code{flat_mcse} (default 2) Monte Carlo standard errors of zero passes, so
 the test cannot fail on noise alone. A value of 0.3 keeps a stage running while it is
 still settling. \code{max_sample_iter} (integer) keeps only the last that many draws of

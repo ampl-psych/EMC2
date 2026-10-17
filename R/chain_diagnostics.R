@@ -97,8 +97,9 @@ robust_gaps <- function(med, mad){
 #' covariance draws do not enter the comparison) is held below the other chains', (ii)
 #' subject-by-chain cells whose parameters another chain would improve on under
 #' this chain's group parameters, and (iii) the flat test: the drift of the
-#' group means and subject parameters between the first and last thirds of the
-#' stage, in units of their interquartile range. These are the statistics the
+#' group means, the subject parameters, the summed log-likelihood and the
+#' per-subject log-likelihoods between the first and last thirds of the stage,
+#' in units of their interquartile range. These are the statistics the
 #' `cull` and `max_flat_loc` stop criteria of [fit()] act on.
 #'
 #' @param emc An emc object
@@ -116,8 +117,8 @@ robust_gaps <- function(med, mad){
 #'   statistics per selection) and `culls` (the record of culls in the object).
 #' @export
 chain_diagnostics <- function(emc, stage = get_last_stage(emc), window = NULL, cull = TRUE,
-                              flat_selection = c("mu", "alpha"), flat_p1 = 1/3, flat_p2 = 1/3,
-                              flat_quantile = c(mu = 1, alpha = .99)){
+                              flat_selection = c("mu", "alpha", "LL", "subj_ll"), flat_p1 = 1/3, flat_p2 = 1/3,
+                              flat_quantile = c(mu = 1, alpha = .99, LL = 1, subj_ll = .99)){
   emc <- restore_duplicates(emc)
   cull <- cull_defaults(cull); if(is.null(cull)) cull <- cull_defaults(TRUE)
   if(!is.null(window)) cull$window <- window
@@ -230,7 +231,10 @@ pooled_matrix <- function(emc, selection, stage){
   } else if(selection == "LL"){
     arr <- sapply(seq_along(emc), function(i) colSums(emc[[i]]$samples$subj_ll[, its[[i]], drop = FALSE]))
     m <- matrix(t(arr), ncol = 1); colnames(m) <- "LL"
-  } else stop("flat_selection must be one or more of: mu, alpha, LL")
+  } else if(selection == "subj_ll"){
+    arr <- sapply(seq_along(emc), function(i) emc[[i]]$samples$subj_ll[, its[[i]], drop = FALSE], simplify = "array") # subjects x n x chains
+    m <- matrix(aperm(arr, c(3, 2, 1)), ncol = dim(arr)[1]); colnames(m) <- rownames(emc[[1]]$samples$subj_ll)
+  } else stop("flat_selection must be one or more of: mu, alpha, LL, subj_ll")
   m
 }
 
@@ -238,7 +242,7 @@ flat_diagnostics <- function(emc, stage, selection, p1, p2, quantile){
   out <- list()
   for(sel in selection){
     m <- pooled_matrix(emc, sel, stage); if(is.null(m) || nrow(m) < 10) next
-    if(sel == "alpha"){ # medians and IQRs vectorised; the Monte Carlo error from a sample of columns
+    if(sel %in% c("alpha", "subj_ll")){ # medians and IQRs vectorised; the Monte Carlo error from a sample of columns
       n <- nrow(m); a <- m[seq_len(max(1, round(n * p1))), , drop = FALSE]; b <- m[(n - max(1, round(n * p2)) + 1):n, , drop = FALSE]
       qa <- apply(a, 2, quantile, c(.25, .5, .75)); qb <- apply(b, 2, quantile, c(.25, .5, .75))
       iqr <- pmax(apply(rbind(qa[3, ] - qa[1, ], qb[3, ] - qb[1, ]), 2, median), 1e-8)

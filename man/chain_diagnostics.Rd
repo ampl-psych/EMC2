@@ -9,10 +9,10 @@ chain_diagnostics(
   stage = get_last_stage(emc),
   window = NULL,
   cull = TRUE,
-  flat_selection = c("mu", "alpha"),
+  flat_selection = c("mu", "alpha", "LL", "subj_ll"),
   flat_p1 = 1/3,
   flat_p2 = 1/3,
-  flat_quantile = c(mu = 1, alpha = 0.99)
+  flat_quantile = c(mu = 1, alpha = 0.99, LL = 1, subj_ll = 0.99)
 )
 }
 \arguments{
@@ -44,7 +44,8 @@ group mean and covariance shared by all chains so that a chain's own
 covariance draws do not enter the comparison) is held below the other chains', (ii)
 subject-by-chain cells whose parameters another chain would improve on under
 this chain's group parameters, and (iii) the flat test: the drift of the
-group means and subject parameters between the first and last thirds of the
-stage, in units of their interquartile range. These are the statistics the
+group means, the subject parameters, the summed log-likelihood and the
+per-subject log-likelihoods between the first and last thirds of the stage,
+in units of their interquartile range. These are the statistics the
 \code{cull} and \code{max_flat_loc} stop criteria of \code{\link[=fit]{fit()}} act on.
 }

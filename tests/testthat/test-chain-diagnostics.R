@@ -16,7 +16,8 @@ test_that("cull settings are validated", {
   expect_error(sc("adapt", list(cull = TRUE)), "burn and sample")
   expect_error(sc("burn", list(max_flat_loc = .3)), "sample stage")
   s <- sc("sample", list(max_flat_loc = .3))
-  expect_equal(s$flat_selection, c("mu", "alpha")); expect_equal(s$flat_mcse, 2)
+  expect_equal(s$flat_selection, c("mu", "alpha", "LL", "subj_ll")); expect_equal(s$flat_mcse, 2)
+  expect_error(sc("sample", list(max_flat_loc = .3, flat_selection = "theta")), "flat_selection")
 })
 
 test_that("flat statistics see drift and the flat test passes on noise", {
@@ -41,7 +42,8 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   d <- chain_diagnostics(e, window = 150)
   expect_s3_class(d, "emc.diagnostics")
   expect_false(any(d$chains$flagged)); expect_equal(nrow(d$cells), 0)
-  expect_true(all(c("mu", "alpha") %in% names(d$flat)))
+  expect_true(all(c("mu", "alpha", "LL", "subj_ll") %in% names(d$flat)))
+  expect_equal(d$flat$subj_ll$quantile, .99); expect_equal(d$flat$LL$quantile, 1)
   n <- e[[1]]$samples$idx; w <- (n - 149):n
   # a chain held below the others
   whole <- e; whole[[1]]$samples$subj_ll[, w] <- whole[[1]]$samples$subj_ll[, w] - 8

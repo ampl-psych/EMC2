@@ -47,16 +47,16 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   if(!is.null(stop_criteria$max_flat_loc)){
     if(stage != "sample") stop("`max_flat_loc` applies to the sample stage")
-    if(is.null(stop_criteria$flat_selection)) stop_criteria$flat_selection <- c("mu", "alpha")
+    if(is.null(stop_criteria$flat_selection)) stop_criteria$flat_selection <- c("mu", "alpha", "LL", "subj_ll")
     if(type == "single") stop_criteria$flat_selection <- setdiff(stop_criteria$flat_selection, "mu")
     if(is.null(stop_criteria$flat_p1)) stop_criteria$flat_p1 <- 1/3
     if(is.null(stop_criteria$flat_p2)) stop_criteria$flat_p2 <- 1/3
-    if(is.null(stop_criteria$flat_quantile)) stop_criteria$flat_quantile <- c(mu = 1, alpha = .99, LL = 1)
+    if(is.null(stop_criteria$flat_quantile)) stop_criteria$flat_quantile <- c(mu = 1, alpha = .99, LL = 1, subj_ll = .99)
     if(is.null(stop_criteria$flat_mcse)) stop_criteria$flat_mcse <- 2
     if(stop_criteria$flat_p1 <= 0 || stop_criteria$flat_p1 > 1 || stop_criteria$flat_p2 <= 0 || stop_criteria$flat_p2 > 1)
       stop("flat_p1 and flat_p2 must be in (0, 1]")
-    if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL")))
-      stop("flat_selection must be one or more of: mu, alpha, LL")
+    if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL", "subj_ll")))
+      stop("flat_selection must be one or more of: mu, alpha, LL, subj_ll")
   }
   if(!is.null(stop_criteria$max_sample_iter)){
     if(stage != "sample") stop("`max_sample_iter` applies to the sample stage")
