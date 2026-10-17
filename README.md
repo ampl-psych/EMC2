@@ -22,8 +22,9 @@ Or for the development version:
 
 Source installation requires a C++17 compiler. On Windows, install
 [Rtools](https://cran.r-project.org/bin/windows/Rtools/) for your R version. On
-macOS, install the [R build tools](https://mac.r-project.org/tools/); EMC2 detects
-OpenMP from the R build tools or Homebrew `libomp`. Linux uses the compiler's OpenMP support.
+macOS, install Xcode Command Line Tools. EMC2 can use the Fortran libraries bundled
+with CRAN's R and detects OpenMP from the [R build tools](https://mac.r-project.org/tools/)
+or Homebrew `libomp`. Other systems use R's configured OpenMP support.
 Without OpenMP, the same C++ sampler runs serially.
 
 `fit()` uses shared-memory C++ sampling. Set `cores_for_chains` and

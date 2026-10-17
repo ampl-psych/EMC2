@@ -11,6 +11,8 @@
 #
 # Run ./configure --help for available options.
 
+set -e
+
 # --------------------------------------------------------------------------- #
 #  Defaults                                                                    #
 # --------------------------------------------------------------------------- #
@@ -82,16 +84,12 @@ EOF
 done
 
 # --------------------------------------------------------------------------- #
-#  R's compiler — split binary from embedded flags (e.g. "g++ -std=gnu++17") #
+#  R's build configuration                                                    #
 # --------------------------------------------------------------------------- #
-R_BIN="${R_HOME:+${R_HOME}/bin/}R"
-sh tools/check-linalg.sh "$R_BIN" || exit 1
-CXX_FULL="$("$R_BIN" CMD config CXX17)"
-CXX_BIN="$(echo "$CXX_FULL"  | awk '{print $1}')"
-CXX_STD="$(echo "$CXX_FULL" | cut -s -d' ' -f2-) $("$R_BIN" CMD config CXX17STD)"
-R_CXXFLAGS="$("$R_BIN" CMD config CXX17FLAGS)"
-R_CPPFLAGS="$("$R_BIN" CMD config CPPFLAGS)"
-R_LDFLAGS="$("$R_BIN" CMD config LDFLAGS)"
+R_BIN=${R_BIN:-"${R_HOME:+${R_HOME}/bin/}R"}
+makevars=${EMC2_MAKEVARS:-src/Makevars}
+: > config.log
+FORTRAN_LIBS=$(sh tools/check-linalg.sh "$R_BIN") || exit 1
 
 # --------------------------------------------------------------------------- #
 #  Extra user-requested flags                                                  #
@@ -101,11 +99,7 @@ if [ "$FAST_MATH" = "yes" ]; then
   EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
 fi
 if [ "$ENABLE_NATIVE" = "yes" ]; then
-  # Only add -march=native if R's own CXXFLAGS don't already contain it
-  case "$R_CXXFLAGS" in
-    *-march=native*) ;;
-    *) EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native" ;;
-  esac
+  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native"
 fi
 
 # --------------------------------------------------------------------------- #
@@ -119,74 +113,7 @@ esac
 # --------------------------------------------------------------------------- #
 #  OpenMP detection — compile test using R's own compiler                     #
 # --------------------------------------------------------------------------- #
-OMP_CXXFLAGS=""
-OMP_LIBS=""
-
-OMP_TMP="$(mktemp -d "${TMPDIR:-/tmp}/emc2-openmp.XXXXXX")" || exit 1
-trap 'rm -rf "$OMP_TMP"' EXIT HUP INT TERM
-
-cat > "$OMP_TMP/test.cpp" <<'OMPEOF'
-#include <omp.h>
-#if !defined(_OPENMP) || _OPENMP < 201307
-#error OpenMP 4.0 is required for task groups
-#endif
-int main() { return omp_get_max_threads() < 1; }
-OMPEOF
-
-if [ "$ENABLE_OPENMP" = yes ]; then
-case "$(uname)" in
-  Darwin)
-    # Prefer the runtime shipped with CRAN R; fall back to Homebrew.
-    R_LIB="$("$R_BIN" RHOME)/lib"
-    for prefix in /usr/local /opt/homebrew/opt/libomp /usr/local/opt/libomp; do
-      if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS \
-            -Xclang -fopenmp \
-            -I"${prefix}/include" \
-            "$OMP_TMP/test.cpp" -o "$OMP_TMP/test" \
-            -L"$R_LIB" $R_LDFLAGS -L"${prefix}/lib" -lomp 2>/dev/null; then
-        OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/include"
-        OMP_LIBS="-L\"$R_LIB\" -L${prefix}/lib -lomp"
-        echo "configure: OpenMP enabled"
-        break
-      fi
-    done
-    ;;
-  *)
-    if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS \
-          -fopenmp \
-          "$OMP_TMP/test.cpp" -o "$OMP_TMP/test" $R_LDFLAGS 2>/dev/null; then
-      OMP_CXXFLAGS="-fopenmp"
-      OMP_LIBS="-fopenmp"
-      echo "configure: OpenMP enabled via -fopenmp"
-    fi
-    ;;
-esac
-fi
-
-if [ -z "$OMP_LIBS" ]; then
-  echo "configure: OpenMP not available, building without it (single-threaded fallback)"
-fi
-
-# Probe the pool-release API; GCC 9 provides it but reports OpenMP 4.5.
-OMP_PAUSE=0
-if [ -n "$OMP_LIBS" ]; then
-  cat > "$OMP_TMP/pause.cpp" <<'OMPEOF'
-#include <omp.h>
-int main() { return omp_pause_resource_all(omp_pause_hard); }
-OMPEOF
-  case "$(uname)" in
-    Darwin)
-      if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS $OMP_CXXFLAGS \
-            "$OMP_TMP/pause.cpp" -L"$R_LIB" $R_LDFLAGS -L"${prefix}/lib" -lomp \
-            -o "$OMP_TMP/pause" 2>/dev/null; then OMP_PAUSE=1; fi
-      ;;
-    *)
-      if $CXX_BIN $CXX_STD $R_CXXFLAGS $R_CPPFLAGS $OMP_CXXFLAGS \
-            "$OMP_TMP/pause.cpp" $R_LDFLAGS $OMP_LIBS \
-            -o "$OMP_TMP/pause" 2>/dev/null; then OMP_PAUSE=1; fi
-      ;;
-  esac
-fi
+. ./tools/check-openmp.sh
 
 # --------------------------------------------------------------------------- #
 #  Summary                                                                     #
@@ -199,8 +126,6 @@ echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
 echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
 echo "  OpenMP libs   : ${OMP_LIBS:-disabled}"
 echo "  OpenMP pause  : $OMP_PAUSE"
-echo "  Compiler      : $CXX_BIN $CXX_STD"
-echo "  R CXXFLAGS    : $R_CXXFLAGS"
 
 # --------------------------------------------------------------------------- #
 #  Write src/Makevars from src/Makevars.in                                    #
@@ -211,7 +136,8 @@ sed \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
-  src/Makevars.in > src/Makevars
+  -e "s|@FORTRAN_LIBS@|${FORTRAN_LIBS}|g" \
+  src/Makevars.in > "$makevars"
 
 # --------------------------------------------------------------------------- #
 #  Write inst/include/build_info.h from inst/include/build_info.h.in          #
@@ -229,5 +155,5 @@ sed \
   inst/include/build_info.h.in > inst/include/build_info.h
 
 echo "configure: inst/include/build_info.h written"
-sh tools/header-dependencies.sh >> src/Makevars || exit 1
-echo "configure: src/Makevars written"
+sh tools/header-dependencies.sh >> "$makevars"
+echo "configure: $makevars written"

@@ -13,6 +13,7 @@ paper
 src/Makevars
 src/Makevars.win
 inst/include/build_info.h
+/config.log
 tests/extratests
 /Forstmann_results/
 /benchmarks/sampler_cpp/results/
