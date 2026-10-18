@@ -101,7 +101,7 @@ nn_tf_inv <- function(x, tf, c = NA_real_) switch(tf, identity = x, log = exp(x)
 # zerobox). A zerobox input without a constant, or a constant on an input that
 # is not zerobox, is refused.
 nn_zerobox_c <- function(m, ctx, tfs, what = "") {
-  zc <- m$zerobox_c
+  zc <- m[["zerobox_c", exact = TRUE]]
   zc <- if (is.null(zc)) stats::setNames(numeric(0), character(0)) else unlist(zc)
   zb <- ctx[tfs == "zerobox"]
   miss <- setdiff(zb, names(zc))
@@ -185,22 +185,22 @@ nn_read_json <- function(path) {
 # loaders produce it (W is n_in x n_out), so .rds and .json cards are the same.
 nn_normalise_card <- function(raw) {
   fix_mlp <- function(mlp) {
-    mlp$layers <- lapply(mlp$layers, function(l) list(W = as.matrix(l$W), b = as.numeric(l$b)))
-    if (isTRUE(mlp$use_norm))
-      mlp$norms <- lapply(mlp$norms, function(n)
-        list(scale = as.numeric(n$scale), bias = as.numeric(n$bias), eps = as.numeric(n$eps)))
+    mlp$layers <- lapply(mlp[["layers", exact = TRUE]], function(l) list(W = as.matrix(l[["W", exact = TRUE]]), b = as.numeric(l[["b", exact = TRUE]])))
+    if (isTRUE(mlp[["use_norm", exact = TRUE]]))
+      mlp$norms <- lapply(mlp[["norms", exact = TRUE]], function(n)
+        list(scale = as.numeric(n[["scale", exact = TRUE]]), bias = as.numeric(n[["bias", exact = TRUE]]), eps = as.numeric(n[["eps", exact = TRUE]])))
     mlp
   }
-  members <- if (!is.null(raw$members)) raw$members else list(raw)
+  members <- if (!is.null(raw[["members", exact = TRUE]])) raw[["members", exact = TRUE]] else list(raw)
   version <- nn_card_version(raw, members[[1]])
   members <- lapply(members, function(m) {
     for (f in c("mlp", "flow_mlp", "classifier_mlp")) if (!is.null(m[[f]])) m[[f]] <- fix_mlp(m[[f]])
-    m$scaling <- nn_scaling_spec(m$scaling)
+    m$scaling <- nn_scaling_spec(m[["scaling", exact = TRUE]])
     nn_natural_context(m)
   })
   kinds <- vapply(members, nn_infer_kind, "")
   if (length(unique(kinds)) != 1L) stop("Ensemble members hold different kinds of network")
-  declared <- if (!is.null(raw$kind)) raw$kind else members[[1]]$kind
+  declared <- if (!is.null(raw[["kind", exact = TRUE]])) raw[["kind", exact = TRUE]] else members[[1]][["kind", exact = TRUE]]
   if (!is.null(declared) && !identical(declared, kinds[1]))
     stop("Card declares kind '", declared, "' but holds a ", kinds[1], " network")
   members <- lapply(members, nn_fill_sampled_box)
@@ -209,7 +209,7 @@ nn_normalise_card <- function(raw) {
     for (f in c("context_names", "context_transforms", "bounds_natural", "bounds_sampled", "zerobox_c", "pre",
                 "scaling"))
       if (!identical(m[[f]], m1[[f]])) stop("Ensemble members disagree on ", f)
-  list(members = members, top = if (!is.null(raw$members)) raw[names(raw) != "members"] else NULL,
+  list(members = members, top = if (!is.null(raw[["members", exact = TRUE]])) raw[names(raw) != "members"] else NULL,
        kind = kinds[1], version = version)
 }
 
@@ -218,7 +218,7 @@ nn_normalise_card <- function(raw) {
 # this EMC2 does not read is refused by name rather than read as if it were
 # one it knows.
 nn_card_version <- function(raw, m1) {
-  v <- if (!is.null(raw$card_version)) raw$card_version else m1$card_version
+  v <- if (!is.null(raw[["card_version", exact = TRUE]])) raw[["card_version", exact = TRUE]] else m1[["card_version", exact = TRUE]]
   if (is.null(v)) return(0)
   if (!is.numeric(v) || length(v) != 1L || !is.finite(v))
     stop("The card's card_version must be one number (", paste(nn_card_versions, collapse = ", "), ")")
@@ -240,15 +240,15 @@ nn_scaling_spec <- function(sc) {
     if (length(sc) == 1L && startsWith(sc, "ddm_unit")) sc <- list(kind = "ddm_unit")
     else stop("The card's scaling is not understood: '", sc[1], "'")
   }
-  if (!is.list(sc) || !is.character(sc$kind) || length(sc$kind) != 1L)
+  if (!is.list(sc) || !is.character(sc[["kind", exact = TRUE]]) || length(sc[["kind", exact = TRUE]]) != 1L)
     stop("The card's scaling must give a kind (e.g. list(kind = \"ddm_unit\"))")
-  if (sc$kind != "ddm_unit") stop("Unsupported scaling kind '", sc$kind, "' (this EMC2 knows ddm_unit)")
-  if (is.null(sc$pars)) sc$pars <- nn_scaled_pars
-  if (!identical(as.character(sc$pars), nn_scaled_pars))
+  if (sc[["kind", exact = TRUE]] != "ddm_unit") stop("Unsupported scaling kind '", sc[["kind", exact = TRUE]], "' (this EMC2 knows ddm_unit)")
+  if (is.null(sc[["pars", exact = TRUE]])) sc$pars <- nn_scaled_pars
+  if (!identical(as.character(sc[["pars", exact = TRUE]]), nn_scaled_pars))
     stop("A ddm_unit scaling takes the DDM parameters ", paste(nn_scaled_pars, collapse = ", "),
          " in that order")
-  if (is.null(sc$sz)) sc$sz <- "proportion"
-  if (!identical(sc$sz, "proportion"))
+  if (is.null(sc[["sz", exact = TRUE]])) sc$sz <- "proportion"
+  if (!identical(sc[["sz", exact = TRUE]], "proportion"))
     stop("A ddm_unit scaling's SZ convention must be \"proportion\" (see vignette(\"neural-likelihood-cards\"))")
   sc
 }
@@ -258,8 +258,8 @@ nn_scaling_spec <- function(sc) {
 # keep the twin's transforms on EMC2's sampled scale; the network is fed the
 # natural values.
 nn_natural_context <- function(m) {
-  if (is.null(m$context_transforms) && identical(m$context_scale, "natural") && !is.null(m$context_names)) {
-    ctx <- as.character(m$context_names)
+  if (is.null(m[["context_transforms", exact = TRUE]]) && identical(m[["context_scale", exact = TRUE]], "natural") && !is.null(m[["context_names", exact = TRUE]])) {
+    ctx <- as.character(m[["context_names", exact = TRUE]])
     m$context_transforms <- as.list(stats::setNames(rep("identity", length(ctx)), ctx))
   }
   m
@@ -268,21 +268,21 @@ nn_natural_context <- function(m) {
 # bounds_sampled from bounds_natural when the card has only the latter (the
 # compiled evaluators read the sampled box).
 nn_fill_sampled_box <- function(m) {
-  bn <- m$bounds_natural; tr <- m$context_transforms; ctx <- m$context_names
-  if (!is.null(m$bounds_sampled) || is.null(bn) || is.null(tr) || is.null(ctx) ||
-      length(bn$lower) != length(tr) || !all(ctx %in% names(tr))) return(m)
+  bn <- m[["bounds_natural", exact = TRUE]]; tr <- m[["context_transforms", exact = TRUE]]; ctx <- m[["context_names", exact = TRUE]]
+  if (!is.null(m[["bounds_sampled", exact = TRUE]]) || is.null(bn) || is.null(tr) || is.null(ctx) ||
+      length(bn[["lower", exact = TRUE]]) != length(tr) || !all(ctx %in% names(tr))) return(m)
   j <- match(ctx, names(tr))
   tfs <- vapply(ctx, function(p) as.character(tr[[p]]), "", USE.NAMES = FALSE)
   zc <- nn_zerobox_c(m, ctx, tfs)
-  m$bounds_sampled <- list(lower = unname(mapply(nn_tf, bn$lower[j], tfs, zc)),
-                           upper = unname(mapply(nn_tf, bn$upper[j], tfs, zc)))
+  m$bounds_sampled <- list(lower = unname(mapply(nn_tf, bn[["lower", exact = TRUE]][j], tfs, zc)),
+                           upper = unname(mapply(nn_tf, bn[["upper", exact = TRUE]][j], tfs, zc)))
   m
 }
 
 nn_infer_kind <- function(m) {
-  if (!is.null(m$flow_mlp) && !is.null(m$classifier_mlp)) if (!is.null(m$scaling)) "flow_scaled" else "flow_joint"
-  else if (!is.null(m$mlp) && !is.null(m$spline)) "flow_race"
-  else if (!is.null(m$mlp)) if (identical(m$kind, "mlp_joint")) "mlp_joint" else "regression_joint"
+  if (!is.null(m[["flow_mlp", exact = TRUE]]) && !is.null(m[["classifier_mlp", exact = TRUE]])) if (!is.null(m[["scaling", exact = TRUE]])) "flow_scaled" else "flow_joint"
+  else if (!is.null(m[["mlp", exact = TRUE]]) && !is.null(m[["spline", exact = TRUE]])) "flow_race"
+  else if (!is.null(m[["mlp", exact = TRUE]])) if (identical(m[["kind", exact = TRUE]], "mlp_joint")) "mlp_joint" else "regression_joint"
   else stop("Cannot tell what kind of network this card holds (neither flow_mlp + classifier_mlp nor mlp)")
 }
 
@@ -604,19 +604,19 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   res <- nn_resolve(path)
   hit <- nn_card(res)
   card <- hit$card
-  m1 <- card$members[[1]]
+  m1 <- card[["members", exact = TRUE]][[1]]
   label <- if (!is.null(res$artefact)) res$artefact else nn_label(res$path, m1)
   what <- paste0("Neural likelihood '", label, "': ")
   if (!is.null(kind)) {
     kind <- match.arg(kind, nn_kinds)
-    if (kind != card$kind) stop(what, "the card holds a ", card$kind, " network, not ", kind)
+    if (kind != card[["kind", exact = TRUE]]) stop(what, "the card holds a ", card[["kind", exact = TRUE]], " network, not ", kind)
   }
-  kind <- card$kind
-  if (kind != "flow_joint" && length(card$members) > 1L)
+  kind <- card[["kind", exact = TRUE]]
+  if (kind != "flow_joint" && length(card[["members", exact = TRUE]]) > 1L)
     stop(what, "ensembles are only supported for flow_joint networks")
 
   # --- inputs: order, names, scales -----------------------------------------
-  ctx <- m1$context_names
+  ctx <- m1[["context_names", exact = TRUE]]
   if (is.null(ctx)) {
     if (is.null(pars)) stop(what, "the card has no context_names; give the input order with pars")
     ctx <- pars
@@ -644,10 +644,10 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     if (!is.null(exceptions)) stop(what, "a scaled DDM card takes every DDM parameter; exceptions do not apply")
     if (!is.null(pre)) stop(what, "a scaled DDM card applies t0 itself; pre does not apply")
     if (!is.null(hybrid)) stop(what, "hybrid is for race flows")
-    if (!identical(m1$context_encoding, "zerobox"))
+    if (!identical(m1[["context_encoding", exact = TRUE]], "zerobox"))
       stop(what, "a scaled DDM card must have context_encoding \"zerobox\" (eta and SZ exact at 0)")
   }
-  tr_card <- m1$context_transforms
+  tr_card <- m1[["context_transforms", exact = TRUE]]
   if (!is.null(transforms)) {
     transforms <- stats::setNames(as.character(transforms), names(transforms))
     if (!is.null(names(transforms))) {
@@ -676,7 +676,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   # --- training box -----------------------------------------------------------
   zc <- nn_zerobox_c(m1, ctx, tfs, what)
   box <- nn_box(m1, ctx, tr_card, tfs, zc, what)
-  if (!(kind %in% nn_mlp_kinds) && is.null(m1$bounds_sampled))   # read by the compiled evaluators
+  if (!(kind %in% nn_mlp_kinds) && is.null(m1[["bounds_sampled", exact = TRUE]]))   # read by the compiled evaluators
     stop(what, "a flow card must carry bounds_sampled (or bounds_natural with context_transforms)")
 
   # --- parameterisation: the analytic twin, or the user's own defaults -----------
@@ -686,10 +686,10 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
       stop(what, "give either twin (a model supplies the defaults) or p_types (your own defaults), not both")
     tl <- nn_own_parameterisation(p_types, pars, tfs, want_type, what)
   } else {
-    if (is.null(twin) && !is.null(m1$model) && m1$model %in% names(nn_twin_names))
-      twin <- get(nn_twin_names[[m1$model]], envir = asNamespace("EMC2"))
+    if (is.null(twin) && !is.null(m1[["model", exact = TRUE]]) && m1[["model", exact = TRUE]] %in% names(nn_twin_names))
+      twin <- get(nn_twin_names[[m1[["model", exact = TRUE]]]], envir = asNamespace("EMC2"))
     if (is.null(twin))
-      stop(what, "no analytic twin (card model '", if (is.null(m1$model)) "" else m1$model, "'). ",
+      stop(what, "no analytic twin (card model '", if (is.null(m1[["model", exact = TRUE]])) "" else m1[["model", exact = TRUE]], "'). ",
            "Give the defaults with p_types = c(<parameter> = <sampled-scale default>, ...) ",
            "(transforms follow the card; no simulator), or pass twin = <a model function> ",
            "with p_types, transform and, to simulate, rfun")
@@ -713,7 +713,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   # default would simulate one model and evaluate another). Checked whatever
   # supplies the defaults (DDM, a hand-written twin, or p_types). A scaled
   # card is exact at eta = 0 (sv = 0), SZ = 0 and, by construction, st0 = 0.
-  if (identical(m1$context_encoding, "zerobox") && kind %in% c("flow_joint", "flow_scaled")) {
+  if (identical(m1[["context_encoding", exact = TRUE]], "zerobox") && kind %in% c("flow_joint", "flow_scaled")) {
     zp <- intersect(c("sv", "SZ", "st0"), names(pt))
     if (!all(is.infinite(pt[zp]) & pt[zp] < 0))
       stop(what, "a zero-box DDM network needs the defaults sv = SZ = st0 = -Inf (exactly zero)")
@@ -731,7 +731,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   }
   fixed <- exceptions
   for (p in setdiff(dropped, names(fixed))) {
-    if (identical(m1$context_encoding, "st0zero") && p == "st0") fixed <- c(fixed, st0 = 0)
+    if (identical(m1[["context_encoding", exact = TRUE]], "st0zero") && p == "st0") fixed <- c(fixed, st0 = 0)
     else stop(what, "the network was trained without '", p, "' (it is in context_transforms but not ",
               "context_names); declare the value it was fixed at with exceptions = c(", p, " = <value>)")
   }
@@ -740,8 +740,8 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   if (any(ctx == "b" & pars == "B") && "A" %in% setdiff(names(pt), names(fixed)[fixed == 0]))
     stop(what, "the network's input 'b' (the threshold, B + A) is registered as 'B', which is exact ",
          "only without start-point variability: fix it with exceptions = c(A = 0)")
-  if (!is.null(m1$pre)) {
-    card_pre <- m1$pre
+  if (!is.null(m1[["pre", exact = TRUE]])) {
+    card_pre <- m1[["pre", exact = TRUE]]
     if (!is.character(card_pre) || length(card_pre) != 1L)
       stop(what, "the card's pre must name one parameter (e.g. \"t0\")")
     if (is.null(pre)) pre <- card_pre
@@ -766,7 +766,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     stop(what, "a race needs the survivor function (1 - CDF) of the losing accumulators, ",
          "so a flow_race network without a CDF cannot be assembled into a race")
   if (is_mlp) nn_check_regression(m1, ctx, kind, what)
-  oob <- if (kind == "mlp_joint") m1$ll_floor_log else -Inf
+  oob <- if (kind == "mlp_joint") m1[["ll_floor_log", exact = TRUE]] else -Inf
 
   # --- edges of the training region that are closed; the hybrid race ---------------
   # zerobox inputs at 0; on a natural-scale card, an input whose region starts
@@ -774,7 +774,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   twin_ex <- tl$bound$exception
   at_default <- vapply(seq_along(pars), function(j) {
     p <- pars[j]
-    identical(m1$context_scale, "natural") && tfs[j] == "identity" && p %in% names(twin_ex) &&
+    identical(m1[["context_scale", exact = TRUE]], "natural") && tfs[j] == "identity" && p %in% names(twin_ex) &&
       isTRUE(defaults[[p]] == box$lower[j]) && twin_ex[[p]] == box$lower[j]
   }, TRUE)
   closed <- union(zb, pars[at_default])
@@ -831,7 +831,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
 
   card_meta <- m1[setdiff(names(m1), c("mlp", "flow_mlp", "classifier_mlp", "scaler",
                                         "classifier_scaler", "spline"))]
-  card_meta <- c(card_meta, card$top[setdiff(names(card$top), names(card_meta))])
+  card_meta <- c(card_meta, card[["top", exact = TRUE]][setdiff(names(card[["top", exact = TRUE]]), names(card_meta))])
   reg <- list(
     kind = kind, label = label, artefact = res$artefact, path = res$path, sha256 = hit$sha256,
     pars = pars, context_names = ctx, transforms = tfs, transform_codes = unname(nn_transform_codes[tfs]),
@@ -840,10 +840,10 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     lower = lower, upper = upper, lower_s = box$lower_s, upper_s = box$upper_s,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
-    ll_floor = m1$ll_floor_log, oob = oob, n_members = length(card$members),
-    input_layout = m1$input_layout, card = card_meta, card_version = card$version,
+    ll_floor = m1[["ll_floor_log", exact = TRUE]], oob = oob, n_members = length(card[["members", exact = TRUE]]),
+    input_layout = m1[["input_layout", exact = TRUE]], card = card_meta, card_version = card[["version", exact = TRUE]],
     # a scaled card: the rule and the DDM parameters its inputs are computed from
-    scaled = scaled, scaling = if (scaled) m1$scaling, sc_pars = if (scaled) nn_scaled_pars,
+    scaled = scaled, scaling = if (scaled) m1[["scaling", exact = TRUE]], sc_pars = if (scaled) nn_scaled_pars,
     # race cards may state the limits of the analytic control (vignette)
     control_limits = nn_control_limits(m1, kind, what),
     # the analytic twin, the default control of the validation kit
@@ -852,7 +852,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     twin = nn_twin_ref(twin))
   reg$native <- nn_native_spec(reg)
   class(reg) <- "emc_nn"
-  if (card$version >= 1 && is.null(m1$validation))
+  if (card[["version", exact = TRUE]] >= 1 && is.null(m1[["validation", exact = TRUE]]))
     message(what, "the card records no validation (score bias, posterior shift, SBC); loading a network ",
             "is not the same as being able to infer with it (see ?nn_cell)")
   nn_model_function(nn_model_list(reg, tl, minmax))
@@ -865,14 +865,14 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
 # validation kit (nn_cell) to warn; a box that reaches past the limit is noted
 # at registration, never refused (it is a property of the control).
 nn_control_limits <- function(m, kind, what) {
-  cl <- m$control_limits
+  cl <- m[["control_limits", exact = TRUE]]
   if (is.null(cl)) return(NULL)
   if (kind != "flow_race") stop(what, "control_limits are for race cards")
   if (!is.list(cl)) stop(what, "control_limits must be a list (s = c(lower, upper), vb_over_s2_max = )")
-  if (!is.null(cl$s) && !(is.numeric(cl$s) && length(cl$s) == 2L && cl$s[1] < cl$s[2]))
+  if (!is.null(cl[["s", exact = TRUE]]) && !(is.numeric(cl[["s", exact = TRUE]]) && length(cl[["s", exact = TRUE]]) == 2L && cl[["s", exact = TRUE]][1] < cl[["s", exact = TRUE]][2]))
     stop(what, "control_limits$s must be c(lower, upper)")
-  if (!is.null(cl$vb_over_s2_max) && !(is.numeric(cl$vb_over_s2_max) && length(cl$vb_over_s2_max) == 1L &&
-                                       cl$vb_over_s2_max > 0))
+  if (!is.null(cl[["vb_over_s2_max", exact = TRUE]]) && !(is.numeric(cl[["vb_over_s2_max", exact = TRUE]]) && length(cl[["vb_over_s2_max", exact = TRUE]]) == 1L &&
+                                       cl[["vb_over_s2_max", exact = TRUE]] > 0))
     stop(what, "control_limits$vb_over_s2_max must be one positive number")
   cl
 }
@@ -976,34 +976,34 @@ nn_eval_scaled <- function(reg, rt, R, pars, what = "pdf", evaluator = NULL) {
 # folder per network) the card's `model` field, else the folder's name.
 nn_label <- function(path, m) {
   if (!identical(tools::file_path_sans_ext(basename(path)), "card")) return(basename(path))
-  if (is.character(m$model) && length(m$model) == 1L && nzchar(m$model)) m$model else basename(dirname(path))
+  if (is.character(m[["model", exact = TRUE]]) && length(m[["model", exact = TRUE]]) == 1L && nzchar(m[["model", exact = TRUE]])) m[["model", exact = TRUE]] else basename(dirname(path))
 }
 
 # The optional stages of a race flow's card (src/flow_race.cpp evaluates them).
 nn_check_flow_race <- function(m, k, what) {
-  if (!is.null(m$scaler) && !is.null(m$input_scaling))
+  if (!is.null(m[["scaler", exact = TRUE]]) && !is.null(m[["input_scaling", exact = TRUE]]))
     stop(what, "the card has both a scaler and input_scaling; a network has one input standardisation")
-  if (!is.null(m$input_scaling)) {
-    isc <- m$input_scaling
+  if (!is.null(m[["input_scaling", exact = TRUE]])) {
+    isc <- m[["input_scaling", exact = TRUE]]
     if (!all(c("eps", "loc", "scale") %in% names(isc)) ||
         any(lengths(isc[c("eps", "loc", "scale")]) != k) || !is.numeric(unlist(isc[c("eps", "loc", "scale")])))
       stop(what, "input_scaling needs eps, loc and scale, one number per network input (", k, ")")
-    if (any(unlist(isc$scale) == 0)) stop(what, "input_scaling has a zero scale")
+    if (any(unlist(isc[["scale", exact = TRUE]]) == 0)) stop(what, "input_scaling has a zero scale")
   }
-  if (!is.null(m$scaler) && (length(m$scaler$mean) != k || length(m$scaler$scale) != k))
+  if (!is.null(m[["scaler", exact = TRUE]]) && (length(m[["scaler", exact = TRUE]][["mean", exact = TRUE]]) != k || length(m[["scaler", exact = TRUE]][["scale", exact = TRUE]]) != k))
     stop(what, "the scaler needs one mean and scale per network input (", k, ")")
-  if (nrow(m$mlp$layers[[1]]$W) != k)
-    stop(what, "the network has ", nrow(m$mlp$layers[[1]]$W), " inputs; the card names ", k)
-  affine <- isTRUE(m$affine)
-  if (!is.null(m$affine) && !is.logical(m$affine)) stop(what, "the card's affine must be true or false")
-  if (affine && !(is.numeric(m$affine_scale$min_scale) && is.numeric(m$affine_scale$offset)))
+  if (nrow(m[["mlp", exact = TRUE]][["layers", exact = TRUE]][[1]][["W", exact = TRUE]]) != k)
+    stop(what, "the network has ", nrow(m[["mlp", exact = TRUE]][["layers", exact = TRUE]][[1]][["W", exact = TRUE]]), " inputs; the card names ", k)
+  affine <- isTRUE(m[["affine", exact = TRUE]])
+  if (!is.null(m[["affine", exact = TRUE]]) && !is.logical(m[["affine", exact = TRUE]])) stop(what, "the card's affine must be true or false")
+  if (affine && !(is.numeric(m[["affine_scale", exact = TRUE]][["min_scale", exact = TRUE]]) && is.numeric(m[["affine_scale", exact = TRUE]][["offset", exact = TRUE]])))
     stop(what, "an affine card needs affine_scale with min_scale and offset")
-  n_out <- ncol(m$mlp$layers[[length(m$mlp$layers)]]$W)
-  want <- 3L * m$spline$num_bins + if (affine) 3L else 1L
+  n_out <- ncol(m[["mlp", exact = TRUE]][["layers", exact = TRUE]][[length(m[["mlp", exact = TRUE]][["layers", exact = TRUE]])]][["W", exact = TRUE]])
+  want <- 3L * m[["spline", exact = TRUE]][["num_bins", exact = TRUE]] + if (affine) 3L else 1L
   if (n_out != want)
     stop(what, "the conditioner has ", n_out, " outputs; a", if (affine) "n affine" else "",
-         " spline of ", m$spline$num_bins, " bins needs ", want)
-  if (!is.null(m$spline$boundary_slopes) && !identical(m$spline$boundary_slopes, "identity"))
+         " spline of ", m[["spline", exact = TRUE]][["num_bins", exact = TRUE]], " bins needs ", want)
+  if (!is.null(m[["spline", exact = TRUE]][["boundary_slopes", exact = TRUE]]) && !identical(m[["spline", exact = TRUE]][["boundary_slopes", exact = TRUE]], "identity"))
     stop(what, "only boundary_slopes = \"identity\" is supported")
   invisible(TRUE)
 }
@@ -1051,29 +1051,29 @@ nn_own_parameterisation <- function(p_types, pars, tfs, type, what) {
 # Training box: natural scale per input (network order), sampled scale per
 # input. Cross-checks the card's two boxes when both are present.
 nn_box <- function(m, ctx, tr_card, tfs, zc, what) {
-  bn <- m$bounds_natural; bs <- m$bounds_sampled
+  bn <- m[["bounds_natural", exact = TRUE]]; bs <- m[["bounds_sampled", exact = TRUE]]
   if (is.null(bn) && is.null(bs)) stop(what, "the card has no training box (bounds_natural / bounds_sampled)")
   k <- length(ctx)
   if (!is.null(bn)) {
-    if (length(bn$lower) != length(tr_card) || length(bn$upper) != length(tr_card))
+    if (length(bn[["lower", exact = TRUE]]) != length(tr_card) || length(bn[["upper", exact = TRUE]]) != length(tr_card))
       stop(what, "bounds_natural needs one entry per context_transforms entry (", length(tr_card), ")")
     j <- match(ctx, names(tr_card))
-    lo <- bn$lower[j]; hi <- bn$upper[j]
+    lo <- bn[["lower", exact = TRUE]][j]; hi <- bn[["upper", exact = TRUE]][j]
     lo_s <- mapply(nn_tf, lo, tfs, zc); hi_s <- mapply(nn_tf, hi, tfs, zc)
   }
   if (!is.null(bs)) {
-    if (length(bs$lower) != k || length(bs$upper) != k)
+    if (length(bs[["lower", exact = TRUE]]) != k || length(bs[["upper", exact = TRUE]]) != k)
       stop(what, "bounds_sampled needs one entry per network input (", k, ")")
     if (is.null(bn)) {
-      lo_s <- bs$lower; hi_s <- bs$upper
+      lo_s <- bs[["lower", exact = TRUE]]; hi_s <- bs[["upper", exact = TRUE]]
       lo <- mapply(nn_tf_inv, lo_s, tfs, zc); hi <- mapply(nn_tf_inv, hi_s, tfs, zc)
     } else {
       agree <- function(a, b) (is.infinite(a) & a == b) | abs(a - b) <= 1e-8 * pmax(1, abs(b))
-      bad <- which(!(agree(lo_s, bs$lower) & agree(hi_s, bs$upper)))
+      bad <- which(!(agree(lo_s, bs[["lower", exact = TRUE]]) & agree(hi_s, bs[["upper", exact = TRUE]])))
       if (length(bad))
         stop(what, "the card's bounds_sampled disagree with its transformed bounds_natural for input ",
              bad[1], " ('", ctx[bad[1]], "'): its context_names may be permuted or mislabelled")
-      lo_s <- bs$lower; hi_s <- bs$upper
+      lo_s <- bs[["lower", exact = TRUE]]; hi_s <- bs[["upper", exact = TRUE]]
     }
   }
   if (any(!(lo < hi))) stop(what, "empty training box for ", paste(ctx[!(lo < hi)], collapse = ", "))
@@ -1118,9 +1118,9 @@ nn_check_pre <- function(pre, pars, defaults, box, what) {
 }
 
 nn_check_regression <- function(m, ctx, kind, what) {
-  lay <- m$input_layout
+  lay <- m[["input_layout", exact = TRUE]]
   if (is.null(lay)) stop(what, "a ", kind, " card must declare input_layout (the network's inputs in order)")
-  if (kind == "mlp_joint" && !(is.numeric(m$ll_floor_log) && length(m$ll_floor_log) == 1L && is.finite(m$ll_floor_log)))
+  if (kind == "mlp_joint" && !(is.numeric(m[["ll_floor_log", exact = TRUE]]) && length(m[["ll_floor_log", exact = TRUE]]) == 1L && is.finite(m[["ll_floor_log", exact = TRUE]])))
     stop(what, "a mlp_joint card must give ll_floor_log, the finite log density returned outside the training box")
   lay <- as.character(lay)
   bad <- setdiff(lay, c(ctx, nn_data_inputs))
@@ -1128,17 +1128,17 @@ nn_check_regression <- function(m, ctx, kind, what) {
                         " are neither context_names nor one of ", paste(nn_data_inputs, collapse = ", "))
   if (anyDuplicated(lay) || !all(ctx %in% lay))
     stop(what, "input_layout must list every context name exactly once")
-  n_in <- nrow(m$mlp$layers[[1]]$W)
+  n_in <- nrow(m[["mlp", exact = TRUE]][["layers", exact = TRUE]][[1]][["W", exact = TRUE]])
   if (n_in != length(lay)) stop(what, "input_layout has ", length(lay), " entries; the network has ", n_in, " inputs")
-  if (ncol(m$mlp$layers[[length(m$mlp$layers)]]$W) != 1L)
+  if (ncol(m[["mlp", exact = TRUE]][["layers", exact = TRUE]][[length(m[["mlp", exact = TRUE]][["layers", exact = TRUE]])]][["W", exact = TRUE]]) != 1L)
     stop(what, "a ", kind, " network must have a single output (the joint log density)")
-  if (!is.null(m$scaler) && (length(m$scaler$mean) != n_in || length(m$scaler$scale) != n_in))
+  if (!is.null(m[["scaler", exact = TRUE]]) && (length(m[["scaler", exact = TRUE]][["mean", exact = TRUE]]) != n_in || length(m[["scaler", exact = TRUE]][["scale", exact = TRUE]]) != n_in))
     stop(what, "a ", kind, " scaler needs one mean and scale per input (", n_in, ")")
-  if (!is.null(m$response_values) && length(m$response_values) != 2L)
+  if (!is.null(m[["response_values", exact = TRUE]]) && length(m[["response_values", exact = TRUE]]) != 2L)
     stop(what, "response_values must give the input values for responses 1 and 2")
-  if (!is.null(m$output_scaler) && !(length(m$output_scaler$mean) == 1L && length(m$output_scaler$scale) == 1L))
+  if (!is.null(m[["output_scaler", exact = TRUE]]) && !(length(m[["output_scaler", exact = TRUE]][["mean", exact = TRUE]]) == 1L && length(m[["output_scaler", exact = TRUE]][["scale", exact = TRUE]]) == 1L))
     stop(what, "output_scaler needs one mean and one scale")
-  nle_mlp_forward(m$mlp, matrix(0, 1L, n_in))     # refuses an unsupported activation now
+  nle_mlp_forward(m[["mlp", exact = TRUE]], matrix(0, 1L, n_in))     # refuses an unsupported activation now
   invisible(TRUE)
 }
 
@@ -1408,11 +1408,11 @@ nle_artefact_info <- function(x) {
   reg <- if (inherits(x, "emc_nn")) x else if (is.function(x)) x()$nn else if (is.list(x)) x$nn else
     register_nn_model(x)()$nn
   cm <- reg$card
-  step <- if (!is.null(cm$checkpoint_step)) cm$checkpoint_step else
-    c(flow = cm$checkpoint_step_flow, classifier = cm$checkpoint_step_classifier)
+  step <- if (!is.null(cm[["checkpoint_step", exact = TRUE]])) cm[["checkpoint_step", exact = TRUE]] else
+    c(flow = cm[["checkpoint_step_flow", exact = TRUE]], classifier = cm[["checkpoint_step_classifier", exact = TRUE]])
   cat(sprintf("EMC2 %s @ %s\n  artefact %s: budget=%s checkpoint_step=%s %s=%s\n",
               as.character(utils::packageVersion("EMC2")), find.package("EMC2"),
-              reg$label, if (is.null(cm$budget)) "?" else cm$budget,
+              reg$label, if (is.null(cm[["budget", exact = TRUE]])) "?" else cm[["budget", exact = TRUE]],
               if (is.null(names(step))) paste(step, collapse = "/") else
                 paste(names(step), step, sep = "=", collapse = "/"),
               nle_hash_algo(), reg$sha256))

@@ -34,9 +34,11 @@
 #' @param golden Path of the golden CSV. Default: the file beside the card,
 #'   or the shipped one.
 #' @param tol The largest absolute difference accepted, per output
-#'   (`log_pdf` and the CDF). The exporters' float64 port and EMC2 agree to
-#'   about `1e-12`; `1e-9` leaves room for a different BLAS. A LAN converted
-#'   from a float32 ONNX file needs about `1e-4`.
+#'   (`log_pdf` and the CDF). Default: the tolerance the card records in
+#'   `validation$golden$tolerance`, else `1e-9`. The exporters' float64 port
+#'   and EMC2 agree to about `1e-12`; `1e-9` leaves room for a different
+#'   BLAS. A LAN converted from a float32 ONNX file needs about `1e-4`, which
+#'   `nleflow convert` records in the card.
 #' @param flow_only For a joint flow: compare the flow's part only (the joint
 #'   log density minus `log_p_R`, and the CDF divided by `P(R)`), for a golden
 #'   file written with another classifier than the card's.
@@ -49,11 +51,12 @@
 #' @examples
 #' nn_golden_check("rdm_small")
 #' @export
-nn_golden_check <- function(x, golden = NULL, tol = 1e-9, flow_only = FALSE, error = TRUE,
+nn_golden_check <- function(x, golden = NULL, tol = NULL, flow_only = FALSE, error = TRUE,
                             twin = NULL, ...) {
   reg <- nn_golden_reg(x, twin, ...)
   if (is.null(golden)) golden <- nn_golden_path(reg)
   if (!file.exists(golden)) stop("No golden file ", golden, " for neural likelihood '", reg$label, "'")
+  if (is.null(tol)) tol <- nn_golden_tolerance(reg)
   g <- utils::read.csv(golden, stringsAsFactors = FALSE)
   ctx <- reg$context_names
   miss <- setdiff(ctx, names(g))
@@ -82,6 +85,16 @@ format.nn_golden_check <- function(x, ...) {
 
 #' @export
 print.nn_golden_check <- function(x, ...) { cat(format(x), "\n", sep = ""); invisible(x) }
+
+# The tolerance a card states for its own golden file (validation$golden$tolerance,
+# read by exact name), 1e-9 when it states none.
+nn_golden_tolerance <- function(reg) {
+  tol <- reg[["card", exact = TRUE]][["validation", exact = TRUE]][["golden", exact = TRUE]][["tolerance", exact = TRUE]]
+  if (is.null(tol)) return(1e-9)
+  if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0)
+    stop("The card's validation$golden$tolerance must be one positive number")
+  tol
+}
 
 nn_golden_reg <- function(x, twin, ...) {
   if (inherits(x, "emc_nn")) return(x)
@@ -132,15 +145,15 @@ nn_golden_joint <- function(reg, g, flow_only) {
   miss <- setdiff(need, names(g))
   if (length(miss)) stop("Golden file lacks column(s) ", paste(miss, collapse = ", "))
   th <- nn_golden_theta_joint(reg, g)
-  ev <- ddm_ens_eval_trials_cpp(nn_ptr(reg), th, as.numeric(g$rt), as.integer(g$R))
+  ev <- ddm_ens_eval_trials_cpp(nn_ptr(reg), th, as.numeric(g[["rt", exact = TRUE]]), as.integer(g[["R", exact = TRUE]]))
   if (flow_only) {
-    if (is.null(g$log_p_R)) stop("flow_only needs the golden column log_p_R")
-    c(log_pdf_flow = max(nn_golden_diff(ev$log_pdf - log(ev$p_R), g$log_pdf_joint - g$log_p_R)),
-      cdf_flow = max(nn_golden_diff(ev$cdf / ev$p_R, g$cdf_defective / exp(g$log_p_R))))
+    if (is.null(g[["log_p_R", exact = TRUE]])) stop("flow_only needs the golden column log_p_R")
+    c(log_pdf_flow = max(nn_golden_diff(ev$log_pdf - log(ev$p_R), g[["log_pdf_joint", exact = TRUE]] - g[["log_p_R", exact = TRUE]])),
+      cdf_flow = max(nn_golden_diff(ev$cdf / ev$p_R, g[["cdf_defective", exact = TRUE]] / exp(g[["log_p_R", exact = TRUE]]))))
   } else {
-    d <- c(log_pdf = max(nn_golden_diff(ev$log_pdf, g$log_pdf_joint)),
-           cdf = max(nn_golden_diff(ev$cdf, g$cdf_defective)))
-    if (!is.null(g$log_p_R)) d <- c(d, log_p_R = max(nn_golden_diff(log(ev$p_R), g$log_p_R)))
+    d <- c(log_pdf = max(nn_golden_diff(ev$log_pdf, g[["log_pdf_joint", exact = TRUE]])),
+           cdf = max(nn_golden_diff(ev$cdf, g[["cdf_defective", exact = TRUE]])))
+    if (!is.null(g[["log_p_R", exact = TRUE]])) d <- c(d, log_p_R = max(nn_golden_diff(log(ev$p_R), g[["log_p_R", exact = TRUE]])))
     d
   }
 }
@@ -151,23 +164,23 @@ nn_golden_race <- function(reg, g) {
   if (length(miss)) stop("Golden file lacks column(s) ", paste(miss, collapse = ", "))
   th <- as.matrix(g[, reg$context_names, drop = FALSE]); storage.mode(th) <- "double"
   # a decision-time card's golden file holds the time the network sees
-  ev <- flow_eval_trials_cpp(nn_ptr(reg), th, as.numeric(g$rt))
-  c(log_pdf = max(nn_golden_diff(ev$log_pdf, g$log_pdf)),
-    cdf = max(nn_golden_diff(ev$cdf, g$cdf)),
-    log_sf = max(nn_golden_diff(ev$log_sf, g$log_sf)))
+  ev <- flow_eval_trials_cpp(nn_ptr(reg), th, as.numeric(g[["rt", exact = TRUE]]))
+  c(log_pdf = max(nn_golden_diff(ev$log_pdf, g[["log_pdf", exact = TRUE]])),
+    cdf = max(nn_golden_diff(ev$cdf, g[["cdf", exact = TRUE]])),
+    log_sf = max(nn_golden_diff(ev$log_sf, g[["log_sf", exact = TRUE]])))
 }
 
 nn_golden_mlp <- function(reg, g) {
   lp_col <- intersect(c("log_pdf_joint", "log_pdf", "logp", "logp_ort"), names(g))
   if (!length(lp_col)) stop("Golden file has no log-density column (log_pdf_joint, log_pdf, logp or logp_ort)")
-  if (!is.null(g$R)) R <- as.integer(g$R)
-  else if (!is.null(g$choice)) {
-    rv <- if (is.null(reg$card$response_values)) c(1, 2) else unlist(reg$card$response_values)
-    R <- ifelse(g$choice == rv[2], 2L, ifelse(g$choice == rv[1], 1L, NA_integer_))
+  if (!is.null(g[["R", exact = TRUE]])) R <- as.integer(g[["R", exact = TRUE]])
+  else if (!is.null(g[["choice", exact = TRUE]])) {
+    rv <- if (is.null(reg$card[["response_values", exact = TRUE]])) c(1, 2) else unlist(reg$card[["response_values", exact = TRUE]])
+    R <- ifelse(g[["choice", exact = TRUE]] == rv[2], 2L, ifelse(g[["choice", exact = TRUE]] == rv[1], 1L, NA_integer_))
     if (anyNA(R)) stop("Golden 'choice' values are not the card's response_values")
   } else stop("Golden file needs a response column (R, or choice in the card's response_values)")
   pars <- as.matrix(g[, reg$context_names, drop = FALSE]); storage.mode(pars) <- "double"
   colnames(pars) <- reg$pars
-  lp <- log(nn_eval_joint(reg, as.numeric(g$rt), R, pars, "pdf"))
+  lp <- log(nn_eval_joint(reg, as.numeric(g[["rt", exact = TRUE]]), R, pars, "pdf"))
   c(log_pdf = max(nn_golden_diff(lp, as.numeric(g[[lp_col[1]]]))))
 }

@@ -214,6 +214,7 @@ test_that("the mapping's parameters are recovered as the best agreement (profile
 # --- g. the converter itself (inst/scripts/onnx_to_card.py) ---------------------------------------
 # Needs python with onnx and onnxruntime; point EMC2_NLE_PYTHON at it (default python3).
 test_that("onnx_to_card.py turns the original ONNX file into the golden card, --verify passes", {
+  skip("onnx_to_card.py now only points to `nleflow convert` (nleflow/, plan section 7.4); the converter is tested there (tests/test_convert.py)")
   skip_if_not_installed("jsonlite")
   py <- Sys.getenv("EMC2_NLE_PYTHON", "python3")
   has <- suppressWarnings(system2(py, c("-c", shQuote("import onnx, onnxruntime, numpy")),
@@ -237,4 +238,23 @@ test_that("onnx_to_card.py turns the original ONNX file into the golden card, --
   bad <- system2(py, c(shQuote(script), shQuote(test_path("golden", "ddm_uniform_st.onnx")), shQuote(out)),
                  stdout = TRUE, stderr = TRUE)
   expect_true(!is.null(attr(bad, "status")) && any(grepl("--params is required", bad)))
+})
+
+# --- card fields are read by exact name ---------------------------------------------
+# `$` on a list matches a field by prefix: a card field `preset` was read as `pre`
+# and the card refused (found converting the LAN with nleflow). Extra fields named
+# like a prefix of a field EMC2 reads must leave the registration unchanged.
+test_that("a card with extra fields that begin with names EMC2 reads registers unchanged", {
+  card <- readRDS(lan_card_path)
+  extra <- c(preset = "ddm_uniform_st", pre_x = "x", scaler_note = "x", scaling_note = "x", mlp_note = "x",
+             kind_note = "x", bounds_note = "x", response_note = "x", ll_note = "x", context_note = "x")
+  card2 <- c(card, as.list(extra))
+  path <- tempfile(fileext = ".rds"); saveRDS(card2, path)
+  m0 <- lan_model()()
+  m1 <- register_nn_model(path, p_types = lan_p_types)()
+  for (f in c("kind", "context_names", "transforms", "lower", "upper", "ll_floor", "oob", "cdf"))
+    expect_identical(m1$nn[[f]], m0$nn[[f]], label = f)
+  g <- read.csv(test_path("golden", "lan_ddm_uniform_st_ort.csv"))
+  pars <- as.matrix(g[, c("v", "a", "z", "t", "st")]); R <- ifelse(g$choice > 0, 2L, 1L)
+  expect_identical(m1$dfun(g$rt, R, pars), m0$dfun(g$rt, R, pars))
 })

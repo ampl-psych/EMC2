@@ -2,13 +2,17 @@
 # nothing and confirms that the installed EMC2 evaluates each card as its
 # golden vectors say it should.
 #
-#   Rscript nle_verify.R [<card> ...]
+#   Rscript nle_verify.R [--p-types=v=0,a=1,...] [<card> ...]
 #   Rscript -e 'source(system.file("scripts", "nle_verify.R", package = "EMC2"))'
 #
 # Without arguments the shipped artefacts (ddm_cap256w_c4, ddm_st0zero,
 # rdm_small) are checked against the golden files shipped with them. Each
 # further argument is a card file (<tag>_weights.json or .rds) checked against
-# <tag>_golden.csv beside it; its twin is the card's `model` (DDMsc -> DDM).
+# <tag>_golden.csv beside it, to the tolerance the card records in
+# validation$golden$tolerance (1e-9 without one); its twin is the card's `model`
+# (DDMsc -> DDM). A card with no analytic twin (a LAN, kind mlp_joint) needs the
+# defaults of its parameters on the sampled scale: the card's own `p_types`
+# field, or --p-types=v=0,a=1,z=0.5,t=0.5,st=0.05 (before the card).
 # For a scaled DDM card the compiled likelihood is also compared with the R
 # path over prior draws, and the R path with the analytic unit-scale DDM in
 # place of the network (the oracle) where the NLE R reference is at hand.
@@ -18,6 +22,13 @@
 suppressPackageStartupMessages(library(EMC2))
 nle <- function(f) getFromNamespace(f, "EMC2")
 args <- commandArgs(trailingOnly = TRUE)
+p_types_arg <- NULL
+pt <- grep("^--p-types=", args, value = TRUE)
+if (length(pt)) {
+  kv <- strsplit(strsplit(sub("^--p-types=", "", pt[length(pt)]), ",")[[1]], "=")
+  p_types_arg <- stats::setNames(as.numeric(vapply(kv, `[`, "", 2)), vapply(kv, `[`, "", 1))
+  args <- setdiff(args, pt)
+}
 fails <- 0L
 say <- function(ok, ...) {
   cat(if (ok) "PASS " else "FAIL ", ..., "\n", sep = "")
@@ -94,7 +105,14 @@ scaled_checks <- function(card, m) {
 
 for (card in args) {
   if (!file.exists(card)) { say(FALSE, "no such card ", card); next }
-  m <- try_check(card, register_nn_model(card))
+  # a card with no analytic twin registers with its own defaults: the card's p_types, else --p-types
+  pt_card <- if (grepl("\\.json$", card, ignore.case = TRUE) && requireNamespace("jsonlite", quietly = TRUE))
+    jsonlite::fromJSON(card, simplifyVector = TRUE)[["p_types"]] else NULL
+  p_types <- if (!is.null(pt_card)) unlist(pt_card) else p_types_arg
+  m <- tryCatch(register_nn_model(card), error = function(e) e)
+  if (inherits(m, "error") && !is.null(p_types) && grepl("p_types", conditionMessage(m)))
+    m <- tryCatch(register_nn_model(card, p_types = p_types), error = function(e) e)
+  if (inherits(m, "error")) { say(FALSE, card, ": ", conditionMessage(m)); next }
   if (is.null(m)) next
   reg <- m()$nn
   cat(sprintf("card %s: kind %s, card_version %s, %s=%s\n", basename(card), reg$kind,

@@ -149,6 +149,15 @@ the kit's results fit it:
 }
 ```
 
+`validation$golden$tolerance` is the tolerance `nn_golden_check()` uses for the
+card's golden file when `tol` is not given (1e-9 without one; a LAN converted
+from a float32 ONNX file records 1e-4).
+
+`p_types` (optional, for a card with no analytic twin such as a LAN): named
+defaults of the parameters on the sampled scale. `register_nn_model()` does not
+read it (give `p_types = ` there); `inst/scripts/nle_verify.R` uses it to
+register the card, or `--p-types=v=0,a=1,z=0.5,t=0.5,st=0.05`.
+
 A version-1 card without `validation` registers with a message: loading a
 network is not the same as being able to infer with it (`?nn_cell`).
 
