@@ -1,0 +1,323 @@
+---
+title: "Using a trained flow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using a trained flow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+# The card is not shipped with EMC2: every chunk that needs it is eval = FALSE, and
+# what it printed is read from data/using-a-trained-flow.RData, written by
+# system.file("scripts", "using_a_trained_flow_data.R", package = "EMC2").
+load("data/using-a-trained-flow.RData")
+show <- function(x) cat(sub("\n$", "", x), sep = "\n")
+```
+
+This vignette takes a neural likelihood trained outside *EMC2*, a *card*, and
+fits data with it: register the card, check it, build a design and a prior
+that respect it, fit one subject, and compare the fit with the analytic
+likelihood on the same data. The card is `ddm_svst0_e299`, a normalizing flow
+for *EMC2*'s `DDM` with drift-rate variability `sv` and non-decision-time
+variability `st0` free. The card is not part of *EMC2*, so the code below is
+not run when the vignette is built; what it printed comes from the script
+`system.file("scripts", "using_a_trained_flow_data.R", package = "EMC2")`,
+which regenerates every number here from the card in about half a minute on
+six cores (`r ut$env$machine`, `r ut$env$R`).
+
+## 1. The card
+
+A card is one JSON file: the network's weights, its spline, the names of its
+inputs and the scale each is given on, the region of parameter space it was
+trained on (the *box*), the parameters it holds fixed, and golden vectors to
+check it with. Cards are made by **nleflow**, a Python package that trains a
+flow from a model specification and a simulator and exports the result
+(`nleflow spec` -> `simulate` -> `train` -> `export`). Its `START_HERE.md`
+(the NLE repository, `nleflow/START_HERE.md`; at the time of writing a
+private repository, <https://github.com/andrewheathcote/nle>, branch
+`nleflow-plan`) explains how to install it, and its `TUTORIAL.md` makes a
+card in about half an hour. The format, the contract between nleflow and
+*EMC2*, is `vignette("neural-likelihood-cards")`.
+
+This card is `r ut$card_info$file` (sha256 `r substr(ut$card_info$sha256, 1, 16)`...),
+kind `r ut$card_info$kind`: a spline flow over rt given the parameters and the
+response, and a classifier for the probability of the second response. It was
+trained for `r ut$card_info$training$epochs` epochs on 24 million simulated
+trials (nleflow's `examples/ddm_svst0`).
+
+```{r, eval = FALSE}
+card <- "ddm_svst0_e299_weights.json"      # from the NLE repository, handover/nle-methods/port/export/
+j <- jsonlite::fromJSON(card)
+j$kind; j$context_names; j$fixed
+```
+
+```{r, echo = FALSE}
+ut$card_info$kind; ut$card_info$context_names; as.list(ut$card_info$fixed)
+```
+
+Its inputs and the box (natural scale), with the transform each input is
+given to the network on:
+
+```{r, echo = FALSE}
+ut$card_info$box
+```
+
+`sv` and `st0` are *zero-box* inputs: the box includes exactly zero, and the
+flow was trained on four regimes (both free, `sv = 0`, `st0 = 0`, both zero),
+so the card gives the exact-zero models as well (`zerobox_c` is the
+encoding's scale). `s` and `SZ` are not inputs: training held them at the
+values in `fixed`, `s = 1` (the DDM's scale) and `SZ = 0` (no start-point
+variability). Outside the box the network returns its floor, log density
+`r round(ut$card_info$ll_floor_log, 1)`.
+
+`register_nn_model()` turns the card into an *EMC2* model. `twin = DDM` names
+the analytic model the card approximates; the registered model borrows its
+parameter names, transforms, defaults and simulator, and replaces its
+likelihood:
+
+```{r, eval = FALSE}
+m <- register_nn_model(card, twin = DDM)
+```
+
+```{r, echo = FALSE}
+show(ut$reg$messages)
+```
+
+Section 4 comes back to this message: the card says nothing about whether its
+posteriors are calibrated. The card's `fixed`
+values become the model's exceptions, so `s` and `SZ` can only be held at 1
+and 0 (an exception that contradicts `fixed` is refused):
+
+```{r, eval = FALSE}
+m()$nn$fixed
+m()$p_types
+```
+
+```{r, echo = FALSE}
+ut$reg$fixed
+ut$reg$p_types
+```
+
+The first check is that *EMC2* computes what the exporter computed: the
+golden vectors beside the card (`ddm_svst0_e299_golden.csv`) are the
+exporter's log densities at 1150 points, which `nn_golden_check()` recomputes
+with *EMC2*'s compiled evaluator:
+
+```{r, eval = FALSE}
+nn_golden_check(m)
+```
+
+```{r, echo = FALSE}
+show(ut$golden)
+```
+
+The same check, together with the cards that ship with *EMC2*, is one
+command, which installs nothing and needs no R session of your own:
+
+```{r, eval = FALSE}
+# in a shell:  Rscript -e 'source(system.file("scripts", "nle_verify.R", package = "EMC2"))' ddm_svst0_e299_weights.json
+```
+
+```{r, echo = FALSE}
+show(ut$verify)
+```
+
+## 2. A design and a prior
+
+The design is an ordinary `DDM` design with the registered model in place of
+`DDM`: drift rate by stimulus, everything else one value. `s` and `SZ` are
+constants at the card's `fixed` values, on the sampled scale (`s` is sampled
+on the log scale, `SZ` on the probit scale):
+
+```{r, eval = FALSE}
+des <- design(factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+              formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, sv ~ 1, st0 ~ 1),
+              constants = c(s = log(1), SZ = qnorm(0)), model = m)
+```
+
+```{r, echo = FALSE}
+show(ut$design_messages); show(ut$design_nn)
+```
+
+**The prior must stay inside the box.** Where a parameter vector leaves the
+box the network returns its floor, which cuts the posterior off there.
+`nn_in_box()` maps the prior's mean +- 4 sd of every parameter to the natural
+scale, cell by cell of the design, and compares it with the box. A first try:
+
+```{r, eval = FALSE}
+pmean <- c(v = 0, v_Sright = 1, a = log(1.2), t0 = log(.25), Z = 0, sv = log(.8), st0 = log(.1))
+pri <- prior(des, type = "single", pmean = pmean,
+             psd = c(v = 1, v_Sright = 1, a = .3, t0 = .2, Z = .2, sv = .3, st0 = .3))
+nn_in_box(des, pri)
+```
+
+```{r, echo = FALSE}
+ut$box_wide
+show(paste("Warning message:", ut$box_wide_warning, sep = "\n"))
+```
+
+The right-stimulus drift rate (`v + v_Sright`) and the boundary separation
+`a` leave the box. Narrower sds on `v`, `v_Sright` and `a` keep the prior
+inside:
+
+```{r, eval = FALSE}
+pri <- prior(des, type = "single", pmean = pmean,
+             psd = c(v = .6, v_Sright = .6, a = .15, t0 = .2, Z = .2, sv = .3, st0 = .3))
+nn_in_box(des, pri)
+```
+
+```{r, echo = FALSE}
+ut$box_ok
+```
+
+`nn_cell()` and `run_sbc()` refuse a prior that fails this check; a fit does
+not, so check before fitting.
+
+**The rt resolution.** `make_emc()` floors response times to its
+`rt_resolution`, by default 1/60 s (a 60 Hz screen). When `t0` is sampled, that
+moves every rt earlier by up to 16.7 ms, and `t0`, which is bounded by the
+fastest responses, follows: in the NLE project's simulations the default
+biased `t0` by about -1.9 posterior sds at 100 trials, for the analytic
+likelihood as much as for a network. `make_emc()` warns when a
+neural-likelihood design is given a coarse resolution:
+
+```{r, eval = FALSE}
+emc <- make_emc(dat, des, prior_list = pri)      # the default rt_resolution = 1/60
+```
+
+```{r, echo = FALSE}
+show(paste("Warning message:", ut$coarse_warning, sep = "\n"))
+```
+
+so give it the resolution the data were recorded at, 1 ms or finer:
+
+```{r, eval = FALSE}
+emc <- make_emc(dat, des, prior_list = pri, rt_resolution = 1/1000)
+```
+
+## 3. One subject, fitted with the card and with the analytic DDM
+
+One subject, `r ut$data_summary$n` trials (200 per stimulus), simulated from
+the analytic `DDM` (not from the network) at values inside the box, with
+`sv` and `st0` above zero (on the natural scale, `v` = -1 for the left
+stimulus and 1 for the right, `a` = 1.3, `t0` = 0.3 s, `Z` = 0.45, `sv` = 1,
+`st0` = 0.15 s). The same data, design (with `DDM` as the model), prior and
+seed are then fitted with the analytic likelihood. The chains run in
+parallel, in forked processes, so the seed fixes the fit only with R's
+`"L'Ecuyer-CMRG"` generator. Three chains of two cores each use six cores.
+
+```{r, eval = FALSE}
+RNGkind("L'Ecuyer-CMRG")
+des_ddm <- design(factors = list(subjects = 1, S = c("left", "right")), Rlevels = c("left", "right"),
+                  formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, sv ~ 1, st0 ~ 1),
+                  constants = c(s = log(1), SZ = qnorm(0)), model = DDM)
+pri_ddm <- prior(des_ddm, type = "single", pmean = pmean,
+                 psd = c(v = .6, v_Sright = .6, a = .15, t0 = .2, Z = .2, sv = .3, st0 = .3))
+truth <- c(v = -1, v_Sright = 2, a = log(1.3), t0 = log(.3), Z = qnorm(.45), sv = log(1), st0 = log(.15))
+set.seed(20261020)
+dat <- make_data(truth, des_ddm, n_trials = 200)
+
+emc_card <- make_emc(dat, des, prior_list = pri, rt_resolution = 1/1000)
+set.seed(1)
+emc_card <- fit(emc_card, cores_per_chain = 2, cores_for_chains = 3)
+
+emc_ddm <- make_emc(dat, des_ddm, prior_list = pri_ddm, rt_resolution = 1/1000)
+set.seed(1)
+emc_ddm <- fit(emc_ddm, cores_per_chain = 2, cores_for_chains = 3)
+```
+
+```{r, echo = FALSE}
+ut$data_summary$table
+```
+
+Posterior means and 95 % intervals on the sampled scale (log for `a`, `t0`,
+`sv`, `st0`; probit for `Z`), from `get_pars(emc, selection = "alpha")`.
+`shift` is the card's posterior mean minus the analytic one, in analytic
+posterior sds; `sd ratio` is the ratio of the posterior sds; `overlap` is the
+part of the analytic interval that the card's interval covers.
+
+```{r, echo = FALSE}
+cmp <- ut$comparison
+tab <- data.frame(parameter = cmp$parameter, true = round(cmp$true, 3),
+                  card = sprintf("%.3f [%.3f, %.3f]", cmp$card_mean, cmp$card_lower, cmp$card_upper),
+                  analytic = sprintf("%.3f [%.3f, %.3f]", cmp$analytic_mean, cmp$analytic_lower, cmp$analytic_upper),
+                  shift = sprintf("%+.3f", cmp$shift_sd), `sd ratio` = sprintf("%.3f", cmp$sd_ratio),
+                  overlap = sprintf("%.2f", cmp$overlap), check.names = FALSE)
+knitr::kable(tab)
+fs <- ut$fits
+knitr::kable(data.frame(fit = c("card", "analytic DDM"),
+                        seconds = round(c(fs$card$seconds, fs$analytic$seconds), 1),
+                        `samples` = c(sum(fs$card$iter), sum(fs$analytic$iter)),
+                        `max gd` = round(c(fs$card$gd_max, fs$analytic$gd_max), 3),
+                        `min ESS` = round(c(fs$card$ess_min, fs$analytic$ess_min)),
+                        check.names = FALSE))
+```
+
+The two posteriors agree: the means differ by at most
+`r sprintf("%.2f", max(abs(cmp$shift_sd)))` posterior sds, the sds by at most
+`r sprintf("%.0f", 100 * max(abs(cmp$sd_ratio - 1)))` %, and the intervals
+overlap by `r sprintf("%.0f", 100 * min(cmp$overlap))` % or more. With
+`r round(min(fs$card$ess_min, fs$analytic$ess_min))` or more effective
+samples per fit the Monte Carlo error of each mean is about 0.03 posterior
+sd, so differences of this size are mostly sampling noise. The card's fit
+took `r round(fs$card$seconds, 1)` s and the analytic fit
+`r round(fs$analytic$seconds, 1)` s, `r sprintf("%.1f", fs$analytic$seconds / fs$card$seconds)`
+times longer; the analytic DDM with `st0 > 0` integrates over the
+non-decision time, the network does not.
+
+Both posteriors miss the true values by about the same amounts (`v_Sright`,
+for example, is 1.78 and 1.76 against 2): that is this data set, not the
+likelihood. `sv` is the least informed parameter, with the widest interval.
+
+## 4. What the checks showed, and what they did not
+
+The checks in section 1, and the gates nleflow ran when it exported the card
+(its `examples/ddm_svst0/README.md`), test **the network and its transport**:
+the card computes in *EMC2* what it computed in training (the golden check,
+7.6e-12), the compiled and R paths agree, and the network is close to the
+analytic DDM point by point (on 100 000 held-out simulated trials, 99 % within
+0.1 log units, worst in the far tail beyond 3 s). The fit in section 3 shows
+the two likelihoods give the same posterior on one data set.
+
+None of this shows that the card's **posteriors are calibrated**. Point
+accuracy is not calibration: a network's error that varies with the
+parameters moves the posterior, and a small error repeated over hundreds of
+trials, all in one direction, can move it by a sizeable part of a posterior
+sd, which one data set will not reveal. That is checked over many data sets
+simulated from the prior, against the analytic likelihood on the same data,
+with the tools of `vignette("neural-likelihoods")`:
+
+- `nn_cell()` builds a cell: one design and prior, twice, with the network
+  and with its analytic control;
+- `nn_score_bias()` (seconds) is the direction in which the network pulls
+  the posterior, per trial; `nn_posterior_shift()` (about a minute) predicts
+  an SBC cell's standardised bias without the sampler;
+- `run_sbc()` (through `nn_sbc_cell()`, hours) is the confirmation:
+  simulation-based calibration of the network and of its control.
+
+For this card none has been run yet (its registration message says so);
+until they have, use it as above, alongside the analytic likelihood, and
+not in place of it.
+
+## 5. The same card outside R
+
+nleflow also writes a card as an ONNX graph, so that the same network can be
+used without *EMC2* (for example by HSSM-style Python code, with nothing but
+`onnxruntime`):
+
+```{r, eval = FALSE}
+# in a shell, in nleflow/:
+#   uv run nleflow onnx ddm_svst0_e299_weights.json                         # two graphs
+#   uv run nleflow onnx-check ddm_svst0_e299_shared.onnx ddm_svst0_e299_weights.json
+```
+
+It writes two graphs, `trialwise` (a parameter vector per trial) and `shared`
+(one parameter vector for a block of trials), both float64; each takes the
+parameters on the card's stored scale, rt and the choice (-1 for the first
+response, +1 for the second) and returns the log likelihood of each trial.
+They match the golden vectors to about 3e-12. nleflow's `examples/onnx_use`
+(`README.md` and `use_onnx.py`) uses the graphs with `numpy` and
+`onnxruntime` only, and documents the conversion from natural parameters to
+the stored scale.
