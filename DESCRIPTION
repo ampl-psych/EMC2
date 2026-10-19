@@ -41,6 +41,7 @@ VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),
     vdiffr,
+    withr,
     knitr,
     rmarkdown,
     DiagrammeR

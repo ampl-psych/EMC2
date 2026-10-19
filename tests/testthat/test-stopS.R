@@ -24,13 +24,10 @@ expect_ssexg_cr_equal <- function(emc, p_vector, n = 25, proposal_var = 0.0025,
   expect_equal(ll_c, ll_r, tolerance = tolerance)
 }
 
-# Baseline single-subject SSEXG fixture using staircase SSD generation.
-mySSD_function <- make_ssd()
-
 designSSexG <- design(model=SSEXG,
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
-                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1), report_p_vector = FALSE
+                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)
 )
 
 p_vector <- sampled_pars(designSSexG,doMap = FALSE)
@@ -38,22 +35,21 @@ p_vector[1:length(p_vector)] <- c(log(.6), log(.8), log(0.05), log(0.2),
                                   log(0.2),log(0.03), log(0.05),
                                   qnorm(.1),qnorm(.1))
 
-dat <- make_data(p_vector, designSSexG, n_trials = 10,
-                 functions = list(SSD = mySSD_function))
-emc <- make_emc(dat, designSSexG, type = "single")
 
+dat <- data.frame(
+  subjects = factor(1),
+  S = factor(rep(c("left", "right"), each = 4)),
+  R = factor(c("left", "right", NA, "left", "right", "left", NA, "right"),
+             levels = c("left", "right")),
+  rt = c(.65, .9, NA, .75, .7, 1.1, NA, .85),
+  SSD = c(Inf, Inf, .2, .3, Inf, Inf, .25, .35)
+)
+emc <- make_emc(dat, designSSexG, type = "single", compress = FALSE, n_chains = 1)
 
-test_that("exG", {
-  # Smoke-test that SSEXG can initialize and returns structurally valid samples.
-  samples <- init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples
-  expect_equal(dim(samples$alpha), c(length(p_vector), 1, 1))
-  expect_named(samples$alpha[, 1, 1], names(p_vector))
-  expect_equal(as.character(samples$stage), "init")
-  expect_equal(samples$idx, 1)
-  expect_true(is.finite(samples$subj_ll[1, 1]))
+test_that("exG likelihood", {
+  parameters <- likelihood_parameters(p_vector)
+  expect_snapshot(round(model_likelihood(emc, parameters), 6))
 })
-
-
 
 test_that("staircase resets per subject", {
   # Each subject-specific staircase should start from the same initial SSD.

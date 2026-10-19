@@ -1,0 +1,83 @@
+withr::local_preserve_seed()
+
+calc_lls <- function(emc, n_particles=1e3) {
+  model <- emc[[1]]$model()
+  p_types <- names(model$p_types)
+  dadm <- emc[[1]]$data[[1]]
+
+  designs <- list()
+  for(p in p_types){
+    designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+  }
+  constants <- attr(dadm, "constants")
+  if(is.null(constants)) constants <- NA
+
+  # make p_mat
+
+  p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
+  colnames(p_mat) <- p_types
+  ## always set t0 to log(runif(0, min(dadm$rt))) to ensure there's actual density
+  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt, na.rm=TRUE)))
+
+  ## if the model is an RDM, set half of the A-values to 0 to ensure both pathways (digt0/pigt0 and digt_core/pigt_core) are tested
+  if(model$c_name == 'RDM') {
+    p_mat[1:(nrow(p_mat)/2),'A'] <- log(0)
+  }
+
+  lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
+                            model$bound, model$transform, model$pre_transform, p_types = p_types,
+                            min_ll = log(1e-10), model$trend)[1,]
+  round(lls_new, 3)  # prevent numerical precision issues messing with the results
+}
+
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+matchfun=function(d)d$S==d$lR
+dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2],]
+dat$subjects <- droplevels(dat$subjects)
+
+# LNR ---------------------------------------------------------------------
+design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
+                     formula=list(m~lM,s~1,t0~1),
+                     contrasts=list(m=list(lM=ADmat)), report_p_vector=FALSE)
+
+# RDM ----------------------------------------------------------
+design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
+                     formula=list(v~lM,s~1,t0~1,A~1,B~1),
+                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
+
+# LBA ----------------------------------------------------------
+design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
+                     formula=list(v~lM,sv~1,t0~1,A~1,B~1),
+                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
+
+# WDM ----------------------------------------------------------
+design_WDM <- design(data = dat, model=DDM,
+                     formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+                     constants=c(s=1, sv=log(0), SZ=qnorm(0)), report_p_vector=FALSE)
+
+# Tests for likelihoods that rely on survivor functions (1-CDFs) ----------
+dat_m <- make_missing(dat, LT=0.15, UC=0.75, rt_resolution=0.05) # truncation requires CDFs on each trial, censoring only for NA trials
+LNR_s1_m <- make_emc(dat_m, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+RDM_s1_m <- make_emc(dat_m, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+LBA_s1_m <- make_emc(dat_m, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+WDM_s1_m <- make_emc(dat_m, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+
+# Keep the original coefficient draws after removing the duplicated core cases.
+assign(".Random.seed", c(10407L, -1186531652L, 1469460740L, 1702494635L,
+                        2142430657L, 57016431L, 881925066L), envir = .GlobalEnv)
+test_that("LNR with missing", {expect_snapshot(calc_lls(LNR_s1_m))})
+test_that("RDM with missing", {expect_snapshot(calc_lls(RDM_s1_m))})
+test_that("LBA with missing", {expect_snapshot(calc_lls(LBA_s1_m))})
+test_that("WDM with missing", {expect_snapshot(calc_lls(WDM_s1_m))})
+
+# Racing ExGaussian -------------------------------------------------------
+design_REXG <- design(data = dat,model=REXG,matchfun=matchfun,
+                      formula=list(mu~lM,tau~1,sigma~1,t0~1),
+                      contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
+REXG_s <- make_emc(dat, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
+test_that("REXG", {
+  expect_snapshot(calc_lls(REXG_s))
+})
+
+REXG_s1_m <- make_emc(dat_m, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("REXG with missing", {expect_snapshot(calc_lls(REXG_s1_m))})

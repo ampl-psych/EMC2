@@ -1,33 +1,14 @@
-# Convenience functions ---------------------------------------------------------
-make_tiny_design <- function(trend, ...) {
-  cov_names <- trend$kernels[[1]]$cov_names
-  for(nm in names(list(...))) cov_names <- c(cov_names, nm)
-
-  return(design(factors = list(subjects = 1, S = 1), Rlevels = 1,
-                covariates = cov_names, matchfun = function(x) x$S==x$R, trend = trend,
-                formula = list(m ~ 1, s ~ 1, t0 ~ 1),
-                model = LNR, report_p_vector = FALSE))
+make_minimal_emc <- function(trend, covariate1 = c(-.5, 0, .5, 1, 2), ...) {
+  this_design <- design(
+    factors = list(subjects = 1, S = 1), Rlevels = 1,
+    covariates = c("covariate1", names(list(...))),
+    matchfun = function(x) x$S == x$R, trend = trend,
+    formula = list(m ~ 1, s ~ 1, t0 ~ 1), model = LNR
+  )
+  dat <- data.frame(subjects = factor(1), S = factor(1), R = factor(1),
+                    rt = 1, covariate1 = covariate1, ...)
+  make_emc(dat, this_design, type = "single", n_chains = 1, compress = FALSE)
 }
-
-make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5, ...) {
-  ## This *ONLY* creates an EMC object with the covariates. Kernel pars are ignored
-  this_design <- make_tiny_design(trend, ...)
-  p_vector <- sampled_pars(this_design, doMap = FALSE)  # no kernel pars
-
-  opts <- list(...)
-
-  covariates <- data.frame(covariate1=covariate1)
-  for(nm in names(opts)) {
-    covariates[,nm] <- opts[[nm]]
-  }
-
-  dat <- make_data(p_vector, this_design, n_trials = n_trials, covariates = covariates)
-
-
-  emc <- make_emc(dat, this_design, type='single')
-  return(emc)
-}
-
 
 # lin_incr ----------------------------------------------------------------
 trend_lin_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'lin_incr')))
@@ -36,42 +17,42 @@ trend_lin_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'li
 #                             kernels = 'lin_incr')
 kernel_pars <- NULL
 emc <- make_minimal_emc(trend_lin_incr)
-expected_output <- 1:5
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+expected_output <- c(-.5, 0, .5, 1, 2)
 test_that("lin_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # lin_decr ----------------------------------------------------------------
 trend_lin_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'lin_decr')))
 kernel_pars <- NULL
 emc <- make_minimal_emc(trend_lin_decr)
-expected_output <- -(1:5)
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+expected_output <- -c(-.5, 0, .5, 1, 2)
 test_that("lin_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # exp_decr ----------------------------------------------------------------
 trend_exp_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'exp_decr')))
 kernel_pars <- c('m.d_ed'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_exp_decr, covariate1 = covariate1)
 expected_output <- exp(-exp(kernel_pars) * covariate1)
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("exp_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # exp_incr ----------------------------------------------------------------
 trend_exp_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'exp_incr')))
 kernel_pars <- c('m.d_ei'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_exp_incr, covariate1 = covariate1)
 expected_output <- 1-exp(-exp(kernel_pars) * covariate1)
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("exp_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # slin_incr / slin_decr ---------------------------------------------------
@@ -79,7 +60,7 @@ test_that("exp_incr_Rcpp", {
 trend_slin_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'slin_incr')))
 kernel_pars <- c('m.k_sat'=log(2))
 covariate1 <- c(0, .1, .3, 1, Inf, NA)
-emc <- make_minimal_emc(trend_slin_incr, covariate1 = covariate1, n_trials = 6)
+emc <- make_minimal_emc(trend_slin_incr, covariate1 = covariate1)
 expected_output <- ifelse(is.finite(covariate1), pmin(1, exp(kernel_pars) * covariate1), 0)
 all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("slin_incr_R", {
@@ -89,7 +70,7 @@ test_that("slin_incr_Rcpp", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
 })
 trend_slin_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'slin_decr')))
-emc <- make_minimal_emc(trend_slin_decr, covariate1 = covariate1, n_trials = 6)
+emc <- make_minimal_emc(trend_slin_decr, covariate1 = covariate1)
 test_that("slin_decr_R", {
   expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(-expected_output))
 })
@@ -100,56 +81,56 @@ test_that("slin_decr_Rcpp", {
 # pow_decr ----------------------------------------------------------------
 trend_pow_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'pow_decr')))
 kernel_pars <- c('m.d_pd'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_pow_decr, covariate1 = covariate1)
 expected_output = (1 + covariate1)^(-exp(kernel_pars))
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("pow_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # pow_incr ----------------------------------------------------------------
 trend_pow_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'pow_incr')))
 kernel_pars <- c('m.d_pi'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_pow_incr, covariate1 = covariate1)
 expected_output <- 1-(1 + covariate1)^(-exp(kernel_pars))
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("pow_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # poly2: Quadratic polynomial: k = d1 * c + d2 * c^2 -----------
 trend_poly2 <- make_trend(make_base('m', 'add', make_kernel('covariate1', 'poly2')))
 kernel_pars <- c('m.d1'=1, 'm.d2'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_poly2, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly2_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # poly3: Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 ----------
 trend_poly3 <- make_trend(make_base('m', 'add', make_kernel('covariate1', 'poly3')))
 kernel_pars <- c('m.d1'=1, 'm.d2'=1, 'm.d3'=1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_poly3, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly3_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 # poly4: Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4 ---------
 trend_poly4 <- make_trend(make_base('m', 'add', make_kernel('covariate1', 'poly4')))
 kernel_pars <- c('m.d1'=1, 'm.d2'=1, 'm.d3'=1, 'm.d4'=.1)
-covariate1 <- 1:5
+covariate1 <- c(-.5, 0, .5, 1, 2)
 emc <- make_minimal_emc(trend_poly4, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3+kernel_pars[[4]]*covariate1^4
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("poly4_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 
@@ -162,9 +143,9 @@ kernel_pars <- c('m.q0'=0.5, 'm.alpha'=qnorm(0.2))
 covariate1 <- c(NA, 1, NA, 1, NA)
 emc <- make_minimal_emc(trend_delta, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.6, 0.6, 0.68)) # manually computed for this specific covariate + parameter vector
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("delta_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 
@@ -174,33 +155,10 @@ kernel_pars <- c('m.q0'=0.5, 'm.alphaPos'=qnorm(0.5), 'm.alphaNeg' = qnorm(0.25)
 covariate1 <- c(NA, 1, NA, 0, NA)
 emc <- make_minimal_emc(trend_delta2lr, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.75, 0.75, 0.5625)) # manually computed for this specific covariate + parameter vector
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 test_that("delta2lr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
-
-
-# delta 2 kernel ----------------------------------------------------------
-# trend_delta2kernel <- make_trend(par_names = "m", cov_names = 'covariate1', kernels = 'delta2kernel', base='lin')
-# kernel_pars <- c('m.q0'=0.8, 'm.alphaFast'=qnorm(0.50), 'm.propSlow' = qnorm(0.10), 'm.dSwitch'=qnorm(0.1))
-# covariate1 <- c(1, 1, 1, 1, 0, 0, 0, 0)
-# ## use delta rules to construct target output.
-# # this test is contingent on delta rules being implemented correctly,
-# # but if that's not the case, an error is thrown above
-# delta_fast <- EMC2:::run_delta(q0=rep(kernel_pars[1], length(covariate1)),
-#                                alpha=rep(kernel_pars[2], length(covariate1)),
-#                                covariate = covariate1)
-# delta_slow <- EMC2:::run_delta(q0=rep(kernel_pars[1], length(covariate1)),
-#                                alpha=rep(kernel_pars[2]*kernel_pars[3], length(covariate1)),
-#                                covariate = covariate1)
-# do_switch <- abs(delta_fast - delta_slow) > kernel_pars[4]
-# expected_output <- delta_slow
-# expected_output[do_switch] <- delta_fast[do_switch]
-# emc <- make_minimal_emc(trend_delta2kernel, n_trials=8, covariate1 = covariate1)
-# all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
-# test_that("delta2kernel_Rcpp", {
-#   expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
-# })
 
 
 ## test resetting
@@ -209,41 +167,39 @@ kernel_pars <- c('m.q0'=0, 'm.alpha'=qnorm(0.2))
 covariate1 <- c(1, 1, 1, 1, 1)
 emc <- make_minimal_emc(trend_delta, covariate1 = covariate1, do_reset=c(F,F,T,F,F))
 expected_output <- matrix(c(0, 0.2, 0, 0.2, 0.36)) # manually computed for this specific covariate + parameter vector
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
-test_that("delta_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+test_that("delta reset_Rcpp", {
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output),
+               tolerance = 1e-8)
 })
 
 
 
-## Rescorla-wagner
-trend_rw <-make_trend(make_base('m', 'add', make_kernel(c('covariate1','covariate2','covariate3','covariate4'),
-                                                        'rescorlawagner', kernel_args = list(q_reset_column='do_reset'))))
-
-# make_trend(par_names = "m",
-#                        cov_names = list(c('covariate1','covariate2','covariate3','covariate4')),
-#                        kernels = 'rescorlawagner', base='add',
-#                        kernel_args=list(q_reset_column='do_reset'))
-
-covariate_matrix <- matrix(c(NA,NA,  1,  1,
-                             1,  1, NA, NA,
-                             NA, 0,  0, NA,
-                             1,  NA, NA, 1,
-                             0,  0,  0,  0), nrow=5, byrow=TRUE)
-covariates <- data.frame(covariate_matrix)
-colnames(covariates) <- paste0('covariate', 1:4)
-covariates$do_reset <- rep(FALSE, 5)
-emc <- make_minimal_emc(trend_delta,
-                        covariate1 = covariates$covariate1,
-                        covariate2 = covariates$covariate2,
-                        covariate3 = covariates$covariate3,
-                        covariate4 = covariates$covariate4,
-                        do_reset=c(F,F,F,T,F))
-kernel_pars <- c('m.q0'=0, 'm.alpha'=0.2)
-apply_kernel(kernel_pars, emc)
-## looks ok...
-# all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
-
+# Rescorla-Wagner uses the summed expectation of active cues.
+trend_rw <- make_trend(make_base("m", "add",
+  make_kernel(paste0("covariate", 1:4), "rescorlawagner",
+    kernel_args = list(q_reset_column = "do_reset"))))
+covariates <- matrix(c(NA, NA, 1, 1,
+                       1, 1, NA, NA,
+                       NA, 0, 0, NA,
+                       1, NA, NA, 1,
+                       1, 1, 1, 1,
+                       0, 0, 0, 0), ncol = 4, byrow = TRUE)
+emc <- make_minimal_emc(
+  trend_rw, covariate1 = covariates[, 1], covariate2 = covariates[, 2],
+  covariate3 = covariates[, 3], covariate4 = covariates[, 4],
+  do_reset = c(FALSE, FALSE, FALSE, FALSE, TRUE, FALSE)
+)
+kernel_pars <- c(m.q0 = 0, m.alpha = qnorm(.2))
+expected_output <- matrix(c(0, 0, 0, 0,
+                            0, 0, .2, .2,
+                            .2, .2, .2, .2,
+                            .2, .12, .12, .2,
+                            0, 0, 0, 0,
+                            .2, .2, .2, .2), ncol = 4, byrow = TRUE)
+test_that("rescorlawagner_Rcpp", {
+  expect_equal(unname(apply_kernel(kernel_pars, emc)), expected_output,
+               tolerance = 1e-8)
+})
 
 # ----------------------------------------------------------------------------~
 # BETA-BINOMIAL, DBM, TPM LEARNING RULES                                  -----
@@ -270,7 +226,6 @@ make_minimal_emc_wrap <- function(kernel_name, output_code = 1L) {
         kernel_output = output_code
       )
     ),
-    n_trials = length(covariate1),
     covariate1 = covariate1
   )
 }
@@ -330,7 +285,6 @@ emc_reset <- make_minimal_emc(
       kernel_output = 1L
     )
   ),
-  n_trials = length(covariate1),
   covariate1 = covariate1,
   do_reset = reset_column
 )
@@ -454,7 +408,6 @@ emc_reset <- make_minimal_emc(
       kernel_output = 1L
     )
   ),
-  n_trials = length(covariate1),
   covariate1 = covariate1,
   do_reset = reset_column
 )
@@ -629,7 +582,6 @@ emc_reset <- make_minimal_emc(
       kernel_output = 1L
     )
   ),
-  n_trials = length(covariate1),
   covariate1 = covariate1,
   do_reset = reset_column
 )
@@ -702,7 +654,6 @@ emc <- make_minimal_emc(
       kernel_output = 1L
     )
   ),
-  n_trials = length(covariate1),
   covariate1 = covariate1
 )
 
@@ -773,7 +724,7 @@ test_that("tpm_Rcpp", {
 # covariate1 <- c(NA, 1, 2, 0, 20, 2, 1)
 # t0 <- matrix(rep(0.2, length(covariate1)))
 # colnames(t0) <- 't0'
-# emc <- make_minimal_emc(trend_custom, covariate1 = covariate1, n_trials=7)
+# emc <- make_minimal_emc(trend_custom, covariate1 = covariate1)
 # expected_output <- matrix(NA, nrow=length(covariate1))
 # a <- rep(kernel_pars['m.a'], length(covariate1))
 # b <- rep(kernel_pars['m.b'], length(covariate1))
