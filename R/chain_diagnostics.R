@@ -305,6 +305,13 @@ apply_culls <- function(emc, diag, stage, cull, state){
 # are discarded, so this is free), over the last two thirds of burn however
 # short the stage. The re-seeded chain starts adapt from a donor's state, with
 # its kernel settings. Recorded in emc[[1]]$culls with exit = TRUE.
+# Note: only the chain's last draw is replaced. The first adapt step's
+# proposals (create_chain_proposals(), merged over chains) and lik_prec are
+# built from the last min(250, idx / 1.5) draws of every chain, so they still
+# pool the re-seeded chain's stuck burn draws (1/n_chains of that history).
+# The window slides past them within adapt's first 250 iterations, which
+# adapt_converge's minimum guarantees before the sample kernel is built from
+# adapt's tail; the same holds after a cull at a burn check.
 burn_exit_reseed <- function(emc, cull, verbose = FALSE){
   cx <- cull; cx$window <- NULL; cx$min_window <- 20L
   d <- cull_diagnostics(emc, "burn", cx)
