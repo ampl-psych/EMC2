@@ -112,9 +112,9 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 \code{cull} (\code{TRUE} or a list; \code{burn} and \code{sample} stages): chain culling for a chain
 held in a different region. After each check, a chain whose summed subject
 log-likelihood over the comparison window is below the best chain's by more than
-\code{chain_gap} units and \code{chain_z} within-chain spreads, and whose own log posterior
-(the subject log-likelihoods plus the group density under its own group parameters)
-is below the other chains' median, is flagged; once flagged on \code{persistence}
+\code{chain_gap} units and \code{chain_z} within-chain spreads, and (when that gap is below
+\code{lp_guard_below}) whose own log posterior (the subject log-likelihoods plus the group
+density under its own group parameters) is below the other chains' median, is flagged; once flagged on \code{persistence}
 consecutive checks it is respawned from a draw of another chain, with that chain's
 kernel settings. The log posterior under pooled group parameters is not compared: its
 group-density term differs between healthy chains by hundreds of units. The window is
@@ -125,7 +125,7 @@ rule or at \code{max_tries}) every chain then in a different region is re-seeded
 more without the persistence requirement, since burn draws are discarded. In
 \code{sample} the stage restarts after \code{reburn} discarded iterations and the tries
 count over, at most \code{max_culls} times (default 1). Defaults: \code{persistence = 2,
-min_window = 500, chain_gap = 200, chain_z = 5, max_culls = 1, reburn = 100}. Culls
+min_window = 500, chain_gap = 200, chain_z = 5, lp_guard_below = 1000, max_culls = 1, reburn = 100}. Culls
 are recorded in \code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes
 the lower region is spurious; with a genuinely multimodal posterior it favours the
 region most chains found.

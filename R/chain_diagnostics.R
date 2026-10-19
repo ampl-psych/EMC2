@@ -7,14 +7,20 @@
 # between healthy chains by hundreds of units (it follows each chain's group
 # covariance draws; jmh replay of 105 fits: log-posterior gap median 617,
 # log-likelihood gap median 15), so culling on it removed wandering chains,
-# not stuck ones. A chain is culled only when it is also lower on its own log
-# posterior (the subject log-likelihoods plus the group density under that
-# chain's own group parameters) than the other chains: the likelihood alone
-# can favour a state that fits the data with an implausible group covariance.
+# not stuck ones. Below a likelihood gap of lp_guard_below (default 1,000) a
+# chain is culled only when it is also lower on its own log posterior (the
+# subject log-likelihoods plus the group density under that chain's own group
+# parameters) than the other chains: the likelihood alone can favour a state
+# that fits the data with an implausible group covariance. Above it the
+# likelihood decides: the own-covariance group term differs between healthy
+# chains by 200-1,000 units (jm1 fits, 2026-10-19), so at smaller gaps it could
+# veto a genuine cull by noise, while a stuck chain thousands of units down is
+# far lower on both (ANT_LBA_BciVci jm1 c3 chains 2 and 6: group term -15,457
+# and -10,196 against about +2,500).
 
 cull_defaults <- function(cull){
   defaults <- list(persistence = 2L, window = NULL, min_window = 500L, chain_gap = 200, chain_z = 5,
-                   max_culls = 1L, reburn = 100L)
+                   lp_guard_below = 1000, max_culls = 1L, reburn = 100L)
   if(isTRUE(cull)) return(defaults)
   if(is.null(cull) || isFALSE(cull)) return(NULL)
   if(!is.list(cull)) stop("`cull` must be TRUE, FALSE or a list")
@@ -152,8 +158,8 @@ cull_diagnostics <- function(emc, stage, cull){
   # chains: summed subject log-likelihood per draw; a chain is flagged when it is
   # chain_gap units and chain_z within-chain spreads below the best chain (a
   # different region: fine chains differ by tens of units, a stuck one by
-  # hundreds or thousands) and also lower on its own log posterior than the
-  # median of the other chains
+  # hundreds or thousands) and, when the gap is below lp_guard_below, also lower
+  # on its own log posterior than the median of the other chains
   tot <- sapply(st, function(s) colSums(s$ll))
   med <- matrix(apply(tot, 2, median), 1); mad <- matrix(apply(tot, 2, mad), 1)
   g <- robust_gaps(med, mad)
@@ -161,7 +167,8 @@ cull_diagnostics <- function(emc, stage, cull){
   lp_lower <- vapply(seq_len(nch), function(i) isTRUE(lp[i] < stats::median(lp[-i])), TRUE)
   chains <- data.frame(chain = seq_len(nch), median_ll = as.vector(med), gap = as.vector(g$gap), z = as.vector(g$z),
                        median_lp = lp, lp_lower = lp_lower,
-                       flagged = as.vector(g$gap > cull$chain_gap & g$z > cull$chain_z) & lp_lower)
+                       flagged = as.vector(g$gap > cull$chain_gap & g$z > cull$chain_z) &
+                         (lp_lower | as.vector(g$gap) >= cull$lp_guard_below))
   # never cull all chains but one on a single check: at least two survive
   if(sum(chains$flagged) > nch - 2){
     keep <- order(chains$gap)[seq_len(2)]

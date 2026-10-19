@@ -10,6 +10,7 @@ sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standa
 test_that("cull settings are validated", {
   d <- EMC2:::cull_defaults(TRUE)
   expect_equal(d$persistence, 2L); expect_equal(d$chain_z, 5); expect_equal(d$chain_gap, 200); expect_equal(d$max_culls, 1L)
+  expect_equal(d$lp_guard_below, 1000)
   expect_equal(EMC2:::cull_defaults(list(chain_z = 4))$chain_z, 4)
   expect_null(EMC2:::cull_defaults(FALSE))
   expect_error(EMC2:::cull_defaults(list(bogus = 1)), "unknown")
@@ -93,6 +94,9 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   for(k in w){ lik[[1]]$samples$theta_var[, , k] <- diag(1e-12, p); lik[[1]]$samples$alpha[, , k] <- lik[[1]]$samples$theta_mu[, k] }
   dl <- EMC2:::cull_diagnostics(lik, "sample", EMC2:::cull_defaults(list(window = 150, chain_gap = 20, chain_z = 1)))
   expect_gt(dl$chains$gap[1], 20); expect_false(dl$chains$lp_lower[1]); expect_false(dl$chains$flagged[1])
+  # above lp_guard_below the likelihood decides: the same chain is flagged once the gap clears it
+  dg <- EMC2:::cull_diagnostics(lik, "sample", EMC2:::cull_defaults(list(window = 150, chain_gap = 20, chain_z = 1, lp_guard_below = 30)))
+  expect_false(dg$chains$lp_lower[1]); expect_true(dg$chains$flagged[1])
   # two subjects apart in one chain, the chain's sum unchanged: reported in the subject spread, nothing culled
   cell <- e; cell[[1]]$samples$subj_ll[2, w] <- cell[[1]]$samples$subj_ll[2, w] - 12
   cell[[1]]$samples$subj_ll[3, w] <- cell[[1]]$samples$subj_ll[3, w] + 12

@@ -558,9 +558,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' ``cull`` (``TRUE`` or a list; ``burn`` and ``sample`` stages): chain culling for a chain
 #' held in a different region. After each check, a chain whose summed subject
 #' log-likelihood over the comparison window is below the best chain's by more than
-#' ``chain_gap`` units and ``chain_z`` within-chain spreads, and whose own log posterior
-#' (the subject log-likelihoods plus the group density under its own group parameters)
-#' is below the other chains' median, is flagged; once flagged on ``persistence``
+#' ``chain_gap`` units and ``chain_z`` within-chain spreads, and (when that gap is below
+#' ``lp_guard_below``) whose own log posterior (the subject log-likelihoods plus the group
+#' density under its own group parameters) is below the other chains' median, is flagged; once flagged on ``persistence``
 #' consecutive checks it is respawned from a draw of another chain, with that chain's
 #' kernel settings. The log posterior under pooled group parameters is not compared: its
 #' group-density term differs between healthy chains by hundreds of units. The window is
@@ -571,7 +571,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' more without the persistence requirement, since burn draws are discarded. In
 #' ``sample`` the stage restarts after ``reburn`` discarded iterations and the tries
 #' count over, at most ``max_culls`` times (default 1). Defaults: ``persistence = 2,
-#' min_window = 500, chain_gap = 200, chain_z = 5, max_culls = 1, reburn = 100``. Culls
+#' min_window = 500, chain_gap = 200, chain_z = 5, lp_guard_below = 1000, max_culls = 1,
+#' reburn = 100``. Culls
 #' are recorded in ``emc[[1]]$culls`` and shown by [chain_diagnostics()]. Culling assumes
 #' the lower region is spurious; with a genuinely multimodal posterior it favours the
 #' region most chains found.
