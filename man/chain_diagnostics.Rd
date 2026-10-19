@@ -34,7 +34,8 @@ as in \code{stop_criteria}}
 A list with elements \code{chains} (one row per chain: median log
 posterior, gap to the best chain, robust z, flagged), \code{subjects} (one row
 per subject, widest first: spread, the chains with the highest and lowest
-median log-likelihood), \code{flat} (drift
+median log-likelihood), \code{stop} (the sample stop statistics: min ESS, chain
+log-likelihood gap, subject spread, projected Rhats; see \code{\link[=fit]{fit()}}), \code{flat} (drift
 statistics per selection) and \code{culls} (the record of culls in the object).
 }
 \description{

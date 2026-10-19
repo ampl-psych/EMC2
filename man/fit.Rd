@@ -141,6 +141,19 @@ under 20 per chain, where a slow wave and a trend cannot be told apart (see
 (integer) keeps only the last that many draws of the sample stage, so a long run is
 judged on its recent window.
 
+\code{min_ess}, \code{max_ll_gap}, \code{max_subj_spread} (numeric; \code{sample} stage; each off
+unless given): criteria on statistics reported at every sample check, read on the same
+draws as the Rhat. \code{min_ess}: the smallest effective sample size over the group means
+and log group SDs, summed over chains, must reach this (along a ridge the Rhat rule can
+be met with about 100). \code{max_ll_gap}: the median summed log-likelihood over the last
+two thirds of the draws may differ between the best and worst chain by at most this
+many units (fine fits differ by tens, a chain in a different region by thousands; the
+log posterior is not used, since its group-density term differs between healthy chains
+by hundreds). \code{max_subj_spread}: no subject's median log-likelihood may differ
+between chains by more than this many units (a subject in a different mode in some
+chains). The progress line shows all three whether or not they are set, and the fit
+records the rules that were on and their last values in \code{emc[[1]]$stop_record}.
+
 Chains share fixed likelihood inputs in one process. Each chain has its own
 native RNG, seeded from R, with its state saved in the samples for resuming fits.
 Resuming with a different C++ library seeds fresh chain RNGs from R.

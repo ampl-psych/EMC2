@@ -114,7 +114,8 @@ robust_gaps <- function(med, mad){
 #' @return A list with elements `chains` (one row per chain: median log
 #'   posterior, gap to the best chain, robust z, flagged), `subjects` (one row
 #'   per subject, widest first: spread, the chains with the highest and lowest
-#'   median log-likelihood), `flat` (drift
+#'   median log-likelihood), `stop` (the sample stop statistics: min ESS, chain
+#'   log-likelihood gap, subject spread, projected Rhats; see [fit()]), `flat` (drift
 #'   statistics per selection) and `culls` (the record of culls in the object).
 #' @export
 chain_diagnostics <- function(emc, stage = get_last_stage(emc), window = NULL, cull = TRUE,
@@ -125,7 +126,7 @@ chain_diagnostics <- function(emc, stage = get_last_stage(emc), window = NULL, c
   if(!is.null(window)) cull$window <- window
   d <- cull_diagnostics(emc, stage, cull)
   f <- flat_diagnostics(emc, stage, flat_selection, flat_p1, flat_p2, flat_quantile)
-  out <- list(chains = d$chains, subjects = d$subjects, flat = f, culls = emc[[1]]$culls)
+  out <- list(chains = d$chains, subjects = d$subjects, flat = f, stop = sample_stop_stats(emc, stage), culls = emc[[1]]$culls)
   class(out) <- "emc.diagnostics"
   out
 }

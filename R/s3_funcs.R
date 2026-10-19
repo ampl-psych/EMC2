@@ -502,6 +502,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                        is.finite(final_progress$curr_min_es)) {
       sprintf("min ESS=%.0f", final_progress$curr_min_es)
     } else NULL
+    ss <- stop_stats_message(final_progress$stop_stats)
+    if (!is.null(ss)) ess_message <- paste(c(ess_message, sub("^ \\| ", "", ss)), collapse = " | ")
 
     final_iters <- chain_n(emc)[1, "sample"]
 
@@ -585,6 +587,19 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' ``chain_diagnostics()``). ``max_sample_iter``
 #' (integer) keeps only the last that many draws of the sample stage, so a long run is
 #' judged on its recent window.
+#'
+#' ``min_ess``, ``max_ll_gap``, ``max_subj_spread`` (numeric; ``sample`` stage; each off
+#' unless given): criteria on statistics reported at every sample check, read on the same
+#' draws as the Rhat. ``min_ess``: the smallest effective sample size over the group means
+#' and log group SDs, summed over chains, must reach this (along a ridge the Rhat rule can
+#' be met with about 100). ``max_ll_gap``: the median summed log-likelihood over the last
+#' two thirds of the draws may differ between the best and worst chain by at most this
+#' many units (fine fits differ by tens, a chain in a different region by thousands; the
+#' log posterior is not used, since its group-density term differs between healthy chains
+#' by hundreds). ``max_subj_spread``: no subject's median log-likelihood may differ
+#' between chains by more than this many units (a subject in a different mode in some
+#' chains). The progress line shows all three whether or not they are set, and the fit
+#' records the rules that were on and their last values in ``emc[[1]]$stop_record``.
 #'
 #' Chains share fixed likelihood inputs in one process. Each chain has its own
 #' native RNG, seeded from R, with its state saved in the samples for resuming fits.

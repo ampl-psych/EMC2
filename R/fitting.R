@@ -37,7 +37,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   # min_es also needs a selection: without one, check_progress() has nothing to
   # take the effective size of and the criterion is silently always satisfied.
-  if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
+  if(!is.null(stop_criteria[["min_es"]]) && is.null(stop_criteria$selection)){
     stop_criteria$selection <- if(type != "single") c('alpha', 'mu') else 'alpha'
   }
   # Chain culling (burn and sample) and the flat test (sample); see ?fit
@@ -62,6 +62,17 @@ get_stop_criteria <- function(stage, stop_criteria, type){
       stop("flat_p1 and flat_p2 must be in (0, 1]")
     if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL", "subj_ll")))
       stop("flat_selection must be one or more of: mu, alpha, LL, subj_ll")
+  }
+  # Opt-in sample-stage criteria on the per-check statistics (sample_stop_stats()):
+  # an effective-size floor on the group means and log group SDs, and vetoes on
+  # the chains' log-likelihood gap and the subject spread. The statistics are
+  # reported at every check whether or not these are set.
+  for(k in c("min_ess", "max_ll_gap", "max_subj_spread")){
+    v <- stop_criteria[[k]]
+    if(is.null(v)) next
+    if(stage != "sample") stop("`", k, "` applies to the sample stage")
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v < 0) stop("`", k, "` must be a single non-negative number")
+    if(k == "min_ess" && type == "single") stop("`min_ess` reads the group means: not for type 'single'")
   }
   if(!is.null(stop_criteria$max_sample_iter)){
     if(stage != "sample") stop("`max_sample_iter` applies to the sample stage")
@@ -235,6 +246,7 @@ run_emc <- function(emc, stage, stop_criteria,
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
         ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
       }
+      ess_message <- paste0(ess_message, stop_stats_message(progress$stop_stats))
       if(!is.null(progress$flat) && length(progress$flat)){
         ess_message <- paste0(ess_message, " | drift(se)=", paste(sprintf("%s %.2f(%.2f)", names(progress$flat),
           vapply(progress$flat, function(f) f$drift, 0), vapply(progress$flat, function(f) f$mcse, 0)), collapse = ", "))
@@ -259,6 +271,14 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
 
+  # The fit's record of how the sample stage ended: the rules that were on, their
+  # values at the last check, and whether the rules or max_tries ended it
+  if(stage == "sample"){
+    on <- c("max_gd", "mean_gd", "gd_quantile", "iter", "min_ess", "max_ll_gap", "max_subj_spread", "max_flat_loc", "flat_mcse", "min_es")
+    emc[[1]]$stop_record <- list(criteria = stop_criteria[intersect(on, names(stop_criteria))], cull = stop_criteria$cull,
+                                 met = isTRUE(progress$met), tries = progress$trys, rule = progress$gd$rule,
+                                 stats = progress$stop_stats, culls = length(emc[[1]]$culls))
+  }
   if(stage == "adapt" && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
     emc <- tune_sample_kernel(emc, verbose = verbose, verboseProgress = verboseProgress,
@@ -434,7 +454,7 @@ create_lik_prec <- function(emc, n_cores, reset_directions = TRUE){
 check_progress <- function (emc, stage, iter, stop_criteria,
                             max_tries, step_size, n_cores, verbose, progress = NULL)
 {
-  min_es <- stop_criteria$min_es
+  min_es <- stop_criteria[["min_es"]]
   if(is.null(min_es)) min_es <- 0
   selection <- stop_criteria$selection
   min_unique <- stop_criteria$min_unique
@@ -492,6 +512,17 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
     adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
   }
+  # The per-check statistics and the opt-in criteria on them (see sample_stop_stats())
+  stop_stats <- if(stage == "sample") sample_stop_stats(emc, stage) else NULL
+  crit_ok <- function(k, stat, below){
+    v <- stop_criteria[[k]]
+    if(is.null(v)) return(TRUE)
+    s <- stop_stats[[stat]]
+    if(is.null(s) || !is.finite(s)) return(FALSE)
+    if(below) s <= v else s >= v
+  }
+  stats_ok <- crit_ok("min_ess", "ess_min", FALSE) & crit_ok("max_ll_gap", "ll_gap", TRUE) &
+    crit_ok("max_subj_spread", "subj_spread", TRUE)
   # The flat test: the stage must not still be drifting between its first and last thirds
   flat <- NULL; flat_ok <- TRUE
   if(stage == "sample" && !is.null(stop_criteria$max_flat_loc) && total_iters_stage >= 30){
@@ -502,12 +533,12 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   # In sample, max_tries binds even when the iteration target is unmet: a
   # discard can take the stage back below the target at every failing check,
   # so without this the run would continue past max_tries indefinitely
-  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok) | (trys_done & (iter_done | stage == "sample"))
-  if(es_done & gd$gd_done & adapted & flat_ok & !iter_done){
+  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok) | (trys_done & (iter_done | stage == "sample"))
+  if(es_done & gd$gd_done & adapted & flat_ok & stats_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   if (trys_done & (iter_done | stage == "sample")) {
-    if(!(es_done & gd$gd_done & enough_unique & flat_ok & iter_done)){
+    if(!(es_done & gd$gd_done & enough_unique & flat_ok & stats_ok & iter_done)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
@@ -518,7 +549,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
               trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
-              flat = flat, cull_state = cull_state, n_culls = n_culls))
+              flat = flat, cull_state = cull_state, n_culls = n_culls, stop_stats = stop_stats,
+              met = es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok))
 }
 
 # The Rhats a stop rule reads (split_rhat()), subject-level ones from the
