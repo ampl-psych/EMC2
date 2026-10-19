@@ -161,6 +161,15 @@ between chains by more than this many units (a subject in a different mode in so
 chains). The progress line shows all three whether or not they are set, and the fit
 records the rules that were on and their last values in \code{emc[[1]]$stop_record}.
 
+\code{abort_gd}, \code{abort_try} (\code{sample} stage; off unless \code{abort_gd} is given;
+\code{abort_try} defaults to 20): an early stop for runs that will not converge. At check
+\code{abort_try} of the stage (counted, as \code{max_tries} is, within this call), if the stop
+rule's own Rhat (the value compared with \code{max_gd}) still exceeds \code{abort_gd} the stage
+ends with a warning saying why, and \code{emc[[1]]$stop_record$aborted} holds the check and
+the value; \code{stop_record$met} is then \code{FALSE}. In replays of hierarchical fits and
+single-subject extensions no run above 1.5 at check 20 met the rule later, so
+\code{abort_gd = 1.5} saves the remaining tries at no cost to outcomes.
+
 The number of chains is set when the object is made (\code{\link[=make_emc]{make_emc()}}): by default 6 for hierarchical types and 3
 for \code{type = "single"}; the stop rule's Rhat, the chain comparisons of \code{cull} and the subject spread all need
 several chains, and 6 is the default the culling and the opt-in sample criteria were tuned with.

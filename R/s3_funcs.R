@@ -608,6 +608,15 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' chains). The progress line shows all three whether or not they are set, and the fit
 #' records the rules that were on and their last values in ``emc[[1]]$stop_record``.
 #'
+#' ``abort_gd``, ``abort_try`` (``sample`` stage; off unless ``abort_gd`` is given;
+#' ``abort_try`` defaults to 20): an early stop for runs that will not converge. At check
+#' ``abort_try`` of the stage (counted, as ``max_tries`` is, within this call), if the stop
+#' rule's own Rhat (the value compared with ``max_gd``) still exceeds ``abort_gd`` the stage
+#' ends with a warning saying why, and ``emc[[1]]$stop_record$aborted`` holds the check and
+#' the value; ``stop_record$met`` is then ``FALSE``. In replays of hierarchical fits and
+#' single-subject extensions no run above 1.5 at check 20 met the rule later, so
+#' ``abort_gd = 1.5`` saves the remaining tries at no cost to outcomes.
+#'
 #' The number of chains is set when the object is made ([make_emc()]): by default 6 for hierarchical types and 3
 #' for ``type = "single"``; the stop rule's Rhat, the chain comparisons of ``cull`` and the subject spread all need
 #' several chains, and 6 is the default the culling and the opt-in sample criteria were tuned with.

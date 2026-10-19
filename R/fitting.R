@@ -77,6 +77,17 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(!is.numeric(v) || length(v) != 1 || is.na(v) || v < 0) stop("`", k, "` must be a single non-negative number")
     if(k == "min_ess" && type == "single") stop("`min_ess` reads the group means: not for type 'single'")
   }
+  # Opt-in early stop: at check abort_try of the sample stage (default 20), a run
+  # whose rule Rhat still exceeds abort_gd ends the stage, recorded as aborted
+  if(!is.null(stop_criteria$abort_try) && is.null(stop_criteria$abort_gd)) stop("`abort_try` needs `abort_gd`")
+  if(!is.null(stop_criteria$abort_gd)){
+    if(stage != "sample") stop("`abort_gd` applies to the sample stage")
+    v <- stop_criteria$abort_gd
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v <= 1) stop("`abort_gd` must be a single number above 1")
+    if(is.null(stop_criteria$abort_try)) stop_criteria$abort_try <- 20L
+    v <- stop_criteria$abort_try
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v < 1 || v != round(v)) stop("`abort_try` must be a single positive integer")
+  }
   if(!is.null(stop_criteria$max_sample_iter)){
     if(stage != "sample") stop("`max_sample_iter` applies to the sample stage")
     if(stop_criteria$max_sample_iter < 10) stop("max_sample_iter must be at least 10")
@@ -287,13 +298,15 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
   # The fit's record of how the sample stage ended: the rules that were on, their
-  # values at the last check, and whether the rules or max_tries ended it
+  # values at the last check, and whether the rules, max_tries or the early stop
+  # (aborted: the check and the rule's value) ended it
   if(stage == "sample"){
-    on <- c("max_gd", "mean_gd", "gd_quantile", "iter", "min_ess", "max_ll_gap", "max_subj_spread", "max_flat_loc", "flat_mcse", "min_es")
+    on <- c("max_gd", "mean_gd", "gd_quantile", "iter", "min_ess", "max_ll_gap", "max_subj_spread", "max_flat_loc", "flat_mcse", "min_es",
+            "abort_gd", "abort_try")
     emc[[1]]$stop_record <- list(criteria = stop_criteria[intersect(on, names(stop_criteria))], cull = stop_criteria$cull,
                                  met = isTRUE(progress$met), tries = progress$trys, rule = progress$gd$rule,
                                  stats = progress$stop_stats, culls = length(emc[[1]]$culls),
-                                 discards = progress$discards)
+                                 discards = progress$discards, aborted = progress$aborted)
   }
   if(stage == "adapt" && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
@@ -559,15 +572,24 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   total_iters_stage <- r$total_iters_stage; iter_done <- r$iter_done; es_done <- r$es_done
   curr_min_es <- r$curr_min_es; adapted <- r$adapted; enough_unique <- r$enough_unique; adapt_rhat <- r$adapt_rhat
   stop_stats <- r$stop_stats; stats_ok <- r$stats_ok; flat <- r$flat; flat_ok <- r$flat_ok
+  # The early stop: at check abort_try, a rule Rhat still above abort_gd ends the stage
+  aborted <- NULL
+  if(stage == "sample" && !is.null(stop_criteria$abort_gd) && trys == stop_criteria$abort_try &&
+     !isTRUE(r$met) && isTRUE(gd$rule > stop_criteria$abort_gd)){
+    aborted <- list(try = trys, rule = gd$rule, abort_gd = stop_criteria$abort_gd)
+    warning(sprintf("Sample stage stopped early at check %d: the rule's Rhat %.3f is above abort_gd = %s. The fit is recorded as aborted (stop_record$aborted), not met.",
+                    trys, gd$rule, format(stop_criteria$abort_gd)), call. = FALSE)
+  }
   trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries)
   # In sample, max_tries binds even when the iteration target is unmet (a
   # continuation's target can stay out of reach), so the run cannot continue
   # past max_tries
-  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok) | (trys_done & (iter_done | stage == "sample"))
+  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok) | (trys_done & (iter_done | stage == "sample")) |
+    !is.null(aborted)
   if(es_done & gd$gd_done & adapted & flat_ok & stats_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  if (trys_done & (iter_done | stage == "sample")) {
+  if (trys_done & (iter_done | stage == "sample") & is.null(aborted)) {
     if(!(es_done & gd$gd_done & enough_unique & flat_ok & stats_ok & iter_done)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
@@ -580,7 +602,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
               flat = flat, cull_state = cull_state, n_culls = n_culls, stop_stats = stop_stats,
-              discards = discards, met = r$met))
+              discards = discards, met = r$met, aborted = aborted))
 }
 
 # The Rhats a stop rule reads (split_rhat()), subject-level ones from the

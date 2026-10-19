@@ -147,4 +147,35 @@ test_that("a failing sample stage keeps all its draws, check after check", {
                                            c(a, max_tries = 4))))
   expect_equal(unname(chain_n(r)[1, "sample"]), 200)
   expect_length(r[[1]]$stop_record$discards, 0); expect_false(r[[1]]$stop_record$met)
+  expect_null(r[[1]]$stop_record$aborted)
+  # the same with the early stop at check 2: the stage ends there, recorded as aborted, not met
+  expect_warning(s <- do.call(run_emc, c(list(e, "sample", sc("sample", list(iter = 1000, max_gd = 1.0001, abort_gd = 1.0001,
+                                                                             abort_try = 2))), c(a, max_tries = 4))),
+                 "stopped early at check 2")
+  expect_equal(unname(chain_n(s)[1, "sample"]), 100)
+  expect_false(s[[1]]$stop_record$met); expect_equal(s[[1]]$stop_record$aborted$try, 2)
+  expect_gt(s[[1]]$stop_record$aborted$rule, 1.0001); expect_equal(s[[1]]$stop_record$criteria$abort_try, 2)
+})
+
+test_that("the early stop: validated, and taken only at its check with the rule's Rhat above the threshold", {
+  sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standard")
+  expect_equal(sc("sample", list(max_gd = 1.1, abort_gd = 1.5))$abort_try, 20)
+  expect_error(sc("burn", list(abort_gd = 1.5)), "sample stage")
+  expect_error(sc("sample", list(abort_try = 20)), "needs `abort_gd`")
+  expect_error(sc("sample", list(abort_gd = 1)), "above 1")
+  expect_error(sc("sample", list(abort_gd = 1.5, abort_try = 2.5)), "positive integer")
+  bad <- samples_LNR; it <- which(bad[[1]]$samples$stage == "sample")
+  bad[[1]]$samples$theta_mu[, it] <- bad[[1]]$samples$theta_mu[, it] + 20      # chain 1 apart throughout: rule Rhat far above 1.5
+  crit <- list(max_gd = 1.1, selection = "mu", omit_mpsrf = TRUE, abort_gd = 1.5, abort_try = 3)
+  cp <- function(x, crit, trys) EMC2:::check_progress(x, "sample", iter = 10, stop_criteria = crit, max_tries = 20, step_size = 10,
+                                                      n_cores = 1, verbose = FALSE, progress = list(trys = trys, iters_total = 0))
+  expect_warning(p <- cp(bad, crit, 2), "check 3: the rule's Rhat")
+  expect_true(p$done); expect_false(p$met); expect_equal(p$aborted$try, 3); expect_gt(p$aborted$rule, 1.5)
+  q <- cp(bad, crit, 1)                                                          # check 2: not yet
+  expect_false(q$done); expect_null(q$aborted)
+  q <- cp(bad, crit, 3)                                                          # check 4: past it, only at the check itself
+  expect_false(q$done); expect_null(q$aborted)
+  ok <- cp(samples_LNR, c(crit[names(crit) != "max_gd"], max_gd = 1.0001), 2)    # unmet but below 1.5: carries on
+  expect_false(ok$done); expect_null(ok$aborted)
+  expect_null(cp(bad, crit[!names(crit) %in% c("abort_gd", "abort_try")], 2)$aborted)
 })
