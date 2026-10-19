@@ -244,6 +244,7 @@ run_emc <- function(emc, stage, stop_criteria,
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
       if(!is.null(stop_criteria$max_gd)) gd_message <- rhat_message(progress$gd$rule, gd)
+      if(isTRUE(progress$gd$discarded > 0)) gd_message <- paste0(gd_message, sprintf(" (first %d draws dropped: the rule passes without them)", progress$gd$discarded))
       # get min effective sample size (ESS)
       ess_message <- NULL
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
@@ -291,7 +292,8 @@ run_emc <- function(emc, stage, stop_criteria,
     on <- c("max_gd", "mean_gd", "gd_quantile", "iter", "min_ess", "max_ll_gap", "max_subj_spread", "max_flat_loc", "flat_mcse", "min_es")
     emc[[1]]$stop_record <- list(criteria = stop_criteria[intersect(on, names(stop_criteria))], cull = stop_criteria$cull,
                                  met = isTRUE(progress$met), tries = progress$trys, rule = progress$gd$rule,
-                                 stats = progress$stop_stats, culls = length(emc[[1]]$culls))
+                                 stats = progress$stop_stats, culls = length(emc[[1]]$culls),
+                                 discards = progress$discards)
   }
   if(stage == "adapt" && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
@@ -481,72 +483,86 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
   }
-  cull_state <- progress$cull_state; n_culls <- progress$n_culls
+  cull_state <- progress$cull_state; n_culls <- progress$n_culls; discards <- progress$discards
   gd <- check_gd(emc, stage, stop_criteria$max_gd, stop_criteria$mean_gd,
                  omit_mpsrf = stop_criteria$omit_mpsrf, selection = selection,
                  gd_quantile = stop_criteria$gd_quantile)
-  # Everything below reads the draws the Rhat read: check_gd() may have dropped
-  # the first third of the stage, and the draws that remain are what the run
-  # keeps, so the iteration target, the ESS and the flat test count those
-  emc <- gd$emc
-  total_iters_stage <- chain_n(emc)[, stage][1]
-  iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
-  if (min_es == 0) {
-    es_done <- TRUE
-  } else if (total_iters_stage != 0) {
-    class(emc) <- "emc"
-    curr_min_es <- Inf
-    for(select in selection){
-      curr_min_es <- min(c(ess_summary(emc, selection = select,
-                                                stage = stage, stat_only = TRUE), curr_min_es))
+  adapt_rhat0 <- progress$adapt_rhat
+  # Every criterion read on one set of draws: all of the stage's, or (when
+  # check_gd() offers them) the stage without its first third
+  evaluate <- function(emc, gd){
+    total_iters_stage <- chain_n(emc)[, stage][1]
+    iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
+    curr_min_es <- NULL
+    if (min_es == 0) {
+      es_done <- TRUE
+    } else if (total_iters_stage != 0) {
+      class(emc) <- "emc"
+      curr_min_es <- Inf
+      for(select in selection){
+        curr_min_es <- min(c(ess_summary(emc, selection = select,
+                                         stage = stage, stat_only = TRUE), curr_min_es))
+      }
+      es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es > min_es)
+    } else {
+      es_done <- FALSE
     }
-    es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es >
-                        min_es)
+    if (stage == "adapt") {
+      samples_merged <- merge_chains(emc)
+      test_samples <- extract_samples(samples_merged, stage = "adapt",
+                                      samples_merged$samples$idx, n_chains = length(emc))
+      adapted <- test_adapted(emc[[1]], test_samples, min_unique, n_cores, verbose)
+    } else {
+      adapted <- TRUE
+    }
+    # max_tries reached with only adapt's convergence rule unmet is not worth
+    # the warning below: the kernel is then built from the draws there are
+    enough_unique <- adapted
+    adapt_rhat <- adapt_rhat0
+    if(stage == "adapt" && adapted){
+      adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
+      adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
+    }
+    # The per-check statistics and the opt-in criteria on them (see sample_stop_stats())
+    stop_stats <- if(stage == "sample") sample_stop_stats(emc, stage) else NULL
+    crit_ok <- function(k, stat, below){
+      v <- stop_criteria[[k]]
+      if(is.null(v)) return(TRUE)
+      s <- stop_stats[[stat]]
+      if(is.null(s) || !is.finite(s)) return(FALSE)
+      if(below) s <= v else s >= v
+    }
+    stats_ok <- crit_ok("min_ess", "ess_min", FALSE) & crit_ok("max_ll_gap", "ll_gap", TRUE) &
+      crit_ok("max_subj_spread", "subj_spread", TRUE)
+    # The flat test: the stage must not still be drifting between its first and last thirds
+    flat <- NULL; flat_ok <- TRUE
+    if(stage == "sample" && !is.null(stop_criteria$max_flat_loc) && total_iters_stage >= 30){
+      flat <- flat_diagnostics(emc, stage, stop_criteria$flat_selection, stop_criteria$flat_p1,
+                               stop_criteria$flat_p2, stop_criteria$flat_quantile)
+      flat_ok <- flat_done(flat, stop_criteria$max_flat_loc, stop_criteria$flat_mcse)
+    } else if(stage == "sample" && !is.null(stop_criteria$max_flat_loc)) flat_ok <- FALSE
+    list(emc = emc, gd = gd, total_iters_stage = total_iters_stage, iter_done = iter_done, es_done = es_done,
+         curr_min_es = curr_min_es, adapted = adapted, enough_unique = enough_unique, adapt_rhat = adapt_rhat,
+         stop_stats = stop_stats, stats_ok = stats_ok, flat = flat, flat_ok = flat_ok,
+         met = es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok)
   }
-  else {
-    es_done <- FALSE
+  r <- evaluate(gd$emc, gd)
+  discarded <- 0
+  if(!r$met && !is.null(gd$short)){
+    r_short <- evaluate(gd$short$emc, gd$short)
+    if(r_short$met){
+      r <- r_short; discarded <- gd$short$removed
+      discards <- c(discards, list(list(stage = stage, try = trys, removed = discarded, kept = r$total_iters_stage)))
+    }
   }
+  emc <- r$emc; gd <- r$gd; gd$discarded <- discarded
+  total_iters_stage <- r$total_iters_stage; iter_done <- r$iter_done; es_done <- r$es_done
+  curr_min_es <- r$curr_min_es; adapted <- r$adapted; enough_unique <- r$enough_unique; adapt_rhat <- r$adapt_rhat
+  stop_stats <- r$stop_stats; stats_ok <- r$stats_ok; flat <- r$flat; flat_ok <- r$flat_ok
   trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries)
-  if (stage == "adapt") {
-    samples_merged <- merge_chains(emc)
-    test_samples <- extract_samples(samples_merged, stage = "adapt",
-                                    samples_merged$samples$idx, n_chains = length(emc))
-    adapted <- test_adapted(emc[[1]], test_samples,
-                            min_unique, n_cores, verbose)
-
-  }
-  else {
-    adapted <- TRUE
-  }
-  # max_tries reached with only adapt's convergence rule unmet is not worth
-  # the warning below: the kernel is then built from the draws there are
-  enough_unique <- adapted
-  adapt_rhat <- progress$adapt_rhat
-  if(stage == "adapt" && adapted){
-    adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
-    adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
-  }
-  # The per-check statistics and the opt-in criteria on them (see sample_stop_stats())
-  stop_stats <- if(stage == "sample") sample_stop_stats(emc, stage) else NULL
-  crit_ok <- function(k, stat, below){
-    v <- stop_criteria[[k]]
-    if(is.null(v)) return(TRUE)
-    s <- stop_stats[[stat]]
-    if(is.null(s) || !is.finite(s)) return(FALSE)
-    if(below) s <= v else s >= v
-  }
-  stats_ok <- crit_ok("min_ess", "ess_min", FALSE) & crit_ok("max_ll_gap", "ll_gap", TRUE) &
-    crit_ok("max_subj_spread", "subj_spread", TRUE)
-  # The flat test: the stage must not still be drifting between its first and last thirds
-  flat <- NULL; flat_ok <- TRUE
-  if(stage == "sample" && !is.null(stop_criteria$max_flat_loc) && total_iters_stage >= 30){
-    flat <- flat_diagnostics(emc, stage, stop_criteria$flat_selection, stop_criteria$flat_p1,
-                             stop_criteria$flat_p2, stop_criteria$flat_quantile)
-    flat_ok <- flat_done(flat, stop_criteria$max_flat_loc, stop_criteria$flat_mcse)
-  } else if(stage == "sample" && !is.null(stop_criteria$max_flat_loc)) flat_ok <- FALSE
-  # In sample, max_tries binds even when the iteration target is unmet: a
-  # discard can take the stage back below the target at every failing check,
-  # so without this the run would continue past max_tries indefinitely
+  # In sample, max_tries binds even when the iteration target is unmet (a
+  # continuation's target can stay out of reach), so the run cannot continue
+  # past max_tries
   done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok) | (trys_done & (iter_done | stage == "sample"))
   if(es_done & gd$gd_done & adapted & flat_ok & stats_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
@@ -564,7 +580,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
               flat = flat, cull_state = cull_state, n_culls = n_culls, stop_stats = stop_stats,
-              met = es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok))
+              discards = discards, met = r$met))
 }
 
 # The Rhats a stop rule reads (split_rhat()), subject-level ones from the
@@ -647,28 +663,30 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf,
       (is.null(max_gd) || gd_top(g, gd_quantile) < max_gd) &&
       (is.null(mean_gd) || mean(g$gd) < mean_gd)
   }
+  # the value the rule compares with max_gd (mean_gd): the maximum over the
+  # non-subject Rhats and the gd_quantile quantile of the subject ones
+  rule_of <- function(g) if(!is.null(max_gd)) gd_top(g, gd_quantile) else mean(g$gd)
   g <- stage_gds(emc, selection, stage, omit_mpsrf)
   ok_gd <- gd_ok(g)
+  # The first third of the stage may be dropped, but only when that makes the
+  # rule pass: it is offered here as `short` and check_progress() takes it only
+  # if every other criterion then passes too. A failing stage keeps all its
+  # draws (repeated discards held failing stages at 300-450 draws, where an ESS
+  # floor or the cull's window can never be reached).
+  short <- NULL
   if(!ok_gd) {
-    # Drop the first third if this improves the stopping diagnostic.
     n_remove <- round(chain_n(emc)[,stage][1]/3)
     g_short <- tryCatch(stage_gds(emc, selection, stage, omit_mpsrf, filter = n_remove), error = function(e) NULL)
-    if(!is.null(g_short) &&
-       ((is.null(max_gd) && mean(g_short$gd) < mean(g$gd)) || (!is.null(max_gd) && max(g_short$gd) < max(g$gd)))){
+    if(!is.null(g_short) && gd_ok(g_short)){
       emc_short <- try(subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE), silent = TRUE)
       if(!is(emc_short, "try-error")){
-        g <- g_short
-        emc <- emc_short
-        ok_gd <- gd_ok(g)
+        class(emc_short) <- "emc"
+        short <- list(gd = g_short$gd, gd_done = TRUE, emc = emc_short, rule = rule_of(g_short), removed = n_remove)
       }
     }
   }
-  gd <- g$gd
   class(emc) <- "emc"
-  # the value the rule compares with max_gd (mean_gd): the maximum over the
-  # non-subject Rhats and the gd_quantile quantile of the subject ones
-  rule <- if(!is.null(max_gd)) gd_top(g, gd_quantile) else mean(gd)
-  return(list(gd = gd, gd_done = ok_gd, emc = emc, rule = rule))
+  return(list(gd = g$gd, gd_done = ok_gd, emc = emc, rule = rule_of(g), short = short))
 }
 
 # window: build them from the last `window` adapt iterations of each chain

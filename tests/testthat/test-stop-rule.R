@@ -109,3 +109,42 @@ test_that("the sample ETA counts the run's own target and at least one more chec
                                               current_iters = 6000, target_iters = 5100, step_size = 100, done = TRUE)
   expect_equal(as.numeric(fin$max_time), 0)
 })
+
+test_that("the first third is dropped only when the stop is then met, and the drop is recorded", {
+  crit <- list(max_gd = 1.3, selection = "mu", omit_mpsrf = TRUE)     # all draws: about 1.7; without the first third: about 1.0
+  n <- unname(chain_n(samples_LNR)[1, "sample"])
+  it <- which(samples_LNR[[1]]$samples$stage == "sample")
+  bad <- samples_LNR; k <- it[seq_len(round(n / 3))]
+  bad[[1]]$samples$theta_mu[, k] <- bad[[1]]$samples$theta_mu[, k] + 20     # chain 1 far off in the first third only
+  args <- list(stage = "sample", iter = 10, max_tries = 20, step_size = 10, n_cores = 1, verbose = FALSE,
+               progress = list(trys = 0, iters_total = 0))
+  # the Rhat rule fails on all draws and passes without the first third: dropped, stage stops, drop recorded
+  p <- do.call(EMC2:::check_progress, c(list(bad, stop_criteria = crit), args))
+  expect_true(p$done); expect_equal(p$total_iters_stage, n - round(n / 3))
+  expect_length(p$discards, 1); expect_equal(p$discards[[1]]$removed, round(n / 3)); expect_equal(p$gd$discarded, round(n / 3))
+  # the same, but another criterion would still fail without the first third: all draws kept, nothing recorded
+  q <- do.call(EMC2:::check_progress, c(list(bad, stop_criteria = c(crit, min_ess = 1e6)), args))
+  expect_false(q$done); expect_equal(q$total_iters_stage, n); expect_length(q$discards, 0); expect_equal(q$gd$discarded, 0)
+  # check_gd() itself never subsets: it offers the shorter draws only when they pass the rule
+  g <- EMC2:::check_gd(bad, "sample", max_gd = 1.3, mean_gd = NULL, omit_mpsrf = TRUE, selection = "mu")
+  expect_false(g$gd_done); expect_equal(unname(chain_n(g$emc)[1, "sample"]), n); expect_true(g$short$gd_done)
+  expect_null(EMC2:::check_gd(bad, "sample", max_gd = 1.0001, mean_gd = NULL, omit_mpsrf = TRUE, selection = "mu")$short)
+})
+
+test_that("a failing sample stage keeps all its draws, check after check", {
+  skip_on_cran()
+  old <- options(emc.adapt_converge = FALSE); on.exit(options(old))
+  dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:3], ]; dat$subjects <- droplevels(dat$subjects)
+  des <- design(data = dat, model = LNR, matchfun = function(d) d$S == d$lR, formula = list(m ~ lM, s ~ 1, t0 ~ 1), report_p_vector = FALSE)
+  sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standard")
+  a <- list(cores_for_chains = 1, step_size = 50, verbose = FALSE, particle_factor = 30)
+  set.seed(4); e <- make_emc(dat, des, rt_resolution = 0.05, n_chains = 3)
+  e <- do.call(run_emc, c(list(e, "preburn", sc("preburn", list(iter = 30))), a))
+  e <- do.call(run_emc, c(list(e, "burn", sc("burn", list(iter = 100))), a))
+  e <- do.call(run_emc, c(list(e, "adapt", sc("adapt", list(min_unique = 50))), a))
+  # an unreachable Rhat target: 4 checks of 50 must leave all 200 draws (the old discard held the stage near 2/3)
+  r <- suppressWarnings(do.call(run_emc, c(list(e, "sample", sc("sample", list(iter = 1000, max_gd = 1.0001))),
+                                           c(a, max_tries = 4))))
+  expect_equal(unname(chain_n(r)[1, "sample"]), 200)
+  expect_length(r[[1]]$stop_record$discards, 0); expect_false(r[[1]]$stop_record$met)
+})

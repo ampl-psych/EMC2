@@ -93,8 +93,10 @@ subject-level (\code{alpha}) diagnostics. All other selected parameters must sti
 pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
 \code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
-every \code{step_size} iterations. After a failed check, the first third of the stage's
-draws is dropped if this lowers the stopping diagnostic.
+every \code{step_size} iterations. When a check fails on all of the stage's draws, its first
+third is dropped only if without it the rule passes and every other criterion of the stage
+is then met, so that the stage stops; otherwise all draws are kept and the stage grows. Each
+drop is recorded in \code{emc[[1]]$stop_record$discards}.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 

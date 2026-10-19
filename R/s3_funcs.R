@@ -539,8 +539,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' pass ``max_gd``. Default ``NULL`` uses the maximum throughout.
 #'
 #' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
-#' every ``step_size`` iterations. After a failed check, the first third of the stage's
-#' draws is dropped if this lowers the stopping diagnostic.
+#' every ``step_size`` iterations. When a check fails on all of the stage's draws, its first
+#' third is dropped only if without it the rule passes and every other criterion of the stage
+#' is then met, so that the stage stops; otherwise all draws are kept and the stage grows. Each
+#' drop is recorded in ``emc[[1]]$stop_record$discards``.
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
