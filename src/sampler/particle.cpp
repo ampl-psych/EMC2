@@ -31,6 +31,10 @@ bool conditional_covariance(const arma::mat& likelihood, const arma::mat& prior,
 
 }  // namespace
 
+// =============================================================================
+// Gaussian — cache the factorisation for repeated draws and density evaluations
+// =============================================================================
+
 Gaussian::Gaussian(const arma::mat& covariance) {
   if (!arma::chol(root_, covariance, "lower"))
     throw std::runtime_error("singular Gaussian covariance");
@@ -58,10 +62,16 @@ arma::vec Gaussian::log_density(const arma::mat& x, const arma::vec& mean,
   return out;
 }
 
+// =============================================================================
+// ParticleSampler — one set of proposals per subject and parameter block
+// =============================================================================
+
 ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const Rcpp::List& tune,
                                 const Rcpp::List& pm_settings, const std::string& kernel)
   : rng(rng_), kernel_(kernel), exact_(flag(tune, "exact")), frozen_(flag(tune, "frozen")),
     original_settings_(Rcpp::clone(pm_settings)) {
+  // Proposal order: group, local, chain, efficient. Burn uses a second local
+  // proposal in the chain slot; sample adds the conditional-history proposal.
   proposals_ = kernel == "preburn" ? 2 : kernel == "sample" ? 4 : 3;
   multiplier_ = kernel == "preburn" ? 2 : 1;
   local_.assign(proposals_, false);
@@ -129,6 +139,8 @@ ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const 
 }
 
 void ParticleSampler::begin_iteration(const arma::mat& covariance) {
+  // Group factors are shared by subjects; conditional factors also depend on
+  // each subject's likelihood precision and are refreshed lazily in prepare().
   if (covariance_.n_rows != covariance.n_rows ||
       !arma::approx_equal(covariance_, covariance, "absdiff", 0)) {
     covariance_ = covariance;
@@ -140,6 +152,9 @@ void ParticleSampler::begin_iteration(const arma::mat& covariance) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Prepare particles and prior/proposal weights; likelihoods are evaluated outside
+// ---------------------------------------------------------------------------
 const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current,
                                         const arma::vec& mean,
                                         const arma::mat& prior_precision) {
@@ -152,6 +167,8 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
     subject.local.clear();
     subject.has_local.assign(indices_.size(), false);
     subject.conditional_covariance.reset();
+    // Global proposal uses the marginal block of (L + P)^-1; the local
+    // proposal uses (L_bb + P_bb)^-1 with the other coefficients held fixed.
     if (conditional_covariance(subject.likelihood_precision, prior_precision,
                                subject.conditional_covariance)) {
       for (const auto& block : indices_)
@@ -190,6 +207,8 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
       kernels[2] = &subject.conditional[b];
     }
   }
+  // Exact updates choose between local and independent kernels first.
+  // Mixing a current-centred proposal into ordinary i-SIR weights is not valid.
   const double local_probability = settings.mix[1];
   const bool use_local = exact_ && rng.runif(0, 1) < local_probability;
   std::vector<int> active;
@@ -199,6 +218,7 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
   for (arma::uword j = 0; j < active.size(); ++j) mixture[j] = settings.mix[active[j]];
   mixture /= arma::sum(mixture);
   std::vector<int> counts(active.size());
+  // Independent i-SIR needs draws from the stated mixture, including zero counts.
   rng.rmultinom(settings.n_particles * multiplier_, mixture.memptr(), active.size(), counts.data());
   subject.counts.zeros(proposals_);
   for (arma::uword k = 0; k < active.size(); ++k)
@@ -206,11 +226,14 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
   if (use_local && subject.has_local[b]) kernels[1] = &subject.local[b];
   arma::vec scales(proposals_, arma::fill::ones);
   for (int j = 1; j < proposals_; ++j) scales[j] = settings.epsilon[j - 1];
+  // Local step: draw an auxiliary centre, then particles around that centre.
+  // The symmetric Gaussian centre density cancels the proposal density in the weights.
   for (const auto j : active)
     if (exact_ && local_[j]) centers[j] = kernels[j]->draw(rng, centers[j], 1, scales[j]).row(0).t();
   const arma::uword rows = arma::sum(subject.counts) + 1;
   subject.candidates = arma::repmat(current.t(), rows, 1);
   arma::mat proposed(rows, idx.n_elem);
+  // Retain the current particle at row 0; only this block's columns change.
   proposed.row(0) = current.elem(idx).t();
   arma::uword offset = 1;
   for (const auto j : active) {
@@ -220,9 +243,11 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
     offset += count;
   }
   subject.candidates.cols(idx) = proposed;
+  // For split blocks use the full group density, keeping cross-block correlations.
   subject.log_weights = indices_.size() == 1 ?
     group_blocks_[b].log_density(proposed, mean.elem(idx)) :
     group_.log_density(subject.candidates, mean);
+  // Independent step: target / mixture, including the retained particle.
   if (!exact_ || !use_local) {
     arma::mat log_densities(rows, active.size());
     for (arma::uword k = 0; k < active.size(); ++k) {
@@ -242,6 +267,9 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
   return subject.candidates;
 }
 
+// ---------------------------------------------------------------------------
+// Resample from posterior weights, then update tuning during warmup
+// ---------------------------------------------------------------------------
 arma::uword ParticleSampler::select(int s, int b, const arma::vec& likelihood) {
   Subject& subject = subjects_[s];
   arma::vec log_weights = subject.log_weights + likelihood;
@@ -266,6 +294,7 @@ void ParticleSampler::update(Settings& x, const arma::vec& weights,
   for (int j = 0; j < proposals_; ++j) {
     x.proposal_counts[j] += counts[j];
     if (counts[j] == 0) continue;
+    // Tuning uses the fraction beating the retained particle, not MH acceptances.
     const double better = arma::accu(weights.subvec(offset, offset + counts[j] - 1) > weights[0]);
     x.acc_counts[j] += better;
     rate_now[j] = better / counts[j];
@@ -303,6 +332,7 @@ void ParticleSampler::update(Settings& x, const arma::vec& weights,
       x.mix[1] = min_local_;
     }
   }
+  // Particle ESS within this update, not MCMC ESS across iterations.
   if (proposals_ > 3) {
     const double ess = std::pow(arma::sum(weights), 2) / arma::dot(weights, weights);
     x.n_particles = std::max(25.0, std::min(max_particles_,
@@ -314,6 +344,7 @@ void ParticleSampler::update(Settings& x, const arma::vec& weights,
   }
 }
 
+// Rcpp boundary — write tuning back for the next batch.
 Rcpp::List ParticleSampler::settings() const {
   Rcpp::List out = Rcpp::clone(original_settings_);
   for (arma::uword s = 0; s < subjects_.size(); ++s) {

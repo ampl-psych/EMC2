@@ -15,9 +15,12 @@ arma::mat group_inverse(const arma::mat& x);
 arma::vec group_normal(Random& rng, const arma::vec& mean, const arma::mat& covariance);
 arma::mat group_inverse_wishart(Random& rng, double df, const arma::mat& scale);
 
+// tmu / tvar correspond to samples$theta_mu / theta_var; tvinv is the precision.
+// subj_mu has one column per subject, after applying group designs or factor scores.
 struct GroupState {
   arma::vec tmu, a_half, u, s, a_half_s;
   arma::mat tvar, tvinv, subj_mu;
+  // SEM's particle prior uses conditional tvar; stored theta_var uses population_var.
   arma::mat lambda, eta, psi, B, K, G, delta_inv, population_var;
   arma::vec epsilon_inv, delta;
 };

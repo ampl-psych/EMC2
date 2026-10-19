@@ -5,6 +5,8 @@
 #include <vector>
 namespace emc2 {
 class Likelihoods;
+
+// Owned by an R external pointer; reused across fit() batches.
 struct SamplerContexts {
   std::vector<std::unique_ptr<Likelihoods>> chains;
   int cores_per_chain;

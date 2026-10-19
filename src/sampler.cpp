@@ -3,6 +3,11 @@
 #include "sampler/likelihood.h"
 #include "openmp.h"
 
+// =============================================================================
+// Rcpp entry points — R objects and OpenMP pool lifetime are handled here
+// Sampling, proposal construction and likelihood caching live in sampler/.
+// =============================================================================
+
 // [[Rcpp::export]]
 Rcpp::List native_run_hyper(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter) {
   return emc2::sample_group(sampler, alpha, iter);

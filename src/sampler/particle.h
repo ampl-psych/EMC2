@@ -48,7 +48,7 @@ class ParticleSampler {
     arma::mat conditional_covariance;
     unsigned int covariance_version = 0;
     std::vector<Settings> settings;
-    arma::mat candidates;
+    arma::mat candidates;  // particles x parameters; row 0 is the retained draw
     arma::vec log_weights;
     arma::ivec counts;
   };
@@ -59,6 +59,8 @@ class ParticleSampler {
   double min_local_, target_ess_, ess_scale_, max_particles_, mix_adapt_, alpha_star_;
   arma::vec target_accept_;
   std::vector<bool> local_;
+  // R's components identifies parameter blocks; shared_ll_idx identifies the
+  // likelihood to evaluate. Several blocks can belong to the same likelihood.
   std::vector<int> shared_, labels_;
   std::vector<arma::uvec> indices_;
   std::vector<Subject> subjects_;

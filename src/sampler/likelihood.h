@@ -11,6 +11,8 @@
 
 namespace emc2 {
 
+// One set of likelihood components per subject. Copies share fixed model inputs;
+// coefficient, trend and likelihood buffers belong to the individual chain.
 class Likelihoods {
   struct Part;
   std::vector<std::vector<std::unique_ptr<Part>>> parts;
@@ -38,6 +40,7 @@ public:
     };
 #ifdef _OPENMP
     if (omp_in_parallel()) {
+      // Already in the chain team; schedule subject tasks on that same team.
 #pragma omp taskgroup
       for (int k = 0; k < std::min(cores, n); ++k) {
 #pragma omp task firstprivate(k) shared(one)
@@ -50,6 +53,7 @@ public:
 #else
     for (int s = 0; s < n; ++s) one(s);
 #endif
+    // Task errors go back to the caller; APIs requiring R run on the R thread.
     if (error) std::rethrow_exception(error);
     for (int s = 0; s < n; ++s) if (!safe[s]) work(s);
   }

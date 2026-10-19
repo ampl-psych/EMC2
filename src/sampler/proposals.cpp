@@ -83,12 +83,17 @@ void rescale_settings(Rcpp::List& sampler, double ratio) {
   sampler["samples"] = samples;
 }
 
-// Cache the empirical Gaussian once; preserve condMVN's existing jitter when
-// its joint covariance is nearly singular.
+// =============================================================================
+// Conditional — condMVN's empirical Gaussian, cached across conditioning draws
+// Preserve its jitter when the joint covariance is nearly singular.
+// =============================================================================
+
 class Conditional {
  public:
   Conditional(const arma::mat& alpha, const arma::mat& given) : p_(alpha.n_rows), given_(given) {
     if (given_.n_rows) {
+      // Fixed SEM loadings carry no information for conditioning and make the
+      // empirical covariance singular. Drop constant predictors before fitting.
       arma::uvec varying = arma::find(arma::max(given_, 1) != arma::min(given_, 1));
       given_ = given_.rows(varying);
     }
@@ -131,6 +136,7 @@ class Conditional {
     if (!arma::inv_sympd(inverse, covariance.submat(p_, p_, end, end)))
       Rcpp::stop("singular conditional proposal covariance");
     arma::mat cross = covariance.submat(0, p_, p_ - 1, end);
+    // Gaussian conditioning: B = Sigma_ag Sigma_gg^-1, V = Sigma_aa - B Sigma_ga.
     regression_ = cross * inverse;
     variance_ = covariance.submat(0, 0, p_ - 1, p_ - 1) - regression_ * cross.t();
   }
@@ -141,6 +147,7 @@ struct ProposalBlock {
   std::vector<Conditional> subjects;
 };
 
+// Build the conditioning history once for each parameter block.
 ProposalBlock make_block(const Rcpp::List& samples, const std::string& type,
                          const arma::uvec& selected, const arma::uvec& global, int only_subject = -1) {
   ProposalBlock block;
@@ -149,6 +156,7 @@ ProposalBlock make_block(const Rcpp::List& samples, const std::string& type,
   const arma::uword p = selected.n_elem, draws = alpha.n_slices;
   arma::mat unwound, means;
   arma::cube subject_means;
+  // Factor proposals condition on means, scores, log error precisions and loadings.
   if (type == "SEM" || type == "infnt_factor") {
     const arma::cube loadings = cube(samples["lambda"]), eta = cube(samples["eta"]);
     const arma::mat mu = Rcpp::as<arma::mat>(samples["theta_mu"]);
@@ -170,6 +178,7 @@ ProposalBlock make_block(const Rcpp::List& samples, const std::string& type,
   }
   if (type != "single") {
     arma::cube covariance = cube(samples["theta_var"]);
+    // unwind_chol representation: lower triangle, with log diagonal entries.
     unwound.set_size(p * (p + 1) / 2, draws);
     for (arma::uword i = 0; i < draws; ++i) {
       arma::mat root;
@@ -202,6 +211,10 @@ ProposalBlock make_block(const Rcpp::List& samples, const std::string& type,
 }
 
 }  // namespace
+
+// =============================================================================
+// Chain proposals — means/covariances from a random half of the pooled history
+// =============================================================================
 
 Rcpp::List chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha,
                                  Rcpp::NumericMatrix likelihood, bool do_block,
@@ -239,6 +252,7 @@ Rcpp::List chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha,
       }
       weights = arma::exp(weights - weights.max());
       weights /= arma::accu(weights);
+      // The centre is likelihood-weighted; covariance uses the unweighted draws.
       arma::vec weighted_mean = x * weights;
       Rcpp::NumericVector mu(weighted_mean.begin(), weighted_mean.end());
       if (!Rf_isNull(par_names)) mu.attr("names") = par_names;
@@ -279,6 +293,10 @@ Rcpp::List chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha,
   }
   return out;
 }
+
+// =============================================================================
+// Efficient proposals — condition the fitted Gaussian at one draw per chain
+// =============================================================================
 
 Rcpp::List efficient_proposals(Rcpp::List emc, Rcpp::List samples) {
   Rcpp::List first = emc[0], data = first["data"];
@@ -321,6 +339,9 @@ Rcpp::List efficient_proposals(Rcpp::List emc, Rcpp::List samples) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Parameter blocking — complete linkage on 1 - |correlation|, within likelihoods
+// ---------------------------------------------------------------------------
 Rcpp::IntegerVector parameter_blocks(Rcpp::List emc, int n_blocks) {
   if (n_blocks < 1) Rcpp::stop("n_blocks must be positive");
   Rcpp::List first = emc[0], covariances = first["chains_var"], data = first["data"];
@@ -366,6 +387,7 @@ Rcpp::IntegerVector parameter_blocks(Rcpp::List emc, int n_blocks) {
   return out;
 }
 
+// Rcpp boundary — single conditional proposal and implied group means.
 Rcpp::List conditional_proposal(Rcpp::List samples, std::string type, int subject,
                               int iteration, SEXP indices) {
   Rcpp::NumericVector alpha = samples["alpha"];

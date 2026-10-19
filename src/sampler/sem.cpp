@@ -49,6 +49,10 @@ double structural_logdet(const arma::mat& b) {
 
 }  // namespace
 
+// =============================================================================
+// SEM setup — alpha = mu + K x + Lambda eta + error; eta = B eta + G x + error
+// =============================================================================
+
 SEMSampler::SEMSampler(const Rcpp::List& sampler) {
   p_ = Rcpp::as<int>(sampler["n_pars"]);
   n_ = Rcpp::as<int>(sampler["n_subjects"]);
@@ -74,6 +78,7 @@ SEMSampler::SEMSampler(const Rcpp::List& sampler) {
   structural_precision_ = 1 / arma::join_cols(recycled(prior["G_var"], c_), recycled(prior["B_var"], q_));
   const arma::mat loading = arma::join_rows(k_, lambda_);
   const arma::mat structural = arma::join_rows(g_, b_);
+  // Non-finite entries mark free coefficients; finite entries remain fixed.
   for (arma::uword j = 0; j < p_; ++j)
     loading_free_.push_back(arma::find_nonfinite(loading.row(j).t()));
   for (arma::uword j = 0; j < q_; ++j)
@@ -101,6 +106,8 @@ arma::mat SEMSampler::subject_means(const GroupState& state) const {
   return out;
 }
 
+// Conditional moments feed the particle update; marginal variance is stored
+// as theta_var and includes covariates and the structural factor distribution.
 void SEMSampler::moments(GroupState& state) const {
   state.subj_mu = subject_means(state);
   state.tvar = arma::diagmat(1 / state.epsilon_inv);
@@ -145,8 +152,14 @@ GroupState SEMSampler::read_state(const Rcpp::List& last) const {
   return state;
 }
 
+// =============================================================================
+// SEM Gibbs update — keep the previous state if a decomposition fails
+// =============================================================================
+
 void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) const {
   GroupState next = state;
+
+  // 1) Population means, then factor scores conditional on the structural model
   const arma::mat y = alpha.t();
   const arma::mat residual = y - x_ * state.K.t() - state.eta * state.lambda.t();
   const arma::vec mu_var = 1 / (n_ * state.epsilon_inv + mean_precision_);
@@ -169,6 +182,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
       next.eta.row(s) = (eta_mean.col(s) + root * z).t();
     }
   }
+
+  // 2) Error precisions and free measurement coefficients (K, Lambda)
   const arma::vec squares = arma::sum(arma::square(centered - x_ * state.K.t() - next.eta * state.lambda.t()), 0).t();
   for (arma::uword j = 0; j < p_; ++j)
     next.epsilon_inv[j] = rng.rgamma(a_e_[j] + .5 * n_, 1 / (b_e_[j] + .5 * squares[j]));
@@ -188,6 +203,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
     loading.row(j) = coefficients.t();
   }
   next.K = loading.head_cols(c_); next.lambda = loading.tail_cols(q_);
+
+  // 3) Structural coefficients (G, B), conditional on the latest residuals
   arma::mat structural = arma::join_rows(state.G, state.B);
   arma::mat eta_residual = next.eta - design * structural.t();
   for (arma::uword j = 0; j < q_; ++j) {
@@ -204,6 +221,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
     const arma::mat variance = group_inverse(precision);
     coefficients.elem(free) = group_normal(rng, variance * z.t() * target, variance);
     if (cyclic_) {
+      // Cycles add |I - B|^n to the density; the Gaussian proposal needs this
+      // determinant correction. For an acyclic graph the determinant is one.
       arma::mat candidate_b = structural.tail_cols(q_);
       candidate_b.row(j) = coefficients.tail(q_).t();
       const double ratio = n_ * (structural_logdet(candidate_b) - structural_logdet(structural.tail_cols(q_)));
@@ -213,6 +232,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
     eta_residual.col(j) = next.eta.col(j) - design * coefficients;
   }
   next.G = structural.head_cols(c_); next.B = structural.tail_cols(q_);
+
+  // 4) Structural error precisions, independent or in correlated factor blocks
   for (const auto& indices : factor_groups_) {
     const arma::mat residuals = eta_residual.cols(indices);
     const arma::mat squares = residuals.t() * residuals;
@@ -228,6 +249,8 @@ void SEMSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) co
   state = std::move(next);
 }
 
+// Joint scale moves act on residuals around K x + Lambda eta + mu.
+// Loadings and factor scores stay fixed; only the error variance changes.
 double SEMSampler::affine(GroupState& state, arma::uword j,
                           double log_scale, double shift) const {
   double ratio = 0;

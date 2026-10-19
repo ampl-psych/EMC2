@@ -13,6 +13,10 @@ bool present(const Rcpp::List& x, const char* name) {
 
 }  // namespace
 
+// =============================================================================
+// Group distributions — all random draws use the chain's own RNG
+// =============================================================================
+
 arma::mat group_inverse(const arma::mat& x) {
   arma::mat out;
   if (!arma::inv_sympd(out, x))
@@ -57,6 +61,10 @@ std::vector<std::string> get_names(SEXP x) {
 }
 
 }  // namespace
+
+// =============================================================================
+// Group setup — priors, fixed/random designs and covariance blocks
+// =============================================================================
 
 GroupSampler::GroupSampler(const Rcpp::List& sampler) {
   const std::string type = Rcpp::as<std::string>(sampler["type"]);
@@ -163,6 +171,8 @@ GroupSampler::GroupSampler(const Rcpp::List& sampler) {
     }
   }
 
+  // par_group labels identify covariance blocks; their numeric values need not
+  // be consecutive. Unblocked parameters get independent variance updates.
   Rcpp::LogicalVector blocked = present(sampler, "is_blocked") &&
     Rf_xlength(sampler["is_blocked"]) > 0 ?
     Rcpp::as<Rcpp::LogicalVector>(sampler["is_blocked"]) :
@@ -221,6 +231,9 @@ arma::mat GroupSampler::subject_means(const GroupState& state) const {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Initial state / continuation from the last stored draw
+// ---------------------------------------------------------------------------
 GroupState GroupSampler::initialize(Random& rng, SEXP start_mu, SEXP start_var) const {
   if (sem_) return sem_->initialize(rng, start_mu, start_var);
   if (infnt_) return infnt_->initialize(rng, start_mu, start_var);
@@ -282,6 +295,10 @@ GroupState GroupSampler::read_state(const Rcpp::List& last) const {
   return state;
 }
 
+// =============================================================================
+// Group Gibbs update — alpha is parameters x subjects
+// =============================================================================
+
 void GroupSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) const {
   if (single_) return;
   if (sem_) { sem_->draw(rng, alpha, state); return; }
@@ -304,6 +321,8 @@ void GroupSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) 
   }
   // Keep the old state intact if a covariance factorization fails.
   GroupState next = state;
+
+  // 1) Fixed effects, conditional on random effects and the current precision
   arma::mat residual = alpha;
   if (!random_.empty()) residual -= random_means(state.u);
   arma::mat weighted = state.tvinv * residual;
@@ -323,6 +342,8 @@ void GroupSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) 
   const arma::mat covariance = group_inverse(precision);
   next.tmu = group_normal(rng, covariance * linear, covariance);
   next.subj_mu = fixed_means(next.tmu);
+
+  // 2) Random effects and their variances; update residuals after each block
   if (!random_.empty()) {
     next.subj_mu += random_means(next.u);
     residual = alpha - next.subj_mu;
@@ -349,6 +370,8 @@ void GroupSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) 
         1 / (v_z_ / next.s[j] + az_inv_sq_[j]));
     }
   } else residual = alpha - next.subj_mu;
+
+  // 3) Covariance blocks and independent variances, then half-t auxiliaries
   next.tvar.zeros(p_, p_);
   for (const auto& block : blocks_) {
     arma::mat r = residual.rows(block);
@@ -367,6 +390,10 @@ void GroupSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) 
   state = std::move(next);
 }
 
+// ---------------------------------------------------------------------------
+// Group side of a joint move; the runner transforms the subject coefficients
+// Returns the log prior/Jacobian remainder after the subject-density cancellation.
+// ---------------------------------------------------------------------------
 double GroupSampler::affine(GroupState& state, arma::uword j, double log_scale, double shift) const {
   if (sem_) return sem_->affine(state, j, log_scale, shift);
   if (infnt_) return infnt_->affine(state, j, log_scale, shift);
@@ -376,6 +403,7 @@ double GroupSampler::affine(GroupState& state, arma::uword j, double log_scale, 
       -2 * shape_[j % shape_.n_elem] * log_scale - rate_[j % rate_.n_elem] *
         state.tvinv(j, j) * (1 / (factor * factor) - 1) :
       log_scale - (factor * factor - 1) * a_inv_sq_[j] / state.a_half[j];
+    // Sigma -> D Sigma D; scale a_j inversely to keep a_j * Sigma_jj unchanged.
     state.tvar.row(j) *= factor; state.tvar.col(j) *= factor;
     state.tvinv.row(j) /= factor; state.tvinv.col(j) /= factor;
     if (!diagonal_gamma_) state.a_half[j] /= factor * factor;

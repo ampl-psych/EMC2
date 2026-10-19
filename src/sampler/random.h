@@ -26,6 +26,8 @@ class Random {
   bool has_spare = false;
  public:
   explicit Random(SEXP saved = R_NilValue) {
+    // Restore the stream rather than reseeding each batch; batch size then has
+    // no effect on the sequence. Distribution formats depend on the C++ library.
     if (!Rf_isNull(saved)) {
       Rcpp::List state(saved);
       if (state.containsElementNamed("format") && Rcpp::as<std::string>(state["format"]) == format()) {
@@ -70,6 +72,7 @@ class Random {
   }
   double rchisq(double df) { return rgamma(df / 2, 2); }
   void rmultinom(int n, const double* p, int k, int* counts) {
+    // Sequential conditional binomials; the last component gets the remainder.
     double remaining = 1;
     for (int j = 0; j + 1 < k; ++j) {
       counts[j] = n ? std::binomial_distribution<int>(n, std::min(1., p[j] / remaining))(engine) : 0;

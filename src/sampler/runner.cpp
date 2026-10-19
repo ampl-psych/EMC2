@@ -14,7 +14,11 @@ namespace {
 bool present(const Rcpp::List& x, const char* key) {
   return x.containsElementNamed(key) && !Rf_isNull(x[key]);
 }
-// R arrays are allocated once at the boundary, then filled without R calls.
+
+// =============================================================================
+// SampleStore — R arrays allocated at the boundary, filled without R calls
+// =============================================================================
+
 class SampleStore {
  public:
   Rcpp::List data;
@@ -35,6 +39,7 @@ class SampleStore {
     return arma::vec(values.begin() + static_cast<size_t>(index()) * n, n);
   }
   Rcpp::List last() const {
+    // Stored names -> GroupState names. The last dimension is always iteration.
     Rcpp::List out;
     const int j = index();
     const char* names[] = {"tmu", "tvar", "a_half", "u", "s", "a_half_s", "alpha", "subj_ll",
@@ -92,6 +97,10 @@ struct Population {
   explicit Population(const Rcpp::List& sampler) : main(sampler) {}
 };
 
+// =============================================================================
+// Joint moves — scale subject deviations, or translate subjects and means together
+// =============================================================================
+
 class JointMoves {
   Rcpp::List settings;
   arma::vec step, loc, sum_step, sum_loc, mean, curvature, shift;
@@ -119,6 +128,8 @@ class JointMoves {
     arma::mat covariance(p, p, arma::fill::zeros);
     if (variance.hasAttribute("dim")) covariance = Rcpp::as<arma::mat>(variance);
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
+    // Use the saved directions throughout a sampling stage. Otherwise estimate
+    // curvature in prior-standardised coordinates and shrink the stiff directions.
     if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
     else {
       const arma::mat root = arma::chol(covariance, "lower");
@@ -146,6 +157,7 @@ class JointMoves {
         for (int j = 0; j < p; ++j) precision(j, j) = inverse[j % inverse.size()];
       }
     } else precision = group_inverse(covariance);
+    // Cache the linear/quadratic terms of the normal mean-prior ratio.
     prior_directions = precision * directions;
     curvature = arma::sum(directions % prior_directions, 0).t();
   }
@@ -163,6 +175,8 @@ class JointMoves {
         proposed = pop.state;
         lp = pop.main.affine(proposed, j, delta, 0);
       } else {
+        // Translating alpha and mu equally leaves the conditional group density
+        // unchanged. Only the mean prior and subject likelihoods enter the ratio.
         shift = delta * directions.col(j);
         lp = -delta * arma::dot(prior_directions.col(j), pop.state.tmu - mean) -
           .5 * delta * delta * curvature[j];
@@ -173,6 +187,7 @@ class JointMoves {
           factor * (alpha(j, s) - pop.state.subj_mu(j, s));
         else proposals[s].row(0) += shift.t();
       }
+      // Exact likelihood check for all subjects; curvature only sets the proposal.
       likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
       double lr = lp;
       for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
@@ -190,6 +205,7 @@ class JointMoves {
         }
       }
     }
+    // Warmup tuning; R freezes the geometric average of the adaptation tail.
     if (!frozen) {
       step %= arma::exp(.1 * (accepted - .3));
       if (do_location) loc %= arma::exp(.1 * (accepted_loc - .3));
@@ -212,6 +228,11 @@ void attach_samples(Rcpp::List& sampler, SampleStore& store, Population& pop, in
   store.finish(pop.state, j); sampler["samples"] = store.data;
 }
 } // namespace
+
+// =============================================================================
+// Initial particles — draw from the group distribution and weight by likelihood
+// =============================================================================
+
 Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
                       int particles, Likelihoods& likelihood) {
   sampler = Rcpp::List(Rf_shallow_duplicate(sampler));
@@ -256,6 +277,12 @@ Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
 }
 
 namespace {
+
+// =============================================================================
+// Chain — one batch of group, joint and particle updates
+// Construction/finish handle R storage; advance() performs the sampling updates.
+// =============================================================================
+
 class Chain {
   Rcpp::List sampler;
   SampleStore store;
@@ -300,8 +327,10 @@ class Chain {
         }
       }
       if (joint) joint->draw(rng, pop, alpha, ll, likelihood, frozen);
+
       particle.begin_iteration(pop.state.tvar);
       component_ll.zeros();
+      // Blocks are sequential: prepare() sees alpha after all earlier updates.
       for (int b = 0; b < particle.block_count(); ++b) {
         for (arma::uword s = 0; s < alpha.n_cols; ++s)
           particle.prepare(s, b, alpha.col(s), pop.state.subj_mu.col(s), pop.state.tvinv);
@@ -310,6 +339,7 @@ class Chain {
         for (arma::uword s = 0; s < alpha.n_cols; ++s) {
           const int selected = particle.select(s, b, values[s]);
           alpha.col(s) = particle.candidate(s).row(selected).t();
+          // Shared likelihoods are overwritten by their last block, not added twice.
           component_ll(s, component - 1) = values[s][selected];
         }
       }
@@ -327,6 +357,10 @@ class Chain {
   }
 };
 } // namespace
+
+// =============================================================================
+// Chain scheduling — shared fixed likelihood inputs, separate mutable workspaces
+// =============================================================================
 
 SamplerContexts::SamplerContexts(const Rcpp::List& inputs, int n_chains, int cores)
   : cores_per_chain(std::max(1, cores)) {
@@ -347,9 +381,12 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
     contexts.warned_openmp = true;
   }
 #endif
+  // Allocate R storage and restore RNGs before entering the parallel region.
   std::vector<std::unique_ptr<Chain>> chains;
   for (int c = 0; c < n; ++c) chains.emplace_back(new Chain(args[c], *contexts.chains[c]));
   std::vector<std::exception_ptr> errors(n);
+
+  // Return to the R thread every ten iterations for interrupts and progress.
   for (int end = 0; end < iter;) {
     end = std::min(iter, end + 10);
     Rcpp::checkUserInterrupt();
@@ -358,6 +395,7 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
 #pragma omp master
 #endif
     {
+      // Chain and subject tasks share one OpenMP team, avoiding nested teams.
       for (int first = 0; first < n; first += concurrent) {
 #ifdef _OPENMP
 #pragma omp taskgroup
@@ -387,6 +425,7 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
   return out;
 }
 
+// Group-only sampling conditional on supplied subject coefficients (run_hyper).
 Rcpp::List sample_group(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter) {
   sampler = Rcpp::List(Rf_shallow_duplicate(sampler));
   GroupSampler group(sampler);

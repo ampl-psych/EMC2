@@ -427,7 +427,7 @@ inline void apply_bounds(std::vector<int>&             is_ok,
 
 
 // =============================================================================
-// Likelihood functions — Call within calc_ll branches
+// Likelihood functions — called by LikelihoodContext::Impl::evaluate_particle
 // =============================================================================
 
 void c_log_likelihood_race(ParamTable& pt,
@@ -601,10 +601,17 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
 
 namespace emc2 {
 
+// =============================================================================
+// LikelihoodContext — shared setup from calc_ll / calc_ll_multithreaded
+// Kept between sampler calls; only the particle values change.
+// =============================================================================
+
 struct LikelihoodContext::Impl {
   enum Model { MRI, MRI_AR1, ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT, MULTINOMIAL_PROBIT,
                SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE };
 
+  // Per-thread mutable state. Previously pt_vec, tr_vec, ll_buf_vec, etc.
+  // ll holds compressed trial log-likelihoods; rows holds the race accumulator buffer.
   struct State {
     ParamTable pt;
     std::unique_ptr<TrendRuntime> trend;
@@ -620,12 +627,16 @@ struct LikelihoodContext::Impl {
   };
 
   List fixed_inputs; // retains designs and custom compiled-kernel pointers
+  // pipeline was ctx in calc_ll; race below was the local RaceModelSetup setup.
   PipelineContext pipeline;
   PipelineCache cache;
   std::vector<TransformSpec> pretransforms;
   std::vector<BoundSpec> bounds;
   std::vector<std::pair<int, double>> constants;
 
+  // Index lists — built once, shared across all choice models
+  // idx_all: all non-missing rows (DDM)
+  // idx_win / idx_los: winner/loser split (race and choice-only)
   std::vector<int> idx_all, idx_win, idx_los, keep_indices;
   std::vector<bool> participating;
   IntegerVector expand, responses, levels;
@@ -640,6 +651,7 @@ struct LikelihoodContext::Impl {
   MRISpec mri;
   Model model;
   std::string model_name;
+  // n_trials was n_choice_trials in calc_ll; n_rows includes accumulator rows.
   int n_parameters, n_rows, n_lR, n_trials, n_exp, n_threads;
   double min_ll;
   bool safe = true;
@@ -661,6 +673,7 @@ struct LikelihoodContext::Impl {
     n_exp = n_trials;
     participating.assign(n_rows, true);
 
+    // Shared setup -- context holds the param_table, designs, constants and trends.
     NumericMatrix initial(1, n_parameters);
     colnames(initial) = parameter_names;
     pretransforms = make_transform_specs(initial, pretransform_values);
@@ -668,6 +681,8 @@ struct LikelihoodContext::Impl {
                                      transforms, pretransform_values, trend);
     cache = make_pipeline_cache(pipeline.param_table, designs, pipeline.transform_specs,
                                 pipeline.trend_runtime.get());
+
+    // Bounds — built once from structure
     NumericMatrix minmax = bound_values["minmax"];
     bounds = make_bound_specs(minmax, colnames(minmax), pipeline.param_table, bound_values);
     for (int j = n_parameters; j < pipeline.particle_matrix.ncol(); ++j)
@@ -678,12 +693,17 @@ struct LikelihoodContext::Impl {
         if (kernel.second.kernel_type == KernelType::Custom) safe = false;
     }
 
+    // -----------------------------------------------------------------------
+    // MRI / MRI_AR1 -- no expand, rt, R attributes
+    // -----------------------------------------------------------------------
     if (type == "MRI" || type == "MRI_AR1") {
       model = type == "MRI" ? MRI : MRI_AR1;
       y = extract_y(data);
       y_ptr = y.begin();
+      // Resolve column indices once — no allocation inside particle loop
       mri = make_mri_spec(pipeline.param_table, pipeline.keep_names, model == MRI_AR1);
     } else {
+      // All choice models — shared read-only data
       expand = data.attr("expand");
       n_exp = expand.size();
       expand_ptr = expand.begin();
@@ -695,12 +715,15 @@ struct LikelihoodContext::Impl {
       if (has_winner) { idx_win.reserve(n_rows); idx_los.reserve(n_rows); }
       for (int i = 0; i < n_rows; ++i) {
         if (has_missingness && !IntegerVector::is_na(missingness[i])) {
+          // Ignored rows also skip bounds; censored probabilities are filled separately.
           if (missingness[i] == 0) participating[i] = false;
           continue;
         }
         idx_all.push_back(i);
         if (has_winner) (winner[i] ? idx_win : idx_los).push_back(i);
       }
+
+      // Choice-only models
       if (type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT" ||
           type == "MULTINOMIAL_LOGIT" || type == "MULTINOMIAL_PROBIT") {
         model = type == "ORDERED_PROBIT" ? ORDERED_PROBIT :
@@ -714,6 +737,7 @@ struct LikelihoodContext::Impl {
       } else {
         rts = data["rt"];
         rts_ptr = rts.begin();
+        // Continuous-choice-RT models (CDM, PSDM, PHSDM)
         if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
           model = type == "CDM" ? CDM : type == "PSDM" ? PSDM : PHSDM;
           safe = false;
@@ -723,6 +747,7 @@ struct LikelihoodContext::Impl {
           for (const auto& name : pipeline.keep_names)
             keep_indices.push_back(pipeline.param_table.base_index_for(as<std::string>(name)));
         } else {
+          // Discrete-Choice-RT models (DDM, & Race: RDM, LBA, LNR, ...)
           model = type == "DDM" ? DDM : RACE;
           race = make_race_setup(type, pipeline.param_table);
           if (model == DDM) {
@@ -737,6 +762,9 @@ struct LikelihoodContext::Impl {
 
   }
 
+  // ---------------------------------------------------------------------------
+  // Per-thread mutable state — built on the R thread, bound to its own ParamTable
+  // ---------------------------------------------------------------------------
   std::vector<std::unique_ptr<State>> make_states() const {
     DataFrame data = as<DataFrame>(fixed_inputs[0]);
     String type(model_name);
@@ -745,16 +773,20 @@ struct LikelihoodContext::Impl {
     for (int t = 0; t < n_threads; ++t) {
       states.emplace_back(new State);
       State& s = *states.back();
+      // TrendPlan is shared; kernel buffers and parameter pointers are local.
       s.pt = pipeline.param_table.deep_copy();
       if (pipeline.trend_runtime)
         s.trend.reset(new TrendRuntime(clone_trend_runtime(*pipeline.trend_runtime, s.pt)));
       s.is_ok.assign(n_rows, 1);
       s.ll.resize(n_trials);
       if (model == MRI || model == MRI_AR1) {
+        // Pre-fetch all mean column pointers
         for (int col : mri.col_means) s.means.push_back(s.pt.base.colptr(col));
       } else if (model == ORDERED_PROBIT || model == ORDERED_LOGIT) {
         s.cuts.resize(n_rows);
       } else if (model == SSEXG || model == SSRDEX) {
+        // The SS likelihood handles missingness codes itself (deadline / lower
+        // censoring / intrinsic no-response), so no CensorSpec/TruncSpec here.
         s.ss = make_ss_spec(std::string(type), data, s.pt);
       } else if (model == CDM || model == PSDM || model == PHSDM) {
         s.pars = NumericMatrix(n_rows, keep_indices.size());
@@ -770,6 +802,8 @@ struct LikelihoodContext::Impl {
     return states;
   }
 
+  // Pretransform + constants, formerly applied to the whole particle_matrix in
+  // make_pipeline_context. Fill one particle directly into the cached ParamTable.
   void fill_particle(State& s, const double* particles, int row, int n_particles) const {
     s.pt.reset_base_to_zero();
     for (const TransformSpec& sp : pretransforms) {
@@ -786,9 +820,16 @@ struct LikelihoodContext::Impl {
     run_pars_pipeline(s.pt, s.trend.get(), cache);
   }
 
+  // ---------------------------------------------------------------------------
+  // One particle — common pipeline for serial and parallel evaluation
+  // ---------------------------------------------------------------------------
   double evaluate_particle(State& s, const double* particles, int row,
                            int n_particles, double* trialwise) const {
+    // 1) Map p_vector to trialwise parameters
     fill_particle(s, particles, row, n_particles);
+
+    // 2) Calculate raw (compressed) trialwise log-likelihoods
+    // DDM takes logs in place, so skipped trials start at 1; others start at log(1).
     std::fill(s.ll.begin(), s.ll.end(), model == DDM ? 1.0 : 0.0);
 
     switch (model) {
@@ -819,6 +860,7 @@ struct LikelihoodContext::Impl {
       for (size_t j = 0; j < keep_indices.size(); ++j)
         std::copy_n(s.pt.base.colptr(keep_indices[j]), n_rows, s.pars_ptr + j * n_rows);
       if (model == CDM) {
+        // Sub-type dispatch: CDM -> HSDM (R,R2,R3) -> SDM (R,R2) -> CDM (R only)
         if (R2.size() && R3.size() && keep_indices.size() >= 8)
           c_dHSDM(rts, continuous_R, R2, R3, s.pars, participating, s.ll.data(), n_trials);
         else if (R2.size() && keep_indices.size() >= 7)
@@ -832,26 +874,34 @@ struct LikelihoodContext::Impl {
       c_log_likelihood_DDM(rts_ptr, responses_ptr, s.pt, race.spec, idx_all, s.ll.data());
       break;
     case RACE:
+      // Re-fill row-wise likelihoods — skipped accumulators contribute 1.
       std::fill(s.rows.begin(), s.rows.end(), 1.0);
       c_log_likelihood_race(s.pt, race, rts_ptr, idx_win, idx_los, n_lR,
                             s.rows.data(), n_rows, s.ll.data(), s.scratch);
       break;
     }
 
+    // 3) Handle truncation, censoring. Needs to be in this order!
     if (model == DDM || model == RACE) {
       if (s.trunc.any()) s.trunc.calculate_normalization_constant();
+      // Censoring needs the normalization constant and fills rows, doesn't add.
       if (s.censor.any()) s.censor.fill_censored_rows(s.trunc, s.ll, true);
       if (s.trunc.any())
         for (int t = 0; t < n_trials; ++t) s.ll[t] -= s.trunc.log_Z[t];
     }
+
+    // 4) Handle not-ok parameter values (out of bound)
     c_do_bound(s.pt, bounds, s.is_ok);
     const bool continuous = model == MRI || model == MRI_AR1 || model == CDM || model == PSDM || model == PHSDM;
     apply_bounds(s.is_ok, s.ll.data(), n_trials, continuous ? 1 : n_lR, min_ll, participating);
+
+    // 5) Expand, clamp, sum. MRI has no expand.
     return (model == MRI || model == MRI_AR1) ?
       clamp_sum(s.ll.data(), n_trials, min_ll, trialwise) :
       expand_clamp_sum(s.ll.data(), expand_ptr, n_exp, min_ll, trialwise);
   }
 
+  // Column i = particle i's trialwise buffer (contiguous).
   void evaluate(std::vector<std::unique_ptr<State>>& states, const double* particles, int n_particles, double* result, bool trialwise) const {
     if (n_threads == 1 || n_particles == 1) {
       for (int i = 0; i < n_particles; ++i) {
@@ -875,6 +925,7 @@ struct LikelihoodContext::Impl {
   }
 };
 
+// Copies share Impl's fixed inputs, but need their own buffers and bindings.
 struct LikelihoodContext::Workspace {
   std::vector<std::unique_ptr<Impl::State>> states;
   explicit Workspace(const Impl& fixed) : states(fixed.make_states()) {}

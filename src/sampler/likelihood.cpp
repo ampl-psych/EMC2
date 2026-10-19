@@ -16,6 +16,10 @@ Rcpp::List optional_list(SEXP x) {
 }
 }
 
+// =============================================================================
+// Likelihood components — cached model setup and parameter-column mapping
+// =============================================================================
+
 struct Likelihoods::Part {
   int component;
   arma::uvec columns;
@@ -39,6 +43,7 @@ struct Likelihoods::Part {
   Part(const Part& other)
     : component(other.component), columns(other.columns), direct(other.direct), context(other.context) {}
   void evaluate(const arma::mat& candidates, arma::vec& out) {
+    // Most models use all columns in order; avoid a copy in that case.
     const double* input;
     if (direct && columns.n_elem == candidates.n_cols) input = candidates.memptr();
     else { coefficients = candidates.cols(columns); input = coefficients.memptr(); }
@@ -69,12 +74,19 @@ bool Likelihoods::thread_safe() const {
   return std::all_of(safe.begin(), safe.end(), [](bool value) { return value; });
 }
 void Likelihoods::one(int subject, const arma::mat& candidates, arma::vec& out, int component) {
+  // component == 0 evaluates all tasks. A subject with no data contributes zero.
   out.zeros(candidates.n_rows);
   for (auto& part : parts[subject])
     if (!component || component == part->component) part->evaluate(candidates, out);
 }
 
 namespace {
+
+// =============================================================================
+// Likelihood curvature — log L(x) ~= constant + linear' x - x' precision x / 2
+// Used to construct proposals, never to replace the likelihood in the weights.
+// =============================================================================
+
 struct Quadratic {
   arma::mat precision;
   arma::vec linear;
@@ -93,6 +105,8 @@ std::optional<Quadratic> finite_difference(Likelihoods& likelihood, int subject,
   fp.fill(arma::datum::nan); fm.fill(arma::datum::nan);
   lo.fill(arma::datum::nan); hi.fill(arma::datum::nan);
   arma::uvec todo(p, arma::fill::ones);
+  // Choose finite-difference steps giving about one log-unit of curvature.
+  // These are new likelihood evaluations, centred on the retained draw mean.
   for (int round = 0; round < max_rounds; ++round) {
     arma::uvec k = arma::find(todo);
     const int n = k.n_elem;
@@ -119,6 +133,7 @@ std::optional<Quadratic> finite_difference(Likelihoods& likelihood, int subject,
     if (arma::accu(todo) == 0) break;
   }
   arma::mat H = arma::diagmat((2 * f0 - fp - fm) / arma::square(h));
+  // Four corners for each mixed derivative, evaluated in one batch.
   const int pairs = p * (p - 1) / 2;
   if (pairs) {
     arma::mat candidates = arma::repmat(centre.t(), 4 * pairs, 1);
@@ -144,6 +159,7 @@ std::optional<Quadratic> finite_difference(Likelihoods& likelihood, int subject,
   }
   arma::vec values; arma::mat vectors;
   if (!arma::eig_sym(values, vectors, H)) return std::nullopt;
+  // Flat/negative curvature contributes no precision; the group prior supplies it.
   values = arma::clamp(values, 0, arma::datum::inf);
   H = vectors * arma::diagmat(values) * vectors.t();
   H = (H + H.t()) / 2;
@@ -187,6 +203,10 @@ double ar_effective_size(const arma::vec& x) {
   return spectrum == 0 ? 0 : n * arma::var(x) / spectrum;
 }
 
+// ---------------------------------------------------------------------------
+// Draw-based refinement — subtract the group precision from posterior precision
+// Work in prior-standardised coordinates to compare directions on the same scale.
+// ---------------------------------------------------------------------------
 std::optional<Quadratic> draw_precision(const arma::mat& draws, const arma::mat& P,
                                         const arma::vec& mu, const Quadratic& fd,
                                         int n_chains, double tau = .5) {
@@ -209,11 +229,13 @@ std::optional<Quadratic> draw_precision(const arma::mat& draws, const arma::mat&
   arma::mat M = Pih * inverse_covariance * Pih;
   if (!arma::eig_sym(values, vectors, (M + M.t()) / 2)) return std::nullopt;
   const arma::vec lambda = values - 1;
+  // Use empirical curvature only where it clearly exceeds the group precision.
   const arma::uvec trusted = arma::find(lambda > tau), other = arma::find(lambda <= tau);
   const arma::mat U = vectors.cols(trusted);
   const arma::vec mt = Ph * mean, mut = Ph * mu;
   arma::mat Lw = U * arma::diagmat(lambda.elem(trusted)) * U.t();
   arma::vec lw = U * (values.elem(trusted) % (U.t() * mt) - U.t() * mut);
+  // In the remaining directions use capped finite-difference curvature.
   if (other.n_elem) {
     const arma::mat C = vectors.cols(other), Fw = Pih * fd.precision * Pih;
     arma::mat Fc = C.t() * Fw * C;
@@ -243,6 +265,10 @@ Rcpp::List wrap_quadratic(const Quadratic& x, const Rcpp::CharacterVector& names
   return Rcpp::List::create(Rcpp::Named("prec") = precision, Rcpp::Named("lin") = linear);
 }
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Pool the same history window for participant and group draws
+// ---------------------------------------------------------------------------
 Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
                            Rcpp::List ll_inputs, int n_cores) {
   const Rcpp::List first = emc[0];
@@ -258,6 +284,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     std::vector<int> selected;
     for (int i = 0; i < stages.size(); ++i)
       if (stages[i] == "preburn" || stages[i] == "burn" || stages[i] == "adapt" || stages[i] == "sample") selected.push_back(i);
+    // history_idx indexes the filtered history, not the full sample arrays.
     for (int i : history_idx) history[chain].push_back(selected[i - 1]);
     for (int i = 0; i < window; ++i) for (int s = 0; s < n; ++s)
       std::copy_n(values + static_cast<size_t>(history[chain][i]) * p * n + s * p,
@@ -295,6 +322,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
         state.tmu /= window; state.u /= window;
         group_mean += population.subject_means(state);
       }
+      // Group precision is the inverse of the average covariance.
       covariance /= N; group_mean /= chains;
       // Use draw-based curvature only when all marginal precisions have CV < .5.
       const arma::vec cv = arma::sqrt(precision_m2 / (N - 1)) / precision_mean;
@@ -302,6 +330,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
         group_mean.is_finite() && group_mean.n_rows == group_precision.n_rows;
     } catch (const std::exception&) { group = false; }
   }
+  // Finite differences remain available when group history is not stable enough.
   Likelihoods likelihood(ll_inputs, n_cores);
   std::vector<std::optional<Quadratic>> finite(n), posterior(n);
   likelihood.for_each([&](int s) {
