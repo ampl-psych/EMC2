@@ -44,3 +44,13 @@ normalized rank (between 0 and 1) and prior samples. For hierarchical models the
 the (implied) group-level (co-)variance are returned.
 For non-hierarchical models only the subject-level parameters rank is returned.
 }
+\details{
+For a neural-likelihood model (e.g. \link{DDMnn}, or one made with
+\code{\link[=register_nn_model]{register_nn_model()}}) the prior must lie inside the network's training
+region to +-4 prior sds (\code{\link[=nn_in_box]{nn_in_box()}}; the width is
+\code{getOption("emc.nn_box_k", 4)}, and for a hierarchical prior the group-mean
+prior is checked): a replicate whose true parameters leave the region
+cannot be recovered by the network, so such an SBC is refused.
+\code{\link[=nn_sbc_cell]{nn_sbc_cell()}} builds a cell that satisfies this, with a matched analytic
+control.
+}

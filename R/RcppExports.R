@@ -5,6 +5,30 @@
     invisible(.Call(`_EMC2_emc2_build_info`))
 }
 
+crdm_mean <- function(t, v, amp, tau) {
+    .Call(`_EMC2_crdm_mean`, t, v, amp, tau)
+}
+
+rcrdm_acc <- function(n, v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_rcrdm_acc`, n, v, amp, tau, s, b, dt, t_max)
+}
+
+crdm_volterra_grid <- function(v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_crdm_volterra_grid`, v, amp, tau, s, b, dt, t_max)
+}
+
+dcrdm_volterra <- function(t, v, amp, tau, s, b, dt, t_max) {
+    .Call(`_EMC2_dcrdm_volterra`, t, v, amp, tau, s, b, dt, t_max)
+}
+
+crdm_dens_rows <- function(t, P, dt) {
+    .Call(`_EMC2_crdm_dens_rows`, t, P, dt)
+}
+
+rcrdm_rows <- function(v, amp, tau, s, b, hz, dt) {
+    .Call(`_EMC2_rcrdm_rows`, v, amp, tau, s, b, hz, dt)
+}
+
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
     .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
 }
@@ -13,12 +37,72 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
     .Call(`_EMC2_sp_new`, iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm)
 }
 
+ddm_build <- function(fl) {
+    .Call(`_EMC2_ddm_build`, fl)
+}
+
+ddm_build_ensemble <- function(fls) {
+    .Call(`_EMC2_ddm_build_ensemble`, fls)
+}
+
+ddm_ptr_valid <- function(ptr_) {
+    .Call(`_EMC2_ddm_ptr_valid`, ptr_)
+}
+
+ddm_eval_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_eval_cpp`, ptr_, theta, rt, R)
+}
+
+ddm_eval_trials_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_eval_trials_cpp`, ptr_, theta, rt, R)
+}
+
+ddm_ens_eval_trials_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_ddm_ens_eval_trials_cpp`, ptr_, theta, rt, R)
+}
+
+flow_ptr_valid <- function(ptr_) {
+    .Call(`_EMC2_flow_ptr_valid`, ptr_)
+}
+
+flow_build <- function(fl) {
+    .Call(`_EMC2_flow_build`, fl)
+}
+
+flow_eval_cpp <- function(ptr_, theta, rt) {
+    .Call(`_EMC2_flow_eval_cpp`, ptr_, theta, rt)
+}
+
+flow_eval_trials_cpp <- function(ptr_, theta, rt) {
+    .Call(`_EMC2_flow_eval_trials_cpp`, ptr_, theta, rt)
+}
+
+nle_mlp_forward <- function(mlp, X) {
+    .Call(`_EMC2_nle_mlp_forward`, mlp, X)
+}
+
+nle_wald_cpp <- function(t, v, b, s) {
+    .Call(`_EMC2_nle_wald_cpp`, t, v, b, s)
+}
+
 calculate_subject_means <- function(group_designs, params) {
     .Call(`_EMC2_calculate_subject_means`, group_designs, params)
 }
 
 draw_alpha_from_design <- function(group_designs, mu, var) {
     .Call(`_EMC2_draw_alpha_from_design`, group_designs, mu, var)
+}
+
+mlp_lik_valid <- function(ptr_) {
+    .Call(`_EMC2_mlp_lik_valid`, ptr_)
+}
+
+mlp_lik_build <- function(card, lower_s, upper_s, oob) {
+    .Call(`_EMC2_mlp_lik_build`, card, lower_s, upper_s, oob)
+}
+
+mlp_lik_eval_cpp <- function(ptr_, theta, rt, R) {
+    .Call(`_EMC2_mlp_lik_eval_cpp`, ptr_, theta, rt, R)
 }
 
 dlba <- function(t, A, b, v, sv, posdrift = TRUE) {
@@ -109,12 +193,12 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE) {
-    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise)
+calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, nn = NULL) {
+    .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, nn)
 }
 
-calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, n_threads = -1L) {
-    .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads)
+calc_ll_multithreaded <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE, n_threads = -1L, nn = NULL) {
+    .Call(`_EMC2_calc_ll_multithreaded`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads, nn)
 }
 
 get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {

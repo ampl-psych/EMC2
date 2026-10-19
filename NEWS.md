@@ -1,5 +1,23 @@
 # EMC2 (development)
 
+## Neural likelihoods
+
+-   The scaled DDM card (DDMnle: a flow over the unit-scale decision time given `kappa`, `eta`, `Z`, `SZ`, with `a`, `s`, `t0` and `st0` applied exactly) is a card kind of its own, `"flow_scaled"`. `register_nn_model(card, twin = DDM)` reads it directly: its parameterisation, bounds, zero exceptions and simulator are the DDM's, its R path is the NLE project's reference (`ddm_sc_density`, `SZ` as the proportion), and its compiled path the evaluator that used to need a hand-built registration from a scaffold card. The two agree to 1e-11 over prior draws in every variability regime.
+-   Cards carry a format version (`card_version`; absent = 0). EMC2 reads versions 0 and 1 and refuses any other by name. Version 1 adds the structured `scaling`, `support`/`mass_tolerance`/`beyond_support` (read by `nn_total_mass()`), `control_limits` for race cards (the analytic control's `s` range and `v b / s^2` overflow limit; `nn_cell()` and `nn_in_box()` warn when a prior passes them) and a `validation` record. `vignette("neural-likelihood-cards")` is the specification.
+-   `nn_golden_check()` evaluates a card on its golden vectors (`<tag>_golden.csv` beside it; the shipped artefacts' files are now installed with them) and reports the largest difference per output, `PASS` or `FAIL` in one line. `inst/scripts/nle_verify.R` runs it for every shipped artefact and every card given, plus the compiled-vs-R and oracle checks of a scaled card, and exits non-zero on any failure.
+-   Card fields are read by exact name. `$` on a list matches a field by prefix, so a card field `preset` was read as `pre` and the card refused; `register_nn_model()` and `nn_golden_check()` now read every card, member and golden-file field with `[[name, exact = TRUE]]`, and a test registers a card carrying extra fields named like prefixes of fields EMC2 reads.
+-   `nn_golden_check()` takes its default tolerance from the card's `validation$golden$tolerance` (1e-9 without one; the converter records 1e-4 for a LAN converted from a float32 ONNX file). `inst/scripts/nle_verify.R` checks `mlp_joint` cards too: it registers one with the card's optional `p_types` field or `--p-types=v=0,a=1,...` and checks it to the card's own tolerance.
+-   `inst/scripts/onnx_to_card.py` is now a pointer to `nleflow convert` (the converter moved into the nleflow Python package of the NLE repository); its test in `test-nn-mlp.R` is skipped with that message and the converter is tested in nleflow (`tests/test_convert.py`).
+-   `nn_sz_convert()` converts between the two start-point-variability conventions (EMC2's proportion; the width `2 SZ min(Z, 1 - Z)` that `DDM()` passes to its likelihood); the conventions are a documented contract with a test at each boundary.
+-   The training-region rule of the validation kit is advisory: `nn_cell()`, `nn_in_box()` and `run_sbc()` warn when a prior leaves the network's training region within `k` sd, and no longer refuse (`nn_in_box(error = TRUE)` for the old behaviour).
+-   `make_emc()` warns when a neural-likelihood design samples `t0` and the response times are floored to a resolution coarser than 1 ms (the default `rt_resolution = 1/60` biases t0 by about -1.9 posterior sd at N = 100, even for the analytic likelihood; the flooring applies whether or not the data are compressed).
+-   On R < 4.5 (no `tools::sha256sum`) the shipped artefacts are pinned by md5 lines in `inst/extdata/flownn/MANIFEST`; before, every shipped artefact failed to load there with a misleading "does not match the sha256" error.
+-   `?DDMnn` records the state of the `ddm_cap256w_c4` t0 shift: no correction is applied, an unresolved shift of about 0.002 (log scale) at N = 800 remains, and the scaled card replaces the artefact for the variability models.
+
+## New features (dev-nle)
+
+-   `register_nn_model()` accepts two more kinds of neural likelihood, `"regression_joint"` (direct-regression MLPs) and `"mlp_joint"` (likelihood approximation networks such as HSSM's LANs). Both run in the compiled likelihood, like the flows, with the weights loaded once. `inst/scripts/onnx_to_card.py` converts an ONNX MLP (tanh hidden layers) into a model card; EMC2 does not depend on onnxruntime.
+
 ## Sampler
 
 -   `adapt` and `sample` now use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. `preburn` and `burn` retain the search kernel. `options(emc.sampler = "legacy")` restores the previous sampler for comparison.

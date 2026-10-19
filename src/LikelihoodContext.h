@@ -15,7 +15,8 @@ public:
                     Rcpp::List designs, Rcpp::String type, Rcpp::List bounds,
                     Rcpp::List transforms, Rcpp::List pretransforms,
                     double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                    int n_threads = 1);
+                    int n_threads = 1,
+                    Rcpp::Nullable<Rcpp::List> nn = R_NilValue); // neural likelihoods: nn_native_args()
   ~LikelihoodContext();
   LikelihoodContext(LikelihoodContext&&) noexcept;
   LikelihoodContext& operator=(LikelihoodContext&&) noexcept;

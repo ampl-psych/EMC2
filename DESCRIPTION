@@ -1,6 +1,6 @@
 Package: EMC2
 Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
-Version: 3.4.1
+Version: 3.4.1.9001
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
@@ -44,7 +44,8 @@ Suggests:
     withr,
     knitr,
     rmarkdown,
-    DiagrammeR
+    DiagrammeR,
+    jsonlite
 Config/testthat/edition: 3
 Imports: 
     abind,

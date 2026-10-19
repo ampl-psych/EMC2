@@ -29,6 +29,7 @@
 #include "model_SS_EXG.h"
 #include "model_SS_RDEX.h"
 #include "ss_fast.h"         // stop-signal: data-only SSSpec + thread-safe per-particle likelihood
+#include "model_NN.h"        // neural likelihoods (type "NN"): registration-driven, thread-safe per particle
 using namespace Rcpp;
 
 // =============================================================================
@@ -608,7 +609,7 @@ namespace emc2 {
 
 struct LikelihoodContext::Impl {
   enum Model { MRI, MRI_AR1, ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT, MULTINOMIAL_PROBIT,
-               SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE };
+               SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE, NN };
 
   // Per-thread mutable state
   struct State {
@@ -622,11 +623,12 @@ struct LikelihoodContext::Impl {
     CensorSpec censor;
     TruncSpec trunc;
     SSSpec ss;
+    NnScratch nn_scratch; // neural likelihoods: per-thread network buffers
     NumericMatrix pars; // CDM's native density functions use the Rcpp matrix ABI.
     double* pars_ptr = nullptr;
   };
 
-  List fixed_inputs; // retains designs and custom compiled-kernel pointers
+  List fixed_inputs; // retains designs, custom compiled-kernel pointers and the nn registration
   PipelineContext ctx;
   PipelineCache cache;
   std::vector<TransformSpec> pretransforms;
@@ -648,6 +650,10 @@ struct LikelihoodContext::Impl {
   RaceModelSetup setup{};
   ChoiceOnlySpec choice;
   MRISpec mri;
+  // Neural likelihoods (NN): the model list's registration supplies the
+  // evaluator and the network's inputs (model_NN.h). Column indices are taken
+  // from the shared ParamTable; the per-thread copies share its layout.
+  NnSpec nn_spec;
   Model model;
   std::string model_name;
   int n_parameters, n_rows, n_lR, n_choice_trials, n_exp, n_threads_used;
@@ -656,8 +662,9 @@ struct LikelihoodContext::Impl {
 
   Impl(CharacterVector parameter_names, DataFrame data, NumericVector constant_values,
        List designs, String type, List bounds, List transforms,
-       List pretransform_values, double min_ll_, Nullable<List> trend, int n_threads)
-    : fixed_inputs(List::create(data, designs, trend)), model_name(type),
+       List pretransform_values, double min_ll_, Nullable<List> trend, int n_threads,
+       Nullable<List> nn)
+    : fixed_inputs(List::create(data, designs, trend, SEXP(nn))), model_name(type),
       n_parameters(parameter_names.size()), n_rows(data.nrow()), min_ll(min_ll_)
   {
 #ifdef _OPENMP
@@ -735,8 +742,13 @@ struct LikelihoodContext::Impl {
       } else {
         rts = data["rt"];
         rts_ptr = rts.begin();
-        // Continuous-choice-RT models (CDM, PSDM, PHSDM)
-        if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
+        if (type == "NN") {
+          // Neural likelihoods: no race setup; the spec carries rt, R / winner
+          // and the network's column map. Refuses censored or truncated data.
+          model = NN;
+          if (nn.isNull()) stop("calc_ll: type 'NN' needs the model's neural-likelihood registration (nn)");
+          nn_spec = make_nn_spec(List(nn.get()), data, ctx.param_table, n_lR);
+        } else if (type == "CDM" || type == "PSDM" || type == "PHSDM") {
           model = type == "CDM" ? CDM : type == "PSDM" ? PSDM : PHSDM;
           safe = false;
           Rs = data["R"];
@@ -831,6 +843,10 @@ struct LikelihoodContext::Impl {
     std::fill(s.ll_buf.begin(), s.ll_buf.end(), model == DDM ? 1.0 : 0.0);
 
     switch (model) {
+    case NN:
+      // Every trial is written (log density, or min_ll for a missing accumulator).
+      nn_trial_ll(nn_spec, s.pt_local, s.nn_scratch, min_ll, s.ll_buf.data());
+      break;
     case MRI:
       c_log_likelihood_MRI_white(s.pt_local, mri, s.mean_cols, y, n_choice_trials, s.ll_buf.data());
       break;
@@ -901,6 +917,13 @@ struct LikelihoodContext::Impl {
 
   // Column i = particle i's trialwise buffer (contiguous).
   void evaluate(std::vector<std::unique_ptr<State>>& states, const double* particles, int n_particles, double* result, bool trialwise) const {
+    // Neural likelihoods: the run-time refusals (a constant the network was not
+    // trained for) stop on the R thread, checked on the first particle before
+    // any parallel region, as calc_ll_multithreaded did before LikelihoodContext.
+    if (model == NN && !nn_spec.checks.empty() && n_particles > 0) {
+      fill_particle(*states[0], particles, 0, n_particles);
+      nn_check_refusals(nn_spec, states[0]->pt_local);
+    }
     if (n_threads_used == 1 || n_particles == 1) {
       for (int i = 0; i < n_particles; ++i) {
         const double sum = evaluate_particle(*states[0], particles, i, n_particles,
@@ -932,9 +955,10 @@ struct LikelihoodContext::Workspace {
 LikelihoodContext::LikelihoodContext(CharacterVector parameter_names, DataFrame data,
                                      NumericVector constants, List designs, String type,
                                      List bounds, List transforms, List pretransforms,
-                                     double min_ll, Nullable<List> trend, int n_threads)
+                                     double min_ll, Nullable<List> trend, int n_threads,
+                                     Nullable<List> nn)
   : impl_(new Impl(parameter_names, data, constants, designs, type, bounds,
-                   transforms, pretransforms, min_ll, trend, n_threads)),
+                   transforms, pretransforms, min_ll, trend, n_threads, nn)),
     work_(new Workspace(*impl_)) {}
 LikelihoodContext::LikelihoodContext(const LikelihoodContext& other)
   : impl_(other.impl_), work_(new Workspace(*impl_)) {}
@@ -954,9 +978,9 @@ bool LikelihoodContext::thread_safe() const { return impl_->safe; }
 NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                      bool return_trialwise = false) {
+                      bool return_trialwise = false, Rcpp::Nullable<Rcpp::List> nn = R_NilValue) {
   emc2::LikelihoodContext context(colnames(particle_matrix), data, constants, designs, type,
-                                  bounds, transforms, pretransforms, min_ll, trend);
+                                  bounds, transforms, pretransforms, min_ll, trend, 1, nn);
   NumericMatrix result(return_trialwise ? context.trial_count() : 1, particle_matrix.nrow());
   context.evaluate(particle_matrix.begin(), particle_matrix.nrow(), result.begin(), return_trialwise);
   return result;
@@ -968,14 +992,15 @@ NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame dat
                                     List bounds, List transforms, List pretransforms,
                                     CharacterVector p_types, double min_ll,
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                                    bool return_trialwise = false, int n_threads = -1) {
+                                    bool return_trialwise = false, int n_threads = -1,
+                                    Rcpp::Nullable<Rcpp::List> nn = R_NilValue) {
   emc2::OpenMPPoolRelease release;
 #ifndef _OPENMP
   if (n_threads > 1)
     Rcpp::warning("calc_ll_multithreaded: OpenMP not available, running single-threaded.");
 #endif
   emc2::LikelihoodContext context(colnames(particle_matrix), data, constants, designs, type,
-                                  bounds, transforms, pretransforms, min_ll, trend, n_threads);
+                                  bounds, transforms, pretransforms, min_ll, trend, n_threads, nn);
   NumericMatrix result(return_trialwise ? context.trial_count() : 1, particle_matrix.nrow());
   context.evaluate(particle_matrix.begin(), particle_matrix.nrow(), result.begin(), return_trialwise);
   return result;

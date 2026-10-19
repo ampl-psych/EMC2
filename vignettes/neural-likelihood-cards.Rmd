@@ -1,0 +1,198 @@
+---
+title: "Neural-likelihood cards: the format, version 1"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Neural-likelihood cards: the format, version 1}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+A *card* is the file that carries a trained neural likelihood into EMC2: the
+weights, the spline, what the inputs are and on what scale, the training box,
+and (since version 1) what the card has been validated against.
+`register_nn_model()` reads it and refuses anything it cannot interpret; the
+compiled evaluators (`src/flow_ddm.cpp`, `src/flow_race.cpp`,
+`src/mlp_lik.cpp`) read the weights from the same file. This page is the
+contract between the exporters (the NLE project's `export_flow.py`,
+`export_flow_ddm.py`, `golden.py`; EMC2's `inst/scripts/onnx_to_card.py` and
+`regress_to_card.R`) and this package.
+
+A card is a JSON file (`<tag>_weights.json`, read with **jsonlite**) or an
+`.rds` list with the same fields. Its golden vectors live beside it as
+`<tag>_golden.csv` (`nn_golden_check()`).
+
+## Versions
+
+| `card_version` | reads as |
+|---|---|
+| absent | 0: every card written before this field existed; the fields below marked *v1* are optional and ignored |
+| `1` | this page |
+| anything else | refused by name: *"Card version 2 is not supported by this EMC2, which reads card versions 0 and 1"* |
+
+Unknown fields are carried along (`reg$card`) and never refused; a field this
+page names is checked. Version 1 adds `card_version`, the structured
+`scaling`, `support`, `mass_tolerance`, `beyond_support`, `control_limits` and
+`validation`; nothing a version-0 card has changes meaning.
+
+## Kinds
+
+The kind is inferred from the weights the card holds, and a declared `kind`
+must agree:
+
+| kind | holds | model type | CDF |
+|---|---|---|---|
+| `flow_joint` | `flow_mlp` + `classifier_mlp` + `spline` + `scaler` | two-response joint (`DDM`) | defective CDF of rt |
+| `flow_scaled` | the same, plus `scaling` (the scaled DDM card, DDMnle) | `DDM` | none of rt (`cdf = FALSE`); the network's CDF is of the unit-scale time |
+| `flow_race` | `mlp` + `spline` + (`scaler` or `input_scaling`) | race (`RDM`, `CRDM`) | per accumulator: CDF and survivor |
+| `regression_joint` | `mlp` with `input_layout` | `DDM` | none |
+| `mlp_joint` | `mlp` with `kind = "mlp_joint"`, `input_layout`, `ll_floor_log` (a LAN converted from ONNX) | `DDM` | none |
+
+## Fields
+
+### Identity and provenance
+
+| field | required | meaning |
+|---|---|---|
+| `card_version` | v1 | `1` |
+| `kind` | no | one of the kinds above; must agree with the weights |
+| `model` | no | the analytic twin: `DDM`, `RDM`, `LNR`, `LBA`, `CRDM`, or `DDMsc` (the scaled DDM, twin `DDM`). A card without one needs `twin` or `p_types` at registration |
+| `budget`, `checkpoint_step` / `checkpoint_step_flow`, `checkpoint_step_classifier`, `exported`, `source`, `source_sha256`, `converted_with` | no | provenance, printed by `nle_artefact_info()` |
+
+The file's own hash is not in the card: EMC2 records it at registration
+(`reg$sha256`; sha256 where R has `tools::sha256sum`, md5 before R 4.5) and
+refuses to evaluate a file that changed since.
+
+### Inputs
+
+| field | required | meaning |
+|---|---|---|
+| `context_names` | yes | the network's inputs, in the network's order (asserted; never reordered) |
+| `context_transforms` | yes, unless `context_scale = "natural"` | per name: `identity`, `log`, `probit` or `zerobox` (`asinh(x / c)`): the scale the network takes the natural value on. A name here but not in `context_names` was fixed in training (declare it with `exceptions`, except `context_encoding = "st0zero"`, which implies `st0 = 0`) |
+| `zerobox_c` | with any `zerobox` input | the constant `c` per zero-box input (one each, positive; none for other inputs). The network is exact at 0 |
+| `context_scale` | no | `"natural"`: no `context_transforms`, every input identity, the box is `bounds_natural` in `context_names` order (Lüken's race cards) |
+| `context_encoding` | no | `"zerobox"` (needs twin defaults `sv = SZ = st0 = -Inf`; carries the st0 = 0 support rule), `"st0zero"`, `"triple"` |
+| `bounds_natural` | one of the two | the training box on the natural scale, `lower`/`upper` in the order of `names(context_transforms)` |
+| `bounds_sampled` | one of the two | the box on the network's scale in `context_names` order; both present must agree (that catches permuted names). Flows need this one (filled from `bounds_natural` when absent) |
+| `scaler` | flows, unless `input_scaling` | `mean`, `scale` per input: the network sees `(x - mean) / scale` of the transformed input |
+| `input_scaling` | race flows | `eps`, `loc`, `scale` per input: the network sees `(log(x + eps) - loc) / scale` of the natural input; not with `scaler` |
+| `pre` | no | a parameter subtracted from rt before the network (`"t0"`: a decision-time flow); `pre_bounds_natural` is its box, for the golden grid |
+| `input_layout`, `response_values`, `output_scaler` | MLP kinds | the network's inputs in order (context names, `rt`, `log_rt`, `R`); the input values coding responses 1 and 2 (`c(-1, 1)` for HSSM); an output affine |
+| `ll_floor_log` | `mlp_joint` | the finite log density returned outside the box; flows carry `log(1e-10)` for information |
+
+### The scaled DDM card (`flow_scaled`, v1)
+
+```json
+"context_names": ["kappa", "eta", "Z", "SZ"],
+"context_transforms": {"kappa": "identity", "eta": "zerobox", "Z": "probit", "SZ": "zerobox"},
+"zerobox_c": {"eta": 0.01, "SZ": 0.05},
+"context_encoding": "zerobox",
+"scaling": {"kind": "ddm_unit", "pars": ["v", "a", "sv", "t0", "st0", "s", "Z", "SZ"], "sz": "proportion"}
+```
+
+The network models the unit-scale decision time `u = (rt - t0) (s / a)^2` of
+a diffusion with boundary 1 and noise 1 given `kappa = v a / s^2`,
+`eta = sv a / s^2`, `Z` and `SZ`. The evaluator applies the rest exactly, on
+both paths (`nn_eval_scaled()` in R, `nn_trial_ll_scaled()` in C++):
+`f(rt) = c g(u)` with `c = (s/a)^2` when `st0 = 0`, and
+`[G(u_1) - G(max(u_0, 0))] / st0` with `u_0 = (rt - t0 - st0) c` when
+`st0 > 0`, where `g` and `G` are the network's defective density and CDF;
+zero for `rt <= t0`. The model's parameters, transforms, bounds, zero
+exceptions and simulator are the DDM's; `pars`, `exceptions`, `pre` and
+`hybrid` do not apply. A card exported before the field was structured
+carries a description string beginning `"ddm_unit"`, read as that kind.
+
+### The SZ conventions (a contract)
+
+Three conventions for the start-point variability are in use; each interface
+states which it takes, `nn_sz_convert()` converts, and the tests hold a
+golden row at every boundary (`test-nn-scaled.R`).
+
+| convention | who takes it |
+|---|---|
+| **proportion** `SZ` in [0, 1): EMC2's natural-scale `SZ` (what `p_types`/`transform` produce from the sampled probit), the simulator, the shipped DDM flows, the registered models' `Ttransform`, and the scaled card (`scaling$sz = "proportion"`) | |
+| **width** `sw = 2 SZ min(Z, 1 - Z)`: what `DDM()`'s `Ttransform` passes to its likelihood (WienR's `sw`), and what the NLE reference `ddm_sc_density()` takes | |
+
+`nn_sz_convert(x, Z, from, to)` is exact in both directions.
+
+### Support and mass (v1)
+
+| field | meaning |
+|---|---|
+| `support` | `{"time": [lower, upper]}` in seconds of the network's time (`u` for a scaled card): the range the card is valid on. Default `[0, Inf]`. `nn_total_mass()` integrates up to `upper` when it is finite |
+| `mass_tolerance` | the card expects total mass 1 within this tolerance on its support; `nn_total_mass()` reports `within_tolerance` |
+| `beyond_support` | how mass beyond the support (or beyond the spline range) is treated, in words: for a spline flow with identity tails, *"identity tails beyond [range_min, range_max] in log t carry the remaining mass"*, i.e. the density integrates to 1 over the whole positive axis and nothing is lost |
+
+### Limits of the analytic control (race cards, v1)
+
+`control_limits`: `{"s": [lower, upper], "vb_over_s2_max": 354}`, the `s`
+range the twin's Wald is exact on and the largest `v b / s^2` its CDF
+evaluates without overflow. Recorded on the registration; `nn_cell()` and
+`nn_in_box()` warn when a prior's `+-k` sd region passes them. These are
+properties of the control, never enforced on the network. (The `s = 1`
+convention of the NLE project's cells is a cell convention, not a default.)
+
+### Validation (v1)
+
+`validation`: a record of what the card passed, kept with it. Free-form, but
+the kit's results fit it:
+
+```json
+"validation": {
+  "golden": {"file": "ddm_sc_s1106_e245_golden.csv", "tolerance": 1e-9},
+  "score_bias": {"date": "2026-10-15", "draws": 300, "regimes": 7, "sum_abs_g_v_a_Z": 0.042, "control_max": 7e-5},
+  "sbc": {"date": "2026-10-16", "cells": 6, "N": 400, "replicates": 500, "outside_envelope": "a in st0 (1 of 35)",
+          "record": "sbc/aws/scaled_sbc/run1"}
+}
+```
+
+`validation$golden$tolerance` is the tolerance `nn_golden_check()` uses for the
+card's golden file when `tol` is not given (1e-9 without one; a LAN converted
+from a float32 ONNX file records 1e-4).
+
+`p_types` (optional, for a card with no analytic twin such as a LAN): named
+defaults of the parameters on the sampled scale. `register_nn_model()` does not
+read it (give `p_types = ` there); `inst/scripts/nle_verify.R` uses it to
+register the card, or `--p-types=v=0,a=1,z=0.5,t=0.5,st=0.05`.
+
+A version-1 card without `validation` registers with a message: loading a
+network is not the same as being able to infer with it (`?nn_cell`).
+
+### Weights and spline
+
+| field | meaning |
+|---|---|
+| `flow_mlp` / `mlp` / `classifier_mlp` | `activation` (`gelu_tanh`; `tanh` for MLP kinds), `use_norm`, `layers` (`W` as `n_in x n_out`, `b`), `norms` (`scale`, `bias`, `eps`) |
+| `affine`, `affine_scale` | race flows: two more conditioner outputs (`loc`, `raw_scale`; `min_scale`, `offset`) |
+| `spline` | `num_bins`, `num_splines = 1`, `range_min`, `range_max`, `min_bin_size`, `min_knot_slope`, `boundary_slopes = "identity"`, `output_transform = "exp"`, `base_distribution = "standard_normal"` |
+| `classifier_scaler`, `classifier_context_names` | the classifier's own standardisation (`triple` encoding) |
+
+## Golden vectors
+
+`<tag>_golden.csv`: one row per (parameter set, time), written in float64 by
+the exporter from the trained weights (or by `golden.py` from the card) and
+checked by `nn_golden_check()` at `1e-9` (the ports agree to about `1e-12`).
+Race cards record the inputs on the network's scale with `rt`, `log_pdf`,
+`cdf`, `log_sf`; joint cards the inputs on the exporter's storage scale (the
+sampled scale; a zero-box input as the log, or the probit for `SZ`, of its
+natural value, `-Inf` at an exact zero) with `R`, `rt`, `log_pdf_joint`,
+`cdf_defective`, `log_p_R`; for a scaled card `rt` is the unit-scale time.
+Every port of a network, compiled EMC2 included, is tested against the same
+file; nothing is regenerated from checkpoints unless the export format changes.
+
+## Reading a card in EMC2
+
+```{r}
+m <- register_nn_model("ddm_sc_s1106_e245_weights.json", twin = DDM)   # a scaled card
+m()$nn$kind            # "flow_scaled"
+nn_golden_check(m)     # PASS golden check of 'ddm_sc_s1106_e245_weights.json' ...
+nn_sz_convert(0.2, Z = 0.3, "proportion", "width")
+```
+
+`Rscript -e 'source(system.file("scripts", "nle_verify.R", package = "EMC2"))' <card>`
+runs the golden check of every shipped artefact and of each card given, and
+for a scaled card the compiled-versus-R and oracle checks, printing one `PASS`
+or `FAIL` line each.

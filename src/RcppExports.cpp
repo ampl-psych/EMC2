@@ -20,6 +20,103 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// crdm_mean
+List crdm_mean(NumericVector t, double v, double amp, double tau);
+RcppExport SEXP _EMC2_crdm_mean(SEXP tSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_mean(t, v, amp, tau));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcrdm_acc
+NumericVector rcrdm_acc(int n, double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_rcrdm_acc(SEXP nSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcrdm_acc(n, v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// crdm_volterra_grid
+List crdm_volterra_grid(double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_crdm_volterra_grid(SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_volterra_grid(v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dcrdm_volterra
+List dcrdm_volterra(NumericVector t, double v, double amp, double tau, double s, double b, double dt, double t_max);
+RcppExport SEXP _EMC2_dcrdm_volterra(SEXP tSEXP, SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP dtSEXP, SEXP t_maxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< double >::type v(vSEXP);
+    Rcpp::traits::input_parameter< double >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type s(sSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< double >::type t_max(t_maxSEXP);
+    rcpp_result_gen = Rcpp::wrap(dcrdm_volterra(t, v, amp, tau, s, b, dt, t_max));
+    return rcpp_result_gen;
+END_RCPP
+}
+// crdm_dens_rows
+List crdm_dens_rows(NumericVector t, NumericMatrix P, double dt);
+RcppExport SEXP _EMC2_crdm_dens_rows(SEXP tSEXP, SEXP PSEXP, SEXP dtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type P(PSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    rcpp_result_gen = Rcpp::wrap(crdm_dens_rows(t, P, dt));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcrdm_rows
+NumericVector rcrdm_rows(NumericVector v, NumericVector amp, NumericVector tau, NumericVector s, NumericVector b, NumericVector hz, double dt);
+RcppExport SEXP _EMC2_rcrdm_rows(SEXP vSEXP, SEXP ampSEXP, SEXP tauSEXP, SEXP sSEXP, SEXP bSEXP, SEXP hzSEXP, SEXP dtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type amp(ampSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type hz(hzSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcrdm_rows(v, amp, tau, s, b, hz, dt));
+    return rcpp_result_gen;
+END_RCPP
+}
 // EMC2_call_custom_trend
 Rcpp::NumericVector EMC2_call_custom_trend(Rcpp::NumericMatrix trend_pars, Rcpp::NumericMatrix input, SEXP funptrSEXP);
 RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
@@ -53,6 +150,155 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ddm_build
+SEXP ddm_build(List fl);
+RcppExport SEXP _EMC2_ddm_build(SEXP flSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type fl(flSEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_build(fl));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ddm_build_ensemble
+SEXP ddm_build_ensemble(List fls);
+RcppExport SEXP _EMC2_ddm_build_ensemble(SEXP flsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type fls(flsSEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_build_ensemble(fls));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ddm_ptr_valid
+bool ddm_ptr_valid(SEXP ptr_);
+RcppExport SEXP _EMC2_ddm_ptr_valid(SEXP ptr_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_ptr_valid(ptr_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ddm_eval_cpp
+List ddm_eval_cpp(SEXP ptr_, NumericVector theta, NumericVector rt, IntegerVector R);
+RcppExport SEXP _EMC2_ddm_eval_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP RSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type R(RSEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_eval_cpp(ptr_, theta, rt, R));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ddm_eval_trials_cpp
+List ddm_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt, IntegerVector R);
+RcppExport SEXP _EMC2_ddm_eval_trials_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP RSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type R(RSEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_eval_trials_cpp(ptr_, theta, rt, R));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ddm_ens_eval_trials_cpp
+List ddm_ens_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt, IntegerVector R);
+RcppExport SEXP _EMC2_ddm_ens_eval_trials_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP RSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type R(RSEXP);
+    rcpp_result_gen = Rcpp::wrap(ddm_ens_eval_trials_cpp(ptr_, theta, rt, R));
+    return rcpp_result_gen;
+END_RCPP
+}
+// flow_ptr_valid
+bool flow_ptr_valid(SEXP ptr_);
+RcppExport SEXP _EMC2_flow_ptr_valid(SEXP ptr_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    rcpp_result_gen = Rcpp::wrap(flow_ptr_valid(ptr_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// flow_build
+SEXP flow_build(List fl);
+RcppExport SEXP _EMC2_flow_build(SEXP flSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type fl(flSEXP);
+    rcpp_result_gen = Rcpp::wrap(flow_build(fl));
+    return rcpp_result_gen;
+END_RCPP
+}
+// flow_eval_cpp
+List flow_eval_cpp(SEXP ptr_, NumericVector theta, NumericVector rt);
+RcppExport SEXP _EMC2_flow_eval_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    rcpp_result_gen = Rcpp::wrap(flow_eval_cpp(ptr_, theta, rt));
+    return rcpp_result_gen;
+END_RCPP
+}
+// flow_eval_trials_cpp
+List flow_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt);
+RcppExport SEXP _EMC2_flow_eval_trials_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    rcpp_result_gen = Rcpp::wrap(flow_eval_trials_cpp(ptr_, theta, rt));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nle_mlp_forward
+NumericMatrix nle_mlp_forward(List mlp, NumericMatrix X);
+RcppExport SEXP _EMC2_nle_mlp_forward(SEXP mlpSEXP, SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type mlp(mlpSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(nle_mlp_forward(mlp, X));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nle_wald_cpp
+List nle_wald_cpp(NumericVector t, NumericVector v, NumericVector b, NumericVector s);
+RcppExport SEXP _EMC2_nle_wald_cpp(SEXP tSEXP, SEXP vSEXP, SEXP bSEXP, SEXP sSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    rcpp_result_gen = Rcpp::wrap(nle_wald_cpp(t, v, b, s));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calculate_subject_means
 arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params);
 RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP) {
@@ -75,6 +321,45 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type mu(muSEXP);
     Rcpp::traits::input_parameter< const arma::cube& >::type var(varSEXP);
     rcpp_result_gen = Rcpp::wrap(draw_alpha_from_design(group_designs, mu, var));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mlp_lik_valid
+bool mlp_lik_valid(SEXP ptr_);
+RcppExport SEXP _EMC2_mlp_lik_valid(SEXP ptr_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_valid(ptr_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mlp_lik_build
+SEXP mlp_lik_build(List card, NumericVector lower_s, NumericVector upper_s, double oob);
+RcppExport SEXP _EMC2_mlp_lik_build(SEXP cardSEXP, SEXP lower_sSEXP, SEXP upper_sSEXP, SEXP oobSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type card(cardSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lower_s(lower_sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type upper_s(upper_sSEXP);
+    Rcpp::traits::input_parameter< double >::type oob(oobSEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_build(card, lower_s, upper_s, oob));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mlp_lik_eval_cpp
+NumericVector mlp_lik_eval_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt, IntegerVector R);
+RcppExport SEXP _EMC2_mlp_lik_eval_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP RSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type R(RSEXP);
+    rcpp_result_gen = Rcpp::wrap(mlp_lik_eval_cpp(ptr_, theta, rt, R));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -450,8 +735,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll
-NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool return_trialwise);
-RcppExport SEXP _EMC2_calc_ll(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP return_trialwiseSEXP) {
+NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool return_trialwise, Rcpp::Nullable<Rcpp::List> nn);
+RcppExport SEXP _EMC2_calc_ll(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP return_trialwiseSEXP, SEXP nnSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -467,13 +752,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< bool >::type return_trialwise(return_trialwiseSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type nn(nnSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, nn));
     return rcpp_result_gen;
 END_RCPP
 }
 // calc_ll_multithreaded
-NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool return_trialwise, int n_threads);
-RcppExport SEXP _EMC2_calc_ll_multithreaded(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP return_trialwiseSEXP, SEXP n_threadsSEXP) {
+NumericMatrix calc_ll_multithreaded(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool return_trialwise, int n_threads, Rcpp::Nullable<Rcpp::List> nn);
+RcppExport SEXP _EMC2_calc_ll_multithreaded(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP return_trialwiseSEXP, SEXP n_threadsSEXP, SEXP nnSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -490,7 +776,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< bool >::type return_trialwise(return_trialwiseSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll_multithreaded(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type nn(nnSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll_multithreaded(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise, n_threads, nn));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -749,10 +1036,31 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_emc2_build_info", (DL_FUNC) &_EMC2_emc2_build_info, 0},
+    {"_EMC2_crdm_mean", (DL_FUNC) &_EMC2_crdm_mean, 4},
+    {"_EMC2_rcrdm_acc", (DL_FUNC) &_EMC2_rcrdm_acc, 8},
+    {"_EMC2_crdm_volterra_grid", (DL_FUNC) &_EMC2_crdm_volterra_grid, 7},
+    {"_EMC2_dcrdm_volterra", (DL_FUNC) &_EMC2_dcrdm_volterra, 8},
+    {"_EMC2_crdm_dens_rows", (DL_FUNC) &_EMC2_crdm_dens_rows, 3},
+    {"_EMC2_rcrdm_rows", (DL_FUNC) &_EMC2_rcrdm_rows, 7},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
+    {"_EMC2_ddm_build", (DL_FUNC) &_EMC2_ddm_build, 1},
+    {"_EMC2_ddm_build_ensemble", (DL_FUNC) &_EMC2_ddm_build_ensemble, 1},
+    {"_EMC2_ddm_ptr_valid", (DL_FUNC) &_EMC2_ddm_ptr_valid, 1},
+    {"_EMC2_ddm_eval_cpp", (DL_FUNC) &_EMC2_ddm_eval_cpp, 4},
+    {"_EMC2_ddm_eval_trials_cpp", (DL_FUNC) &_EMC2_ddm_eval_trials_cpp, 4},
+    {"_EMC2_ddm_ens_eval_trials_cpp", (DL_FUNC) &_EMC2_ddm_ens_eval_trials_cpp, 4},
+    {"_EMC2_flow_ptr_valid", (DL_FUNC) &_EMC2_flow_ptr_valid, 1},
+    {"_EMC2_flow_build", (DL_FUNC) &_EMC2_flow_build, 1},
+    {"_EMC2_flow_eval_cpp", (DL_FUNC) &_EMC2_flow_eval_cpp, 3},
+    {"_EMC2_flow_eval_trials_cpp", (DL_FUNC) &_EMC2_flow_eval_trials_cpp, 3},
+    {"_EMC2_nle_mlp_forward", (DL_FUNC) &_EMC2_nle_mlp_forward, 2},
+    {"_EMC2_nle_wald_cpp", (DL_FUNC) &_EMC2_nle_wald_cpp, 4},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
     {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
+    {"_EMC2_mlp_lik_valid", (DL_FUNC) &_EMC2_mlp_lik_valid, 1},
+    {"_EMC2_mlp_lik_build", (DL_FUNC) &_EMC2_mlp_lik_build, 4},
+    {"_EMC2_mlp_lik_eval_cpp", (DL_FUNC) &_EMC2_mlp_lik_eval_cpp, 4},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 6},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
@@ -775,8 +1083,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
-    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
-    {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 13},
+    {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 14},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_omp_diagnostics", (DL_FUNC) &_EMC2_omp_diagnostics, 1},
     {"_EMC2_rCDM", (DL_FUNC) &_EMC2_rCDM, 4},
