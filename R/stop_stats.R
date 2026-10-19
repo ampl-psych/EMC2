@@ -37,9 +37,14 @@ sample_stop_stats <- function(emc, stage = "sample"){
       m <- matrix(apply(V, 3, function(v) 0.5 * log(diag(v))), nrow = length(pn), dimnames = list(pn, NULL))
       m
     })
-    ess <- c(stats::setNames(vapply(pn, function(p) sum(vapply(MU, function(m) ess_series(m[p, ]), 0)), 0), pn),
-             stats::setNames(vapply(pn, function(p) sum(vapply(LSD, function(m) ess_series(m[p, ]), 0)), 0), paste0("lsd:", pn)))
-    out$ess_min <- min(ess, na.rm = TRUE); out$ess_min_par <- names(ess)[which.min(ess)]
+    # a parameter whose series is non-finite or constant in any chain (e.g. the group
+    # variances of a type without them, such as SEM's all-NA theta_var) has no
+    # effective size and is left out of the minimum
+    chain_sum <- function(L, p) { e <- vapply(L, function(m) ess_series(m[p, ]), 0); if(anyNA(e)) NA_real_ else sum(e) }
+    ess <- c(stats::setNames(vapply(pn, function(p) chain_sum(MU, p), 0), pn),
+             stats::setNames(vapply(pn, function(p) chain_sum(LSD, p), 0), paste0("lsd:", pn)))
+    if(all(is.na(ess))){ out$ess_min <- NA_real_; out$ess_min_par <- NA_character_ }
+    else { out$ess_min <- min(ess, na.rm = TRUE); out$ess_min_par <- names(ess)[which.min(ess)] }
     out <- c(out, projected_rhats(MU))
   }
   k <- seq(floor(n / 3) + 1, n)
@@ -57,9 +62,12 @@ sample_stop_stats <- function(emc, stage = "sample"){
   out
 }
 
-# Effective size of one chain's series (coda's spectral estimate); 0 for a constant series
+# Effective size of one chain's series (coda's spectral estimate); NA for a series
+# that is too short, non-finite anywhere or constant (nothing to estimate)
 ess_series <- function(x){
-  if(length(x) < 4 || stats::sd(x) == 0) return(0)
+  if(length(x) < 4 || !all(is.finite(x))) return(NA_real_)
+  s <- stats::sd(x)
+  if(!is.finite(s) || s == 0) return(NA_real_)
   unname(coda::effectiveSize(x))
 }
 
@@ -69,6 +77,7 @@ ess_series <- function(x){
 projected_rhats <- function(MU){
   nch <- length(MU); p <- nrow(MU[[1]]); n <- ncol(MU[[1]])
   if(p < 2) return(list(rhat_b = NA_real_, rhat_ident = NA_real_))
+  if(!all(vapply(MU, function(m) all(is.finite(m)), TRUE))) return(list(rhat_b = NA_real_, rhat_ident = NA_real_))
   wsd <- sqrt(Reduce(`+`, lapply(MU, function(m) apply(m, 1, stats::var))) / nch)
   if(any(!is.finite(wsd)) || any(wsd <= 0)) return(list(rhat_b = NA_real_, rhat_ident = NA_real_))
   Z <- lapply(MU, function(m) m / wsd)
@@ -83,7 +92,7 @@ projected_rhats <- function(MU){
 # The progress line's part for these statistics
 stop_stats_message <- function(st){
   if(is.null(st)) return(NULL)
-  paste0(if(!is.null(st$ess_min)) sprintf(" | min ESS=%.0f (%s)", st$ess_min, st$ess_min_par),
+  paste0(if(!is.null(st$ess_min) && is.finite(st$ess_min)) sprintf(" | min ESS=%.0f (%s)", st$ess_min, st$ess_min_par),
          sprintf(" | LL gap=%.0f | subject spread=%.1f (%s; %d > 5)", st$ll_gap, st$subj_spread,
                  st$subj_spread_subject, st$subj_spread_n5))
 }

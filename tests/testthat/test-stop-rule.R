@@ -72,3 +72,20 @@ test_that("projected Rhats: the disagreement axis sees chains apart, the identif
   r <- EMC2:::projected_rhats(MU)
   expect_gt(r$rhat_b, 1.5); expect_lt(r$rhat_ident, 1.05)
 })
+
+test_that("the sample stop statistics survive group variances that are not sampled (SEM: theta_var all NA)", {
+  sem <- samples_LNR
+  for(i in seq_along(sem)) sem[[i]]$samples$theta_var[] <- NA_real_
+  st <- EMC2:::sample_stop_stats(sem)
+  expect_true(is.finite(st$ess_min))                      # the group means still count
+  expect_false(grepl("^lsd:", st$ess_min_par))
+  expect_true(is.finite(st$ll_gap)); expect_true(is.finite(st$subj_spread))
+  expect_true(is.na(EMC2:::ess_series(c(1, NA, 3, 4, 5)))); expect_true(is.na(EMC2:::ess_series(rep(2, 10))))
+  none <- sem; for(i in seq_along(none)) none[[i]]$samples$theta_mu[] <- 0     # no finite non-constant series at all
+  sn <- EMC2:::sample_stop_stats(none)
+  expect_true(is.na(sn$ess_min)); expect_true(is.na(sn$ess_min_par))
+  expect_false(grepl("min ESS", EMC2:::stop_stats_message(sn)))
+  p <- EMC2:::check_progress(sem, "sample", iter = 10, stop_criteria = list(max_gd = 10, selection = "mu", omit_mpsrf = TRUE),
+                             max_tries = 20, step_size = 10, n_cores = 1, verbose = FALSE, progress = list(trys = 0, iters_total = 0))
+  expect_true(p$done)
+})
