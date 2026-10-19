@@ -89,3 +89,23 @@ test_that("the sample stop statistics survive group variances that are not sampl
                              max_tries = 20, step_size = 10, n_cores = 1, verbose = FALSE, progress = list(trys = 0, iters_total = 0))
   expect_true(p$done)
 })
+
+test_that("the chain-count default is 6 for hierarchical types, 3 for single, and a given count is kept", {
+  dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2], ]; dat$subjects <- droplevels(dat$subjects)
+  des <- design(data = dat, model = LNR, matchfun = function(d) d$S == d$lR, formula = list(m ~ lM, s ~ 1, t0 ~ 1), report_p_vector = FALSE)
+  expect_length(suppressMessages(make_emc(dat, des, rt_resolution = 0.05)), 6)
+  expect_length(suppressMessages(make_emc(dat, des, rt_resolution = 0.05, type = "single")), 3)
+  expect_length(suppressMessages(make_emc(dat, des, rt_resolution = 0.05, n_chains = 4)), 4)
+})
+
+test_that("the sample ETA counts the run's own target and at least one more check until done", {
+  e <- EMC2:::estimate_remaining_total_time("sample", tries_done = 12, elapsed_dt = as.difftime(60, units = "secs"), max_tries = 40,
+                                            current_iters = 5000, target_iters = 5100, step_size = 100)
+  expect_gt(as.numeric(e$min_time), 0); expect_gt(as.numeric(e$max_time), as.numeric(e$min_time))
+  met <- EMC2:::estimate_remaining_total_time("sample", tries_done = 12, elapsed_dt = as.difftime(60, units = "secs"), max_tries = 40,
+                                              current_iters = 6000, target_iters = 5100, step_size = 100)
+  expect_equal(as.numeric(met$min_time), 60)                          # target met, not done: one more check
+  fin <- EMC2:::estimate_remaining_total_time("sample", tries_done = 12, elapsed_dt = as.difftime(60, units = "secs"), max_tries = 40,
+                                              current_iters = 6000, target_iters = 5100, step_size = 100, done = TRUE)
+  expect_equal(as.numeric(fin$max_time), 0)
+})

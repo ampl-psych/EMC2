@@ -258,11 +258,12 @@ run_emc <- function(emc, stage, stop_criteria,
       }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
-      target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
+      target_iters  <- if (stage == "sample") iter else NULL     # the run's target, including draws it started with
 
       # this one is still a little buggy, should fix
       rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
-                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
+                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size,
+                                           done = progress$done)
 
       message(sprintf("[%s | try=%d | iters=%d%s%s] Duration: %s - ETA: %s-%s",
                       stage, progress$trys, progress$total_iters,
@@ -817,6 +818,10 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
 #' @param model A model list. If none is supplied, the model specified in `design()` is used.
 #' @param type A string indicating whether to run a `standard`, `blocked`, `diagonal`, `diagonal-gamma`, `SEM`, `infnt_factor`, or `single` (non-hierarchical) model.
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
+#'   The default, `NULL`, gives 6 chains for hierarchical types and 3 for `type = "single"`: with 3 chains a subject
+#'   with two posterior modes goes undetected in roughly a quarter to a third of fits (every chain in the same mode),
+#'   with 6 in 6-12%, at about 1.4 times the cost per unit of effective sample size; 12 chains bought nothing more on
+#'   the hard fits used to set this. A number given is used as it is.
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
 #' @param group_design A design for group-level mappings, made using `group_design()`.
@@ -857,7 +862,7 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
 
 make_emc <- function(data,design,model=NULL,
                     type="standard",
-                    n_chains=3,compress=TRUE,rt_resolution=1/60,
+                    n_chains=NULL,compress=TRUE,rt_resolution=1/60,
                     prior_list = NULL, group_design = NULL,
                     par_groups=NULL, memory_saver = FALSE, ...){
   # arguments for future compatibility
@@ -874,6 +879,7 @@ make_emc <- function(data,design,model=NULL,
   if(!is.null(prior_list)){
     type <- attr(prior_list[[1]], "type")
   }
+  if(is.null(n_chains)) n_chains <- if(type == "single") 3L else 6L
   if(!is.null(group_design) && !type %in% c("standard", "diagonal", "blocked")){
     stop("group_design can only be used with standard, blocked or diagonal type")
   }

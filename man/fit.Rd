@@ -159,6 +159,10 @@ between chains by more than this many units (a subject in a different mode in so
 chains). The progress line shows all three whether or not they are set, and the fit
 records the rules that were on and their last values in \code{emc[[1]]$stop_record}.
 
+The number of chains is set when the object is made (\code{\link[=make_emc]{make_emc()}}): by default 6 for hierarchical types and 3
+for \code{type = "single"}; the stop rule's Rhat, the chain comparisons of \code{cull} and the subject spread all need
+several chains, and 6 is the default the culling and the opt-in sample criteria were tuned with.
+
 Chains share fixed likelihood inputs in one process. Each chain has its own
 native RNG, seeded from R, with its state saved in the samples for resuming fits.
 Resuming with a different C++ library seeds fresh chain RNGs from R.
