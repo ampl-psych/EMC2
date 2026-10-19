@@ -225,6 +225,31 @@ test_that("st0zero without context_encoding needs exceptions, and registers corr
   expect_identical(m$dfun(rt, R, pars), m_ref$dfun(rt, R, pars))
 })
 
+test_that("a card's `fixed` field supplies the exceptions; a contradicting exception is refused", {
+  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
+  x$members[[1]]$context_encoding <- NULL
+  m_ref <- register_nn_model("ddm_st0zero")()
+  rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
+  pars <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
+  # on the member (a single-network card, as nleflow writes it) or at the top of an ensemble
+  member <- x; member$members[[1]]$fixed <- list(st0 = 0)
+  top <- x; top$fixed <- list(st0 = 0)
+  for (y in list(member, top)) {
+    tmp <- tempfile(fileext = ".rds"); saveRDS(y, tmp)
+    m <- register_nn_model(tmp, twin = DDM)()
+    expect_identical(m$nn$fixed, c(st0 = 0))
+    expect_identical(m$dfun(rt, R, pars), m_ref$dfun(rt, R, pars))
+    expect_identical(register_nn_model(tmp, twin = DDM, exceptions = c(st0 = 0))()$nn$fixed, c(st0 = 0))
+    expect_error(register_nn_model(tmp, twin = DDM, exceptions = c(st0 = .1)), "the card's fixed")
+  }
+  bad <- x; bad$members[[1]]$fixed <- list(st0 = "0")
+  tmp <- tempfile(fileext = ".rds"); saveRDS(bad, tmp)
+  expect_error(register_nn_model(tmp, twin = DDM), "fixed")
+  bad <- x; bad$members[[1]]$fixed <- list(st0 = 0, v = 1)   # v is a network input
+  tmp <- tempfile(fileext = ".rds"); saveRDS(bad, tmp)
+  expect_error(register_nn_model(tmp, twin = DDM), "fixed")
+})
+
 test_that("exceptions cannot fix a network input", {
   expect_error(register_nn_model("ddm_cap256w_c4", twin = DDM, exceptions = c(sv = 0)),
                "is an input of the network")

@@ -41,7 +41,8 @@ inferred from the card; if given it must match.}
 \item{exceptions}{Named natural-scale values of twin parameters that the
 network does not take as input because they were fixed in training
 (e.g. \code{c(st0 = 0)}). The model admits exactly that value and refuses
-any other.}
+any other. Values the card records in its \code{fixed} field are the
+default; an exception that contradicts them is refused.}
 
 \item{pre}{\code{NULL}, the name of a parameter subtracted from rt before the
 network sees it (\code{"t0"} for a decision-time network), or a
@@ -107,7 +108,9 @@ weights (\code{flow_mlp} + \code{classifier_mlp} + \code{spline} + \code{scaler}
 \code{input_scaling}, \code{affine}, \code{affine_scale}, \code{pre} (below). A name in
 \code{context_transforms} that is not in
 \code{context_names} was fixed when the network was trained; its value must be
-given in \code{exceptions} unless the card implies it (\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
+given in \code{exceptions} unless the card records it (field \code{fixed}: named
+natural-scale values, e.g. \code{{"s": 1, "SZ": 0}}) or implies it
+(\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
 (\code{members}, \code{"flow_joint"} only); \code{.json} cards need the \pkg{jsonlite}
 package.
 

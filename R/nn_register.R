@@ -348,8 +348,9 @@ nn_ptr <- function(reg) {
 #' `input_scaling`, `affine`, `affine_scale`, `pre` (below). A name in
 #' `context_transforms` that is not in
 #' `context_names` was fixed when the network was trained; its value must be
-#' given in `exceptions` unless the card implies it (`context_encoding =
-#' "st0zero"` implies `st0 = 0`). `.rds` bundles may hold an ensemble
+#' given in `exceptions` unless the card records it (field `fixed`: named
+#' natural-scale values, e.g. `{"s": 1, "SZ": 0}`) or implies it
+#' (`context_encoding = "st0zero"` implies `st0 = 0`). `.rds` bundles may hold an ensemble
 #' (`members`, `"flow_joint"` only); `.json` cards need the \pkg{jsonlite}
 #' package.
 #'
@@ -544,7 +545,8 @@ nn_ptr <- function(reg) {
 #' @param exceptions Named natural-scale values of twin parameters that the
 #'   network does not take as input because they were fixed in training
 #'   (e.g. `c(st0 = 0)`). The model admits exactly that value and refuses
-#'   any other.
+#'   any other. Values the card records in its `fixed` field are the
+#'   default; an exception that contradicts them is refused.
 #' @param pre `NULL`, the name of a parameter subtracted from rt before the
 #'   network sees it (`"t0"` for a decision-time network), or a
 #'   `function(rt, pars)` returning the network's time; it must be a shift
@@ -728,6 +730,25 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
                           "fix it inside the training region with constants in design() instead")
     bad <- setdiff(names(exceptions), names(pt))
     if (length(bad)) stop(what, "exceptions names non-parameter(s) ", paste(bad, collapse = ", "))
+  }
+  # the card may record the values (field `fixed`, natural scale): they are the
+  # default exceptions, and an exception may not contradict them
+  card_fixed <- m1[["fixed", exact = TRUE]]
+  if (is.null(card_fixed)) card_fixed <- card[["top", exact = TRUE]][["fixed", exact = TRUE]]
+  if (!is.null(card_fixed)) {
+    if (!is.list(card_fixed) && !is.numeric(card_fixed)) stop(what, "the card's fixed must be named numbers")
+    if (!all(vapply(card_fixed, function(x) is.numeric(x) && length(x) == 1L && is.finite(x), TRUE)))
+      stop(what, "the card's fixed must be named finite numbers")
+    card_fixed <- unlist(card_fixed)
+    if (is.null(names(card_fixed)) || any(names(card_fixed) == "")) stop(what, "the card's fixed must be named numbers")
+    bad <- setdiff(names(card_fixed), dropped)
+    if (length(bad)) stop(what, "the card's fixed names '", bad[1], "', which is not a parameter the network was ",
+                          "trained without (in context_transforms but not context_names)")
+    for (p in intersect(names(exceptions), names(card_fixed)))
+      if (!isTRUE(all.equal(exceptions[[p]], card_fixed[[p]], tolerance = 0)))
+        stop(what, "exceptions = c(", p, " = ", format(exceptions[[p]]), ") contradicts the card's fixed (", p,
+             " = ", format(card_fixed[[p]]), "): the network was trained at that value only")
+    exceptions <- c(exceptions, card_fixed[setdiff(names(card_fixed), names(exceptions))])
   }
   fixed <- exceptions
   for (p in setdiff(dropped, names(fixed))) {

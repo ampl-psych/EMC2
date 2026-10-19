@@ -13,6 +13,7 @@
 -   `make_emc()` warns when a neural-likelihood design samples `t0` and the response times are floored to a resolution coarser than 1 ms (the default `rt_resolution = 1/60` biases t0 by about -1.9 posterior sd at N = 100, even for the analytic likelihood; the flooring applies whether or not the data are compressed).
 -   On R < 4.5 (no `tools::sha256sum`) the shipped artefacts are pinned by md5 lines in `inst/extdata/flownn/MANIFEST`; before, every shipped artefact failed to load there with a misleading "does not match the sha256" error.
 -   `?DDMnn` records the state of the `ddm_cap256w_c4` t0 shift: no correction is applied, an unresolved shift of about 0.002 (log scale) at N = 800 remains, and the scaled card replaces the artefact for the variability models.
+-   `register_nn_model()` reads a card's `fixed` field (the values of twin parameters held fixed in training) as the default `exceptions`, so such a card registers, and `nle_verify.R` checks it, from the card alone; an exception that contradicts the card is refused.
 
 ## New features (dev-nle)
 
