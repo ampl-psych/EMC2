@@ -9,13 +9,15 @@ sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standa
 
 test_that("cull settings are validated", {
   d <- EMC2:::cull_defaults(TRUE)
-  expect_equal(d$persistence, 2L); expect_equal(d$chain_z, 2.5)
+  expect_equal(d$persistence, 2L); expect_equal(d$chain_z, 5); expect_equal(d$chain_gap, 200); expect_equal(d$max_culls, 1L)
   expect_equal(EMC2:::cull_defaults(list(chain_z = 4))$chain_z, 4)
   expect_null(EMC2:::cull_defaults(FALSE))
   expect_error(EMC2:::cull_defaults(list(bogus = 1)), "unknown")
   expect_error(EMC2:::cull_defaults(list(cell_gap = 5)), "unknown")      # the cell cull is gone
   expect_error(sc("adapt", list(cull = TRUE)), "burn and sample")
   expect_equal(sc("burn", list(cull = TRUE))$cull$min_window, 250L)
+  expect_equal(sc("burn", list(cull = TRUE))$cull$max_culls, 2L); expect_equal(sc("sample", list(cull = TRUE))$cull$max_culls, 1L)
+  expect_equal(sc("burn", list(cull = list(max_culls = 1)))$cull$max_culls, 1)
   expect_equal(sc("sample", list(cull = TRUE))$cull$min_window, 500L)
   expect_equal(sc("burn", list(cull = list(min_window = 400)))$cull$min_window, 400)
   expect_error(sc("burn", list(max_flat_loc = .3)), "sample stage")
@@ -69,6 +71,7 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   set.seed(11); e <- make_emc(dat, des, rt_resolution = 0.05, n_chains = 3)
   e <- do.call(run_emc, c(list(e, "preburn", sc("preburn", list(iter = 30))), args))
   e <- do.call(run_emc, c(list(e, "burn", sc("burn", list(iter = 100))), args))
+  eb <- e                                            # ends in burn: for the burn-exit re-seed below
   e <- do.call(run_emc, c(list(e, "adapt", sc("adapt", list(min_unique = 50))), args))
   e <- do.call(run_emc, c(list(e, "sample", sc("sample", list(iter = 200))), args))
   d <- chain_diagnostics(e, window = 150)
@@ -77,10 +80,19 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   expect_true(all(c("mu", "alpha", "LL", "subj_ll") %in% names(d$flat)))
   expect_equal(d$flat$subj_ll$quantile, .99); expect_equal(d$flat$LL$quantile, 1)
   n <- e[[1]]$samples$idx; w <- (n - 149):n
-  # a chain held below the others
-  whole <- e; whole[[1]]$samples$subj_ll[, w] <- whole[[1]]$samples$subj_ll[, w] - 8
+  # a chain in a different region: far below on the log-likelihood (and so on its own log posterior)
+  whole <- e; whole[[1]]$samples$subj_ll[, w] <- whole[[1]]$samples$subj_ll[, w] - 1000
   dw <- chain_diagnostics(whole, window = 150)
-  expect_true(dw$chains$flagged[1]); expect_false(any(dw$chains$flagged[-1]))
+  expect_true(dw$chains$flagged[1]); expect_false(any(dw$chains$flagged[-1])); expect_true(dw$chains$lp_lower[1])
+  # tens of units below is a wandering chain, not a different region: not flagged at the defaults
+  near <- e; near[[1]]$samples$subj_ll[, w] <- near[[1]]$samples$subj_ll[, w] - 30
+  expect_false(any(chain_diagnostics(near, window = 150)$chains$flagged))
+  # lower on the log-likelihood but higher on its own log posterior: not flagged
+  lik <- e; lik[[1]]$samples$subj_ll[, w] <- lik[[1]]$samples$subj_ll[, w] - 40
+  p <- nrow(lik[[1]]$samples$theta_mu)
+  for(k in w){ lik[[1]]$samples$theta_var[, , k] <- diag(1e-12, p); lik[[1]]$samples$alpha[, , k] <- lik[[1]]$samples$theta_mu[, k] }
+  dl <- EMC2:::cull_diagnostics(lik, "sample", EMC2:::cull_defaults(list(window = 150, chain_gap = 20, chain_z = 1)))
+  expect_gt(dl$chains$gap[1], 20); expect_false(dl$chains$lp_lower[1]); expect_false(dl$chains$flagged[1])
   # two subjects apart in one chain, the chain's sum unchanged: reported in the subject spread, nothing culled
   cell <- e; cell[[1]]$samples$subj_ll[2, w] <- cell[[1]]$samples$subj_ll[2, w] - 12
   cell[[1]]$samples$subj_ll[3, w] <- cell[[1]]$samples$subj_ll[3, w] + 12
@@ -108,6 +120,14 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   res <- do.call(run_emc, c(list(whole, "sample", sc("sample", list(iter = 100, max_gd = 1.5, cull = list(window = 150, persistence = 1)))),
                             list(cores_for_chains = 1, step_size = 50, verbose = FALSE, max_tries = 3, particle_factor = 30)))
   expect_length(res[[1]]$culls, 1)
-  expect_equal(res[[1]]$culls[[1]]$chain, 1)
+  expect_equal(res[[1]]$culls[[1]]$chain, 1); expect_false(res[[1]]$culls[[1]]$exit)
   expect_lte(chain_n(res)[1, "sample"], 200)   # restarted: the old sample draws are gone
+  # burn exit: a chain in a different region at the end of burn is re-seeded, no persistence needed
+  nb <- chain_n(eb)[1, "burn"]; wb <- eb[[1]]$samples$idx - seq_len(ceiling(2 * nb / 3)) + 1
+  stuck <- eb; stuck[[2]]$samples$subj_ll[, wb] <- stuck[[2]]$samples$subj_ll[, wb] - 1000
+  attr(stuck[[3]]$samples, "scale_move") <- list(step = c(m = 7))
+  r <- EMC2:::burn_exit_reseed(stuck, EMC2:::cull_defaults(TRUE))
+  expect_length(r[[1]]$culls, 1); expect_equal(r[[1]]$culls[[1]]$chain, 2); expect_true(r[[1]]$culls[[1]]$exit)
+  expect_false(identical(r[[2]]$samples$theta_mu[, r[[2]]$samples$idx], stuck[[2]]$samples$theta_mu[, stuck[[2]]$samples$idx]))
+  expect_length(EMC2:::burn_exit_reseed(eb, EMC2:::cull_defaults(TRUE))[[1]]$culls, 0)   # nothing out of place: untouched
 })

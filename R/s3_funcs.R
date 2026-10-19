@@ -555,22 +555,26 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
 #'
-#' ``cull`` (``TRUE`` or a list; ``burn`` and ``sample`` stages): chain culling. After
-#' each check, a chain whose log posterior over the comparison window (the subject
-#' log-likelihoods plus the group density of the subject parameters, under one group mean
-#' and covariance shared by all chains) is held below the best chain's by more than
-#' ``chain_gap`` units and ``chain_z`` within-chain spreads is flagged; once flagged on
-#' ``persistence`` consecutive checks it is respawned from a draw of a better chain, with
-#' that chain's kernel settings. The window is the last two thirds of the stage once it holds ``min_window``
-#' iterations (500 in sample, 250 in burn, where a false cull costs nothing but one
-#' chain's diversity; a short window mistakes the chains' slow wandering for a held-apart
-#' mode), or ``window`` iterations if given. In ``sample`` the stage then restarts after
-#' ``reburn`` discarded iterations and the tries count over, at most ``max_culls`` times
-#' per stage. Defaults: ``persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5,
-#' max_culls = 2, reburn = 100``. Culls are recorded in
-#' ``emc[[1]]$culls`` and shown by [chain_diagnostics()]. Culling assumes the lower mode
-#' is spurious; with a genuinely multimodal posterior it favours the mode most chains
-#' found.
+#' ``cull`` (``TRUE`` or a list; ``burn`` and ``sample`` stages): chain culling for a chain
+#' held in a different region. After each check, a chain whose summed subject
+#' log-likelihood over the comparison window is below the best chain's by more than
+#' ``chain_gap`` units and ``chain_z`` within-chain spreads, and whose own log posterior
+#' (the subject log-likelihoods plus the group density under its own group parameters)
+#' is below the other chains' median, is flagged; once flagged on ``persistence``
+#' consecutive checks it is respawned from a draw of another chain, with that chain's
+#' kernel settings. The log posterior under pooled group parameters is not compared: its
+#' group-density term differs between healthy chains by hundreds of units. The window is
+#' the last two thirds of the stage once it holds ``min_window`` iterations (500 in
+#' sample, 250 in burn), or ``window`` iterations if given. In ``burn`` at most
+#' ``max_culls`` re-seeds are made at checks (default 2 there), and when burn ends (by its
+#' rule or at ``max_tries``) every chain then in a different region is re-seeded once
+#' more without the persistence requirement, since burn draws are discarded. In
+#' ``sample`` the stage restarts after ``reburn`` discarded iterations and the tries
+#' count over, at most ``max_culls`` times (default 1). Defaults: ``persistence = 2,
+#' min_window = 500, chain_gap = 200, chain_z = 5, max_culls = 1, reburn = 100``. Culls
+#' are recorded in ``emc[[1]]$culls`` and shown by [chain_diagnostics()]. Culling assumes
+#' the lower region is spurious; with a genuinely multimodal posterior it favours the
+#' region most chains found.
 #'
 #' ``max_flat_loc`` (numeric; ``sample`` stage): the flat test. The medians of the first
 #' ``flat_p1`` and last ``flat_p2`` (default thirds) of the stage, pooled over chains, may

@@ -49,6 +49,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     # comparison starts earlier there than in sample, where it restarts the stage.
     if(!is.null(stop_criteria$cull) && stage == "burn" && !"min_window" %in% given)
       stop_criteria$cull$min_window <- 250L
+    # One restart in sample (a cull there discards the stage); burn may re-seed twice at its checks
+    if(!is.null(stop_criteria$cull) && stage == "burn" && !"max_culls" %in% given)
+      stop_criteria$cull$max_culls <- 2L
   }
   if(!is.null(stop_criteria$max_flat_loc)){
     if(stage != "sample") stop("`max_flat_loc` applies to the sample stage")
@@ -214,7 +217,7 @@ run_emc <- function(emc, stage, stop_criteria,
           emc[[1]]$culls <- c(emc[[1]]$culls, act$done)
           progress$n_culls <- n_culls + 1L
           progress$cull_state <- NULL
-          if(verbose) for(d in act$done) message(sprintf("Cull %d of %d: %s of chain %d respawned from chain %d (log posterior %.0f below, z = %.1f)",
+          if(verbose) for(d in act$done) message(sprintf("Cull %d of %d: %s of chain %d respawned from chain %d (log-likelihood %.0f below, z = %.1f)",
             progress$n_culls, cull$max_culls, if(is.na(d$subject)) "the state" else paste("subject", d$subject), d$chain, d$donor, d$gap, d$z))
           if(stage == "sample"){
             emc <- cull_restart(emc, cull$reburn, verbose, verboseProgress, particle_factor, search_width,
@@ -246,7 +249,7 @@ run_emc <- function(emc, stage, stop_criteria,
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
         ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
       }
-      ess_message <- paste0(ess_message, stop_stats_message(progress$stop_stats))
+      if(!is.null(progress$stop_stats)) ess_message <- paste0(ess_message, stop_stats_message(progress$stop_stats))
       if(!is.null(progress$flat) && length(progress$flat)){
         ess_message <- paste0(ess_message, " | drift(se)=", paste(sprintf("%s %.2f(%.2f)", names(progress$flat),
           vapply(progress$flat, function(f) f$drift, 0), vapply(progress$flat, function(f) f$mcse, 0)), collapse = ", "))
@@ -271,6 +274,16 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
 
+  # Burn exit: a chain still in a different region is re-seeded before adapt
+  if(stage == "burn" && !is.null(stop_criteria$cull) && emc[[1]]$init){
+    n0 <- length(emc[[1]]$culls)
+    emc <- burn_exit_reseed(emc, stop_criteria$cull, verbose)
+    if(length(emc[[1]]$culls) > n0 && !is.null(fileName)){
+      emc <- strip_duplicates(emc); class(emc) <- "emc"
+      save(emc, file = fix_fileName(fileName))
+      emc <- restore_duplicates(emc)
+    }
+  }
   # The fit's record of how the sample stage ended: the rules that were on, their
   # values at the last check, and whether the rules or max_tries ended it
   if(stage == "sample"){

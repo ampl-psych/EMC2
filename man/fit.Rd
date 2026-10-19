@@ -109,21 +109,26 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 
 \code{iter} (integer): The number of MCMC samples to collect.
 
-\code{cull} (\code{TRUE} or a list; \code{burn} and \code{sample} stages): chain culling. After
-each check, a chain whose log posterior over the comparison window (the subject
-log-likelihoods plus the group density of the subject parameters, under one group mean
-and covariance shared by all chains) is held below the best chain's by more than
-\code{chain_gap} units and \code{chain_z} within-chain spreads is flagged; once flagged on
-\code{persistence} consecutive checks it is respawned from a draw of a better chain, with
-that chain's kernel settings. The window is the last two thirds of the stage once it holds \code{min_window}
-iterations (500 in sample, 250 in burn, where a false cull costs nothing but one
-chain's diversity; a short window mistakes the chains' slow wandering for a held-apart
-mode), or \code{window} iterations if given. In \code{sample} the stage then restarts after
-\code{reburn} discarded iterations and the tries count over, at most \code{max_culls} times
-per stage. Defaults: \verb{persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5, max_culls = 2, reburn = 100}. Culls are recorded in
-\code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes the lower mode
-is spurious; with a genuinely multimodal posterior it favours the mode most chains
-found.
+\code{cull} (\code{TRUE} or a list; \code{burn} and \code{sample} stages): chain culling for a chain
+held in a different region. After each check, a chain whose summed subject
+log-likelihood over the comparison window is below the best chain's by more than
+\code{chain_gap} units and \code{chain_z} within-chain spreads, and whose own log posterior
+(the subject log-likelihoods plus the group density under its own group parameters)
+is below the other chains' median, is flagged; once flagged on \code{persistence}
+consecutive checks it is respawned from a draw of another chain, with that chain's
+kernel settings. The log posterior under pooled group parameters is not compared: its
+group-density term differs between healthy chains by hundreds of units. The window is
+the last two thirds of the stage once it holds \code{min_window} iterations (500 in
+sample, 250 in burn), or \code{window} iterations if given. In \code{burn} at most
+\code{max_culls} re-seeds are made at checks (default 2 there), and when burn ends (by its
+rule or at \code{max_tries}) every chain then in a different region is re-seeded once
+more without the persistence requirement, since burn draws are discarded. In
+\code{sample} the stage restarts after \code{reburn} discarded iterations and the tries
+count over, at most \code{max_culls} times (default 1). Defaults: \code{persistence = 2,
+min_window = 500, chain_gap = 200, chain_z = 5, max_culls = 1, reburn = 100}. Culls
+are recorded in \code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes
+the lower region is spurious; with a genuinely multimodal posterior it favours the
+region most chains found.
 
 \code{max_flat_loc} (numeric; \code{sample} stage): the flat test. The medians of the first
 \code{flat_p1} and last \code{flat_p2} (default thirds) of the stage, pooled over chains, may
