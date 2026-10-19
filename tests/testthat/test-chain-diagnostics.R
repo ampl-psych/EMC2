@@ -1,6 +1,6 @@
 # Chain culling and the flat test: the statistics on a healthy fit, a chain
-# and a subject held below the others (simulated in the stored draws), the
-# respawn mechanics, persistence, and a cull inside run_emc().
+# held below the others and a subject apart in one chain (simulated in the
+# stored draws), the respawn mechanics, persistence, and a cull inside run_emc().
 dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:3], ]
 dat$subjects <- droplevels(dat$subjects)
 des <- design(data = dat, model = LNR, matchfun = function(d) d$S == d$lR,
@@ -13,6 +13,7 @@ test_that("cull settings are validated", {
   expect_equal(EMC2:::cull_defaults(list(chain_z = 4))$chain_z, 4)
   expect_null(EMC2:::cull_defaults(FALSE))
   expect_error(EMC2:::cull_defaults(list(bogus = 1)), "unknown")
+  expect_error(EMC2:::cull_defaults(list(cell_gap = 5)), "unknown")      # the cell cull is gone
   expect_error(sc("adapt", list(cull = TRUE)), "burn and sample")
   expect_equal(sc("burn", list(cull = TRUE))$cull$min_window, 250L)
   expect_equal(sc("sample", list(cull = TRUE))$cull$min_window, 500L)
@@ -72,7 +73,7 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   e <- do.call(run_emc, c(list(e, "sample", sc("sample", list(iter = 200))), args))
   d <- chain_diagnostics(e, window = 150)
   expect_s3_class(d, "emc.diagnostics")
-  expect_false(any(d$chains$flagged)); expect_equal(nrow(d$cells), 0)
+  expect_false(any(d$chains$flagged)); expect_equal(nrow(d$subjects), 3)
   expect_true(all(c("mu", "alpha", "LL", "subj_ll") %in% names(d$flat)))
   expect_equal(d$flat$subj_ll$quantile, .99); expect_equal(d$flat$LL$quantile, 1)
   n <- e[[1]]$samples$idx; w <- (n - 149):n
@@ -80,18 +81,22 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   whole <- e; whole[[1]]$samples$subj_ll[, w] <- whole[[1]]$samples$subj_ll[, w] - 8
   dw <- chain_diagnostics(whole, window = 150)
   expect_true(dw$chains$flagged[1]); expect_false(any(dw$chains$flagged[-1]))
-  # a subject held below the others, repaired from the best chain for it
+  # two subjects apart in one chain, the chain's sum unchanged: reported in the subject spread, nothing culled
   cell <- e; cell[[1]]$samples$subj_ll[2, w] <- cell[[1]]$samples$subj_ll[2, w] - 12
+  cell[[1]]$samples$subj_ll[3, w] <- cell[[1]]$samples$subj_ll[3, w] + 12
   dc <- chain_diagnostics(cell, window = 150)
   expect_false(any(dc$chains$flagged))
-  expect_equal(nrow(dc$cells), 1); expect_equal(dc$cells$chain, 1)
-  expect_equal(dc$cells$subject, rownames(e[[1]]$samples$subj_ll)[2])
-  # respawn mechanics
-  its <- EMC2:::stage_window(cell, "sample", 150)
-  r <- EMC2:::respawn_subject(cell, 1, dc$cells$donor, 2, its[[dc$cells$donor]], 50)
-  expect_false(identical(r[[1]]$samples$alpha[, 2, n], cell[[1]]$samples$alpha[, 2, n]))
-  r2 <- EMC2:::respawn_chain(whole, 1, 2, its[[2]], 50)
+  sub <- rownames(e[[1]]$samples$subj_ll)
+  expect_setequal(dc$subjects$subject[1:2], sub[2:3]); expect_true(all(dc$subjects$spread[1:2] > 10))
+  expect_equal(dc$subjects$worst[dc$subjects$subject == sub[2]], 1); expect_equal(dc$subjects$best[dc$subjects$subject == sub[3]], 1)
+  # respawn mechanics: the donor's state and its kernel settings, the recipient's own random number state
+  its <- EMC2:::stage_window(whole, "sample", 150)
+  marked <- whole; attr(marked[[2]]$samples, "scale_move") <- list(step = c(v = 9)); attr(marked[[1]]$samples, "rng") <- "own"
+  r2 <- EMC2:::respawn_chain(marked, 1, 2, its[[2]], 50)
   expect_true(any(apply(whole[[2]]$samples$theta_mu[, its[[2]]], 2, function(v) isTRUE(all.equal(v, r2[[1]]$samples$theta_mu[, n])))))
+  expect_identical(attr(r2[[1]]$samples, "scale_move"), list(step = c(v = 9)))
+  expect_identical(attr(r2[[1]]$samples, "pm_settings"), attr(marked[[2]]$samples, "pm_settings"))
+  expect_identical(attr(r2[[1]]$samples, "rng"), "own")
   # persistence: a flag must repeat before anything is culled
   cd <- EMC2:::cull_defaults(list(window = 150))
   dd <- EMC2:::cull_diagnostics(whole, "sample", cd)

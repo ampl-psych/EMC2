@@ -32,8 +32,9 @@ as in \code{stop_criteria}}
 }
 \value{
 A list with elements \code{chains} (one row per chain: median log
-posterior, gap to the best chain, robust z, flagged), \code{cells} (the flagged
-subject-by-chain cells with the donor chain and the gain), \code{flat} (drift
+posterior, gap to the best chain, robust z, flagged), \code{subjects} (one row
+per subject, widest first: spread, the chains with the highest and lowest
+median log-likelihood), \code{flat} (drift
 statistics per selection) and \code{culls} (the record of culls in the object).
 }
 \description{
@@ -42,8 +43,8 @@ iterations of a stage and reports (i) chains whose log posterior (subject
 log-likelihoods plus the group density of the subject parameters, under one
 group mean and covariance shared by all chains so that a chain's own
 covariance draws do not enter the comparison) is held below the other chains', (ii)
-subject-by-chain cells whose parameters another chain would improve on under
-this chain's group parameters, and (iii) the flat test: the drift of the
+the subject spread: per subject, the range over chains of the median
+log-likelihood (reported only; nothing acts on it), and (iii) the flat test: the drift of the
 group means, the subject parameters, the summed log-likelihood and the
 per-subject log-likelihoods between the first and last thirds of the stage,
 in units of their interquartile range. These are the statistics the

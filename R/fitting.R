@@ -229,7 +229,7 @@ run_emc <- function(emc, stage, stop_criteria,
       gd <- progress$gd$gd
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
-      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- rhat_message(progress$gd$rule, gd)
       # get min effective sample size (ESS)
       ess_message <- NULL
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
@@ -451,6 +451,11 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   gd <- check_gd(emc, stage, stop_criteria$max_gd, stop_criteria$mean_gd,
                  omit_mpsrf = stop_criteria$omit_mpsrf, selection = selection,
                  gd_quantile = stop_criteria$gd_quantile)
+  # Everything below reads the draws the Rhat read: check_gd() may have dropped
+  # the first third of the stage, and the draws that remain are what the run
+  # keeps, so the iteration target, the ESS and the flat test count those
+  emc <- gd$emc
+  total_iters_stage <- chain_n(emc)[, stage][1]
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
@@ -494,19 +499,22 @@ check_progress <- function (emc, stage, iter, stop_criteria,
                              stop_criteria$flat_p2, stop_criteria$flat_quantile)
     flat_ok <- flat_done(flat, stop_criteria$max_flat_loc, stop_criteria$flat_mcse)
   } else if(stage == "sample" && !is.null(stop_criteria$max_flat_loc)) flat_ok <- FALSE
-  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok) | (trys_done & iter_done)
+  # In sample, max_tries binds even when the iteration target is unmet: a
+  # discard can take the stage back below the target at every failing check,
+  # so without this the run would continue past max_tries indefinitely
+  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok) | (trys_done & (iter_done | stage == "sample"))
   if(es_done & gd$gd_done & adapted & flat_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  if (trys_done & iter_done) {
-    if(!(es_done & gd$gd_done & enough_unique & flat_ok)){
+  if (trys_done & (iter_done | stage == "sample")) {
+    if(!(es_done & gd$gd_done & enough_unique & flat_ok & iter_done)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
             sample, if run for long enough, sample usually converges eventually.")
     }
   }
-  return(list(emc = gd$emc, done = done, step_size = step_size,
+  return(list(emc = emc, done = done, step_size = step_size,
               trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
@@ -567,6 +575,14 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   list(gd = gd_out, alpha = alpha, other = other)
 }
 
+# The progress line's Rhat: the rule's value (what max_gd is compared with) and,
+# when it differs, the plain maximum over every Rhat the rule read
+rhat_message <- function(rule, gd){
+  if(is.null(rule) || !length(gd)) return(NULL)
+  m <- max(gd)
+  if(isTRUE(all.equal(rule, m))) sprintf("Rhat=%.3f", rule) else sprintf("Rhat=%.3f (rule; max %.3f)", rule, m)
+}
+
 # Apply the quantile only to subject parameters; all other Rhats must pass.
 gd_top <- function(g, gd_quantile = NULL){
   if(is.null(gd_quantile) || is.null(g$alpha) || !all(is.finite(g$alpha))) return(max(g$gd))
@@ -603,7 +619,10 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf,
   }
   gd <- g$gd
   class(emc) <- "emc"
-  return(list(gd = gd, gd_done = ok_gd, emc = emc))
+  # the value the rule compares with max_gd (mean_gd): the maximum over the
+  # non-subject Rhats and the gd_quantile quantile of the subject ones
+  rule <- if(!is.null(max_gd)) gd_top(g, gd_quantile) else mean(gd)
+  return(list(gd = gd, gd_done = ok_gd, emc = emc, rule = rule))
 }
 
 # window: build them from the last `window` adapt iterations of each chain

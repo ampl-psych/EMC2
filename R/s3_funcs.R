@@ -496,7 +496,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     gd      <- final_progress$gd$gd
     gd_final <- NULL
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- rhat_message(final_progress$gd$rule, gd)
 
     ess_message <- if (!is.null(final_progress$curr_min_es) &&
                        is.finite(final_progress$curr_min_es)) {
@@ -557,17 +557,15 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' each check, a chain whose log posterior over the comparison window (the subject
 #' log-likelihoods plus the group density of the subject parameters, under one group mean
 #' and covariance shared by all chains) is held below the best chain's by more than
-#' ``chain_gap`` units and ``chain_z`` within-chain spreads, or a single subject in a chain
-#' whose parameters another chain would improve on under this chain's own group
-#' parameters by more than ``cell_gap`` units and ``cell_z`` spreads, is flagged; once
-#' flagged on ``persistence`` consecutive checks it is respawned from a draw of a better
-#' chain. The window is the last two thirds of the stage once it holds ``min_window``
+#' ``chain_gap`` units and ``chain_z`` within-chain spreads is flagged; once flagged on
+#' ``persistence`` consecutive checks it is respawned from a draw of a better chain, with
+#' that chain's kernel settings. The window is the last two thirds of the stage once it holds ``min_window``
 #' iterations (500 in sample, 250 in burn, where a false cull costs nothing but one
 #' chain's diversity; a short window mistakes the chains' slow wandering for a held-apart
 #' mode), or ``window`` iterations if given. In ``sample`` the stage then restarts after
 #' ``reburn`` discarded iterations and the tries count over, at most ``max_culls`` times
 #' per stage. Defaults: ``persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5,
-#' cell_gap = 5, cell_z = 3, max_culls = 2, reburn = 100``. Culls are recorded in
+#' max_culls = 2, reburn = 100``. Culls are recorded in
 #' ``emc[[1]]$culls`` and shown by [chain_diagnostics()]. Culling assumes the lower mode
 #' is spurious; with a genuinely multimodal posterior it favours the mode most chains
 #' found.

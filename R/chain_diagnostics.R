@@ -11,7 +11,7 @@
 
 cull_defaults <- function(cull){
   defaults <- list(persistence = 2L, window = NULL, min_window = 500L, chain_gap = 10, chain_z = 2.5,
-                   cell_gap = 5, cell_z = 3, max_culls = 2L, reburn = 100L)
+                   max_culls = 2L, reburn = 100L)
   if(isTRUE(cull)) return(defaults)
   if(is.null(cull) || isFALSE(cull)) return(NULL)
   if(!is.list(cull)) stop("`cull` must be TRUE, FALSE or a list")
@@ -95,8 +95,8 @@ robust_gaps <- function(med, mad){
 #' log-likelihoods plus the group density of the subject parameters, under one
 #' group mean and covariance shared by all chains so that a chain's own
 #' covariance draws do not enter the comparison) is held below the other chains', (ii)
-#' subject-by-chain cells whose parameters another chain would improve on under
-#' this chain's group parameters, and (iii) the flat test: the drift of the
+#' the subject spread: per subject, the range over chains of the median
+#' log-likelihood (reported only; nothing acts on it), and (iii) the flat test: the drift of the
 #' group means, the subject parameters, the summed log-likelihood and the
 #' per-subject log-likelihoods between the first and last thirds of the stage,
 #' in units of their interquartile range. These are the statistics the
@@ -112,8 +112,9 @@ robust_gaps <- function(med, mad){
 #' @param flat_selection,flat_p1,flat_p2,flat_quantile The flat test's settings,
 #'   as in `stop_criteria`
 #' @return A list with elements `chains` (one row per chain: median log
-#'   posterior, gap to the best chain, robust z, flagged), `cells` (the flagged
-#'   subject-by-chain cells with the donor chain and the gain), `flat` (drift
+#'   posterior, gap to the best chain, robust z, flagged), `subjects` (one row
+#'   per subject, widest first: spread, the chains with the highest and lowest
+#'   median log-likelihood), `flat` (drift
 #'   statistics per selection) and `culls` (the record of culls in the object).
 #' @export
 chain_diagnostics <- function(emc, stage = get_last_stage(emc), window = NULL, cull = TRUE,
@@ -124,7 +125,7 @@ chain_diagnostics <- function(emc, stage = get_last_stage(emc), window = NULL, c
   if(!is.null(window)) cull$window <- window
   d <- cull_diagnostics(emc, stage, cull)
   f <- flat_diagnostics(emc, stage, flat_selection, flat_p1, flat_p2, flat_quantile)
-  out <- list(chains = d$chains, cells = d$cells, flat = f, culls = emc[[1]]$culls)
+  out <- list(chains = d$chains, subjects = d$subjects, flat = f, culls = emc[[1]]$culls)
   class(out) <- "emc.diagnostics"
   out
 }
@@ -134,25 +135,28 @@ print.emc.diagnostics <- function(x, ...){
   if(all(is.na(x$chains$gap))) cat("Chains: the stage is too short for the mode comparison (fewer than 500 iterations).\n") else
   cat("Chains (log posterior under the common group model over the window; gap to the best chain, z in within-chain spread):\n")
   print(x$chains, row.names = FALSE, digits = 3)
-  if(nrow(x$cells)) { cat("\nSubject-by-chain cells another chain would improve on:\n"); print(x$cells, row.names = FALSE, digits = 3) }
-  else cat("\nNo subject-by-chain cell flagged.\n")
+  if(nrow(x$subjects)) { s <- x$subjects
+    cat(sprintf("\nSubject spread (range over chains of the median log-likelihood): %d subject(s) above 5, widest %s at %.1f\n",
+                sum(s$spread > 5), s$subject[1], s$spread[1]))
+    print(utils::head(s[s$spread > 5, , drop = FALSE], 10), row.names = FALSE, digits = 3) }
   if(length(x$flat)) { cat("\nFlat test (drift between the first and last thirds, in IQRs; mcse in the same units;\n  ess: effective size of the worst series over the window, summed over chains):\n")
     print(do.call(rbind, lapply(names(x$flat), function(n) data.frame(selection = n, drift = x$flat[[n]]$drift, mcse = x$flat[[n]]$mcse, ess = x$flat[[n]]$ess, worst = x$flat[[n]]$worst))), row.names = FALSE, digits = 3) }
   if(!is.null(x$culls)) { cat("\nCulls applied:\n"); print(do.call(rbind, lapply(x$culls, as.data.frame)), row.names = FALSE) }
   invisible(x)
 }
 
-# Chain- and cell-level statistics over the window. `cells` holds every
-# (subject, chain) whose parameters a donor chain improves on by more than
-# cell_gap log posterior units and cell_z within-chain spreads, judged under
-# the recipient chain's own group parameters.
+# Chain-level statistics over the window, and the subject spread: per subject,
+# the range over chains of the median log-likelihood. The spread is reported,
+# not acted on: a subject in a different mode in some chains is invisible in
+# the summed statistic (tens of units against a sum over hundreds of
+# subjects), and moving it between modes needs a proper Metropolis move, not
+# a copy of another chain's parameters.
 cull_diagnostics <- function(emc, stage, cull){
   st <- chain_window_stats(emc, stage, cull$window, cull$min_window)
   nch <- length(emc)
   empty <- list(chains = data.frame(chain = seq_len(nch), median_lp = NA, gap = NA, z = NA, flagged = FALSE),
-                cells = data.frame(subject = character(0), chain = integer(0), donor = integer(0), gain = numeric(0), z = numeric(0)))
+                subjects = data.frame(subject = character(0), spread = numeric(0), best = integer(0), worst = integer(0)))
   if(is.null(st) || length(st[[1]]$it) < 20 || nch < 2) return(empty)
-  group <- uses_group_density(emc)
   # chains: summed log posterior per draw under the common group model
   tot <- sapply(st, function(s) colSums(s$common))
   med <- matrix(apply(tot, 2, median), 1); mad <- matrix(apply(tot, 2, mad), 1)
@@ -164,41 +168,17 @@ cull_diagnostics <- function(emc, stage, cull){
     keep <- order(chains$gap)[seq_len(2)]
     chains$flagged[keep] <- FALSE
   }
-  # cells: candidate subjects are those whose per-subject log posterior differs between chains
-  smed <- sapply(st, function(s) apply(s$lp, 1, median)); smad <- sapply(st, function(s) apply(s$lp, 1, mad))
-  if(is.null(dim(smed))) { smed <- matrix(smed, 1); smad <- matrix(smad, 1) }
-  cg <- robust_gaps(smed, smad)
-  cand <- which(cg$gap > cull$cell_gap & cg$z > cull$cell_z, arr.ind = TRUE)
-  cells <- empty$cells
-  subjects <- rownames(emc[[1]]$samples$subj_ll)
-  if(nrow(cand)){
-    rows <- list()
-    for(r in seq_len(nrow(cand))){
-      s <- cand[r, 1]; cc <- cand[r, 2]; donor <- cg$best[s]
-      if(donor == cc) next
-      # the donor's median parameter vector for this subject, judged in the recipient's group
-      rec <- emc[[cc]]$samples; dn <- st[[donor]]
-      a_donor <- apply(emc[[donor]]$samples$alpha[, s, dn$it, drop = FALSE], 1, median)
-      ll_donor <- median(dn$ll[s, ])
-      if(group){
-        gd <- vapply(st[[cc]]$it, function(t) group_logdens(matrix(a_donor), rec$theta_mu[, t], rec$theta_var[, , t]), 0)
-        value_in_recipient <- ll_donor + median(gd)
-      } else value_in_recipient <- ll_donor
-      own <- st[[cc]]$lp[s, ]
-      gain <- value_in_recipient - median(own); z <- gain / max(mad(own), 1e-8)
-      if(is.finite(gain) && gain > cull$cell_gap && z > cull$cell_z)
-        rows[[length(rows) + 1]] <- data.frame(subject = subjects[s], chain = cc, donor = donor, gain = gain, z = z)
-    }
-    if(length(rows)) cells <- do.call(rbind, rows)
-  }
-  # A chain whose gap is mostly explained by its flagged cells gets the cell
-  # repairs, not a cull of the whole chain; otherwise its cells are not listed.
-  for(cc in chains$chain[chains$flagged]){
-    explained <- sum(cells$gain[cells$chain == cc])
-    if(explained >= .5 * chains$gap[cc]) chains$flagged[cc] <- FALSE
-  }
-  cells <- cells[!cells$chain %in% chains$chain[chains$flagged], , drop = FALSE]
-  list(chains = chains, cells = cells)
+  list(chains = chains, subjects = subject_spread(st, rownames(emc[[1]]$samples$subj_ll)))
+}
+
+# Per subject: the range over chains of the median log-likelihood over the
+# window, with the chains at either end; widest first
+subject_spread <- function(st, subjects){
+  sm <- sapply(st, function(s) apply(s$ll, 1, median))
+  if(is.null(dim(sm))) sm <- matrix(sm, 1)
+  out <- data.frame(subject = subjects, spread = apply(sm, 1, function(v) diff(range(v))),
+                    best = apply(sm, 1, which.max), worst = apply(sm, 1, which.min))
+  out[order(-out$spread), , drop = FALSE]
 }
 
 # ---- flat test ---------------------------------------------------------------
@@ -280,7 +260,10 @@ flat_done <- function(flat, max_flat_loc, flat_mcse){
 
 # Overwrite the last stored draw of chain `to` with the state of chain `from`
 # at a draw of its window (a random one at least `back` draws from the end
-# where the window allows), so the next run starts the chain there.
+# where the window allows), so the next run starts the chain there. The
+# donor's kernel settings come too (the joint move's step and location scales,
+# the particle settings): settings adapted where the culled chain was stuck do
+# not fit the region it restarts in. Its random number state stays its own.
 respawn_chain <- function(emc, to, from, its_from, back = 100){
   pick <- its_from[seq_len(max(1, length(its_from) - back))]
   t <- pick[sample.int(length(pick), 1)]
@@ -296,22 +279,13 @@ respawn_chain <- function(emc, to, from, its_from, back = 100){
     V <- s_from$theta_var[, , t]
     s_to$last_theta_var_inv <- tryCatch(chol2inv(chol(V)), error = function(e) MASS::ginv(V))
   }
+  for(a in c("scale_move", "pm_settings")) attr(s_to, a) <- attr(s_from, a)
   emc[[to]]$samples <- s_to
   emc
 }
 
-# Replace subject `s` of chain `to` by the donor's parameters at a random draw of the donor's window
-respawn_subject <- function(emc, to, from, s, its_from, back = 100){
-  pick <- its_from[seq_len(max(1, length(its_from) - back))]
-  t <- pick[sample.int(length(pick), 1)]
-  last <- emc[[to]]$samples$idx
-  emc[[to]]$samples$alpha[, s, last] <- emc[[from]]$samples$alpha[, s, t]
-  emc[[to]]$samples$subj_ll[s, last] <- emc[[from]]$samples$subj_ll[s, t]
-  emc
-}
-
-# Apply the culls that have persisted: whole chains first, then cells of the
-# surviving chains. Returns the object and a record of what was done.
+# Apply the whole-chain culls that have persisted. Returns the object and a
+# record of what was done.
 apply_culls <- function(emc, diag, stage, cull, state){
   its <- stage_window(emc, stage, cull$window, cull$min_window)
   done <- list()
@@ -324,30 +298,14 @@ apply_culls <- function(emc, diag, stage, cull, state){
     done[[length(done) + 1]] <- list(iteration = emc[[1]]$samples$idx, stage = stage, chain = cc, subject = NA_character_,
                                      donor = from, gap = diag$chains$gap[cc], z = diag$chains$z[cc])
   }
-  cells <- diag$cells
-  if(nrow(cells)){
-    key <- paste(cells$subject, cells$chain)
-    due <- state$cell_count[key] >= cull$persistence; due[is.na(due)] <- FALSE
-    for(r in which(due)){
-      if(cells$chain[r] %in% culled_chains) next
-      s <- match(cells$subject[r], rownames(emc[[1]]$samples$subj_ll))
-      emc <- respawn_subject(emc, cells$chain[r], cells$donor[r], s, its[[cells$donor[r]]], cull$reburn)
-      done[[length(done) + 1]] <- list(iteration = emc[[1]]$samples$idx, stage = stage, chain = cells$chain[r], subject = cells$subject[r],
-                                       donor = cells$donor[r], gap = cells$gain[r], z = cells$z[r])
-    }
-  }
   list(emc = emc, done = done)
 }
 
-# Persistence bookkeeping across checks: consecutive flags per chain and per cell
+# Persistence bookkeeping across checks: consecutive flags per chain
 update_cull_state <- function(state, diag, nch){
-  if(is.null(state)) state <- list(chain_count = integer(nch), cell_count = integer(0))
+  if(is.null(state)) state <- list(chain_count = integer(nch))
   f <- diag$chains$flagged
   state$chain_count <- ifelse(f, state$chain_count + 1L, 0L)
-  key <- if(nrow(diag$cells)) paste(diag$cells$subject, diag$cells$chain) else character(0)
-  new <- setNames(integer(length(key)), key)
-  for(k in key) new[k] <- (if(!is.na(state$cell_count[k])) state$cell_count[k] else 0L) + 1L
-  state$cell_count <- new
   state
 }
 

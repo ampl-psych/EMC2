@@ -113,16 +113,14 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 each check, a chain whose log posterior over the comparison window (the subject
 log-likelihoods plus the group density of the subject parameters, under one group mean
 and covariance shared by all chains) is held below the best chain's by more than
-\code{chain_gap} units and \code{chain_z} within-chain spreads, or a single subject in a chain
-whose parameters another chain would improve on under this chain's own group
-parameters by more than \code{cell_gap} units and \code{cell_z} spreads, is flagged; once
-flagged on \code{persistence} consecutive checks it is respawned from a draw of a better
-chain. The window is the last two thirds of the stage once it holds \code{min_window}
+\code{chain_gap} units and \code{chain_z} within-chain spreads is flagged; once flagged on
+\code{persistence} consecutive checks it is respawned from a draw of a better chain, with
+that chain's kernel settings. The window is the last two thirds of the stage once it holds \code{min_window}
 iterations (500 in sample, 250 in burn, where a false cull costs nothing but one
 chain's diversity; a short window mistakes the chains' slow wandering for a held-apart
 mode), or \code{window} iterations if given. In \code{sample} the stage then restarts after
 \code{reburn} discarded iterations and the tries count over, at most \code{max_culls} times
-per stage. Defaults: \verb{persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5, cell_gap = 5, cell_z = 3, max_culls = 2, reburn = 100}. Culls are recorded in
+per stage. Defaults: \verb{persistence = 2, min_window = 500, chain_gap = 10, chain_z = 2.5, max_culls = 2, reburn = 100}. Culls are recorded in
 \code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes the lower mode
 is spurious; with a genuinely multimodal posterior it favours the mode most chains
 found.
