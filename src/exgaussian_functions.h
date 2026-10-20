@@ -95,7 +95,7 @@ inline double pexg(
     const double shifted_exp_sigma = 0.
 ) {
 
-  // minimal parameter validation - assuming mu, sigma, and tau are all finite
+  if (is_nan(q) || is_nan(mu) || is_nan(sigma) || is_nan(tau)) return na_real();
   if (sigma <= 0. || tau <= 0.) return na_real();
 
   if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
@@ -117,43 +117,74 @@ inline double pexg(
   double tau_p = std::max(tau, SIG_TAU_EPS);
   double sig_p = std::max(sigma, SIG_TAU_EPS);
 
-  // compute the two Phi terms
-  double log_phi_1 = R::pnorm((q - mu) / sig_p, 0.0, 1.0, true, true);
-  double log_phi_2 = R::pnorm(
-    (q - mu) / sig_p - sig_p / tau_p, 0.0, 1.0, true, true
-  );
-
-  // compute the exp term in log space
-  double log_exp_term = (mu - q) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
-
-  // combined second term
-  double log_second_term = log_exp_term + log_phi_2;
-
-  // now obtain ex-Gaussian log CDF
-  double log_cdf_lower;
-  if (log_phi_1 > log_second_term) {
-    log_cdf_lower = log_diff_exp(log_phi_1, log_second_term);
+  const double z = (q - mu) / sig_p;
+  const double a = sig_p / tau_p;
+  const double w = z - a;
+  double log_second_term;
+  if (w < -40.0) {
+    // Scale Phi(w) analytically before combining with its large exponential.
+    // This CDF-only continued fraction does not change dexg's Mills polynomial.
+    const double v = -w;
+    double denom = v;
+    for (int k = 12; k >= 1; --k) denom = v + k / denom;
+    log_second_term = -(0.5 * z) * z - 0.5 * std::log(2.0 * M_PI) - std::log(denom);
   } else {
-    log_cdf_lower = neg_inf();
+    log_second_term = a * (0.5 * a - z) + R::pnorm(w, 0.0, 1.0, true, true);
   }
-
-  double out;
   if (lower_tail) {
-    out = log_p ? log_cdf_lower : std::exp(log_cdf_lower);
-  } else {
-    if (is_neg_inf(log_cdf_lower)) {
-      out = log_p ? 0. : 1.;
-    } else {
-      double cdf_lower = std::exp(log_cdf_lower);
-      if (cdf_lower >= 1. - 1e-15) {
-        out = log_p ? neg_inf() : 0.;
-      } else {
-        out = log_p ? log1m(cdf_lower) : -std::expm1(log_cdf_lower);
-      }
-    }
+    const double log_phi = R::pnorm(z, 0.0, 1.0, true, true);
+    const double out = log_phi > log_second_term ? log_diff_exp(log_phi, log_second_term) : neg_inf();
+    return log_p ? out : std::exp(out);
   }
+  // S(q) = Phi(-z) + exp(-a*z + a*a/2) * Phi(z-a), without 1-F(q).
+  const double log_normal_survivor = R::pnorm(z, 0.0, 1.0, false, true);
+  double out;
+  if (is_neg_inf(log_normal_survivor)) out = log_second_term;
+  else if (is_neg_inf(log_second_term)) out = log_normal_survivor;
+  else {
+    const double hi = std::max(log_normal_survivor, log_second_term);
+    const double lo = std::min(log_normal_survivor, log_second_term);
+    out = hi + std::log1p(std::exp(lo - hi));
+  }
+  if (is_nan(out)) return na_real();
+  out = std::min(0.0, out);
+  return log_p ? out : std::exp(out);
+}
 
-  return(out);
+// Shared interval mass for truncated densities, CDFs and survivors.
+inline double exg_log_interval(double lower, double upper, double mu, double sigma,
+                               double tau, double normal_ratio, double shifted_exp_sigma) {
+  if (is_nan(lower) || is_nan(upper) || is_nan(mu) || is_nan(sigma) || is_nan(tau)) return na_real();
+  if (sigma <= 0. || tau <= 0. || lower > upper) return na_real();
+  if (lower == upper) return neg_inf();
+  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
+    const double lo = std::max(lower, mu);
+    if (upper <= lo) return neg_inf();
+    return -(lo - mu) / tau + R::pexp(upper - lo, tau, true, true);
+  }
+  if (is_neg_inf(lower)) return pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
+  if (is_pos_inf(upper)) return pexg(lower, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma);
+
+  const double width = upper - lower;
+  const double mid = lower + 0.5 * width;
+  const bool normal = normal_ratio > 0. && tau < normal_ratio * sigma;
+  const double sig = normal ? sigma : std::max(sigma, SIG_TAU_EPS);
+  if (width / sig * std::max(1.0, std::fabs((mid - mu) / sig)) < 1e-2) {
+    // Simpson's rule in log space avoids cancellation at nearly equal endpoints.
+    const double l = dexg(lower, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
+    const double m = dexg(mid, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
+    const double u = dexg(upper, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
+    if (is_nan(l) || is_nan(m) || is_nan(u)) return na_real();
+    const double peak = std::max(l, std::max(m, u));
+    if (is_neg_inf(peak)) return neg_inf();
+    return std::log(width) + peak + std::log((std::exp(l-peak)+4.0*std::exp(m-peak)+std::exp(u-peak))/6.0);
+  }
+  const double uf = pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
+  if (uf <= -composite_detail::LOG2) {
+    return log_diff_exp(uf, pexg(lower, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma));
+  }
+  return log_diff_exp(pexg(lower, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma),
+                      pexg(upper, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma));
 }
 
 // probability density function of truncated ex-Gaussian distribution
@@ -172,6 +203,7 @@ inline double dtexg(
   if (is_neg_inf(lower) && is_pos_inf(upper)) {
     return dexg(x, mu, sigma, tau, log_d, normal_ratio, shifted_exp_sigma);
   }
+  if (is_nan(x) || is_nan(lower) || is_nan(upper)) return na_real();
   if (sigma <= 0. || tau <= 0.) return na_real();
   if (lower >= upper) return na_real();
   if (x <= lower || x >= upper) return log_d ? neg_inf() : 0.;
@@ -179,26 +211,7 @@ inline double dtexg(
   double x_ld = dexg(x, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
   if (is_neg_inf(x_ld)) return log_d ? neg_inf() : 0.;
 
-  double lower_lcdf, upper_lcdf;
-  if (is_neg_inf(lower)) {
-    lower_lcdf = neg_inf();
-  } else {
-    lower_lcdf = pexg(lower, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
-  }
-  if (is_pos_inf(upper)) {
-    upper_lcdf = 0.;
-  } else {
-    upper_lcdf = pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
-  }
-
-  if (lower_lcdf == upper_lcdf) return log_d ? neg_inf() : 0.;
-
-  double log_normaliser;
-  if (is_neg_inf(lower_lcdf)) {
-    log_normaliser = upper_lcdf;
-  } else {
-    log_normaliser = log_diff_exp(upper_lcdf, lower_lcdf);
-  }
+  const double log_normaliser = exg_log_interval(lower, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
   if (is_neg_inf(log_normaliser)) return log_d ? neg_inf() : 0.;
 
   double log_out = x_ld - log_normaliser;
@@ -222,6 +235,7 @@ inline double ptexg(
   if (is_neg_inf(lower) && is_pos_inf(upper)) {
     return pexg(q, mu, sigma, tau, lower_tail, log_p, normal_ratio, shifted_exp_sigma);
   }
+  if (is_nan(q) || is_nan(lower) || is_nan(upper)) return na_real();
   if (sigma <= 0. || tau <= 0.) return na_real();
   if (lower >= upper) return na_real();
   if (q <= lower) {
@@ -233,32 +247,21 @@ inline double ptexg(
     return log_p ? (out == 0. ? neg_inf() : 0.) : out;
   }
 
-  double q_cdf = pexg(q, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
-
-  double lower_cdf, upper_cdf;
-  if (is_neg_inf(lower)) {
-    lower_cdf = 0.;
-  } else {
-    lower_cdf = pexg(lower, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
+  const double norm = exg_log_interval(lower, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
+  if (is_nan(norm) || is_neg_inf(norm)) return na_real();
+  const double numerator = lower_tail ? exg_log_interval(lower, q, mu, sigma, tau, normal_ratio, shifted_exp_sigma)
+                                     : exg_log_interval(q, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
+  double out = numerator - norm;
+  if (is_nan(out)) return na_real();
+  // Derive the larger tail from the smaller interval to keep complements consistent.
+  if (out > -composite_detail::LOG2) {
+    const double other = lower_tail ? exg_log_interval(q, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma) - norm
+                                   : exg_log_interval(lower, q, mu, sigma, tau, normal_ratio, shifted_exp_sigma) - norm;
+    if (is_nan(other)) return na_real();
+    out = log1m_exp(std::min(0.0, other));
   }
-  if (is_pos_inf(upper)) {
-    upper_cdf = 1.;
-  } else {
-    upper_cdf = pexg(upper, mu, sigma, tau, true, false, normal_ratio, shifted_exp_sigma);
-  }
-
-  double normaliser = upper_cdf - lower_cdf;
-  if (normaliser <= 0.) return na_real();
-
-  double out;
-  if (lower_tail) {
-    out = (q_cdf - lower_cdf) / normaliser;
-  } else {
-    out = (upper_cdf - q_cdf) / normaliser;
-  }
-  out = std::max(0., std::min(1., out));
-
-  return log_p ? std::log(out) : out;
+  out = std::min(0.0, out);
+  return log_p ? out : std::exp(out);
 }
 
 
