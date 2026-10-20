@@ -9,6 +9,7 @@
 //                   near-double precision (~1.2e-15 max abs error).
 //                   Two-branch: rational poly (|x| < 7.07) /
 //                   continued fraction (|x| >= 7.07).
+//                   Direct small tails and log tails; no finite log cutoff.
 //                   Pure C++; thread-safe.
 //   PNORM_MODE 2  — A&S 7.1.26 rational approximation,
 //                   single-precision quality (~1.5e-7 max abs error).
@@ -47,9 +48,8 @@
 #include <Rcpp.h>
 #endif
 
-// Large finite sentinel used in place of -inf for logp underflow in modes 1
-// and 2. Safe under -ffinite-math-only / -Ofast. Any log-likelihood floor
-// will treat this identically to -inf in practice.
+// Legacy finite sentinel retained for mode 2 only. Mode 1 computes log tails
+// directly; likelihood flooring belongs after complete likelihood evaluation.
 #define PNORM_LOG_ZERO (-1e30)
 
 namespace pnorm_detail {
@@ -113,23 +113,39 @@ constexpr double M5 = 16.064177579207;
 constexpr double M6 = 1.75566716318264;
 constexpr double M7 = 8.83883476483184e-02;
 
+[[gnu::always_inline]] inline double rational_tail_ratio(double z)
+{
+  const double n = (((((N6 * z + N5) * z + N4) * z + N3) * z + N2) * z + N1) * z + N0;
+  const double d = ((((((M7 * z + M6) * z + M5) * z + M4) * z + M3) * z + M2) * z + M1) * z + M0;
+  return n / d;
+}
+
+[[gnu::always_inline]] inline double tail_denom(double z)
+{
+  return z + 1.0 / (z + 2.0 / (z + 3.0 / (z + 4.0 / (z + 13.0 / 20.0))));
+}
+
+// z is nonnegative. Only the probability output may naturally underflow.
+[[gnu::always_inline]] inline double small_tail(double z)
+{
+  const double e = std::exp(-(0.5 * z) * z);
+  if (z < SPLIT) return e * rational_tail_ratio(z);
+  return e / (RT2PI * tail_denom(z));
+}
+
+[[gnu::always_inline]] inline double log_small_tail(double z)
+{
+  if (z < SPLIT) return std::log(small_tail(z));
+  // Prevent fast-math from reassociating this as z*z/2 and overflowing
+  // before the log probability itself exceeds the double range.
+  const volatile double half_z = 0.5 * z;
+  return -half_z * z - std::log(RT2PI) - std::log(tail_denom(z));
+}
+
 [[gnu::always_inline]] inline double phi(double x)
 {
-  const double z = std::fabs(x);
-  double c = 0.0;
-
-  if (z <= 37.0) {
-    const double e = std::exp(-z * z / 2.0);
-    if (z < SPLIT) {
-      const double n = (((((N6 * z + N5) * z + N4) * z + N3) * z + N2) * z + N1) * z + N0;
-      const double d = ((((((M7 * z + M6) * z + M5) * z + M4) * z + M3) * z + M2) * z + M1) * z + M0;
-      c = e * n / d;
-    } else {
-      const double f = z + 1.0 / (z + 2.0 / (z + 3.0 / (z + 4.0 / (z + 13.0 / 20.0))));
-      c = e / (RT2PI * f);
-    }
-  }
-  return x <= 0.0 ? c : 1.0 - c;
+  const double tail = small_tail(std::fabs(x));
+  return x <= 0.0 ? tail : 1.0 - tail;
 }
 
 } // namespace hart
@@ -138,10 +154,14 @@ inline double hart_pnorm_std(double x, bool lower, bool logp)
 {
   double boundary;
   if (pnorm_boundary(x, lower, logp, boundary)) return boundary;
-  double cdf = hart::phi(x);
-  if (!lower) cdf = 1.0 - cdf;
-  if (logp) return (cdf > 0.0) ? std::log(cdf) : PNORM_LOG_ZERO;
-  return cdf;
+  const double z = std::fabs(x);
+  const bool small = (x <= 0.0) == lower;
+  if (logp) {
+    if (small) return hart::log_small_tail(z);
+    return std::log1p(-hart::small_tail(z));
+  }
+  const double tail = hart::small_tail(z);
+  return small ? tail : 1.0 - tail;
 }
 #endif // PNORM_MODE == 1
 
