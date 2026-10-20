@@ -319,7 +319,7 @@ series_hsdm_fpt <- function(t, a = 1, sigma = 1, bessel = NULL) {
   zeros <- bessel$zeros
   JVZ <- bessel$JVZ
   lambda <- (zeros * zeros) / 2
-  weights <- (zeros * zeros) / JVZ
+  weights <- (zeros * zeros) / (2 * JVZ)
   v_scale <- (sigma * sigma) / (a * a)
   s <- t * v_scale
   out <- as.vector(v_scale * (exp(-outer(s, lambda, "*")) %*% weights))
