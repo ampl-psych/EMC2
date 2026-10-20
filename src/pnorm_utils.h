@@ -34,6 +34,8 @@
 #define PNORM_UTILS_H
 
 #include <cmath>
+#include "nan_check.h"
+#include "r_constants.h"
 
 #ifndef PNORM_MODE
 #define PNORM_MODE 1  // default: Hart near-double, pure C++, thread-safe
@@ -52,6 +54,16 @@
 
 namespace pnorm_detail {
 
+// Inspect bits before arithmetic so these boundaries also work with fast-math.
+inline bool pnorm_boundary(double x, bool lower, bool logp, double& out)
+{
+  if (is_nan(x)) { out = x; return true; }
+  if (!is_inf(x)) return false;
+  const bool zero = is_neg_inf(x) == lower;
+  out = zero ? (logp ? neg_inf() : 0.0) : (logp ? 0.0 : 1.0);
+  return true;
+}
+
 // ===========================================================================
 // MODE 0 — exact R::pnorm
 // Requires R API. NOT safe to call from non-main threads.
@@ -60,6 +72,8 @@ namespace pnorm_detail {
 #if PNORM_MODE == 0
 inline double exact_pnorm_std(double x, bool lower, bool logp)
 {
+  double boundary;
+  if (pnorm_boundary(x, lower, logp, boundary)) return boundary;
   return R::pnorm(x, 0.0, 1.0, lower, logp);
 }
 inline double exact_qnorm_std(double p)
@@ -122,6 +136,8 @@ constexpr double M7 = 8.83883476483184e-02;
 
 inline double hart_pnorm_std(double x, bool lower, bool logp)
 {
+  double boundary;
+  if (pnorm_boundary(x, lower, logp, boundary)) return boundary;
   double cdf = hart::phi(x);
   if (!lower) cdf = 1.0 - cdf;
   if (logp) return (cdf > 0.0) ? std::log(cdf) : PNORM_LOG_ZERO;
@@ -165,6 +181,8 @@ namespace as7126 {
 
 inline double as_pnorm_std(double x, bool lower, bool logp)
 {
+  double boundary;
+  if (pnorm_boundary(x, lower, logp, boundary)) return boundary;
   double cdf = as7126::phi(x);
   if (!lower) cdf = 1.0 - cdf;
   if (logp) return (cdf > 0.0) ? std::log(cdf) : PNORM_LOG_ZERO;
@@ -331,6 +349,8 @@ inline double fast_dlnorm(double t, double m, double s)
 // Upper tail phi(x) = 1 - phi(x), without log. Used by pigt0 to avoid log(pnorm).
 inline double pnorm_upper(double x)
 {
+  double boundary;
+  if (pnorm_detail::pnorm_boundary(x, false, false, boundary)) return boundary;
 #if   PNORM_MODE == 2
   return 1.0 - pnorm_detail::as7126::phi(x);
 #elif PNORM_MODE == 1
