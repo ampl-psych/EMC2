@@ -496,12 +496,14 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     gd      <- final_progress$gd$gd
     gd_final <- NULL
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- rhat_message(final_progress$gd$rule, gd)
 
     ess_message <- if (!is.null(final_progress$curr_min_es) &&
                        is.finite(final_progress$curr_min_es)) {
       sprintf("min ESS=%.0f", final_progress$curr_min_es)
     } else NULL
+    ss <- stop_stats_message(final_progress$stop_stats)
+    if (!is.null(ss)) ess_message <- paste(c(ess_message, sub("^ \\| ", "", ss)), collapse = " | ")
 
     final_iters <- chain_n(emc)[1, "sample"]
 
@@ -537,8 +539,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' pass ``max_gd``. Default ``NULL`` uses the maximum throughout.
 #'
 #' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
-#' every ``step_size`` iterations. After a failed check, the first third of the stage's
-#' draws is dropped if this lowers the stopping diagnostic.
+#' every ``step_size`` iterations. When a check fails on all of the stage's draws, its first
+#' third is dropped only if without it the rule passes and every other criterion of the stage
+#' is then met, so that the stage stops; otherwise all draws are kept and the stage grows. Each
+#' drop is recorded in ``emc[[1]]$stop_record$discards``.
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
@@ -552,6 +556,70 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
+#'
+#' ``cull`` (``TRUE`` or a list; ``burn`` and ``sample`` stages): chain culling for a chain
+#' held in a different region. After each check, a chain whose summed subject
+#' log-likelihood over the comparison window is below the best chain's by more than
+#' ``chain_gap`` units and ``chain_z`` within-chain spreads, and (when that gap is below
+#' ``lp_guard_below``) whose own log posterior (the subject log-likelihoods plus the group
+#' density under its own group parameters) is below the other chains' median, is flagged; once flagged on ``persistence``
+#' consecutive checks it is respawned from a draw of another chain, with that chain's
+#' kernel settings. The log posterior under pooled group parameters is not compared: its
+#' group-density term differs between healthy chains by hundreds of units. The window is
+#' the last two thirds of the stage once it holds ``min_window`` iterations (500 in
+#' sample, 250 in burn), or ``window`` iterations if given. In ``burn`` at most
+#' ``max_culls`` re-seeds are made at checks (default 2 there), and when burn ends (by its
+#' rule or at ``max_tries``) every chain then in a different region is re-seeded once
+#' more without the persistence requirement, since burn draws are discarded. In
+#' ``sample`` the stage restarts after ``reburn`` discarded iterations and the tries
+#' count over, at most ``max_culls`` times (default 1). Defaults: ``persistence = 2,
+#' min_window = 500, chain_gap = 200, chain_z = 5, lp_guard_below = 1000, max_culls = 1,
+#' reburn = 100``. Culls
+#' are recorded in ``emc[[1]]$culls`` and shown by [chain_diagnostics()]. Culling assumes
+#' the lower region is spurious; with a genuinely multimodal posterior it favours the
+#' region most chains found.
+#'
+#' ``max_flat_loc`` (numeric; ``sample`` stage): the flat test. The medians of the first
+#' ``flat_p1`` and last ``flat_p2`` (default thirds) of the stage, pooled over chains, may
+#' differ by at most this many interquartile ranges for the group means and the summed
+#' log-likelihood (the largest drift) and for the subject parameters and per-subject
+#' log-likelihoods (their ``flat_quantile``, default the .99 quantile); ``flat_selection``
+#' (default ``c("mu", "alpha", "LL", "subj_ll")``) chooses the series. A value of 0.3
+#' keeps a stage running while it is still settling; on a stationary chain the test then
+#' also demands roughly 200 effective draws in the window, since smaller differences
+#' between the thirds are noise. ``flat_mcse`` (default 0, off) lets a drift within that
+#' many Monte Carlo standard errors of zero pass instead. The progress line reports each
+#' drift with its Monte Carlo error, and the window's effective sample size when that is
+#' under 20 per chain, where a slow wave and a trend cannot be told apart (see
+#' ``chain_diagnostics()``). ``max_sample_iter``
+#' (integer) keeps only the last that many draws of the sample stage, so a long run is
+#' judged on its recent window.
+#'
+#' ``min_ess``, ``max_ll_gap``, ``max_subj_spread`` (numeric; ``sample`` stage; each off
+#' unless given): criteria on statistics reported at every sample check, read on the same
+#' draws as the Rhat. ``min_ess``: the smallest effective sample size over the group means
+#' and log group SDs, summed over chains, must reach this (along a ridge the Rhat rule can
+#' be met with about 100). ``max_ll_gap``: the median summed log-likelihood over the last
+#' two thirds of the draws may differ between the best and worst chain by at most this
+#' many units (fine fits differ by tens, a chain in a different region by thousands; the
+#' log posterior is not used, since its group-density term differs between healthy chains
+#' by hundreds). ``max_subj_spread``: no subject's median log-likelihood may differ
+#' between chains by more than this many units (a subject in a different mode in some
+#' chains). The progress line shows all three whether or not they are set, and the fit
+#' records the rules that were on and their last values in ``emc[[1]]$stop_record``.
+#'
+#' ``abort_gd``, ``abort_try`` (``sample`` stage; off unless ``abort_gd`` is given;
+#' ``abort_try`` defaults to 20): an early stop for runs that will not converge. At check
+#' ``abort_try`` of the stage (counted, as ``max_tries`` is, within this call), if the stop
+#' rule's own Rhat (the value compared with ``max_gd``) still exceeds ``abort_gd`` the stage
+#' ends with a warning saying why, and ``emc[[1]]$stop_record$aborted`` holds the check and
+#' the value; ``stop_record$met`` is then ``FALSE``. In replays of hierarchical fits and
+#' single-subject extensions no run above 1.5 at check 20 met the rule later, so
+#' ``abort_gd = 1.5`` saves the remaining tries at no cost to outcomes.
+#'
+#' The number of chains is set when the object is made ([make_emc()]): by default 6 for hierarchical types and 3
+#' for ``type = "single"``; the stop rule's Rhat, the chain comparisons of ``cull`` and the subject spread all need
+#' several chains, and 6 is the default the culling and the opt-in sample criteria were tuned with.
 #'
 #' Chains share fixed likelihood inputs in one process. Each chain has its own
 #' native RNG, seeded from R, with its state saved in the samples for resuming fits.

@@ -37,8 +37,60 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   # min_es also needs a selection: without one, check_progress() has nothing to
   # take the effective size of and the criterion is silently always satisfied.
-  if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
+  if(!is.null(stop_criteria[["min_es"]]) && is.null(stop_criteria$selection)){
     stop_criteria$selection <- if(type != "single") c('alpha', 'mu') else 'alpha'
+  }
+  # Chain culling (burn and sample) and the flat test (sample); see ?fit
+  if(!is.null(stop_criteria$cull)){
+    if(!stage %in% c("burn", "sample")) stop("`cull` applies to the burn and sample stages")
+    given <- if(is.list(stop_criteria$cull)) names(stop_criteria$cull) else character(0)
+    stop_criteria$cull <- cull_defaults(stop_criteria$cull)
+    # In burn a false cull costs nothing but one chain's diversity, so the
+    # comparison starts earlier there than in sample, where it restarts the stage.
+    if(!is.null(stop_criteria$cull) && stage == "burn" && !"min_window" %in% given)
+      stop_criteria$cull$min_window <- 250L
+    # One restart in sample (a cull there discards the stage); burn may re-seed twice at its checks
+    if(!is.null(stop_criteria$cull) && stage == "burn" && !"max_culls" %in% given)
+      stop_criteria$cull$max_culls <- 2L
+  }
+  if(!is.null(stop_criteria$max_flat_loc)){
+    if(stage != "sample") stop("`max_flat_loc` applies to the sample stage")
+    if(is.null(stop_criteria$flat_selection)) stop_criteria$flat_selection <- c("mu", "alpha", "LL", "subj_ll")
+    if(type == "single") stop_criteria$flat_selection <- setdiff(stop_criteria$flat_selection, "mu")
+    if(is.null(stop_criteria$flat_p1)) stop_criteria$flat_p1 <- 1/3
+    if(is.null(stop_criteria$flat_p2)) stop_criteria$flat_p2 <- 1/3
+    if(is.null(stop_criteria$flat_quantile)) stop_criteria$flat_quantile <- c(mu = 1, alpha = .99, LL = 1, subj_ll = .99)
+    if(is.null(stop_criteria$flat_mcse)) stop_criteria$flat_mcse <- 0
+    if(stop_criteria$flat_p1 <= 0 || stop_criteria$flat_p1 > 1 || stop_criteria$flat_p2 <= 0 || stop_criteria$flat_p2 > 1)
+      stop("flat_p1 and flat_p2 must be in (0, 1]")
+    if(!all(stop_criteria$flat_selection %in% c("mu", "alpha", "LL", "subj_ll")))
+      stop("flat_selection must be one or more of: mu, alpha, LL, subj_ll")
+  }
+  # Opt-in sample-stage criteria on the per-check statistics (sample_stop_stats()):
+  # an effective-size floor on the group means and log group SDs, and vetoes on
+  # the chains' log-likelihood gap and the subject spread. The statistics are
+  # reported at every check whether or not these are set.
+  for(k in c("min_ess", "max_ll_gap", "max_subj_spread")){
+    v <- stop_criteria[[k]]
+    if(is.null(v)) next
+    if(stage != "sample") stop("`", k, "` applies to the sample stage")
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v < 0) stop("`", k, "` must be a single non-negative number")
+    if(k == "min_ess" && type == "single") stop("`min_ess` reads the group means: not for type 'single'")
+  }
+  # Opt-in early stop: at check abort_try of the sample stage (default 20), a run
+  # whose rule Rhat still exceeds abort_gd ends the stage, recorded as aborted
+  if(!is.null(stop_criteria$abort_try) && is.null(stop_criteria$abort_gd)) stop("`abort_try` needs `abort_gd`")
+  if(!is.null(stop_criteria$abort_gd)){
+    if(stage != "sample") stop("`abort_gd` applies to the sample stage")
+    v <- stop_criteria$abort_gd
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v <= 1) stop("`abort_gd` must be a single number above 1")
+    if(is.null(stop_criteria$abort_try)) stop_criteria$abort_try <- 20L
+    v <- stop_criteria$abort_try
+    if(!is.numeric(v) || length(v) != 1 || is.na(v) || v < 1 || v != round(v)) stop("`abort_try` must be a single positive integer")
+  }
+  if(!is.null(stop_criteria$max_sample_iter)){
+    if(stage != "sample") stop("`max_sample_iter` applies to the sample stage")
+    if(stop_criteria$max_sample_iter < 10) stop("max_sample_iter must be at least 10")
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
@@ -106,6 +158,8 @@ run_emc <- function(emc, stage, stop_criteria,
   total_iters_stage <- chain_n(emc)[,stage][1]
   if(stage != "preburn"){
     iter <- stop_criteria[["iter"]] + total_iters_stage
+    if(!is.null(stop_criteria$max_sample_iter) && iter > stop_criteria$max_sample_iter)
+      stop("`max_sample_iter` is below the iterations requested, which could never be reached")
   } else{
     iter <- stop_criteria[["iter"]]
   }
@@ -152,10 +206,40 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       emc <- sub_emc
     }
+    if(stage == "sample" && !is.null(stop_criteria$max_sample_iter)){
+      emc <- trim_sample_stage(emc, stop_criteria$max_sample_iter)
+    }
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
                                verbose, progress)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
+    # Chain culling: a chain (or one subject in one chain) held in a worse
+    # mode than the others is respawned from a better chain; in sample the
+    # stage then restarts, with the tries counter, after a short re-burn.
+    if(!progress$done && !is.null(stop_criteria$cull) && emc[[1]]$init){
+      cull <- stop_criteria$cull
+      n_culls <- if(is.null(progress$n_culls)) 0L else progress$n_culls
+      if(n_culls < cull$max_culls){
+        diag <- cull_diagnostics(emc, stage, cull)
+        progress$cull_state <- update_cull_state(progress$cull_state, diag, length(emc))
+        act <- apply_culls(emc, diag, stage, cull, progress$cull_state)
+        if(length(act$done)){
+          emc <- act$emc
+          emc[[1]]$culls <- c(emc[[1]]$culls, act$done)
+          progress$n_culls <- n_culls + 1L
+          progress$cull_state <- NULL
+          if(verbose) for(d in act$done) message(sprintf("Cull %d of %d: %s of chain %d respawned from chain %d (log-likelihood %.0f below, z = %.1f)",
+            progress$n_culls, cull$max_culls, if(is.na(d$subject)) "the state" else paste("subject", d$subject), d$chain, d$donor, d$gap, d$z))
+          if(stage == "sample"){
+            emc <- cull_restart(emc, cull$reburn, verbose, verboseProgress, particle_factor, search_width,
+                                cores_per_chain, cores_for_chains, n_blocks, on_singular, .context)
+            iter <- stop_criteria[["iter"]] + chain_n(emc)[1, stage]
+            progress$trys <- 0L; progress$iters_total <- 0
+            if(verbose) message("Sample stage restarted after the cull")
+          }
+        }
+      }
+    }
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
@@ -170,19 +254,28 @@ run_emc <- function(emc, stage, stop_criteria,
       gd <- progress$gd$gd
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
-      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- rhat_message(progress$gd$rule, gd)
+      if(isTRUE(progress$gd$discarded > 0)) gd_message <- paste0(gd_message, sprintf(" (first %d draws dropped: the rule passes without them)", progress$gd$discarded))
       # get min effective sample size (ESS)
       ess_message <- NULL
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
         ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
       }
+      if(!is.null(progress$stop_stats)) ess_message <- paste0(ess_message, stop_stats_message(progress$stop_stats))
+      if(!is.null(progress$flat) && length(progress$flat)){
+        ess_message <- paste0(ess_message, " | drift(se)=", paste(sprintf("%s %.2f(%.2f)", names(progress$flat),
+          vapply(progress$flat, function(f) f$drift, 0), vapply(progress$flat, function(f) f$mcse, 0)), collapse = ", "))
+        wess <- vapply(progress$flat, function(f) if(is.null(f$ess) || !is.finite(f$ess)) Inf else f$ess, 0)
+        if(any(wess < 20 * length(emc))) ess_message <- paste0(ess_message, sprintf(" | window ESS %.0f: too short to tell a wave from a trend", min(wess)))
+      }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
-      target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
+      target_iters  <- if (stage == "sample") iter else NULL     # the run's target, including draws it started with
 
       # this one is still a little buggy, should fix
       rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
-                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
+                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size,
+                                           done = progress$done)
 
       message(sprintf("[%s | try=%d | iters=%d%s%s] Duration: %s - ETA: %s-%s",
                       stage, progress$trys, progress$total_iters,
@@ -194,6 +287,27 @@ run_emc <- function(emc, stage, stop_criteria,
     }
   }
 
+  # Burn exit: a chain still in a different region is re-seeded before adapt
+  if(stage == "burn" && !is.null(stop_criteria$cull) && emc[[1]]$init){
+    n0 <- length(emc[[1]]$culls)
+    emc <- burn_exit_reseed(emc, stop_criteria$cull, verbose)
+    if(length(emc[[1]]$culls) > n0 && !is.null(fileName)){
+      emc <- strip_duplicates(emc); class(emc) <- "emc"
+      save(emc, file = fix_fileName(fileName))
+      emc <- restore_duplicates(emc)
+    }
+  }
+  # The fit's record of how the sample stage ended: the rules that were on, their
+  # values at the last check, and whether the rules, max_tries or the early stop
+  # (aborted: the check and the rule's value) ended it
+  if(stage == "sample"){
+    on <- c("max_gd", "mean_gd", "gd_quantile", "iter", "min_ess", "max_ll_gap", "max_subj_spread", "max_flat_loc", "flat_mcse", "min_es",
+            "abort_gd", "abort_try")
+    emc[[1]]$stop_record <- list(criteria = stop_criteria[intersect(on, names(stop_criteria))], cull = stop_criteria$cull,
+                                 met = isTRUE(progress$met), tries = progress$trys, rule = progress$gd$rule,
+                                 stats = progress$stop_stats, culls = length(emc[[1]]$culls),
+                                 discards = progress$discards, aborted = progress$aborted)
+  }
   if(stage == "adapt" && is.null(emc[[1]]$sample_kernel) &&
      get_last_stage(emc) == "adapt"){
     emc <- tune_sample_kernel(emc, verbose = verbose, verboseProgress = verboseProgress,
@@ -322,7 +436,11 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
   if(stage %in% c("burn", "adapt", "sample") && emc[[1]]$type != "single"){
-    emc <- create_lik_prec(emc, n_cores)
+    # The joint location move's directions are rebuilt only when the stage
+    # changes (and when the sample kernel is tuned, which starts a "sample"
+    # kernel on an adapt object), so that their step sizes keep adapting
+    # across the steps of a stage instead of restarting at every step.
+    emc <- create_lik_prec(emc, n_cores, reset_directions = stage != get_last_stage(emc))
   }
   if(fixed) emc <- store_sample_kernel(emc)
   return(emc)
@@ -348,13 +466,13 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-create_lik_prec <- function(emc, n_cores){
+create_lik_prec <- function(emc, n_cores, reset_directions = TRUE){
   history_idx <- proposal_window(emc[[1]]$samples$idx)
   lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
   for (i in seq_along(emc)) {
     emc[[i]]$lik_prec <- lik_prec
     sm <- attr(emc[[i]]$samples, "scale_move")
-    if (!is.null(sm)) {
+    if (reset_directions && !is.null(sm)) {
       sm$directions <- NULL
       attr(emc[[i]]$samples, "scale_move") <- sm
     }
@@ -365,7 +483,7 @@ create_lik_prec <- function(emc, n_cores){
 check_progress <- function (emc, stage, iter, stop_criteria,
                             max_tries, step_size, n_cores, verbose, progress = NULL)
 {
-  min_es <- stop_criteria$min_es
+  min_es <- stop_criteria[["min_es"]]
   if(is.null(min_es)) min_es <- 0
   selection <- stop_criteria$selection
   min_unique <- stop_criteria$min_unique
@@ -378,61 +496,113 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
   }
+  cull_state <- progress$cull_state; n_culls <- progress$n_culls; discards <- progress$discards
   gd <- check_gd(emc, stage, stop_criteria$max_gd, stop_criteria$mean_gd,
                  omit_mpsrf = stop_criteria$omit_mpsrf, selection = selection,
                  gd_quantile = stop_criteria$gd_quantile)
-  iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
-  if (min_es == 0) {
-    es_done <- TRUE
-  } else if (total_iters_stage != 0) {
-    class(emc) <- "emc"
-    curr_min_es <- Inf
-    for(select in selection){
-      curr_min_es <- min(c(ess_summary(emc, selection = select,
-                                                stage = stage, stat_only = TRUE), curr_min_es))
+  adapt_rhat0 <- progress$adapt_rhat
+  # Every criterion read on one set of draws: all of the stage's, or (when
+  # check_gd() offers them) the stage without its first third
+  evaluate <- function(emc, gd){
+    total_iters_stage <- chain_n(emc)[, stage][1]
+    iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
+    curr_min_es <- NULL
+    if (min_es == 0) {
+      es_done <- TRUE
+    } else if (total_iters_stage != 0) {
+      class(emc) <- "emc"
+      curr_min_es <- Inf
+      for(select in selection){
+        curr_min_es <- min(c(ess_summary(emc, selection = select,
+                                         stage = stage, stat_only = TRUE), curr_min_es))
+      }
+      es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es > min_es)
+    } else {
+      es_done <- FALSE
     }
-    es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es >
-                        min_es)
+    if (stage == "adapt") {
+      samples_merged <- merge_chains(emc)
+      test_samples <- extract_samples(samples_merged, stage = "adapt",
+                                      samples_merged$samples$idx, n_chains = length(emc))
+      adapted <- test_adapted(emc[[1]], test_samples, min_unique, n_cores, verbose)
+    } else {
+      adapted <- TRUE
+    }
+    # max_tries reached with only adapt's convergence rule unmet is not worth
+    # the warning below: the kernel is then built from the draws there are
+    enough_unique <- adapted
+    adapt_rhat <- adapt_rhat0
+    if(stage == "adapt" && adapted){
+      adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
+      adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
+    }
+    # The per-check statistics and the opt-in criteria on them (see sample_stop_stats())
+    stop_stats <- if(stage == "sample") sample_stop_stats(emc, stage) else NULL
+    crit_ok <- function(k, stat, below){
+      v <- stop_criteria[[k]]
+      if(is.null(v)) return(TRUE)
+      s <- stop_stats[[stat]]
+      if(is.null(s) || !is.finite(s)) return(FALSE)
+      if(below) s <= v else s >= v
+    }
+    stats_ok <- crit_ok("min_ess", "ess_min", FALSE) & crit_ok("max_ll_gap", "ll_gap", TRUE) &
+      crit_ok("max_subj_spread", "subj_spread", TRUE)
+    # The flat test: the stage must not still be drifting between its first and last thirds
+    flat <- NULL; flat_ok <- TRUE
+    if(stage == "sample" && !is.null(stop_criteria$max_flat_loc) && total_iters_stage >= 30){
+      flat <- flat_diagnostics(emc, stage, stop_criteria$flat_selection, stop_criteria$flat_p1,
+                               stop_criteria$flat_p2, stop_criteria$flat_quantile)
+      flat_ok <- flat_done(flat, stop_criteria$max_flat_loc, stop_criteria$flat_mcse)
+    } else if(stage == "sample" && !is.null(stop_criteria$max_flat_loc)) flat_ok <- FALSE
+    list(emc = emc, gd = gd, total_iters_stage = total_iters_stage, iter_done = iter_done, es_done = es_done,
+         curr_min_es = curr_min_es, adapted = adapted, enough_unique = enough_unique, adapt_rhat = adapt_rhat,
+         stop_stats = stop_stats, stats_ok = stats_ok, flat = flat, flat_ok = flat_ok,
+         met = es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok)
   }
-  else {
-    es_done <- FALSE
+  r <- evaluate(gd$emc, gd)
+  discarded <- 0
+  if(!r$met && !is.null(gd$short)){
+    r_short <- evaluate(gd$short$emc, gd$short)
+    if(r_short$met){
+      r <- r_short; discarded <- gd$short$removed
+      discards <- c(discards, list(list(stage = stage, try = trys, removed = discarded, kept = r$total_iters_stage)))
+    }
+  }
+  emc <- r$emc; gd <- r$gd; gd$discarded <- discarded
+  total_iters_stage <- r$total_iters_stage; iter_done <- r$iter_done; es_done <- r$es_done
+  curr_min_es <- r$curr_min_es; adapted <- r$adapted; enough_unique <- r$enough_unique; adapt_rhat <- r$adapt_rhat
+  stop_stats <- r$stop_stats; stats_ok <- r$stats_ok; flat <- r$flat; flat_ok <- r$flat_ok
+  # The early stop: at check abort_try, a rule Rhat still above abort_gd ends the stage
+  aborted <- NULL
+  if(stage == "sample" && !is.null(stop_criteria$abort_gd) && trys == stop_criteria$abort_try &&
+     !isTRUE(r$met) && isTRUE(gd$rule > stop_criteria$abort_gd)){
+    aborted <- list(try = trys, rule = gd$rule, abort_gd = stop_criteria$abort_gd)
+    warning(sprintf("Sample stage stopped early at check %d: the rule's Rhat %.3f is above abort_gd = %s. The fit is recorded as aborted (stop_record$aborted), not met.",
+                    trys, gd$rule, format(stop_criteria$abort_gd)), call. = FALSE)
   }
   trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries)
-  if (stage == "adapt") {
-    samples_merged <- merge_chains(emc)
-    test_samples <- extract_samples(samples_merged, stage = "adapt",
-                                    samples_merged$samples$idx, n_chains = length(emc))
-    adapted <- test_adapted(emc[[1]], test_samples,
-                            min_unique, n_cores, verbose)
-
-  }
-  else {
-    adapted <- TRUE
-  }
-  # max_tries reached with only adapt's convergence rule unmet is not worth
-  # the warning below: the kernel is then built from the draws there are
-  enough_unique <- adapted
-  adapt_rhat <- progress$adapt_rhat
-  if(stage == "adapt" && adapted){
-    adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
-    adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
-  }
-  done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
-  if(es_done & gd$gd_done & adapted & !iter_done){
+  # In sample, max_tries binds even when the iteration target is unmet (a
+  # continuation's target can stay out of reach), so the run cannot continue
+  # past max_tries
+  done <- (es_done & iter_done & gd$gd_done & adapted & flat_ok & stats_ok) | (trys_done & (iter_done | stage == "sample")) |
+    !is.null(aborted)
+  if(es_done & gd$gd_done & adapted & flat_ok & stats_ok & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  if (trys_done & iter_done) {
-    if(!(es_done & gd$gd_done & enough_unique)){
+  if (trys_done & (iter_done | stage == "sample") & is.null(aborted)) {
+    if(!(es_done & gd$gd_done & enough_unique & flat_ok & stats_ok & iter_done)){
       warning("Max tries reached. If this happens in burn-in while trying to get
             gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
             sample, if run for long enough, sample usually converges eventually.")
     }
   }
-  return(list(emc = gd$emc, done = done, step_size = step_size,
+  return(list(emc = emc, done = done, step_size = step_size,
               trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
-              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
+              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL,
+              flat = flat, cull_state = cull_state, n_culls = n_culls, stop_stats = stop_stats,
+              discards = discards, met = r$met, aborted = aborted))
 }
 
 # The Rhats a stop rule reads (split_rhat()), subject-level ones from the
@@ -489,6 +659,14 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   list(gd = gd_out, alpha = alpha, other = other)
 }
 
+# The progress line's Rhat: the rule's value (what max_gd is compared with) and,
+# when it differs, the plain maximum over every Rhat the rule read
+rhat_message <- function(rule, gd){
+  if(is.null(rule) || !length(gd)) return(NULL)
+  m <- max(gd)
+  if(isTRUE(all.equal(rule, m))) sprintf("Rhat=%.3f", rule) else sprintf("Rhat=%.3f (rule; max %.3f)", rule, m)
+}
+
 # Apply the quantile only to subject parameters; all other Rhats must pass.
 gd_top <- function(g, gd_quantile = NULL){
   if(is.null(gd_quantile) || is.null(g$alpha) || !all(is.finite(g$alpha))) return(max(g$gd))
@@ -507,25 +685,30 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf,
       (is.null(max_gd) || gd_top(g, gd_quantile) < max_gd) &&
       (is.null(mean_gd) || mean(g$gd) < mean_gd)
   }
+  # the value the rule compares with max_gd (mean_gd): the maximum over the
+  # non-subject Rhats and the gd_quantile quantile of the subject ones
+  rule_of <- function(g) if(!is.null(max_gd)) gd_top(g, gd_quantile) else mean(g$gd)
   g <- stage_gds(emc, selection, stage, omit_mpsrf)
   ok_gd <- gd_ok(g)
+  # The first third of the stage may be dropped, but only when that makes the
+  # rule pass: it is offered here as `short` and check_progress() takes it only
+  # if every other criterion then passes too. A failing stage keeps all its
+  # draws (repeated discards held failing stages at 300-450 draws, where an ESS
+  # floor or the cull's window can never be reached).
+  short <- NULL
   if(!ok_gd) {
-    # Drop the first third if this improves the stopping diagnostic.
     n_remove <- round(chain_n(emc)[,stage][1]/3)
     g_short <- tryCatch(stage_gds(emc, selection, stage, omit_mpsrf, filter = n_remove), error = function(e) NULL)
-    if(!is.null(g_short) &&
-       ((is.null(max_gd) && mean(g_short$gd) < mean(g$gd)) || (!is.null(max_gd) && max(g_short$gd) < max(g$gd)))){
+    if(!is.null(g_short) && gd_ok(g_short)){
       emc_short <- try(subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE), silent = TRUE)
       if(!is(emc_short, "try-error")){
-        g <- g_short
-        emc <- emc_short
-        ok_gd <- gd_ok(g)
+        class(emc_short) <- "emc"
+        short <- list(gd = g_short$gd, gd_done = TRUE, emc = emc_short, rule = rule_of(g_short), removed = n_remove)
       }
     }
   }
-  gd <- g$gd
   class(emc) <- "emc"
-  return(list(gd = gd, gd_done = ok_gd, emc = emc))
+  return(list(gd = g$gd, gd_done = ok_gd, emc = emc, rule = rule_of(g), short = short))
 }
 
 # window: build them from the last `window` adapt iterations of each chain
@@ -675,6 +858,10 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
 #' @param model A model list. If none is supplied, the model specified in `design()` is used.
 #' @param type A string indicating whether to run a `standard`, `blocked`, `diagonal`, `diagonal-gamma`, `SEM`, `infnt_factor`, or `single` (non-hierarchical) model.
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
+#'   The default, `NULL`, gives 6 chains for hierarchical types and 3 for `type = "single"`: with 3 chains a subject
+#'   with two posterior modes goes undetected in roughly a quarter to a third of fits (every chain in the same mode),
+#'   with 6 in 6-12%, at about 1.4 times the cost per unit of effective sample size; 12 chains bought nothing more on
+#'   the hard fits used to set this. A number given is used as it is.
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
 #' @param group_design A design for group-level mappings, made using `group_design()`.
@@ -715,7 +902,7 @@ apply_design_TC <- function(data, design, rt_resolution = NULL) {
 
 make_emc <- function(data,design,model=NULL,
                     type="standard",
-                    n_chains=3,compress=TRUE,rt_resolution=1/60,
+                    n_chains=NULL,compress=TRUE,rt_resolution=1/60,
                     prior_list = NULL, group_design = NULL,
                     par_groups=NULL, memory_saver = FALSE, ...){
   # arguments for future compatibility
@@ -732,6 +919,7 @@ make_emc <- function(data,design,model=NULL,
   if(!is.null(prior_list)){
     type <- attr(prior_list[[1]], "type")
   }
+  if(is.null(n_chains)) n_chains <- if(type == "single") 3L else 6L
   if(!is.null(group_design) && !type %in% c("standard", "diagonal", "blocked")){
     stop("group_design can only be used with standard, blocked or diagonal type")
   }
@@ -1000,4 +1188,33 @@ restore_duplicates <- function(emc) {
     emc[[i]]$samples <- samples
   }
   return(emc)
+}
+
+
+# Keep at most max_sample_iter draws of the sample stage (the flat test's window)
+trim_sample_stage <- function(emc, max_sample_iter){
+  n <- chain_n(emc)[1, "sample"]
+  if(n <= max_sample_iter) return(emc)
+  subset(emc, stage = "sample", filter = n - max_sample_iter, keep_stages = TRUE)
+}
+
+# After a cull in the sample stage: keep only the respawned last draw, run
+# `reburn` discarded iterations with the fixed sample kernel, and keep only
+# the last draw again, so the stage starts afresh from settled states.
+cull_restart <- function(emc, reburn, verbose, verboseProgress, particle_factor, search_width,
+                         cores_per_chain, cores_for_chains, n_blocks, on_singular, context){
+  last_only <- function(emc) subset(emc, stage = "sample", filter = chain_n(emc)[1, "sample"] - 1, keep_stages = TRUE)
+  emc <- last_only(emc)
+  if(reburn > 0){
+    emc <- add_proposals(emc, "sample", cores_per_chain * cores_for_chains, n_blocks)
+    sub_emc <- run_native_chains(emc, stage = "sample", iter = reburn, verbose = verbose,
+                                 verboseProgress = verboseProgress, particle_factor = particle_factor,
+                                 search_width = search_width, n_cores = cores_per_chain,
+                                 cores_for_chains = cores_for_chains, on_singular = on_singular, context = context)
+    class(sub_emc) <- "emc"
+    emc <- concat_emc(emc, sub_emc, reburn, "sample")
+    emc <- last_only(emc)
+  }
+  class(emc) <- "emc"
+  emc
 }

@@ -93,8 +93,10 @@ subject-level (\code{alpha}) diagnostics. All other selected parameters must sti
 pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
 \code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
-every \code{step_size} iterations. After a failed check, the first third of the stage's
-draws is dropped if this lowers the stopping diagnostic.
+every \code{step_size} iterations. When a check fails on all of the stage's draws, its first
+third is dropped only if without it the rule passes and every other criterion of the stage
+is then met, so that the stage stops; otherwise all draws are kept and the stage grows. Each
+drop is recorded in \code{emc[[1]]$stop_record$discards}.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
@@ -108,6 +110,69 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 \code{omit_mpsrf} (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is \code{FALSE}.
 
 \code{iter} (integer): The number of MCMC samples to collect.
+
+\code{cull} (\code{TRUE} or a list; \code{burn} and \code{sample} stages): chain culling for a chain
+held in a different region. After each check, a chain whose summed subject
+log-likelihood over the comparison window is below the best chain's by more than
+\code{chain_gap} units and \code{chain_z} within-chain spreads, and (when that gap is below
+\code{lp_guard_below}) whose own log posterior (the subject log-likelihoods plus the group
+density under its own group parameters) is below the other chains' median, is flagged; once flagged on \code{persistence}
+consecutive checks it is respawned from a draw of another chain, with that chain's
+kernel settings. The log posterior under pooled group parameters is not compared: its
+group-density term differs between healthy chains by hundreds of units. The window is
+the last two thirds of the stage once it holds \code{min_window} iterations (500 in
+sample, 250 in burn), or \code{window} iterations if given. In \code{burn} at most
+\code{max_culls} re-seeds are made at checks (default 2 there), and when burn ends (by its
+rule or at \code{max_tries}) every chain then in a different region is re-seeded once
+more without the persistence requirement, since burn draws are discarded. In
+\code{sample} the stage restarts after \code{reburn} discarded iterations and the tries
+count over, at most \code{max_culls} times (default 1). Defaults: \code{persistence = 2,
+min_window = 500, chain_gap = 200, chain_z = 5, lp_guard_below = 1000, max_culls = 1, reburn = 100}. Culls
+are recorded in \code{emc[[1]]$culls} and shown by \code{\link[=chain_diagnostics]{chain_diagnostics()}}. Culling assumes
+the lower region is spurious; with a genuinely multimodal posterior it favours the
+region most chains found.
+
+\code{max_flat_loc} (numeric; \code{sample} stage): the flat test. The medians of the first
+\code{flat_p1} and last \code{flat_p2} (default thirds) of the stage, pooled over chains, may
+differ by at most this many interquartile ranges for the group means and the summed
+log-likelihood (the largest drift) and for the subject parameters and per-subject
+log-likelihoods (their \code{flat_quantile}, default the .99 quantile); \code{flat_selection}
+(default \code{c("mu", "alpha", "LL", "subj_ll")}) chooses the series. A value of 0.3
+keeps a stage running while it is still settling; on a stationary chain the test then
+also demands roughly 200 effective draws in the window, since smaller differences
+between the thirds are noise. \code{flat_mcse} (default 0, off) lets a drift within that
+many Monte Carlo standard errors of zero pass instead. The progress line reports each
+drift with its Monte Carlo error, and the window's effective sample size when that is
+under 20 per chain, where a slow wave and a trend cannot be told apart (see
+\code{chain_diagnostics()}). \code{max_sample_iter}
+(integer) keeps only the last that many draws of the sample stage, so a long run is
+judged on its recent window.
+
+\code{min_ess}, \code{max_ll_gap}, \code{max_subj_spread} (numeric; \code{sample} stage; each off
+unless given): criteria on statistics reported at every sample check, read on the same
+draws as the Rhat. \code{min_ess}: the smallest effective sample size over the group means
+and log group SDs, summed over chains, must reach this (along a ridge the Rhat rule can
+be met with about 100). \code{max_ll_gap}: the median summed log-likelihood over the last
+two thirds of the draws may differ between the best and worst chain by at most this
+many units (fine fits differ by tens, a chain in a different region by thousands; the
+log posterior is not used, since its group-density term differs between healthy chains
+by hundreds). \code{max_subj_spread}: no subject's median log-likelihood may differ
+between chains by more than this many units (a subject in a different mode in some
+chains). The progress line shows all three whether or not they are set, and the fit
+records the rules that were on and their last values in \code{emc[[1]]$stop_record}.
+
+\code{abort_gd}, \code{abort_try} (\code{sample} stage; off unless \code{abort_gd} is given;
+\code{abort_try} defaults to 20): an early stop for runs that will not converge. At check
+\code{abort_try} of the stage (counted, as \code{max_tries} is, within this call), if the stop
+rule's own Rhat (the value compared with \code{max_gd}) still exceeds \code{abort_gd} the stage
+ends with a warning saying why, and \code{emc[[1]]$stop_record$aborted} holds the check and
+the value; \code{stop_record$met} is then \code{FALSE}. In replays of hierarchical fits and
+single-subject extensions no run above 1.5 at check 20 met the rule later, so
+\code{abort_gd = 1.5} saves the remaining tries at no cost to outcomes.
+
+The number of chains is set when the object is made (\code{\link[=make_emc]{make_emc()}}): by default 6 for hierarchical types and 3
+for \code{type = "single"}; the stop rule's Rhat, the chain comparisons of \code{cull} and the subject spread all need
+several chains, and 6 is the default the culling and the opt-in sample criteria were tuned with.
 
 Chains share fixed likelihood inputs in one process. Each chain has its own
 native RNG, seeded from R, with its state saved in the samples for resuming fits.

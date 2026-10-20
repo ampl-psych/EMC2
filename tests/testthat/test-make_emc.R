@@ -13,7 +13,7 @@ psd <- c(v=1,
          B=0.3,B_Eneutral=0.3,B_Eaccuracy=0.3,B_lRright=0.3,A=0.4,t0=.5)
 prior_LBABE <- prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
 emc <- make_emc(forstmann,design_LBABE,type="standard",  prior=prior_LBABE,
-                          compress = FALSE)
+                          compress = FALSE, n_chains = 3)   # the snapshot is of 3 chains (the default is now 6)
 
 test_that("make_emc", {
   expect_snapshot(str(emc, give.attr = F))
