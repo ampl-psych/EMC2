@@ -61,6 +61,7 @@ struct SSSpec {
   int col_v = -1, col_B = -1, col_A = -1, col_t0 = -1, col_s = -1; // SSRDEX go
   int col_muS = -1, col_sigmaS = -1, col_tauS = -1, col_lbS = -1;
   int col_tf = -1, col_gf = -1;
+  int col_normal_ratio = -1, col_shifted_exp_sigma = -1;
 
   int n_trials = 0, n_rows = 0, n_acc = 0;
 
@@ -89,11 +90,20 @@ namespace ssf {
 
 inline double par(const ParamTable& pt, int row, int col) { return pt.base(row, col); }
 
+inline double normal_ratio(const SSSpec& s, const ParamTable& pt, int row) {
+  return s.col_normal_ratio < 0 ? 0.0 : par(pt, row, s.col_normal_ratio);
+}
+
+inline double shifted_exp_sigma(const SSSpec& s, const ParamTable& pt, int row) {
+  return s.col_shifted_exp_sigma < 0 ? 0.0 : par(pt, row, s.col_shifted_exp_sigma);
+}
+
 // log density of a go accumulator (row r) finishing at time t
 inline double go_lpdf(const SSSpec& s, const ParamTable& pt, int r, double t) {
   if (s.is_exg) {
     double v = dtexg(t, par(pt, r, s.col_mu), par(pt, r, s.col_sigma), par(pt, r, s.col_tau),
-                     par(pt, r, s.col_lb), pos_inf(), true);
+                     par(pt, r, s.col_lb), pos_inf(), true,
+                     normal_ratio(s, pt, r), shifted_exp_sigma(s, pt, r));
     return is_finite(v) ? v : neg_inf();
   }
   const double sc = par(pt, r, s.col_s);
@@ -109,7 +119,8 @@ inline double go_lpdf(const SSSpec& s, const ParamTable& pt, int r, double t) {
 inline double go_lsurv(const SSSpec& s, const ParamTable& pt, int r, double t) {
   if (s.is_exg) {
     double v = ptexg(t, par(pt, r, s.col_mu), par(pt, r, s.col_sigma), par(pt, r, s.col_tau),
-                     par(pt, r, s.col_lb), pos_inf(), false, true);
+                     par(pt, r, s.col_lb), pos_inf(), false, true,
+                     normal_ratio(s, pt, r), shifted_exp_sigma(s, pt, r));
     return is_finite(v) ? v : neg_inf();
   }
   const double sc = par(pt, r, s.col_s);
@@ -123,7 +134,8 @@ inline double go_lsurv(const SSSpec& s, const ParamTable& pt, int r, double t) {
 // log survivor of the stop process (parameters on row r0) at stop-relative time q
 inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q) {
   double v = ptexg(q, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS), par(pt, r0, s.col_tauS),
-                   par(pt, r0, s.col_lbS), pos_inf(), false, true);
+                   par(pt, r0, s.col_lbS), pos_inf(), false, true,
+                   normal_ratio(s, pt, r0), shifted_exp_sigma(s, pt, r0));
   return is_finite(v) ? v : neg_inf();
 }
 
@@ -133,14 +145,15 @@ inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q
 // ---------------------------------------------------------------------------
 struct StopIntegrand {
   const SSSpec* s; const ParamTable* pt;
-  double ssd, muS, sigS, tauS, lbS;
+  double ssd, muS, sigS, tauS, lbS, normal_ratio, shifted_exp_sigma;
   const int* go_rows; int n_go;
 };
 
 inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, double* out) {
   const StopIntegrand* w = static_cast<const StopIntegrand*>(p);
   const double xx = x[0];
-  double lf = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true);
+  double lf = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true,
+                    w->normal_ratio, w->shifted_exp_sigma);
   if (!is_finite(lf)) { out[0] = 0.0; return 0; }
   double ls = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
@@ -157,7 +170,8 @@ inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, 
 inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
                                   const int* go_rows, int n_go, double ssd, double upper) {
   StopIntegrand w{&s, &pt, ssd, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS),
-                  par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS), go_rows, n_go};
+                  par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS),
+                  normal_ratio(s, pt, r0), shifted_exp_sigma(s, pt, r0), go_rows, n_go};
   const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS);
   double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS);
   if (!(hi > lo)) return neg_inf();
@@ -211,11 +225,13 @@ inline double stop_success_lp(const SSSpec& s, const ParamTable& pt, int trial, 
   keys.push_back(s.ssd[trial]); keys.push_back(upper);
   keys.push_back(par(pt, r0, s.col_muS)); keys.push_back(par(pt, r0, s.col_sigmaS));
   keys.push_back(par(pt, r0, s.col_tauS)); keys.push_back(par(pt, r0, s.col_lbS));
+  keys.push_back(normal_ratio(s, pt, r0)); keys.push_back(shifted_exp_sigma(s, pt, r0));
   for (int i = 0; i < n_go; ++i) {
     const int r = go_rows[i];
     if (s.is_exg) {
       keys.push_back(par(pt, r, s.col_mu)); keys.push_back(par(pt, r, s.col_sigma));
       keys.push_back(par(pt, r, s.col_tau)); keys.push_back(par(pt, r, s.col_lb));
+      keys.push_back(normal_ratio(s, pt, r)); keys.push_back(shifted_exp_sigma(s, pt, r));
     } else {
       keys.push_back(par(pt, r, s.col_v)); keys.push_back(par(pt, r, s.col_B));
       keys.push_back(par(pt, r, s.col_A)); keys.push_back(par(pt, r, s.col_t0));
@@ -448,6 +464,10 @@ inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
   s.col_muS = pt.base_index_for("muS"); s.col_sigmaS = pt.base_index_for("sigmaS");
   s.col_tauS = pt.base_index_for("tauS"); s.col_lbS = pt.base_index_for("exgS_lb");
   s.col_tf = pt.base_index_for("tf"); s.col_gf = pt.base_index_for("gf");
+  const auto nr = pt.name_to_base_idx.find("exg_normal_ratio");
+  if (nr != pt.name_to_base_idx.end()) s.col_normal_ratio = nr->second;
+  const auto se = pt.name_to_base_idx.find("exg_shifted_exp_sigma");
+  if (se != pt.name_to_base_idx.end()) s.col_shifted_exp_sigma = se->second;
 
   NumericVector RT = data["rt"];
   IntegerVector R  = data["R"];
