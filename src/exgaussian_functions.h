@@ -4,6 +4,7 @@
 #include <Rcpp.h>
 #include <cmath>
 #include "composite_functions.h"
+#include "pnorm_utils.h"
 #include "r_constants.h"
 #include "nan_check.h"
 using namespace Rcpp;
@@ -66,7 +67,7 @@ inline double dexg(
 
   // compute Phi term
   double z = (x - mu) / sig_p - sig_p / tau_p;
-  double log_phi = R::pnorm(z, 0.0, 1.0, true, true);
+  double log_phi = PNORM_STD(z, true, true);
   if (is_nan(log_phi)) {
     return na_real();
   }
@@ -103,7 +104,7 @@ inline double pexg(
   }
 
   if (normal_ratio > 0. && tau < normal_ratio * sigma) {
-    return R::pnorm(q, mu, sigma, lower_tail, log_p);
+    return PNORM_STD((q - mu) / sigma, lower_tail, log_p);
   }
 
   // handle infinite q
@@ -129,15 +130,15 @@ inline double pexg(
     for (int k = 12; k >= 1; --k) denom = v + k / denom;
     log_second_term = -(0.5 * z) * z - 0.5 * std::log(2.0 * M_PI) - std::log(denom);
   } else {
-    log_second_term = a * (0.5 * a - z) + R::pnorm(w, 0.0, 1.0, true, true);
+    log_second_term = a * (0.5 * a - z) + PNORM_STD(w, true, true);
   }
   if (lower_tail) {
-    const double log_phi = R::pnorm(z, 0.0, 1.0, true, true);
+    const double log_phi = PNORM_STD(z, true, true);
     const double out = log_phi > log_second_term ? log_diff_exp(log_phi, log_second_term) : neg_inf();
     return log_p ? out : std::exp(out);
   }
   // S(q) = Phi(-z) + exp(-a*z + a*a/2) * Phi(z-a), without 1-F(q).
-  const double log_normal_survivor = R::pnorm(z, 0.0, 1.0, false, true);
+  const double log_normal_survivor = PNORM_STD(z, false, true);
   double out;
   if (is_neg_inf(log_normal_survivor)) out = log_second_term;
   else if (is_neg_inf(log_second_term)) out = log_normal_survivor;
