@@ -3,6 +3,12 @@
 
 #include <Rcpp.h>
 #include <cmath>
+#include "r_constants.h"
+#include "nan_check.h"
+
+namespace composite_detail {
+  constexpr double LOG2 = 0.693147180559945309417232121458176568;
+}
 
 /**
  * @file composite_funs.h
@@ -89,23 +95,18 @@ inline Rcpp::NumericVector log1p_exp(const Rcpp::NumericVector& x) {
  * @brief Compute log(1 - exp(x)) in a numerically stable way
  *
  * This function computes log(1 - exp(x)) for x <= 0 without intermediate
- * overflow or underflow issues. Returns NA_REAL for x >= 0 since
- * 1 - exp(x) <= 0 when x >= 0.
+ * overflow or underflow issues. Uses expm1 near zero and log1p for
+ * well-separated terms. Returns NA_REAL for x > 0.
  *
  * @param x Input value (must be <= 0)
  * @return log(1 - exp(x)) if x < 0, log(0) = -Inf if x = 0, NA_REAL if x > 0
  */
-inline double log1m_exp(double x) {
-  if (ISNAN(x)) return NA_REAL;
-  if (x > 0.0) return NA_REAL;  // 1 - exp(x) < 0 for x > 0
-  if (x == 0.0) return R_NegInf;  // log(1 - 1) = log(0) = -Inf
-  if (x == R_NegInf) return 0.0;  // log(1 - 0) = log(1) = 0
-
-  if (x > -0.693147) {  // x > -log(2)
-    return std::log(-std::expm1(x));
-  } else {
-    return log1m(std::exp(x));
-  }
+[[gnu::always_inline]] inline double log1m_exp(double x) {
+  if (is_nan(x) || x > 0.0) { return na_real(); }
+  if (is_neg_inf(x)) { return 0.0; }
+  if (x == 0.0) { return neg_inf(); }
+  if (x > -composite_detail::LOG2) { return std::log(-std::expm1(x)); }
+  return log1m(std::exp(x));
 }
 
 /**
@@ -210,28 +211,21 @@ inline double log_sum_exp(const Rcpp::NumericVector& x) {
  *
  * @param a First log-scale value (must be >= b)
  * @param b Second log-scale value (must be <= a)
- * @return log(exp(a) - exp(b)) if a > b, R_NegInf if a == b, NA_REAL if a < b or invalid inputs
+ * @return log(exp(a) - exp(b)) if a > b, -Inf if a == b,
+ * NA_REAL if a < b or either input is NaN; +Inf for a=+Inf and b<+Inf.
  */
-inline double log_diff_exp(double a, double b) {
-  // Handle infinite and NaN cases
-  if (ISNAN(a) || ISNAN(b)) return NA_REAL;
-  if (a == R_PosInf) return NA_REAL;  // +Inf - anything is undefined in log space
-  if (a < b) return NA_REAL;  // log of negative number is undefined
-  if (a == b) return R_NegInf;  // log(exp(a) - exp(a)) = log(0) = -Inf
-  if (b == R_NegInf) return a;
-
-  double diff = b - a;
-
-  // For numerical stability when a and b are close
-  if (diff > -0.693147) {  // diff > -log(2), i.e., exp(b)/exp(a) > 0.5
-    // Use log1m(exp(diff)) = log1m(exp(b-a))
-    return a + log1m(std::exp(diff));
-  } else {
-    // When exp(b-a) is small, use series expansion
-    // log(1 - x) ~= -x - x^2/2 - x^3/3 - ... for small x
-    // Here x = exp(b-a), so log(1 - exp(b-a)) ~= -exp(b-a) when exp(b-a) is small
-    return a + std::log(-std::expm1(diff));
+[[gnu::always_inline]] inline double log_diff_exp(double a, double b) {
+  if (is_nan(a) || is_nan(b) || a < b) { return na_real(); }
+  if (is_pos_inf(a)) {
+    if (is_pos_inf(b)) { return na_real(); }
+    return pos_inf();
   }
+  if (a == b) { return neg_inf(); }
+  if (is_neg_inf(b)) { return a; }
+  const double diff = b - a;
+  // Close arguments require expm1 to retain their difference.
+  if (diff > -composite_detail::LOG2) { return a + log1m_exp(diff); }
+  return a + std::log1p(-std::exp(diff));
 }
 
 /**
