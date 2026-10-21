@@ -53,7 +53,9 @@ Parallelizes across participant calculations using native threads.}
 Defaults to the number of chains. the total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
 
 \item{max_tries}{An integer. How many times should it try to meet the finish
-conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.}
+conditions as specified by stop_criteria? Defaults to 20. In sample, this limit
+applies even if the requested number of draws has not been reached. In earlier
+stages, the requested number of iterations must be reached first.}
 
 \item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
 
@@ -68,7 +70,6 @@ group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure).}
 
 \item{.context}{Internal compiled likelihood cache.}
-
 }
 \value{
 An emc object

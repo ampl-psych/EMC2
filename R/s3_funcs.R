@@ -496,7 +496,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     gd      <- final_progress$gd$gd
     gd_final <- NULL
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- rhat_message(final_progress$gd$rule, gd)
 
     ess_message <- if (!is.null(final_progress$curr_min_es) &&
                        is.finite(final_progress$curr_min_es)) {
@@ -538,7 +538,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
 #' every ``step_size`` iterations. After a failed check, the first third of the stage's
-#' draws is dropped if this lowers the stopping diagnostic.
+#' draws is dropped only if all stopping criteria pass on the remaining draws.
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
@@ -587,8 +587,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
-#' conditions as specified by ``stop_criteria``? Defaults to 20. ``max_tries`` is
-#' ignored if the required number of iterations has not been reached yet.
+#' conditions as specified by ``stop_criteria``? Defaults to 20. In ``sample``, this
+#' limit applies even if the requested number of draws has not been reached. In
+#' earlier stages, the requested number of iterations must be reached first.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types
 #' of parameters these should hold. See the details and examples section.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.

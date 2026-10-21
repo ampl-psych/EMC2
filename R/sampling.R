@@ -282,6 +282,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
 #'
 #' @param prior an emc.prior object.
 #' @param iter Number of MCMC samples to collect.
+#' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @inheritParams make_emc
 #'
 #' @returns an emc object with only group-level samples

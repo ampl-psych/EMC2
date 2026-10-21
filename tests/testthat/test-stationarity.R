@@ -28,7 +28,7 @@ test_that("a native particle update preserves a known normal posterior", {
   expect_lt(abs(mean(draws > 2) - probability), 6 * sqrt(probability * (1 - probability) / n))
 })
 
-test_that("hierarchical updates preserve a known joint posterior", {
+test_that("hierarchical updates with affine and spread moves preserve a known joint posterior", {
   withr::local_seed(124, .rng_kind = "Mersenne-Twister", .rng_normal_kind = "Inversion")
   withr::local_options(emc.scale_move = TRUE)
   n <- 2000L
@@ -49,6 +49,9 @@ test_that("hierarchical updates preserve a known joint posterior", {
   template$samples$idx <- 1L
   template$chains_mu <- rep(list(c(0, 0)), 3)
   template$chains_var <- rep(list(diag(2)), 3)
+  # Fix the direction independently of the target draws below.
+  template$lik_prec <- structure(vector("list", 3),
+    affine_generator = rbind(c(.2, .4, .3), c(-.3, .1, -.2), c(0, 0, 0)))
   # Separate particle blocks must condition on earlier updates.
   attr(template$data, "components") <- 1:2
 
@@ -101,4 +104,9 @@ test_that("hierarchical updates preserve a known joint posterior", {
   expect_true(any(updated[[1]]$samples$theta_mu[, 2] != emc[[1]]$samples$theta_mu[, 1]))
   expect_true(any(updated[[1]]$samples$theta_var[, , 2] != emc[[1]]$samples$theta_var[, , 1]))
   expect_equal(attr(updated[[1]]$samples, "scale_move")$uses, 1)
+  # One adaptation step increases .2 on acceptance and decreases it on rejection.
+  for (move in c("affine_step", "spread_step")) {
+    steps <- vapply(updated, function(x) attr(x$samples, "scale_move")[[move]], 0)
+    expect_true(any(steps > .2) && any(steps < .2))
+  }
 })

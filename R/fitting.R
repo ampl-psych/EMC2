@@ -37,7 +37,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   # min_es also needs a selection: without one, check_progress() has nothing to
   # take the effective size of and the criterion is silently always satisfied.
-  if(!is.null(stop_criteria$min_es) && is.null(stop_criteria$selection)){
+  if(!is.null(stop_criteria[["min_es"]]) && is.null(stop_criteria$selection)){
     stop_criteria$selection <- if(type != "single") c('alpha', 'mu') else 'alpha'
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
@@ -68,7 +68,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
-#' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
+#' conditions as specified by stop_criteria? Defaults to 20. In sample, this limit
+#' applies even if the requested number of draws has not been reached. In earlier
+#' stages, the requested number of iterations must be reached first.
 #' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?fit``.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
@@ -170,7 +172,7 @@ run_emc <- function(emc, stage, stop_criteria,
       gd <- progress$gd$gd
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
-      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- rhat_message(progress$gd$rule, gd)
       # get min effective sample size (ESS)
       ess_message <- NULL
       if(stage == 'sample' & !is.null(progress$curr_min_es)) {
@@ -178,11 +180,11 @@ run_emc <- function(emc, stage, stop_criteria,
       }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
-      target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
+      target_iters  <- if (stage == "sample") iter else NULL
 
-      # this one is still a little buggy, should fix
       rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
-                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
+                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size,
+                                           done = progress$done)
 
       message(sprintf("[%s | try=%d | iters=%d%s%s] Duration: %s - ETA: %s-%s",
                       stage, progress$trys, progress$total_iters,
@@ -322,7 +324,7 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
     emc <- create_eff_proposals(emc, n_cores, window = window)
   }
   if(stage %in% c("burn", "adapt", "sample") && emc[[1]]$type != "single"){
-    emc <- create_lik_prec(emc, n_cores)
+    emc <- create_lik_prec(emc, n_cores, reset_directions = stage != get_last_stage(emc))
   }
   if(fixed) emc <- store_sample_kernel(emc)
   return(emc)
@@ -348,13 +350,13 @@ restore_sample_kernel <- function(emc){
   return(emc)
 }
 
-create_lik_prec <- function(emc, n_cores){
+create_lik_prec <- function(emc, n_cores, reset_directions = TRUE){
   history_idx <- proposal_window(emc[[1]]$samples$idx)
   lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
   for (i in seq_along(emc)) {
     emc[[i]]$lik_prec <- lik_prec
     sm <- attr(emc[[i]]$samples, "scale_move")
-    if (!is.null(sm)) {
+    if (reset_directions && !is.null(sm)) {
       sm$directions <- NULL
       attr(emc[[i]]$samples, "scale_move") <- sm
     }
@@ -365,11 +367,10 @@ create_lik_prec <- function(emc, n_cores){
 check_progress <- function (emc, stage, iter, stop_criteria,
                             max_tries, step_size, n_cores, verbose, progress = NULL)
 {
-  min_es <- stop_criteria$min_es
+  min_es <- stop_criteria[["min_es"]]
   if(is.null(min_es)) min_es <- 0
   selection <- stop_criteria$selection
   min_unique <- stop_criteria$min_unique
-  total_iters_stage <- chain_n(emc)[, stage][1]
   if (is.null(progress)) {
     iters_total <- 0
     trys <- 0
@@ -381,52 +382,63 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   gd <- check_gd(emc, stage, stop_criteria$max_gd, stop_criteria$mean_gd,
                  omit_mpsrf = stop_criteria$omit_mpsrf, selection = selection,
                  gd_quantile = stop_criteria$gd_quantile)
-  iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
-  if (min_es == 0) {
-    es_done <- TRUE
-  } else if (total_iters_stage != 0) {
-    class(emc) <- "emc"
-    curr_min_es <- Inf
-    for(select in selection){
-      curr_min_es <- min(c(ess_summary(emc, selection = select,
-                                                stage = stage, stat_only = TRUE), curr_min_es))
+  # Evaluate every condition on the same draws before accepting a discard.
+  evaluate <- function(gd){
+    emc <- gd$emc
+    total_iters_stage <- chain_n(emc)[, stage][1]
+    iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
+    curr_min_es <- NULL
+    if (min_es == 0) {
+      es_done <- TRUE
+    } else if (total_iters_stage != 0) {
+      class(emc) <- "emc"
+      curr_min_es <- Inf
+      for(select in selection){
+        curr_min_es <- min(c(ess_summary(emc, selection = select,
+                                          stage = stage, stat_only = TRUE), curr_min_es))
+      }
+      es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es > min_es)
+    } else {
+      es_done <- FALSE
     }
-    es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es >
-                        min_es)
+    if (stage == "adapt") {
+      samples_merged <- merge_chains(emc)
+      test_samples <- extract_samples(samples_merged, stage = "adapt",
+                                      samples_merged$samples$idx, n_chains = length(emc))
+      adapted <- test_adapted(emc[[1]], test_samples, min_unique, n_cores, verbose)
+    } else {
+      adapted <- TRUE
+    }
+    # Only a failure of adapt's uniqueness check needs the max_tries warning.
+    enough_unique <- adapted
+    adapt_rhat <- progress$adapt_rhat
+    if(stage == "adapt" && adapted){
+      adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
+      adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
+    }
+    list(total_iters_stage = total_iters_stage, iter_done = iter_done, es_done = es_done,
+         curr_min_es = curr_min_es, adapted = adapted, enough_unique = enough_unique,
+         adapt_rhat = adapt_rhat, met = es_done & iter_done & gd$gd_done & adapted)
   }
-  else {
-    es_done <- FALSE
+  r <- evaluate(gd)
+  if(!r$met && !is.null(gd$short)){
+    r_short <- evaluate(gd$short)
+    if(r_short$met){
+      gd <- gd$short
+      r <- r_short
+    }
   }
-  trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries)
-  if (stage == "adapt") {
-    samples_merged <- merge_chains(emc)
-    test_samples <- extract_samples(samples_merged, stage = "adapt",
-                                    samples_merged$samples$idx, n_chains = length(emc))
-    adapted <- test_adapted(emc[[1]], test_samples,
-                            min_unique, n_cores, verbose)
-
-  }
-  else {
-    adapted <- TRUE
-  }
-  # max_tries reached with only adapt's convergence rule unmet is not worth
-  # the warning below: the kernel is then built from the draws there are
-  enough_unique <- adapted
-  adapt_rhat <- progress$adapt_rhat
-  if(stage == "adapt" && adapted){
-    adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
-    adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
-  }
-  done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
+  gd$short <- NULL
+  total_iters_stage <- r$total_iters_stage; iter_done <- r$iter_done; es_done <- r$es_done
+  curr_min_es <- r$curr_min_es; adapted <- r$adapted; enough_unique <- r$enough_unique; adapt_rhat <- r$adapt_rhat
+  trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries) & (iter_done | stage == "sample")
+  done <- r$met | trys_done
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  if (trys_done & iter_done) {
-    if(!(es_done & gd$gd_done & enough_unique)){
-      warning("Max tries reached. If this happens in burn-in while trying to get
-            gelman diagnostics small enough, you might have a particularly hard model.
-            Make sure your model is well specified. If so, you can run adapt and
-            sample, if run for long enough, sample usually converges eventually.")
+  if (trys_done) {
+    if(!(es_done & gd$gd_done & enough_unique & iter_done)){
+      warning("Max tries reached before all stopping criteria were met.")
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
@@ -489,6 +501,12 @@ stage_gds <- function(emc, selection, stage, omit_mpsrf = TRUE, filter = 0){
   list(gd = gd_out, alpha = alpha, other = other)
 }
 
+rhat_message <- function(rule, gd){
+  if(is.null(rule) || !length(gd)) return(NULL)
+  m <- max(gd)
+  if(isTRUE(all.equal(rule, m))) sprintf("Rhat=%.3f", rule) else sprintf("Rhat=%.3f (rule; max %.3f)", rule, m)
+}
+
 # Apply the quantile only to subject parameters; all other Rhats must pass.
 gd_top <- function(g, gd_quantile = NULL){
   if(is.null(gd_quantile) || is.null(g$alpha) || !all(is.finite(g$alpha))) return(max(g$gd))
@@ -507,25 +525,23 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf,
       (is.null(max_gd) || gd_top(g, gd_quantile) < max_gd) &&
       (is.null(mean_gd) || mean(g$gd) < mean_gd)
   }
+  rule_of <- function(g) if(!is.null(max_gd)) gd_top(g, gd_quantile) else mean(g$gd)
   g <- stage_gds(emc, selection, stage, omit_mpsrf)
   ok_gd <- gd_ok(g)
+  short <- NULL
   if(!ok_gd) {
-    # Drop the first third if this improves the stopping diagnostic.
+    # Offer a shorter history only if its Rhat passes; check_progress checks the rest.
     n_remove <- round(chain_n(emc)[,stage][1]/3)
     g_short <- tryCatch(stage_gds(emc, selection, stage, omit_mpsrf, filter = n_remove), error = function(e) NULL)
-    if(!is.null(g_short) &&
-       ((is.null(max_gd) && mean(g_short$gd) < mean(g$gd)) || (!is.null(max_gd) && max(g_short$gd) < max(g$gd)))){
+    if(!is.null(g_short) && gd_ok(g_short)){
       emc_short <- try(subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE), silent = TRUE)
       if(!is(emc_short, "try-error")){
-        g <- g_short
-        emc <- emc_short
-        ok_gd <- gd_ok(g)
+        short <- list(gd = g_short$gd, gd_done = TRUE, emc = emc_short, rule = rule_of(g_short))
       }
     }
   }
-  gd <- g$gd
   class(emc) <- "emc"
-  return(list(gd = gd, gd_done = ok_gd, emc = emc))
+  return(list(gd = g$gd, gd_done = ok_gd, emc = emc, rule = rule_of(g), short = short))
 }
 
 # window: build them from the last `window` adapt iterations of each chain

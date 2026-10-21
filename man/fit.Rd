@@ -58,8 +58,9 @@ participant calculations using native threads.}
 Defaults to the number of chains. The total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
 
 \item{max_tries}{An integer. How many times should it try to meet the finish
-conditions as specified by \code{stop_criteria}? Defaults to 20. \code{max_tries} is
-ignored if the required number of iterations has not been reached yet.}
+conditions as specified by \code{stop_criteria}? Defaults to 20. In \code{sample}, this
+limit applies even if the requested number of draws has not been reached. In
+earlier stages, the requested number of iterations must be reached first.}
 
 \item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
@@ -94,7 +95,7 @@ pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
 \code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
 every \code{step_size} iterations. After a failed check, the first third of the stage's
-draws is dropped if this lowers the stopping diagnostic.
+draws is dropped only if all stopping criteria pass on the remaining draws.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
