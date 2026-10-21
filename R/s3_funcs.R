@@ -437,7 +437,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     search_width = 1, step_size = 100, verbose = TRUE, fileName = NULL,
                     particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
-                    thin = FALSE, on_singular = NULL,
+                    thin = FALSE, on_singular = NULL, history_proposals = FALSE,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
@@ -469,6 +469,21 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
   } else{
     last_stage <- stage
   }
+  previous_history <- isTRUE(emc[[1]]$history_proposals)
+  if(missing(history_proposals)) history_proposals <- previous_history
+  if(!is.logical(history_proposals) || length(history_proposals) != 1 || is.na(history_proposals))
+    stop("history_proposals must be TRUE or FALSE")
+  if(history_proposals != previous_history){
+    emc[[1]]$sample_kernel <- NULL
+    for(i in seq_along(emc)) attr(emc[[i]]$samples, "pm_settings") <- NULL
+    # Use the latest draws as warmup history for the changed mixture.
+    if(get_last_stage(emc) %in% c("adapt", "sample")){
+      emc <- subset(emc, stage = get_last_stage(emc))
+      for(i in seq_along(emc)) emc[[i]]$samples$stage[] <- "burn"
+      last_stage <- "adapt"
+    }
+  }
+  emc[[1]]$history_proposals <- history_proposals
   stages <- c('preburn', 'burn', 'adapt', 'sample')
   to_run <- stages[which(stages == last_stage):length(stages)]
   context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)
@@ -598,6 +613,11 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
 #' group step, then an error.
 #' A list may set `max_retries` (integer, re-draw the group step on failure).
+#' @param history_proposals Logical. Add pooled-history proposals alongside curvature
+#' proposals during adaptation and sampling. Defaults to `FALSE` for new fits;
+#' omitted on continuation, retains the saved choice. Changing it after adaptation
+#' uses the previous draws as warmup history and restarts adaptation. Mixture weights
+#' are learned during warmup and fixed in sample.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{

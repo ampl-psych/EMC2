@@ -54,7 +54,7 @@ class ParticleSampler {
   };
   Random& rng;
   std::string kernel_;
-  bool exact_, frozen_;
+  bool exact_, frozen_, history_;
   int proposals_, multiplier_, n0_;
   double min_local_, target_ess_, ess_scale_, max_particles_, mix_adapt_, alpha_star_;
   arma::vec target_accept_;

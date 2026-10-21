@@ -20,6 +20,7 @@
   max_tries = 20,
   thin = FALSE,
   on_singular = NULL,
+  history_proposals = FALSE,
   ...
 )
 
@@ -69,6 +70,12 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
 group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure).}
+
+\item{history_proposals}{Logical. Add pooled-history proposals alongside curvature
+proposals during adaptation and sampling. Defaults to \code{FALSE} for new fits;
+omitted on continuation, retains the saved choice. Changing it after adaptation
+uses the previous draws as warmup history and restarts adaptation. Mixture weights
+are learned during warmup and fixed in sample.}
 
 \item{...}{Additional optional arguments}
 }

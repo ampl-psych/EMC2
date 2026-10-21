@@ -75,6 +75,8 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   # Acceptance ratio tuning
   tune$alphaStar <- ifelse(stage == "sample", 2, 3)
   tune$p_accept <- set_p_accept(stage, tune$search_width)
+  if(isTRUE(tune$history_proposals))
+    tune$p_accept <- append(tune$p_accept, tune$p_accept[2], after = 2)
   # Potential blocking settings
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
@@ -89,17 +91,17 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   return(tune)
 }
 
-check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
+check_sampling_settings <- function(pm_settings, stage, n_pars, particles, history_proposals = FALSE){
   for(i in 1:length(pm_settings)){
     # Mix settings
-    pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage)
+    pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage, history_proposals)
     # For p_accept
     pm_settings[[i]]$epsilon <- check_epsilon(pm_settings[[i]]$epsilon, n_pars, pm_settings[[i]]$mix)
     # Only local components have an adapted epsilon.
-    pm_settings[[i]]$epsilon[!local_components(stage)[-1]] <- 1
+    pm_settings[[i]]$epsilon[!local_components(stage, history_proposals)[-1]] <- 1
     # For mix and p_accept tuning
-    pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage)
-    pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage)
+    pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage, history_proposals)
+    pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage, history_proposals)
     # Setting particles
     if(is.null(pm_settings[[i]]$n_particles)) pm_settings[[i]]$n_particles <- particles
     if(is.null(pm_settings[[i]]$iter)) pm_settings[[i]]$iter <- 1
@@ -119,12 +121,14 @@ resolve_on_singular <- function(on_singular) {
 }
 
 # Components centred on the current value.
-local_components <- function(stage){
-  switch(stage,
+local_components <- function(stage, history_proposals = FALSE){
+  local <- switch(stage,
          preburn = c(FALSE, TRUE),
          burn = c(FALSE, TRUE, TRUE),
          adapt = c(FALSE, TRUE, FALSE),
          c(FALSE, TRUE, FALSE, FALSE))
+  if(history_proposals && stage %in% c("adapt", "sample")) local <- append(local, FALSE, after = 3)
+  local
 }
 
 extend_sampler <- function(sampler, n_samples, stage) {
@@ -175,7 +179,7 @@ set_p_accept <- function(stage, search_width){
   if(stage == "sample") return(c(0.03, 0.3, 0.3)* (1/search_width))
 }
 
-get_default_mix <- function(stage){
+get_default_mix <- function(stage, history_proposals = FALSE){
   if (stage == "burn") {
     default_mix <- c(0.15, 0.35, 0.5)
   } else if(stage == "adapt"){
@@ -185,11 +189,15 @@ get_default_mix <- function(stage){
   }  else{
     default_mix <- c(0.5, 0.5)
   }
+  if(history_proposals && stage %in% c("adapt", "sample")){
+    default_mix[3] <- default_mix[3] / 2
+    default_mix <- append(default_mix, default_mix[3], after = 3)
+  }
   return(default_mix)
 }
 
-check_mix <- function(mix = NULL, stage) {
-  default_mix <- get_default_mix(stage)
+check_mix <- function(mix = NULL, stage, history_proposals = FALSE) {
+  default_mix <- get_default_mix(stage, history_proposals)
   if(is.null(mix)) mix <- default_mix
   if(length(mix) < length(default_mix)){
     if(length(default_mix) - length(mix) == 1){
@@ -215,17 +223,17 @@ check_epsilon <- function(epsilon, n_pars, mix) {
       epsilon <- .7
     }
     # The first proposal is always unscaled
-    # Every subsequent phase at most adds one epsilon
+    # Later stages may add proposal components.
   } else if(length(epsilon) < (length(mix) -1)){
-    epsilon <- c(epsilon, epsilon[length(epsilon)])
+    epsilon <- c(epsilon, rep(tail(epsilon, 1), length(mix) - 1 - length(epsilon)))
   } else if(length(epsilon) > (length(mix) - 1)){
     epsilon <- epsilon[seq_len(length(mix) - 1)]
   }
   return(epsilon)
 }
 
-check_prop_performance <- function(prop_performance, stage){
-  default_mix <- get_default_mix(stage)
+check_prop_performance <- function(prop_performance, stage, history_proposals = FALSE){
+  default_mix <- get_default_mix(stage, history_proposals)
   if(is.null(prop_performance) || stage == "adapt") prop_performance <- rep(0, length(default_mix))
   if(length(prop_performance) < length(default_mix)){
     if(length(default_mix) - length(prop_performance) == 1){

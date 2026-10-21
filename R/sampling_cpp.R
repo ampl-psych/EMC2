@@ -46,6 +46,7 @@ prepare_native_stage <- function(pmwgs, stage, iter, particles, tune, on_singula
   tune$components <- attr(pmwgs$data, "components")
   tune$shared_ll_idx <- shared_likelihood_index(pmwgs)
   kernel <- if (is.null(tune$kernel)) stage else tune$kernel
+  tune$history_proposals <- isTRUE(pmwgs$history_proposals) && kernel %in% c("adapt", "sample")
   tune <- check_tune_settings(tune, pmwgs$n_pars, kernel, particles)
   tune$kernel <- kernel
   tune$frozen <- stage == "sample"
@@ -59,7 +60,8 @@ prepare_native_stage <- function(pmwgs, stage, iter, particles, tune, on_singula
       vector("list", length(unique(tune$components))), simplify = FALSE)
   }
   pm_settings <- lapply(pm_settings, check_sampling_settings, stage = kernel,
-                        n_pars = pmwgs$n_pars, particles = particles)
+                        n_pars = pmwgs$n_pars, particles = particles,
+                        history_proposals = tune$history_proposals)
   scale_settings <- attr(pmwgs$samples, "scale_move")
   if (tune$do_scale) scale_settings <- scale_move_init(scale_settings, pmwgs$par_names)
   list(sampler = extend_sampler(pmwgs, iter, stage), tune = tune,

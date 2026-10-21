@@ -69,10 +69,13 @@ arma::vec Gaussian::log_density(const arma::mat& x, const arma::vec& mean,
 ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const Rcpp::List& tune,
                                 const Rcpp::List& pm_settings, const std::string& kernel)
   : rng(rng_), kernel_(kernel), exact_(flag(tune, "exact")), frozen_(flag(tune, "frozen")),
+    history_(flag(tune, "history_proposals")),
     original_settings_(Rcpp::clone(pm_settings)) {
   // Proposal order: group, local, chain, efficient. Burn uses a second local
   // proposal in the chain slot; sample adds the conditional-history proposal.
   proposals_ = kernel == "preburn" ? 2 : kernel == "sample" ? 4 : 3;
+  // Optional pooled history follows the quadratic; efficient stays last.
+  if (history_) ++proposals_;
   multiplier_ = kernel == "preburn" ? 2 : 1;
   local_.assign(proposals_, false);
   local_[1] = true;
@@ -195,9 +198,13 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
     centers[2] = kernel_ == "burn" ? current.elem(idx) : subject.chain_mean.elem(idx);
     kernels[2] = &subject.chain[b];
   }
-  if (proposals_ == 4) {
-    centers[3] = subject.efficient_mean.elem(idx);
-    kernels[3] = &subject.efficient[b];
+  if (history_) {
+    centers[3] = subject.chain_mean.elem(idx);
+    kernels[3] = &subject.chain[b];
+  }
+  if (kernel_ == "sample") {
+    centers[3 + history_] = subject.efficient_mean.elem(idx);
+    kernels[3 + history_] = &subject.efficient[b];
   }
   if (!subject.conditional.empty()) {
     const arma::vec conditional_mean = subject.conditional_covariance *
@@ -333,7 +340,7 @@ void ParticleSampler::update(Settings& x, const arma::vec& weights,
     }
   }
   // Particle ESS within this update, not MCMC ESS across iterations.
-  if (proposals_ > 3) {
+  if (kernel_ == "sample") {
     const double ess = std::pow(arma::sum(weights), 2) / arma::dot(weights, weights);
     x.n_particles = std::max(25.0, std::min(max_particles_,
       std::nearbyint(x.n_particles * std::pow(target_ess_ / ess, ess_scale_))));
