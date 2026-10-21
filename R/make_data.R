@@ -393,6 +393,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                              drop_subjects = F, n_trials = n_trials, add_acc=F,
                            do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH
                            drop_R = F)
+    # Match design_model's subject order before creating staircase metadata.
+    data <- data[order(data$subjects), ]
   } else {
     data <- add_trials(data[order(data$subjects),])
   }

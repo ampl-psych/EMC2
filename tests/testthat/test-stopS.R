@@ -1,29 +1,6 @@
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 
-# Compare the optimized C/C++ SSEXG likelihood to the R reference path by
-# removing `c_name` from the model while keeping the same data and proposals.
-expect_ssexg_cr_equal <- function(emc, p_vector, n = 25, proposal_var = 0.0025,
-                                  tolerance = 1e-5) {
-  proposals <- mvtnorm::rmvnorm(
-    n,
-    mean = p_vector,
-    sigma = diag(length(p_vector)) * proposal_var
-  )
-  proposals <- rbind(p_vector, proposals)
-  colnames(proposals) <- names(p_vector)
-
-  model_c <- emc[[1]]$model
-  model_r_list <- model_c()
-  model_r_list$c_name <- NULL
-  model_r <- function() model_r_list
-
-  ll_r <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_r)
-  ll_c <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_c)
-
-  expect_equal(ll_c, ll_r, tolerance = tolerance)
-}
-
 designSSexG <- design(model=SSEXG,
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
@@ -69,12 +46,10 @@ test_that("staircase resets per subject", {
   dat_multi <- make_data(p_multi, design_multi, n_trials = 400,
                          functions = list(SSD = make_ssd(p_stop = 1)))
 
-  staircase <- attr(dat_multi, "staircase")
-  expect_false(is.null(staircase))
-  expect_equal(
-    unname(vapply(staircase$specs, `[[`, numeric(1), "SSD0")),
-    rep(0.25, length(staircase$specs))
-  )
+  # Go trials have SSD = Inf; inspect the first actual stop trial per subject.
+  first_ssd <- vapply(split(dat_multi$SSD, dat_multi$subjects),
+                      function(x) x[is.finite(x)][1], numeric(1))
+  expect_equal(unname(first_ssd), rep(0.25, 3))
 })
 
 test_that("posterior-only stop-signal plot summaries are stable", {

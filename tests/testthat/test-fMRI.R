@@ -36,9 +36,6 @@ design_matrices <-  convolve_design_matrix(
   contrasts = list(cond = matrix(c(-1, 1)))
 )
 
-# High pass filter timeseries
-ts <- high_pass_filter(ts)
-
 # Design for sampling
 des <- design_fmri(design_matrices)
 

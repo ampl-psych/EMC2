@@ -12,9 +12,6 @@ make_minimal_emc <- function(trend, covariate1 = c(-.5, 0, .5, 1, 2), ...) {
 
 # lin_incr ----------------------------------------------------------------
 trend_lin_incr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'lin_incr')))
-#trend_lin_incr <- make_trend(par_names = "m",
-#                             cov_names = 'covariate1',
-#                             kernels = 'lin_incr')
 kernel_pars <- NULL
 emc <- make_minimal_emc(trend_lin_incr)
 expected_output <- c(-.5, 0, .5, 1, 2)
@@ -62,20 +59,13 @@ kernel_pars <- c('m.k_sat'=log(2))
 covariate1 <- c(0, .1, .3, 1, Inf, NA)
 emc <- make_minimal_emc(trend_slin_incr, covariate1 = covariate1)
 expected_output <- ifelse(is.finite(covariate1), pmin(1, exp(kernel_pars) * covariate1), 0)
-all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
-test_that("slin_incr_R", {
-  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
-})
 test_that("slin_incr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
 })
 trend_slin_decr <- make_trend(make_base('m', 'lin', make_kernel('covariate1', 'slin_decr')))
 emc <- make_minimal_emc(trend_slin_decr, covariate1 = covariate1)
-test_that("slin_decr_R", {
-  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(-expected_output))
-})
 test_that("slin_decr_Rcpp", {
-  expect_snapshot(matrix(apply_kernel(kernel_pars, emc)))
+  expect_equal(matrix(apply_kernel(kernel_pars, emc)), matrix(-expected_output))
 })
 
 # pow_decr ----------------------------------------------------------------
@@ -230,9 +220,6 @@ make_minimal_emc_wrap <- function(kernel_name, output_code = 1L) {
   )
 }
 
-# TODO: add non-default output codes
-# output_codes <- as.integer(1:4)
-# output_types <- c("mean", "mode", "surprise", "log-precision")
 output_codes <- 1L
 output_types <- c("mean")
 
@@ -261,7 +248,6 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 snapshot_list[["uniform"]] <- list(
   manual = true_out,
   emc = emc_out
@@ -294,8 +280,6 @@ true_out <- beta_binomial(
   belief_reset = reset_column
 )
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
-all.equal(emc_out, true_out)
-identical(emc_out[1], emc_out[reset_idx])
 snapshot_list[["uniform_reset"]] <- list(
   manual = true_out,
   emc = emc_out
@@ -319,14 +303,18 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 snapshot_list[["informative"]] <- list(
   manual = true_out,
   emc = emc_out
 )
 
-# conclude with test snapshot
-test_that("beta_binomial_Rcpp", {expect_snapshot(snapshot_list)})
+test_that("beta_binomial_Rcpp", {
+  # Compare the compiled kernel with the independent R calculation.
+  for (case in snapshot_list) expect_equal(case$emc, case$manual)
+  reset <- snapshot_list$uniform_reset$emc
+  expect_identical(reset[1], reset[reset_idx])
+  expect_snapshot(snapshot_list)
+})
 
 
 # Beta-binomial (exponential decay)
@@ -354,9 +342,8 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
-# conclude with test snapshot
 test_that("beta_binomial_decay_Rcpp", {
+  expect_equal(emc_out, true_out)
   expect_snapshot(list(manual = true_out, emc = emc_out))
 })
 
@@ -388,7 +375,6 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 snapshot_list[["uniform"]] <- list(
   manual = true_out,
   emc = emc_out
@@ -418,15 +404,15 @@ true_out <- beta_binomial(
   belief_reset = reset_column
 )
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
-all.equal(emc_out, true_out)
-identical(emc_out[1], emc_out[reset_idx])
 snapshot_list[["uniform_reset"]] <- list(
   manual = true_out,
   emc = emc_out
 )
 
-# conclude with test snapshot
 test_that("beta_binomial_window_Rcpp", {
+  for (case in snapshot_list) expect_equal(case$emc, case$manual)
+  reset <- snapshot_list$uniform_reset$emc
+  expect_identical(reset[1], reset[reset_idx])
   expect_snapshot(snapshot_list)
 })
 
@@ -461,7 +447,6 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 
 emc_out_bb <- sapply(
   X = output_codes,
@@ -478,8 +463,6 @@ emc_out_bb <- sapply(
   }
 )
 colnames(emc_out_bb) <- output_types
-
-all.equal(emc_out, emc_out_bb, tolerance = 1e-6)
 
 snapshot_list[["cp_0"]] <- list(
   manual = true_out,
@@ -506,7 +489,6 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 
 fixed_beta_out <- matrix(nrow = length(covariate1), ncol = length(output_types))
 colnames(fixed_beta_out) <- output_types
@@ -517,23 +499,6 @@ fixed_beta_out[ , "mean"] <- rep(
   ),
   length = length(covariate1)
 )
-# fixed_beta_out[ , "mode"] <- rep(
-#   x = beta_mode(
-#     a = unname(pnorm(kernel_pars[2])) * unname(exp(kernel_pars[3])),
-#     b = (1 - unname(pnorm(kernel_pars[2]))) * unname(exp(kernel_pars[3]))
-#   ),
-#   length = length(covariate1)
-# )
-# fixed_beta_out[ , "surprise"] <- shannon_surprise(fixed_beta_out[ , "mean"], covariate1)
-# fixed_beta_out[ , "log-precision"] <- rep(
-#   x = beta_logprecision(
-#     a = unname(pnorm(kernel_pars[2])) * unname(exp(kernel_pars[3])),
-#     b = (1 - unname(pnorm(kernel_pars[2]))) * unname(exp(kernel_pars[3]))
-#   ),
-#   length = length(covariate1)
-# )
-
-all.equal(emc_out, fixed_beta_out, tolerance = 1e-5)
 
 snapshot_list[["cp_1"]] <- list(
   manual = true_out,
@@ -561,7 +526,6 @@ emc_out <- sapply(
   X = emc,
   FUN = function(x) {as.numeric(apply_kernel(kernel_pars, x))}
 )
-all.equal(emc_out, true_out)
 
 snapshot_list[["cp_real"]] <- list(
   manual = true_out,
@@ -592,15 +556,20 @@ true_out <- dbm(
   belief_reset = reset_column
 )
 emc_out <- as.numeric(apply_kernel(kernel_pars, emc_reset))
-all.equal(emc_out, true_out)
-identical(emc_out[1], emc_out[reset_idx])
 snapshot_list[["cp_real_reset"]] <- list(
   manual = true_out,
   emc = emc_out
 )
 
-# conclude with test snapshot
-test_that("dbm_Rcpp", {expect_snapshot(snapshot_list)})
+test_that("dbm_Rcpp", {
+  for (case in snapshot_list) expect_equal(case$emc, case$manual)
+  # At the two limits, DBM reduces to cumulative learning or a fixed prior.
+  expect_equal(snapshot_list$cp_0$emc, snapshot_list$cp_0$emc_bb, tolerance = 1e-6)
+  expect_equal(snapshot_list$cp_1$emc, snapshot_list$cp_1$fixed_beta, tolerance = 1e-5)
+  reset <- snapshot_list$cp_real_reset$emc
+  expect_identical(reset[1], reset[reset_idx])
+  expect_snapshot(snapshot_list)
+})
 
 
 # minimal Transition Probability Model (TPM)
@@ -669,73 +638,7 @@ emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
 # seeing trial t (i.e., a true one-step-ahead prediction).
 # After taking this into account, our output is correct:
 
-all.equal(emc_out[-1], true_out[-length(true_out)], tolerance = 1e-3)
-
-# conclude with test snapshot
 test_that("tpm_Rcpp", {
+  expect_equal(emc_out[-1], true_out[-length(true_out)], tolerance = 1e-3)
   expect_snapshot(list(Matlab = true_out, emc = emc_out))
 })
-
-
-
-# # Custom kernel -- only C -------------------------------------------------
-# This cannot be part of that-test :-( but we can still use it for manual tests...
-# Write a custom kernel to a separate file
-# tf <- tempfile(fileext = ".cpp")
-# writeLines(c(
-#   "// [[Rcpp::depends(EMC2)]]",
-#   "#include <Rcpp.h>",
-#   "#include \"EMC2/userfun.hpp\"",
-#   "",
-#   "// Example: two params (a, b) and two inputs (covariate1, t0)",
-#   "Rcpp::NumericVector custom_kernel(Rcpp::NumericMatrix kernel_pars, Rcpp::NumericMatrix input) {",
-#   "  int n = input.nrow();",
-#   "  Rcpp::NumericVector out(n, 0.0);",
-#   "  for (int i = 0; i < n; ++i) {",
-#   "    double a = (kernel_pars.ncol() > 0) ? kernel_pars(i, 0) : 0.0;",
-#   "    double b = (kernel_pars.ncol() > 1) ? kernel_pars(i, 1) : 0.0;",
-#   "    double in1 = input(i, 0);  // covariate1",
-#   "    double in2 = input(i, 1);  // t0",
-#   "    if ((i % 2) == 0) out[i] = (Rcpp::NumericVector::is_na(in1) ? 0.0 : in1) + a;",
-#   "    else              out[i] = (Rcpp::NumericVector::is_na(in2) ? 0.0 : in2) * b;",
-#   "  }",
-#   "  return out;",
-#   "}",
-#   "",
-#   "// Export pointer maker for registration",
-#   "// [[Rcpp::export]]",
-#   "SEXP EMC2_make_custom_kernel_ptr();",
-#   "EMC2_MAKE_PTR(custom_kernel)"
-# ), tf)
-#
-# # Register with parameter names, transforms, and a default base
-# ck <- register_kernel(
-#   kernel_parameters = c("a", "b"),
-#   file = tf,
-#   transforms = c(a = "identity", b = "pnorm")
-# #  base = "add"
-# )
-# kernel <- make_kernel('custom', 'covariate1', par_input='t0', custom_kernel = ck)
-# trend_custom <- make_trend(make_base('add', target_parameter='m', kernel=kernel))
-#
-
-##
-# kernel_pars <- c('m.a'=0.1, 'm.b'=1)
-# covariate1 <- c(NA, 1, 2, 0, 20, 2, 1)
-# t0 <- matrix(rep(0.2, length(covariate1)))
-# colnames(t0) <- 't0'
-# emc <- make_minimal_emc(trend_custom, covariate1 = covariate1)
-# expected_output <- matrix(NA, nrow=length(covariate1))
-# a <- rep(kernel_pars['m.a'], length(covariate1))
-# b <- rep(kernel_pars['m.b'], length(covariate1))
-# for(i in 1:length(covariate1)) {
-#   if((i%%2) == 1) {  # NB: Rcpp does 0-based indexing, so i%%2 == 0 corresponds to (i+1)%%2 here
-#     expected_output[i] <- ifelse(is.na(covariate1[i]), 0, covariate1[i])+a[i]
-#   } else {
-#     expected_output[i] <- ifelse(is.na(t0[i]), 0, t0[i])*pnorm(b)[i] # note that we need to pnorm b here!
-#   }
-# }
-# all.equal(matrix(apply_kernel(kernel_pars, emc, input_pars=t0)), matrix(expected_output))
-
-
-

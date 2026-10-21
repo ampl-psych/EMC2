@@ -70,7 +70,6 @@ design_premap <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_premap)
 
 LNR_premap <- make_emc(dat, design_premap, compress = FALSE, n_chains = 1, type = "single")
 test_that("premap trend works", {
@@ -89,7 +88,6 @@ design_pretrans <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_pretrans)
 
 LNR_pretrans <- make_emc(dat, design_pretrans, compress = FALSE, n_chains = 1, type = "single")
 
@@ -109,7 +107,6 @@ design_posttrans <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_posttrans)
 
 LNR_posttrans <- make_emc(dat, design_posttrans, compress = FALSE, n_chains = 1, type = "single")
 
@@ -129,7 +126,6 @@ design_bases <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_bases)
 
 LNR_bases <- make_emc(dat, design_bases, compress = FALSE, n_chains = 1, type = "single")
 
@@ -149,7 +145,6 @@ design_poly <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_poly)
 
 LNR_poly <- make_emc(dat, design_poly, compress = FALSE, n_chains = 1, type = "single")
 
@@ -212,7 +207,6 @@ design_shared_premap <- design(
   matchfun = matchfun,
   model = LNR
 )
-#mapped_pars(design_shared_premap)
 
 LNR_shared_premap <- make_emc(dat, design_shared_premap, compress = FALSE, n_chains = 1, type = "single")
 
@@ -317,101 +311,3 @@ test_that("trend_covmap", {
   parameters <- trend_parameters(LNR_covmap)
   expect_snapshot(round(model_likelihood(LNR_covmap, parameters), 6))
 })
-
-
-
-# # Manual test of covmaps --------------------------------------------------
-# trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
-#                     kernels = "delta", ffill_na=TRUE,
-#                     maps=list('map1'=function(dadm, covs) {
-#                       d <- matrix(1, nrow=nrow(dadm), ncol=2)
-#                       colnames(d) <- covs
-#                       d
-#                     },
-#                     'map2'=function(dadm, covs) {
-#                       d <- matrix(-0.5, nrow=nrow(dadm), ncol=2)
-#                       colnames(d) <- covs
-#                       d
-#                     }))
-# design_base <- design(factors = list(subjects = 1, S = 1:2),
-#                       Rlevels = 1:2,
-#                       covariates = c('covariate1', 'covariate2'),
-#                       matchfun = matchfun,
-#                       trend = trend,
-#                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
-#                       contrasts = list(lM = ADmat),
-#                       model = LNR)
-# covariate1 <- rep(1, n_trials*2)
-# covariate2 <- rep(0.25, n_trials*2)
-#
-# p_vector <- sampled_pars(design_base, doMap = FALSE)
-# p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
-#
-# dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2),
-#                  return_trialwise_parameters=TRUE)
-#
-# LNR_covmap <- make_emc(dat, design_base, compress = FALSE, n_chains = 1, type = "single")
-#
-# trpars <- attr(dat, 'trialwise_parameters')
-# covmaps <- attr(LNR_covmap[[1]]$data[[1]], 'covariate_maps')
-# head(trpars)
-# head(covmaps[[1]])
-# head(covmaps[[2]])
-#
-# m_without_lMd <- p_vector[1]+ p_vector[['m.w_map1']]*trpars[,4]*covmaps[[1]][,1] + p_vector[['m.w_map1']]*trpars[,5]*covmaps[[1]][,2] +
-#                               p_vector[['m.w_map2']]*trpars[,4]*covmaps[[2]][,1] + p_vector[['m.w_map2']]*trpars[,5]*covmaps[[2]][,2]
-# m <- m_without_lMd
-# m[LNR_covmap[[1]]$data[[1]]$lM==TRUE] <- m[LNR_covmap[[1]]$data[[1]]$lM==TRUE] + 0.5*p_vector[[2]]
-# m[LNR_covmap[[1]]$data[[1]]$lM==FALSE] <- m[LNR_covmap[[1]]$data[[1]]$lM==FALSE] - 0.5*p_vector[[2]]
-# all(round(m,5) == round(trpars[,1], 5))
-#
-#
-# ##
-# # When working with lM it is useful to design  an "average and difference"
-# # contrast matrix, which for binary responses has a simple canonical from:
-# ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
-# # We also define a match function for lM
-# matchfun=function(d)d$S==d$lR
-# trend <- make_trend(par_names = "m", cov_names = list(c("covariate1")),
-#                     kernels = "delta", ffill_na=TRUE)
-# design_base <- design(factors = list(subjects = 1, S = 1:2),
-#                       Rlevels = 1:2,
-#                       covariates = c('covariate1'),
-#                       matchfun = matchfun,
-#                       trend = trend,
-#                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
-#                       model = LNR)
-# ##mapped_pars(design_base)
-# p_vector <- sampled_pars(design_base, doMap = FALSE)
-#
-# p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
-# #
-# covariate1 <- c(NA, 1, NA, NA, 1, NA, NA, NA, NA, NA)#, 1, NA, 1, 1, NA, rep(NA, 10))
-#
-# #debug(EMC2:::run_kernel)
-# dat <- make_data(p_vector, design_base, n_trials = 5, covariates = data.frame(covariate1 = covariate1), return_trialwise_parameters=TRUE)
-# # cbind(attr(dat, 'trialwise_parameters'), rep(covariate1, each=2))
-#
-#
-# ## Test code for comparing the output of run_trend between R and Rcpp
-# # signature:
-# # NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
-# emc <- make_emc(dat, design_base, type='single')
-# dadm <- emc[[1]]$data[[1]]
-# trend <- emc[[1]]$model()$trend$m
-# param <- rep(0,  nrow(dadm))
-# trend_pars <- matrix(rep(c(p_vector[5:7]), each=nrow(dadm)), ncol=3, byrow=FALSE)
-# trend_pars[,3] <- pnorm(trend_pars[,3])
-# pars_full <- matrix(rep(p_vector, each=nrow(dadm)), ncol=length(p_vector), byrow=FALSE)
-# pars_full[,ncol(pars_full)] <- pnorm(pars_full[,ncol(pars_full)])
-# cv1_updated <- EMC2:::run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
-#
-#
-# old_behavior <- c(0,0,0.5,0.5,0,0,0,0,.6,.6,0,0,0,0,0,0,0,0,0,0)
-# ffill_behavior <- c(rep(.5, 8), rep(.6, 12))
-# bfill_behavior <- c(rep(.5, 4), rep(.6, 6), rep(0, 10))
-# cbind(dadm[,c('trials', 'covariate1')], target=cv1_updated, old_behavior=old_behavior, ffill=ffill_behavior, bfill=bfill_behavior)
-#
-# # 3 points of failure in the future: 1. hard-coded that the first trial must be q0; 2. "ffill" is actually a "bfill", 3. hard-coded that the last trial must be updated
-#
-#

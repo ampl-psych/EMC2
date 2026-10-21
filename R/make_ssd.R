@@ -104,7 +104,7 @@
 #'   staircase_down = c("left", "right")
 #' )
 #'
-#' @export
+#' @noRd
 make_ssd <- function(values = NULL,
                      p = NULL,
                      staircase = TRUE,
