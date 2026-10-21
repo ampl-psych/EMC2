@@ -80,6 +80,26 @@ void Likelihoods::one(int subject, const arma::mat& candidates, arma::vec& out, 
     if (!component || component == part->component) part->evaluate(candidates, out);
 }
 
+// Trial scores retain the tangent to a curved ridge even away from its maximum.
+arma::mat Likelihoods::score_information(int subject, const arma::vec& centre,
+                                        const arma::vec& scale) {
+  const int p = centre.n_elem;
+  arma::mat candidates = arma::repmat(centre.t(), 2 * p, 1);
+  for (int j = 0; j < p; ++j) {
+    candidates(j, j) += 1e-4 * scale[j];
+    candidates(p + j, j) -= 1e-4 * scale[j];
+  }
+  arma::mat information(p, p, arma::fill::zeros);
+  for (auto& part : parts[subject]) {
+    part->coefficients = candidates.cols(part->columns);
+    arma::mat values(part->context.trial_count(), 2 * p);
+    part->context.evaluate(part->coefficients.memptr(), 2 * p, values.memptr(), true);
+    const arma::mat score = (values.cols(0, p - 1) - values.cols(p, 2 * p - 1)) / 2e-4;
+    information += score.t() * score;
+  }
+  return information;
+}
+
 namespace {
 
 // =============================================================================
@@ -332,11 +352,23 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
   }
   // Finite differences remain available when group history is not stable enough.
   Likelihoods likelihood(ll_inputs, n_cores);
+  // Learn an affine velocity b + G z with the other proposals. The resulting
+  // direction is shared by the chains and stays fixed during sampling.
+  const arma::ivec groups = Rf_isNull(field(first, "par_group")) ? arma::ivec() :
+    Rcpp::as<arma::ivec>(first["par_group"]);
+  arma::mat centres(p, n);
+  for (int s = 0; s < n; ++s) centres.col(s) = arma::mean(draws[s], 1);
+  const arma::vec centre = arma::mean(centres, 1), scale = arma::stddev(centres, 0, 1);
+  const bool affine = Rcpp::as<std::string>(first["type"]) == "standard" &&
+    Rf_isNull(field(first, "group_designs")) && groups.n_elem &&
+    arma::all(groups == groups[0]) && scale.is_finite() && arma::all(scale > 0);
+  std::vector<arma::mat> scores(n);
   std::vector<std::optional<Quadratic>> finite(n), posterior(n);
   likelihood.for_each([&](int s) {
     try {
-      finite[s] = finite_difference(likelihood, s, arma::mean(draws[s], 1), arma::stddev(draws[s], 0, 1));
+      finite[s] = finite_difference(likelihood, s, centres.col(s), arma::stddev(draws[s], 0, 1));
       if (group && finite[s]) posterior[s] = draw_precision(draws[s], group_precision, group_mean.col(s), *finite[s], chains);
+      if (affine) scores[s] = likelihood.score_information(s, centres.col(s), scale);
     } catch (const std::exception&) {}
   });
   Rcpp::CharacterVector names = first["par_names"];
@@ -345,6 +377,26 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
     Rcpp::List precision = wrap_quadratic(*finite[s], names);
     if (posterior[s]) precision["post"] = wrap_quadratic(*posterior[s], names);
     result[s] = precision;
+  }
+  if (affine) {
+    arma::mat information(p * (p + 1), p * (p + 1), arma::fill::zeros);
+    for (int s = 0; s < n; ++s) if (!scores[s].is_empty()) {
+      arma::vec position(p + 1); position[0] = 1;
+      position.tail(p) = (centres.col(s) - centre) / scale;
+      information += arma::kron(position * position.t(), scores[s]);
+    }
+    arma::vec eigenvalues;
+    arma::mat eigenvectors;
+    if (information.is_finite() && arma::eig_sym(eigenvalues, eigenvectors, information)) {
+      const arma::mat velocity = arma::reshape(eigenvectors.col(0), p, p + 1);
+      arma::mat generator(p + 1, p + 1, arma::fill::zeros);
+      generator.submat(0, 0, p - 1, p - 1) = arma::diagmat(scale) *
+        velocity.cols(1, p) * arma::diagmat(1 / scale);
+      generator.submat(0, p, p - 1, p) = scale % velocity.col(0) -
+        generator.submat(0, 0, p - 1, p - 1) * centre;
+      generator /= arma::abs(generator).max();
+      result.attr("affine_generator") = Rcpp::wrap(generator);
+    }
   }
   return result;
 }

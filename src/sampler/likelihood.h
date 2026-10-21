@@ -25,6 +25,8 @@ public:
   bool thread_safe() const;
   void one(int subject, const arma::mat& candidates, arma::vec& out, int component = 0);
 
+  arma::mat score_information(int subject, const arma::vec& centre, const arma::vec& scale);
+
   template<class Work> void for_each(Work work) {
     std::exception_ptr error;
     const int n = parts.size();
