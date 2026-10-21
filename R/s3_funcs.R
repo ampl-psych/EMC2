@@ -469,21 +469,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
   } else{
     last_stage <- stage
   }
-  previous_history <- isTRUE(emc[[1]]$history_proposals)
-  if(missing(history_proposals)) history_proposals <- previous_history
-  if(!is.logical(history_proposals) || length(history_proposals) != 1 || is.na(history_proposals))
-    stop("history_proposals must be TRUE or FALSE")
-  if(history_proposals != previous_history){
-    emc[[1]]$sample_kernel <- NULL
-    for(i in seq_along(emc)) attr(emc[[i]]$samples, "pm_settings") <- NULL
-    # Use the latest draws as warmup history for the changed mixture.
-    if(get_last_stage(emc) %in% c("adapt", "sample")){
-      emc <- subset(emc, stage = get_last_stage(emc))
-      for(i in seq_along(emc)) emc[[i]]$samples$stage[] <- "burn"
-      last_stage <- "adapt"
-    }
-  }
-  emc[[1]]$history_proposals <- history_proposals
+  hp <- set_history_proposals(emc, if(missing(history_proposals)) NULL else history_proposals)
+  emc <- hp$emc
+  if(!is.null(hp$stage)) last_stage <- hp$stage
   stages <- c('preburn', 'burn', 'adapt', 'sample')
   to_run <- stages[which(stages == last_stage):length(stages)]
   context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)

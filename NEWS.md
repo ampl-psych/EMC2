@@ -1,5 +1,10 @@
 # EMC2 (development)
 
+## Hard fits
+
+-   `hardfit()` runs the stages of `fit()` one check at a time under a stricter sample-stage stop rule: the Rhat rule (the `.99` quantile of subject-level Rhats with every group-level Rhat, below 1.1; 1.05 over the subject's parameters for `type = "single"`), a floor of 100 on the effective sample size of the group means and log group SDs summed over chains, and two vetoes on the summed subject log-likelihood (chains within 100 units, every subject's chains within 15 units). The first third of the draws is dropped only when that alone makes every criterion pass. A chain held 200 log-likelihood units and 5 within-chain spreads below the best chain for two checks (and lower on its own log posterior, or 1,000 units below) is respawned from a healthy chain at burn and sample checks and at burn exit; a sample-stage cull restarts the kept draws. A fit whose rule Rhat is above 1.5 at check 20 stops there as aborted. `emc[[1]]$stop_record` holds the criteria, the outcome, the statistics (including `rhat_b` and `rhat_ident`, Rhat along the direction the chains disagree on most and along the best-identified direction, and the drift statistics), culls, discards, a per-check trace and earlier records. The sampler and its draws are `fit()`'s; `fit()` is unchanged.
+-   `diagnose()` reads any fitted object (a record is used when present) into one of five classes — `met`, `ess_held`, `aborted`, `ridge_only`, `region_mode` — with the per-chain likelihood comparison, the per-subject spread, the drift of the group means, subject parameters and log-likelihoods between the first and last thirds of the stage, whether the rule Rhat is still falling, and what to do next. `vignette("convergence")` explains the rule, the progress line, the record and the five outcomes.
+
 ## Sampler
 
 -   `adapt` and `sample` now use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. `preburn` and `burn` retain the search kernel. `options(emc.sampler = "legacy")` restores the previous sampler for comparison.
