@@ -1,138 +1,101 @@
-RNGkind("L'Ecuyer-CMRG")
-set.seed(123)
-
-calc_lls <- function(emc, n_particles=1e3) {
-  model <- emc[[1]]$model()
-  p_types <- names(model$p_types)
-  dadm <- emc[[1]]$data[[1]]
-
-  designs <- list()
-  for(p in p_types){
-    designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-  }
-  constants <- attr(dadm, "constants")
-  if(is.null(constants)) constants <- NA
-
-  # make p_mat
-
-  p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
-  colnames(p_mat) <- p_types
-  ## always set t0 to log(runif(0, min(dadm$rt))) to ensure there's actual density
-  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt, na.rm=TRUE)))
-
-  ## if the model is an RDM, set half of the A-values to 0 to ensure both pathways (digt0/pigt0 and digt_core/pigt_core) are tested
-  if(model$c_name == 'RDM') {
-    p_mat[1:(nrow(p_mat)/2),'A'] <- log(0)
-  }
-
-  # lls_new <- EMC2:::calc_ll_multithreaded(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
-  #                                         model$bound, model$transform, model$pre_transform, p_types = p_types,
-  #                                         min_ll = log(1e-10), model$trend, n_threads=5)[1,]
-  lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
-                            model$bound, model$transform, model$pre_transform, p_types = p_types,
-                            min_ll = log(1e-10), model$trend)[1,]
-  round(lls_new, 3)  # prevent numerical precision issues messing with the results
-}
-
-# Simplest design, no trend -----------------------------------------------
+# When working with lM it is useful to design  an "average and difference"
+# contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# We also define a match function for lM
 matchfun=function(d)d$S==d$lR
-dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2],]
-dat$subjects <- droplevels(dat$subjects)
 
-# LNR ---------------------------------------------------------------------
+dat <- expand.grid(subjects = factor(1:2), S = factor(c("left", "right")),
+                   E = factor(c("speed", "neutral", "accuracy"),
+                              levels = c("speed", "neutral", "accuracy")),
+                   R = factor(c("left", "right")))
+dat$rt <- rep(c(.35, .45, .6, .8), length.out = nrow(dat))
+
+# First race models
 design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
-                     formula=list(m~lM,s~1,t0~1),
-                     contrasts=list(m=list(lM=ADmat)), report_p_vector=FALSE)
-LNR_s1 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
+                            formula=list(m~lM + E,s~1,t0~1),
+                            contrasts=list(m=list(lM=ADmat)))
 
-test_that("LNR", {
-  expect_snapshot(calc_lls(LNR_s1))
-})
+p_LNR <- c(m=-1,m_lMd=2, m_Eneutral = .1, m_Eaccuracy = .1, s = log(.5), t0=log(.2))
 
-LNR_s2 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("LNR compressed", {
-  expect_snapshot(calc_lls(LNR_s2))
-})
-
-
-
-# RDM ----------------------------------------------------------
-design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
-                     formula=list(v~lM,s~1,t0~1,A~1,B~1),
-                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
-RDM_s <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-test_that("RDM", {
-  expect_snapshot(calc_lls(RDM_s))
-})
-RDM_s2 <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("RDM compressed", {
-  expect_snapshot(calc_lls(RDM_s2))
-})
-
-
-# LBA ----------------------------------------------------------
 design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
-                     formula=list(v~lM,sv~1,t0~1,A~1,B~1),
-                     contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
-LBA_s <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-test_that("LBA", {
-  expect_snapshot(calc_lls(LBA_s))
-})
-LBA_s2 <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("LBA compressed", {
-  expect_snapshot(calc_lls(LBA_s2))
-})
+                            formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+                            contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
+
+p_LBA <- c(v=2,v_lMd=1, sv_lMTRUE = log(.5), B = log(.4), B_Eneutral = .1,
+           B_Eaccuracy = .2, B_lRright = 0, A = log(.2), t0=log(.2))
 
 
-# WDM ----------------------------------------------------------
-design_WDM <- design(data = dat, model=DDM,
-                     formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-                     constants=c(s=1, sv=log(0), SZ=qnorm(0)), report_p_vector=FALSE)
-WDM_s <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2)
-test_that("WDM", {
-  expect_snapshot(calc_lls(WDM_s))
-})
-WDM_s2 <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("WDM compressed", {
-  expect_snapshot(calc_lls(WDM_s2))
-})
+design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
+                            formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
+                            contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
 
+p_RDM <- c(v=log(2),v_lMd=1, s_lMTRUE = log(.8), B = log(.4), B_Eneutral = .1,
+           B_Eaccuracy = .2, B_lRright = 0, A = log(.2), t0=log(.2))
 
-# DDM ---
+# Also DDM
 design_DDM <- design(data = dat,model=DDM,
-                     formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0~1),
-                     constants=c(s=1), report_p_vector=FALSE)
-DDM_s <- make_emc(dat, design_DDM, rt_resolution = 0.05, n_chains = 2)
-test_that("DDM", {
-  expect_snapshot(calc_lls(DDM_s))
+                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1, st0~1),
+                            constants=c(s=log(1)))
+
+p_DDM <- c(v_Sleft = -2, v_Sright = 2, a = log(2), a_Eneutral = .3, a_Eaccuracy = .3, t0 = log(.2),
+           Z = qnorm(.5), sv = log(.5), SZ = qnorm(.3), st0 = log(.05))
+
+LNR_s <- make_emc(dat, design_LNR, type = "single", compress = FALSE, n_chains = 1)
+LBA_s <- make_emc(dat, design_LBA, type = "single", compress = FALSE, n_chains = 1)
+RDM_s <- make_emc(dat, design_RDM, type = "single", compress = FALSE, n_chains = 1)
+DDM_s <- make_emc(dat, design_DDM, type = "single", compress = FALSE, n_chains = 1)
+
+test_that("LNR likelihood", {
+  parameters <- likelihood_parameters(p_LNR)
+  parameters <- rbind(parameters, invalid = p_LNR)
+  parameters[nrow(parameters), "t0"] <- log(10)
+  ll <- model_likelihood(LNR_s, parameters)
+  expected <- apply(parameters, 1, function(p) {
+    effect <- c(speed = 0, neutral = p[["m_Eneutral"]], accuracy = p[["m_Eaccuracy"]])
+    m <- p[["m"]] + effect[as.character(dat$E)]
+    difference <- ifelse(dat$S == dat$R, .5, -.5) * p[["m_lMd"]]
+    rt <- dat$rt - exp(p[["t0"]])
+    trial_ll <- dlnorm(rt, m + difference, exp(p[["s"]]), log = TRUE) +
+      plnorm(rt, m - difference, exp(p[["s"]]), lower.tail = FALSE, log.p = TRUE)
+    tapply(pmax(log(1e-10), trial_ll), dat$subjects, sum)
+  })
+  expect_equal(unname(ll), unname(t(expected)), tolerance = 1e-8)
+  # Repeated observations exercise the compressed likelihood's expansion.
+  compressed <- make_emc(rbind(dat, dat), design_LNR,
+                         type = "single", compress = TRUE, n_chains = 1)
+  expect_equal(model_likelihood(compressed, parameters), 2 * ll)
 })
 
-
-
-# Tests for likelihoods that rely on survivor functions (1-CDFs) ----------
-dat_m <- make_missing(dat, LT=0.15, UC=0.75, rt_resolution=0.05) # truncation requires CDFs on each trial, censoring only for NA trials
-LNR_s1_m <- make_emc(dat_m, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-RDM_s1_m <- make_emc(dat_m, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-LBA_s1_m <- make_emc(dat_m, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-WDM_s1_m <- make_emc(dat_m, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-
-test_that("LNR with missing", {expect_snapshot(calc_lls(LNR_s1_m))})
-test_that("RDM with missing", {expect_snapshot(calc_lls(RDM_s1_m))})
-test_that("LBA with missing", {expect_snapshot(calc_lls(LBA_s1_m))})
-test_that("WDM with missing", {expect_snapshot(calc_lls(WDM_s1_m))})
-
-
-# Racing ExGaussian -------------------------------------------------------
-design_REXG <- design(data = dat,model=REXG,matchfun=matchfun,
-                      formula=list(mu~lM,tau~1,sigma~1,t0~1),
-                      contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
-REXG_s <- make_emc(dat, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-test_that("REXG", {
-  expect_snapshot(calc_lls(REXG_s))
+test_that("LBA likelihood", {
+  parameters <- likelihood_parameters(p_LBA)
+  parameters <- rbind(parameters, invalid = p_LBA)
+  parameters[nrow(parameters), "t0"] <- log(10)
+  expect_snapshot(round(model_likelihood(LBA_s, parameters), 6))
 })
 
-REXG_s1_m <- make_emc(dat_m, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("REXG with missing", {expect_snapshot(calc_lls(REXG_s1_m))})
+test_that("RDM likelihood", {
+  parameters <- likelihood_parameters(p_RDM)
+  # A = 0 has a separate density/CDF implementation.
+  parameters[1:8, "A"] <- -Inf
+  parameters <- rbind(parameters, invalid = p_RDM)
+  parameters[nrow(parameters), "t0"] <- log(10)
+  expect_snapshot(round(model_likelihood(RDM_s, parameters), 6))
+})
 
+test_that("DDM likelihood", {
+  parameters <- likelihood_parameters(p_DDM)
+  parameters <- rbind(parameters, invalid = p_DDM)
+  parameters[nrow(parameters), "t0"] <- log(10)
+  expect_snapshot(round(model_likelihood(DDM_s, parameters), 6))
+})
 
+design_WDM <- design(data = dat, model = DDM,
+                      formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, Z ~ 1),
+                      constants = c(s = 0, sv = -Inf, SZ = -Inf, st0 = -Inf))
+p_WDM <- p_DDM[!names(p_DDM) %in% c("sv", "SZ", "st0")]
+WDM_s <- make_emc(dat, design_WDM, type = "single", compress = FALSE, n_chains = 1)
+
+test_that("WDM likelihood without trial variability", {
+  parameters <- likelihood_parameters(p_WDM)
+  expect_snapshot(round(model_likelihood(WDM_s, parameters), 6))
+})

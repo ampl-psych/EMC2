@@ -142,7 +142,7 @@ inline ChoiceOnlySpec make_choice_only_spec(const ParamTable&      pt,
 {
   ChoiceOnlySpec spec;
 
-  if (type == "MULTINOMIAL_LOGIT") {
+  if (type == "MULTINOMIAL_LOGIT" || type == "MULTINOMIAL_PROBIT") {
     spec.col_utility = pt.base_index_for("utility");
   } else {
     spec.col_location = pt.base_index_for("location");

@@ -77,7 +77,7 @@ More details can be found in the <code>fit</code> help files (<code><a href="fit
 <span>  n_blocks <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  thin <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  trim <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  r_cores <span class="op">=</span> <span class="fl">1</span></span>
+<span>  on_singular <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -153,8 +153,8 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 <dd><p>A boolean. If <code>TRUE</code> will automatically remove redundant samples (i.e. from preburn, burn, adapt).</p></dd>
 
 
-<dt id="arg-r-cores">r_cores<a class="anchor" aria-label="anchor" href="#arg-r-cores"></a></dt>
-<dd><p>An integer for number of cores to use in R-based likelihood calculations, default 1.</p></dd>
+<dt id="arg-on-singular">on_singular<a class="anchor" aria-label="anchor" href="#arg-on-singular"></a></dt>
+<dd><p>A list or <code>NULL</code> (default). Controls recovery when the group-level covariance becomes computationally singular during sampling. <code>NULL</code> retries the group step up to 3 times, then raises an error. A list may set <code>max_retries</code> (integer, re-draw the group step on failure).</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -240,4 +240,3 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 
 
   </body></html>
-

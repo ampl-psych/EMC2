@@ -23,7 +23,7 @@ run_sbc(
 
 \item{replicates}{Integer. The number of samples to draw from the prior}
 
-\item{trials}{Integer. The number of trials of the simulated data (per subject)}
+\item{trials}{Integer. The number of simulated trials per subject per design cell}
 
 \item{n_subjects}{Integer. Only used for hierarchical models. The number of subjects to be used in data generation of each replicate}
 

@@ -8,6 +8,7 @@ using namespace Rcpp;
 static constexpr int    DDM_NEVAL   = 6000;
 static constexpr double DDM_EPS     = 5e-3;
 static constexpr double DDM_LOG_EPS = -5.298317366548036311258; //std::log(DDM_EPS);
+static constexpr double DDM_LOG_INNER_EPS = -7.600902459542082361471; //std::log(DDM_EPS * 0.1);
 
 // lnnorm helpers
 static constexpr double LNNORM_MAX_X = 38.0;
@@ -204,7 +205,8 @@ static double logfl_linear(double q, double w, int K) {
 }
 
 // log-density of the Wiener first-passage time
-static double dwiener(double q, double a, double vn, double wn, double sv)
+static double dwiener(double q, double a, double vn, double wn, double sv,
+                      double log_eps = DDM_LOG_EPS)
 {
   if (q == 0.0) return R_NegInf;
 
@@ -219,7 +221,7 @@ static double dwiener(double q, double a, double vn, double wn, double sv)
     / (2.0 * denom)
     - 2.0 * std::log(a) - 0.5 * std::log(denom);
 
-    const double es  = DDM_LOG_EPS - lg1;
+    const double es  = log_eps - lg1;
     const double kss = ks(q_asq, w, es);
     const double kll = kl(q_asq, w, es);
 
@@ -451,7 +453,7 @@ static int int_ddiff(unsigned /*dim*/, const double* x, void* p,
   if (params->t - tau <= 0.0) { retval[0] = 0.0; return 0; }
   // dwiener returns log-density; exponentiate for the integrand
   retval[0] = std::exp(dwiener(params->low_or_up * (params->t - tau),
-                               params->a, params->v, omega, params->sv));
+                               params->a, params->v, omega, params->sv, DDM_LOG_INNER_EPS));
   return 0;
 }
 

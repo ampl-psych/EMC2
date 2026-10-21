@@ -56,7 +56,7 @@ struct TruncSpec {
 TruncSpec make_trunc_spec(const Rcpp::DataFrame& data,
                           int n_trials,
                           int n_acc,
-                          std::vector<bool>& participating,
+                          const std::vector<bool>& participating,
                           const RaceModelSetup* setup,
                           const ParamTable& pt,
                           RaceScratch& scratch);

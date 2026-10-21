@@ -312,6 +312,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// c_multinomial_probit_probs
+Rcpp::NumericVector c_multinomial_probit_probs(Rcpp::NumericVector utility);
+RcppExport SEXP _EMC2_c_multinomial_probit_probs(SEXP utilitySEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type utility(utilitySEXP);
+    rcpp_result_gen = Rcpp::wrap(c_multinomial_probit_probs(utility));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fft_convolve_equiv_cpp
 arma::vec fft_convolve_equiv_cpp(const arma::vec& x, const arma::vec& y, bool conj_flag);
 RcppExport SEXP _EMC2_fft_convolve_equiv_cpp(SEXP xSEXP, SEXP ySEXP, SEXP conj_flagSEXP) {
@@ -584,6 +595,145 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// native_run_hyper
+Rcpp::List native_run_hyper(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter);
+RcppExport SEXP _EMC2_native_run_hyper(SEXP samplerSEXP, SEXP alphaSEXP, SEXP iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type sampler(samplerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< int >::type iter(iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_run_hyper(sampler, alpha, iter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_chain_proposals
+Rcpp::List native_chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha, Rcpp::NumericMatrix likelihood, bool do_block, std::string stage);
+RcppExport SEXP _EMC2_native_chain_proposals(SEXP emcSEXP, SEXP alphaSEXP, SEXP likelihoodSEXP, SEXP do_blockSEXP, SEXP stageSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type emc(emcSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type likelihood(likelihoodSEXP);
+    Rcpp::traits::input_parameter< bool >::type do_block(do_blockSEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage(stageSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_chain_proposals(emc, alpha, likelihood, do_block, stage));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_eff_proposals
+Rcpp::List native_eff_proposals(Rcpp::List emc, Rcpp::List samples);
+RcppExport SEXP _EMC2_native_eff_proposals(SEXP emcSEXP, SEXP samplesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type emc(emcSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type samples(samplesSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_eff_proposals(emc, samples));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_sub_blocking
+Rcpp::IntegerVector native_sub_blocking(Rcpp::List emc, int n_blocks);
+RcppExport SEXP _EMC2_native_sub_blocking(SEXP emcSEXP, SEXP n_blocksSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type emc(emcSEXP);
+    Rcpp::traits::input_parameter< int >::type n_blocks(n_blocksSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_sub_blocking(emc, n_blocks));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_conditionals
+Rcpp::List native_conditionals(Rcpp::List samples, std::string type, int subject, int iteration, SEXP indices);
+RcppExport SEXP _EMC2_native_conditionals(SEXP samplesSEXP, SEXP typeSEXP, SEXP subjectSEXP, SEXP iterationSEXP, SEXP indicesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type samples(samplesSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< int >::type subject(subjectSEXP);
+    Rcpp::traits::input_parameter< int >::type iteration(iterationSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type indices(indicesSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_conditionals(samples, type, subject, iteration, indices));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_group_means
+Rcpp::NumericVector native_group_means(Rcpp::List sampler, Rcpp::NumericMatrix means, SEXP random);
+RcppExport SEXP _EMC2_native_group_means(SEXP samplerSEXP, SEXP meansSEXP, SEXP randomSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type sampler(samplerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type means(meansSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type random(randomSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_group_means(sampler, means, random));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_lik_prec
+Rcpp::List native_lik_prec(Rcpp::List emc, Rcpp::IntegerVector history_idx, Rcpp::List ll_inputs, int n_cores);
+RcppExport SEXP _EMC2_native_lik_prec(SEXP emcSEXP, SEXP history_idxSEXP, SEXP ll_inputsSEXP, SEXP n_coresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type emc(emcSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type history_idx(history_idxSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ll_inputs(ll_inputsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cores(n_coresSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_lik_prec(emc, history_idx, ll_inputs, n_cores));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_sampler_contexts
+SEXP native_sampler_contexts(Rcpp::List inputs, int n_chains, int n_cores);
+RcppExport SEXP _EMC2_native_sampler_contexts(SEXP inputsSEXP, SEXP n_chainsSEXP, SEXP n_coresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type inputs(inputsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_chains(n_chainsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_cores(n_coresSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_sampler_contexts(inputs, n_chains, n_cores));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_run_chains
+Rcpp::List native_run_chains(Rcpp::List args, SEXP cache, std::string stage, int iter, int cores_for_chains, bool verboseProgress);
+RcppExport SEXP _EMC2_native_run_chains(SEXP argsSEXP, SEXP cacheSEXP, SEXP stageSEXP, SEXP iterSEXP, SEXP cores_for_chainsSEXP, SEXP verboseProgressSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type args(argsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type cache(cacheSEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage(stageSEXP);
+    Rcpp::traits::input_parameter< int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< int >::type cores_for_chains(cores_for_chainsSEXP);
+    Rcpp::traits::input_parameter< bool >::type verboseProgress(verboseProgressSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_run_chains(args, cache, stage, iter, cores_for_chains, verboseProgress));
+    return rcpp_result_gen;
+END_RCPP
+}
+// native_init_chains
+Rcpp::List native_init_chains(Rcpp::List emc, SEXP cache, SEXP start_mu, SEXP start_var, int particles, bool force);
+RcppExport SEXP _EMC2_native_init_chains(SEXP emcSEXP, SEXP cacheSEXP, SEXP start_muSEXP, SEXP start_varSEXP, SEXP particlesSEXP, SEXP forceSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type emc(emcSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type cache(cacheSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type start_mu(start_muSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type start_var(start_varSEXP);
+    Rcpp::traits::input_parameter< int >::type particles(particlesSEXP);
+    Rcpp::traits::input_parameter< bool >::type force(forceSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_init_chains(emc, cache, start_mu, start_var, particles, force));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -617,6 +767,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_dTEXG_RDEX", (DL_FUNC) &_EMC2_dTEXG_RDEX, 6},
     {"_EMC2_dRDEXrace", (DL_FUNC) &_EMC2_dRDEXrace, 11},
     {"_EMC2_stopfn_rdex", (DL_FUNC) &_EMC2_stopfn_rdex, 12},
+    {"_EMC2_c_multinomial_probit_probs", (DL_FUNC) &_EMC2_c_multinomial_probit_probs, 1},
     {"_EMC2_fft_convolve_equiv_cpp", (DL_FUNC) &_EMC2_fft_convolve_equiv_cpp, 3},
     {"_EMC2_compute_gamma_diff_hrf", (DL_FUNC) &_EMC2_compute_gamma_diff_hrf, 9},
     {"_EMC2_compute_hrf", (DL_FUNC) &_EMC2_compute_hrf, 9},
@@ -633,6 +784,16 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_rPSDM", (DL_FUNC) &_EMC2_rPSDM, 4},
     {"_EMC2_rPHSDM", (DL_FUNC) &_EMC2_rPHSDM, 4},
     {"_EMC2_rHSDM", (DL_FUNC) &_EMC2_rHSDM, 4},
+    {"_EMC2_native_run_hyper", (DL_FUNC) &_EMC2_native_run_hyper, 3},
+    {"_EMC2_native_chain_proposals", (DL_FUNC) &_EMC2_native_chain_proposals, 5},
+    {"_EMC2_native_eff_proposals", (DL_FUNC) &_EMC2_native_eff_proposals, 2},
+    {"_EMC2_native_sub_blocking", (DL_FUNC) &_EMC2_native_sub_blocking, 2},
+    {"_EMC2_native_conditionals", (DL_FUNC) &_EMC2_native_conditionals, 5},
+    {"_EMC2_native_group_means", (DL_FUNC) &_EMC2_native_group_means, 3},
+    {"_EMC2_native_lik_prec", (DL_FUNC) &_EMC2_native_lik_prec, 4},
+    {"_EMC2_native_sampler_contexts", (DL_FUNC) &_EMC2_native_sampler_contexts, 3},
+    {"_EMC2_native_run_chains", (DL_FUNC) &_EMC2_native_run_chains, 6},
+    {"_EMC2_native_init_chains", (DL_FUNC) &_EMC2_native_init_chains, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

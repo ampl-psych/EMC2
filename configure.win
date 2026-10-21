@@ -1,3 +1,2 @@
 #!/bin/sh
-cp inst/include/build_info.h.win inst/include/build_info.h
-echo "configure.win: inst/include/build_info.h written"
+R_BIN="${R_HOME}/bin${R_ARCH_BIN}/R.exe" EMC2_MAKEVARS=src/Makevars.win sh configure "$@"

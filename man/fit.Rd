@@ -20,6 +20,7 @@
   max_tries = 20,
   thin = FALSE,
   on_singular = NULL,
+  history_proposals = FALSE,
   ...
 )
 
@@ -52,36 +53,29 @@ by \code{stop_criteria} are checked and, in the stages before \code{sample}, pro
 root of the number of sampled parameters determines the number of particles used.}
 
 \item{cores_per_chain}{An integer. How many cores to use per chain. Parallelizes across
-participant calculations. Only available on Linux or Mac OS. For Windows, only
-parallelization across chains (\code{cores_for_chains}) is available.}
+participant calculations using native threads.}
 
 \item{cores_for_chains}{An integer. How many cores to use across chains.
 Defaults to the number of chains. The total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
 
 \item{max_tries}{An integer. How many times should it try to meet the finish
-conditions as specified by \code{stop_criteria}? Defaults to 20. \code{max_tries} is
-ignored if the required number of iterations has not been reached yet.}
+conditions as specified by \code{stop_criteria}? Defaults to 20. In \code{sample}, this
+limit applies even if the requested number of draws has not been reached. In
+earlier stages, the requested number of iterations must be reached first.}
 
 \item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
 
-\item{on_singular}{A list or \code{NULL} (the default). Controls recovery when the
-group-level covariance becomes computationally singular during sampling (which
-otherwise aborts the run, typically from an unidentified parameter). \code{NULL}
-keeps the defaults below: up to 3 re-draws of the group step, then an error
-naming the diverging parameters.
-A list may set any of:
-\itemize{
-\item \code{max_retries} — integer; on a singular covariance, re-draw the group
-(Gibbs) step this many times before giving up on that iteration. Rescues
-transient singularities. Default 3.
-\item \code{on_exhausted} — \code{"error"} (default) or \code{"carry_forward"}. When retries
-are exhausted, \code{"carry_forward"} reuses the previous iteration's group
-parameters and continues instead of aborting.
-\item \code{max_carry_forward} — integer; consecutive carried-forward iterations
-allowed before giving up with a diagnosis of the diverging parameters. Default 10.
-}
-Retry is attempted before carry-forward when both are enabled.}
+\item{on_singular}{A list or \code{NULL} (default). Controls recovery when the group-level
+covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
+group step, then an error.
+A list may set \code{max_retries} (integer, re-draw the group step on failure).}
+
+\item{history_proposals}{Logical. Add pooled-history proposals alongside curvature
+proposals during adaptation and sampling. Defaults to \code{FALSE} for new fits;
+omitted on continuation, retains the saved choice. Changing it after adaptation
+uses the previous draws as warmup history and restarts adaptation. Mixture weights
+are learned during warmup and fixed in sample.}
 
 \item{...}{Additional optional arguments}
 }
@@ -108,7 +102,7 @@ pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
 \code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
 every \code{step_size} iterations. After a failed check, the first third of the stage's
-draws is dropped if this lowers the stopping diagnostic.
+draws is dropped only if all stopping criteria pass on the remaining draws.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 
@@ -122,6 +116,10 @@ this extra condition. The \code{sample} proposals are then built and fixed.
 \code{omit_mpsrf} (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is \code{FALSE}.
 
 \code{iter} (integer): The number of MCMC samples to collect.
+
+Chains share fixed likelihood inputs in one process. Each chain has its own
+native RNG, seeded from R, with its state saved in the samples for resuming fits.
+Resuming with a different C++ library seeds fresh chain RNGs from R.
 
 The estimation is performed using particle-metropolis within-Gibbs sampling.
 For sampling details see:
@@ -155,6 +153,6 @@ LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress 
 #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 
 # For a transient singular group covariance during burn, retry the group step:
-# LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
+# LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3))
 }
 }

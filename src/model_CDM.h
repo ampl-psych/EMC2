@@ -133,7 +133,7 @@ inline const std::vector<double>& weights_hsdm() {
     const size_t M = sizeof(ZEROS_HSDM)/sizeof(ZEROS_HSDM[0]);
     w.resize(M);
     for (size_t j = 0; j < M; ++j) {
-      w[j] = (ZEROS_HSDM[j] * ZEROS_HSDM[j]) / JVZ_HSDM[j];
+      w[j] = (ZEROS_HSDM[j] * ZEROS_HSDM[j]) / (2.0 * JVZ_HSDM[j]);
     }
   }
   return w;

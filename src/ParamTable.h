@@ -41,6 +41,7 @@ struct ParamTable {
 
   std::vector<int>  active_cols;
   std::vector<char> is_active;
+  std::vector<double> map_scratch;  // self_copy in map_from_designs, reused per particle
   std::vector<bool> col_is_constant;   // true if all rows of this column are identical
 
   std::unordered_map<std::string, int> name_to_base_idx;
@@ -51,6 +52,7 @@ struct ParamTable {
     : base(std::move(base_)), base_names(std::move(names_))
   {
     n_trials = base.nrow;
+    map_scratch.resize(n_trials);
     const int p = base.ncol;
     active_cols.resize(p);
     std::iota(active_cols.begin(), active_cols.end(), 0);
@@ -74,6 +76,7 @@ struct ParamTable {
     pt.base                     = base.clone();
     pt.base_names               = base_names;
     pt.n_trials                 = n_trials;
+    pt.map_scratch.resize(n_trials);
     pt.active_cols              = active_cols;
     pt.is_active                = is_active;
     pt.design_plan              = design_plan;
@@ -190,10 +193,10 @@ struct ParamTable {
 
     // Lazy init of design_plan is not safe inside a parallel region —
     // caller must ensure init_design_plan() was called before entering parallel.
-    // (calc_ll_multithreaded calls ctx.param_table.init_design_plan(designs) before the loop)
+    // (make_pipeline_context builds the plan before thread-local copies are made)
 
     const int T = n_trials;
-    std::vector<double> self_copy(T);
+    std::vector<double>& self_copy = map_scratch;
 
     for (int i = 0; i < n; ++i) {
       if (!use[i])       continue;
