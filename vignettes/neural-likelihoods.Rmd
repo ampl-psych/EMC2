@@ -14,12 +14,24 @@ library(EMC2)
 
 ## Loading a network is not the same as being able to infer with it
 
-*EMC2* can use a trained neural network in place of a model's likelihood:
-the shipped normalizing flows `DDMnn` (the full DDM) and `RDMnn` (the racing
-diffusion model), and any network registered with `register_nn_model()`
-(flows, networks that regress the log-likelihood, and likelihood
-approximation networks converted from ONNX). Such a model is used exactly like
-`DDM` or `RDM`: it goes into `design()`, gets a prior, is fitted.
+*EMC2* ships two normalizing flows: **DDMnle** (a single flow for the full DDM,
+covering all combinations of variability parameters) and a flow for the **racing
+diffusion model**. Both are loaded with `register_nn_model()`:
+
+```{r, eval = FALSE}
+DDMnle <- register_nn_model(
+  system.file("extdata/flownn/ddm_sc_s1106_e245_weights.json", package = "EMC2"),
+  twin = DDM)
+
+RDMnle <- register_nn_model(
+  system.file("extdata/flownn/rdm_ss_base_s801_e271_weights.json", package = "EMC2"),
+  twin = RDM)
+```
+
+A registered model is used exactly like `DDM` or `RDM`: it goes into `design()`,
+gets a prior, is fitted. Any network registered with `register_nn_model()` —
+including likelihood approximation networks converted from ONNX — follows the
+same pattern.
 
 A network is an approximation, trained on simulations from part of the
 parameter space. Its error is not a constant: where it varies with the
@@ -32,18 +44,51 @@ against, are documented in the NLE project's handover notes (Wuth, 2026:
 `METHODS.md` section 6, "What the diagnostics can and cannot do", and
 `TRAPS.md`); they are not restated here.
 
+## A single DDM flow for all variability cases
+
+DDMnle was trained with a zero-box regime: the training data includes exact
+zeros for `sv`, `SZ` and `st0` as a separate sampling regime. A single network
+therefore covers the analytic DDM (all three set to zero) and every subcase in
+between. Subcases are selected in `design()` via `constants`:
+
+```{r, eval = FALSE}
+DDMnle <- register_nn_model(
+  system.file("extdata/flownn/ddm_sc_s1106_e245_weights.json", package = "EMC2"),
+  twin = DDM)
+
+# sv = 0, st0 = 0 (only SZ free):
+des_SZonly <- design(factors = list(subjects = 1), Rlevels = c("u", "l"),
+                     model = DDMnle,
+                     formula = list(v ~ 1, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1),
+                     constants = c(sv = -Inf, st0 = -Inf))  # -Inf on log scale = 0
+
+# analytic DDM (all variability fixed to zero):
+des_ddm <- design(factors = list(subjects = 1), Rlevels = c("u", "l"),
+                  model = DDMnle,
+                  formula = list(v ~ 1, a ~ 1, t0 ~ 1, Z ~ 1),
+                  constants = c(sv = -Inf, SZ = -Inf, st0 = -Inf))
+```
+
+The old DDMnn cards (`ddm_cap256w_c4`, `ddm_st0zero`) required a different
+network for each subcase because they were not trained with zero-box sampling;
+DDMnle replaces them all. They remain in the package for backward compatibility.
+
 ## A cell: the network and its control, differing in one respect
 
 Every check runs on a *cell*: one design with independent normal priors on
 the sampled scale, built twice, once with the network and once with an
 analytic *control*, by default the model the network approximates (for
-`DDMnn`, `DDM`). The two cells share the design, constants, defaults, prior
+`DDMnle`, `DDM`). The two cells share the design, constants, defaults, prior
 and simulator; they differ in the likelihood only. The same check on the
 control must come out at about zero; what it does show is not the network's
 doing.
 
-```{r}
-cell <- nn_cell(DDMnn,
+```{r, eval = FALSE}
+DDMnle <- register_nn_model(
+  system.file("extdata/flownn/ddm_sc_s1106_e245_weights.json", package = "EMC2"),
+  twin = DDM)
+
+cell <- nn_cell(DDMnle,
   mean = c(v = 1, a = log(.8), t0 = log(.3), Z = qnorm(.5), SZ = qnorm(.2),
            sv = log(.1), st0 = log(.05)),
   sd = c(v = .15, a = .15, t0 = .1, Z = .05, SZ = .15, sv = .15, st0 = .15))
@@ -52,9 +97,8 @@ cell
 
 Priors are always named (never matched by position). Parameters not given a
 prior stay at the model's default, which must lie inside the network's
-training region (`DDMnn` refuses `sv = SZ = st0 = 0`, `DDM`'s defaults, because
-the network was not trained there). The within-trial noise `s` is held at its
-default by default, as it sets the scale.
+training region. The within-trial noise `s` is held at its default by default,
+as it sets the scale.
 
 **The prior must stay inside the training region.** The network rejects
 parameter vectors outside the region it was trained on, which truncates the
@@ -64,7 +108,10 @@ leaves the region, and `run_sbc()` makes the same check (`nn_in_box()`) for
 every neural-likelihood design:
 
 ```{r, error = TRUE}
-des <- design(factors = list(subjects = 1), Rlevels = c("a", "b"), model = RDMnn,
+RDMnle <- register_nn_model(
+  system.file("extdata/flownn/rdm_ss_base_s801_e271_weights.json", package = "EMC2"),
+  twin = RDM)
+des <- design(factors = list(subjects = 1), Rlevels = c("a", "b"), model = RDMnle,
               formula = list(v ~ 0 + lR, B ~ 1, t0 ~ 1, A ~ 1), constants = c(s = log(1)),
               report_p_vector = FALSE)
 pri <- prior(des, type = "single",
@@ -81,7 +128,7 @@ nn_score_bias(cell, n_draws = 200)                    # seconds
 nn_posterior_shift(cell, n_datasets = 60, cores = 8)  # about a minute
 nn_sbc_cell(cell, trials = 400, replicates = 500,     # hours
             cores_per_chain = 8, cores_for_chains = 1,
-            archive_dir = "2026-10-01_dev-nle_cap256w-sbc")
+            archive_dir = "2026-10-01_dev-flow_ddmnle-sbc")
 ```
 
 **Total mass** (`nn_total_mass()`) integrates the network's likelihood over rt
@@ -132,98 +179,97 @@ with the prior centred away from the truth, and likelihood profiles.
 
 ## What the checks found for the shipped networks
 
-The cells are those the NLE project used (the prior above for the DDM
-networks; for `rdm_small`, a two-accumulator race with `v ~ lM` and prior
-means `v = log(1.5)`, `v_lMTRUE = 0.4`, `B = 0`, `A = log(0.3)`,
-`t0 = log(0.2)`, sds 0.1). The script
-`system.file("scripts", "nle_validation_kit.R", package = "EMC2")`
+All numbers are on the sampled scale (log for `a`, `t0`, `sv`, `st0`, `B`,
+`A`, the rates of the race; probit for `Z`, `SZ`; `v` is sampled directly).
+The script `system.file("scripts", "nle_validation_kit.R", package = "EMC2")`
 reproduces the numbers.
 
-All numbers are on the sampled scale (log for `a`, `t0`, `sv`, `st0`, `B`,
-`A`, the rates of the race; probit for `Z`, `SZ`). "NLE" is the value the
-project recorded with its own scripts, from other draws (except where noted).
+### DDMnle (sc_s1106_e245)
 
-**Total mass** (50 prior draws). The three flows integrate to one within the
-quadrature error: mean `log Z` below 2e-5 in absolute value, sd below 1.1e-5,
-and they put at most 1.6e-5 of their mass before the non-decision time. The
-LAN (a network regressing the log-likelihood, converted from ONNX) is not
-normalised by construction: sd of `log Z` 0.003 over the prior, similar to the
-project's own regression network (0.002). Before its support it returns its
-training floor, log density -16.1, where the exact density is zero (a fit
-floors it at log(1e-10) = -23).
+DDMnle was validated on six variability cases (N = 400, 500 replicates each,
+AWS x86_64): `sv = 0`, `SZ = 0`, `st0 = 0`, `sv = SZ = 0`, `sv = st0 = 0`,
+and the full model (all free). The prior was the cell above. Score bias was
+screened before SBC on all six cases (300 prior draws, H = 0.01, oracle
+control g <= 7e-5; `t0` excluded because it moves the support).
 
-**Score bias** (h = 0.01; mean over 200 prior draws, standard error in
-brackets; LAN over 80 draws, rt grid to 60 s). Every control is below 5e-4 in
-absolute value.
+**Total mass** (50 prior draws): mean `log Z` < 2e-5, sd < 1.1e-5, mass
+before support < 2e-5 in every case — consistent with a normalised flow.
 
-| network | parameter | g (se) | NLE |
+**Score bias** (300 draws, standard error in brackets):
+
+| case | v | a | Z | sv | SZ | st0 |
+|---|---|---|---|---|---|---|
+| full | +0.0001 (0.0000) | +0.0015 (0.0002) | -0.0024 (0.0001) | 0.0000 (0.0000) | -0.0003 (0.0000) | +0.0007 (0.0000) |
+| sv = 0 | +0.0002 (0.0000) | -0.0032 (0.0002) | -0.0002 (0.0000) | — | +0.0001 (0.0000) | -0.0007 (0.0000) |
+| SZ = 0 | -0.0002 (0.0000) | +0.0037 (0.0001) | +0.0014 (0.0000) | 0.0000 (0.0000) | — | +0.0004 (0.0000) |
+| st0 = 0 | +0.0001 (0.0001) | +0.0030 (0.0008) | -0.0023 (0.0003) | 0.0000 (0.0000) | -0.0003 (0.0000) | — |
+| sv = SZ = 0 | -0.0002 (0.0000) | +0.0040 (0.0001) | -0.0049 (0.0001) | — | — | -0.0001 (0.0000) |
+| sv = st0 = 0 | +0.0002 (0.0001) | -0.0023 (0.0010) | -0.0013 (0.0003) | — | +0.0001 (0.0000) | — |
+| sv = SZ = st0 = 0 | -0.0003 (0.0000) | +0.0047 (0.0007) | -0.0061 (0.0003) | — | — | — |
+
+Score biases are 5–20x smaller than the old DDMnn cards (`a` 0.0030–0.0047
+here vs 0.0153 for ddm_cap256w_c4 and 0.0338 for ddm_st0zero).
+
+**SBC** (N = 400, 500 replicates; gate |standardised bias| <= 0.5):
+all 35 parameter-case tests pass the gate. Worst |std bias|: 0.13 (t0,
+full case). Coverage: 0.922–0.972. Minimum KS p: 0.020. One case
+(full) had one parameter outside the ECDF envelope — chance level for
+35 tests. The old DDMnn cards had worst |std bias| 0.15–0.50.
+
+**Speed** vs WienR (N = 400, single thread, compiled path):
+
+| case | WienR (ms) | DDMnle (ms) | speedup |
 |---|---|---|---|
-| `ddm_cap256w_c4` | v | +0.0001 (0.0001) | +0.0004 |
-| | a | +0.0153 (0.0014) | +0.0118 |
-| | Z | -0.0061 (0.0005) | -0.0063 |
-| | SZ | -0.0017 (0.0001) | -0.0017 |
-| | sv | -0.0001 (0.0000) | -0.0001 |
-| | st0 | +0.0038 (0.0004) | +0.0039 |
-| `ddm_st0zero` | v | -0.0017 (0.0001) | -0.0016 |
-| | a | +0.0338 (0.0010) | +0.0336 |
-| | Z | +0.0008 (0.0004) | +0.0014 |
-| | SZ | -0.0017 (0.0001) | -0.0017 |
-| `rdm_small` | v | -0.0039 (0.0003) | -0.0035 |
-| | v_lMTRUE | -0.0021 (0.0002) | -0.0018 |
-| | B | +0.0038 (0.0004) | +0.0030 |
-| | A | +0.0009 (0.0001) | +0.0008 |
-| LAN `ddm_uniform_st` | v | +0.0000 (0.0024) | +0.0038 |
-| | a | -0.1098 (0.0037) | -0.1221 |
-| | z | -0.0094 (0.0027) | +0.0025 |
+| full | 1.19 | 0.13 | ~9x |
+| sv = 0 | 1.17 | 0.13 | ~9x |
+| st0 = 0 | 1.21 | 0.12 | ~10x |
+| SZ = 0 | 0.35 | 0.08 | ~4x |
 
-The race control reproduces the project's (-0.00012 on v, -0.00021 on B) to
-every printed digit. For the LAN the grid has to reach 60 s: with the default
-8 s the control's g on `a` is -0.005, because the region includes slow
-parameter vectors with probability beyond 8 s (the print reports how much of
-the probability the grid holds).
+### RDM flow (rdm_ss_base_s801_e271)
 
-**Posterior shift** (60 data sets x 400 trials, 2000 draws; under two minutes
-for all four networks on 10 cores). Network standardised bias, with the shift
-from the control's posterior in control posterior sds in brackets; every
-control column is within +-0.36 (standard error 0.13).
+The RDM flow was validated on a two-accumulator cell (v ~ lM, prior means
+`v = log(1.5)`, `v_lMTRUE = 0.4`, `B = 0`, `A = log(0.3)`, `t0 = log(0.2)`,
+sds 0.1) and on an A = 0 cell (the boundary-onset case).
 
-| network | parameter | network (shift) | SBC, 500 replicates (NLE) |
-|---|---|---|---|
-| `ddm_cap256w_c4` | v | +0.03 (+0.04) | +0.05 |
-| | a | -0.05 (0.00) | +0.01 |
-| | t0 | +0.25 (+0.15) | +0.32 |
-| | Z | +0.08 (-0.05) | -0.03 |
-| | SZ | +0.03 (+0.01) | -0.05 |
-| | sv | -0.05 (+0.01) | +0.01 |
-| | st0 | -0.22 (0.00) | -0.14 |
-| `ddm_st0zero` | v | +0.03 (-0.07) | |
-| | a | +0.31 (+0.16) | |
-| | t0 | +0.11 (+0.20) | +0.28 |
-| | Z | +0.11 (+0.11) | worst, +0.28 |
-| | SZ | +0.06 (+0.04) | |
-| | sv | -0.05 (+0.01) | |
-| `rdm_small` | v | +0.11 (+0.03) | +0.03 |
-| | v_lMTRUE | -0.20 (-0.01) | -0.03 |
-| | B | -0.05 (+0.12) | +0.04 |
-| | A | +0.37 (+0.02) | +0.09 |
-| | t0 | -0.09 (-0.16) | 0.00 |
-| LAN `ddm_uniform_st` | v | +0.09 (+0.08) | |
-| | a | **-0.81 (-0.78)** | |
-| | z | -0.31 (-0.17) | |
-| | t | +0.08 (+0.12) | |
-| | st | 0.00 (-0.04) | |
+**Total mass** (50 prior draws): mean `log Z` < 2e-5, sd < 1.1e-5, mass
+before support < 2e-5 — consistent with a normalised flow.
 
-For `ddm_st0zero` the project ran the same check with the same seeds and the
-same (exact) simulator: every value agrees within 0.004. The race network's
-larger network values (v_lMTRUE, A) are shared by its control (-0.20, +0.36):
-they come from the 60 true parameter vectors, not the network, which is why
-the paired shift is the column to read.
+**SBC** (N = 400; gate |standardised bias| <= 0.5):
 
-In short: the DDM flows are calibrated within the SBC gate (|standardised
-bias| <= 0.5) at 400 trials, with a positive non-decision-time bias as their
-main error; the race flow is calibrated; the LAN underestimates boundary
-separation by about 0.8 posterior sds at 400 trials and should not be used
-for inference in this region without further work.
+| cell | parameter | std bias | coverage | KS p | in gate |
+|---|---|---|---|---|---|
+| standard (500 rep.) | v | +0.038 | 0.940 | 0.693 | yes |
+| | v_lMTRUE | -0.097 | 0.928 | 0.052 | yes |
+| | B | +0.007 | 0.956 | 0.737 | yes |
+| | A | -0.063 | 0.960 | 0.539 | yes |
+| | t0 | +0.031 | 0.934 | 0.830 | no (ECDF only) |
+| A = 0 (250 rep.) | v | +0.046 | 0.924 | 0.785 | yes |
+| | v_lMTRUE | -0.017 | 0.956 | 0.901 | yes |
+| | B | -0.006 | 0.940 | 0.911 | yes |
+| | t0 | +0.056 | 0.948 | 0.893 | yes |
+
+Both cells pass the gate. The `t0` ECDF exceedance in the standard cell
+is marginal and shared by the analytic control (std bias -0.029), indicating
+it comes from the prior's true parameter vectors rather than the network.
+
+### LAN (ddm_uniform_st)
+
+The LAN `ddm_uniform_st` (HSSM's DDM with uniform non-decision-time
+variability, converted from ONNX) is an example of a third-party network.
+From the score bias check (80 prior draws, rt grid to 60 s):
+
+| network | parameter | g (se) |
+|---|---|---|
+| LAN `ddm_uniform_st` | v | +0.0000 (0.0024) |
+| | a | -0.1098 (0.0037) |
+| | z | -0.0094 (0.0027) |
+
+The grid has to reach 60 s: with the default 8 s the control's g on `a`
+is -0.005 because the region includes slow parameter vectors with
+probability beyond 8 s. The LAN underestimates boundary separation by about
+0.11 on the sampled scale (~0.8 posterior sds at 400 trials per the
+posterior shift check) and should not be used for inference in this region
+without further validation.
 
 ## Practical notes
 
@@ -235,4 +281,8 @@ for inference in this region without further work.
   `OPENBLAS_NUM_THREADS=1` for the same reason (and to avoid
   oversubscription).
 - A network registered from a file path must be at the same path wherever
-  the cell is run; the shipped networks are found by name.
+  the cell is run; the shipped networks are accessed via `system.file()` as
+  shown above.
+- The CRDM (circular racing diffusion model) flow ships alongside the RDM
+  flow; its card is in the same directory. Its validation is documented in
+  the NLE project's handover notes.

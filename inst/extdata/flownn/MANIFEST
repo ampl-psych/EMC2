@@ -4,3 +4,7 @@ a3981cae981fb62a634edf415e425f2747ed957df83cec40df292cae2824ee9c  rdm_small.rds 
 197aa083258f2649b80935d0eaef1992  ddm_cap256w_c4.rds  md5
 8f3a026dd9168f730cc8474beaa74566  ddm_st0zero.rds  md5
 fbbdfc3e0c55c27e18c1a8e9c1275f7e  rdm_small.rds  md5
+a5c7dd0c0f8ae54b5d2c2a04e40e6b23df36b0a87aec990c6679d35a98db4214  ddm_sc_s1106_e245_weights.json  sha256
+b6ce7db9ca98ed17f1b04ecfc8860744fd5716ee20709f1baddcccdac0b44700  rdm_ss_base_s801_e271_weights.json  sha256
+f6ce838575164c92a6dfc12947defd8d  ddm_sc_s1106_e245_weights.json  md5
+12e8d60cb0de2f1e02ed93963bc0a77c  rdm_ss_base_s801_e271_weights.json  md5
