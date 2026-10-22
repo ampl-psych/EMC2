@@ -245,7 +245,12 @@ test_that("after save/load and a cleared cache the native path rebuilds the eval
 })
 
 # --- e. a native fit is the R-path fit -------------------------------------------
-test_that("a native fit reproduces the R-path fit draw for draw", {
+# The sampler (joint_move) evaluates likelihoods from C++ through
+# LikelihoodContext and refuses a model without a compiled likelihood, so the
+# R path can no longer be fitted and compared draw for draw. What it kept is
+# checked instead: the log-likelihoods the sampler stored for its draws are
+# the R path's on those draws (the sampler's own entry point, and calc_ll_manager).
+test_that("a native fit's stored log-likelihoods are the R path's on its draws", {
   skip_on_cran()
   des <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1),
                     constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0, st0 = log(.1)))
@@ -253,20 +258,24 @@ test_that("a native fit reproduces the R-path fit draw for draw", {
   s <- setup_nn(des, p, 60, seed = 11)
   emc <- suppressMessages(make_emc(s$dat, des, type = "single", n_chains = 2,
                                    compress = TRUE, verbose = FALSE, rt_resolution = .001))
-  sc <- list(preburn = list(iter = 10), burn = list(mean_gd = 5), adapt = list(min_unique = 5),
-             sample = list(iter = 20))
-  fit_with <- function(model) {
-    e <- emc
-    for (k in seq_along(e)) e[[k]]$model <- model
-    set.seed(99)
-    suppressMessages(fit(e, stop_criteria = sc, cores_for_chains = 1, verbose = FALSE,
-                         particle_factor = 10, step_size = 10))
+  eR <- emc
+  for (k in seq_along(eR)) eR[[k]]$model <- r_path(eR[[k]]$model)
+  expect_error(suppressMessages(fit(eR, iter = 5, cores_for_chains = 1, verbose = FALSE)),
+               "compiled likelihood")
+  set.seed(99)
+  fN <- suppressMessages(fit(emc, iter = 20, cores_for_chains = 1, verbose = FALSE))
+  dadm <- fN[[1]]$data[[1]]; model <- fN[[1]]$model     # chains after the first share them
+  for (chain in fN) {
+    keep <- chain$samples$stage == "sample"
+    draws <- t(chain$samples$alpha[, 1, keep])
+    colnames(draws) <- fN[[1]]$par_names
+    stored <- chain$samples$subj_ll[1, keep]
+    llR <- as.numeric(ll_manager(draws, dadm, r_path(model)))
+    llN <- as.numeric(ll_manager(draws, dadm, model))
+    expect_gt(length(unique(stored)), 1)
+    expect_lt(rel_diff(stored, llR), 1e-8)
+    expect_lt(rel_diff(llN, llR), 1e-9)
   }
-  fN <- fit_with(emc[[1]]$model)
-  fR <- fit_with(r_path(emc[[1]]$model))
-  aN <- get_pars(fN, stage = "sample", merge_chains = TRUE, return_mcmc = FALSE)
-  aR <- get_pars(fR, stage = "sample", merge_chains = TRUE, return_mcmc = FALSE)
-  expect_equal(aN, aR, tolerance = 1e-8)
 })
 
 # --- plain-MLP kinds: mlp_joint (a LAN) and regression_joint -------------------------------------
