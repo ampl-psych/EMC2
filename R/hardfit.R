@@ -141,10 +141,11 @@ hardfit <- function(emc, stage = NULL, iter = 1000, step_size = 100, max_tries =
   selection <- if(single) "alpha" else c("alpha", "mu")
   type <- emc[[1]]$type
   context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)
-  # one block of `n` more draws of `stage`; run_emc() computes no Rhat with these criteria
-  block <- function(emc, stage, n, criteria = list(iter = n), tries = 1L){
+  # one block of `n` more draws of `stage`; run_emc() computes no Rhat with these criteria. Burn and sample
+  # blocks are silent (hardfit() prints its own line per check); preburn and adapt run whole and print fit()'s lines.
+  block <- function(emc, stage, n, criteria = list(iter = n), tries = 1L, say_progress = FALSE){
     run_emc(emc, stage, stop_criteria = criteria, search_width = search_width, step_size = n,
-            verbose = FALSE, verboseProgress = dots$verboseProgress, fileName = NULL,
+            verbose = say_progress && verbose, verboseProgress = dots$verboseProgress, fileName = NULL,
             particle_factor = particle_factor, cores_per_chain = cores_per_chain,
             cores_for_chains = cores_for_chains, max_tries = tries, n_blocks = dots$n_blocks,
             trim = dots$trim, on_singular = on_singular, .context = context)
@@ -159,8 +160,7 @@ hardfit <- function(emc, stage = NULL, iter = 1000, step_size = 100, max_tries =
   t_start <- Sys.time()
 
   if("preburn" %in% to_run){
-    say("Running preburn stage")
-    emc <- block(emc, "preburn", step_size, get_stop_criteria("preburn", NULL, type), max_tries)
+    emc <- block(emc, "preburn", step_size, get_stop_criteria("preburn", NULL, type), max_tries, say_progress = TRUE)
     save_fit(emc)
   }
 
@@ -196,8 +196,7 @@ hardfit <- function(emc, stage = NULL, iter = 1000, step_size = 100, max_tries =
   }
 
   if("adapt" %in% to_run){
-    say("Running adapt stage")
-    emc <- block(emc, "adapt", step_size, get_stop_criteria("adapt", NULL, type), max_tries)
+    emc <- block(emc, "adapt", step_size, get_stop_criteria("adapt", NULL, type), max_tries, say_progress = TRUE)
     save_fit(emc)
   }
 
