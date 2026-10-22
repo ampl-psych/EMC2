@@ -1,38 +1,6 @@
-# hardfit(): the one-block primitive it is built on, the record it writes, the
-# early stop and the continuation; diagnose(): the outcome classes on
-# constructed draws.
-
-tiny_lnr <- function(){
-  dat <- data.frame(subjects = factor(rep(1:4, each = 2)), R = factor(1),
-                    rt = .2 + exp(c(-.7, -.2, .1, .4, .3, .8, -.4, .6)))
-  des <- design(data = dat, model = LNR, formula = list(m ~ 1),
-                constants = c(s = 0, t0 = log(.2)), report_p_vector = FALSE)
-  make_emc(dat, des, type = "standard", n_chains = 2)
-}
-
-test_that("run_emc() with an iteration-only criterion draws one block and keeps the kernel", {
-  withr::local_seed(123)
-  withr::local_options(emc.adapt_converge = FALSE)
-  emc <- tiny_lnr()
-  criteria <- list(preburn = list(iter = 10), burn = list(iter = 10),
-                   adapt = list(iter = 20, min_unique = 5), sample = list(iter = 20))
-  emc <- fit(emc, cores_for_chains = 1, stop_criteria = criteria, verbose = FALSE,
-             particle_factor = 10, step_size = 20, trim = FALSE)
-  one <- run_emc(emc, "sample", stop_criteria = list(iter = 20), step_size = 20, max_tries = 1,
-                 cores_for_chains = 1, verbose = FALSE, particle_factor = 10, trim = FALSE)
-  two <- run_emc(one, "sample", stop_criteria = list(iter = 20), step_size = 20, max_tries = 1,
-                 cores_for_chains = 1, verbose = FALSE, particle_factor = 10, trim = FALSE)
-  expect_equal(unname(chain_n(one)[, "sample"]), rep(40, 2))
-  expect_equal(unname(chain_n(two)[, "sample"]), rep(60, 2))
-  expect_identical(two[[1]]$sample_kernel, emc[[1]]$sample_kernel)
-  for(ch in seq_along(emc)){
-    fields <- c("step", "loc", "directions")
-    expect_identical(attr(two[[ch]]$samples, "scale_move")[fields], attr(emc[[ch]]$samples, "scale_move")[fields])
-    before <- attr(emc[[ch]]$samples, "pm_settings"); after <- attr(two[[ch]]$samples, "pm_settings")
-    for(s in seq_along(before)) expect_identical(after[[s]][[1]][c("epsilon", "mix", "n_particles")], before[[s]][[1]][c("epsilon", "mix", "n_particles")])
-    expect_equal(filter_obj(two[[ch]]$samples$theta_mu, seq_len(emc[[ch]]$samples$idx)), emc[[ch]]$samples$theta_mu)
-  }
-})
+# hardfit(): the record it writes, the early stop and the continuation;
+# diagnose(): the outcome classes on constructed draws. The one-block primitive
+# (run_emc() with an iteration-only criterion) is tested in test-sample-kernel.R.
 
 test_that("hardfit() runs the stages, writes the record and continues", {
   withr::local_seed(123)
@@ -48,7 +16,7 @@ test_that("hardfit() runs the stages, writes the record and continues", {
   expect_equal(nrow(r$trace), r$tries); expect_equal(r$trace$draws[nrow(r$trace)], unname(chain_n(h)[1, "sample"]))
   expect_equal(r$criteria$max_gd, 1.1); expect_null(r$criteria$min_ess); expect_null(r$criteria$cull); expect_null(r$criteria$abort_gd)
   expect_null(r$previous); expect_equal(r$restarts, 0L); expect_equal(r$culls, 0L)
-  expect_true(is.finite(r$stats$ll_gap)); expect_true(is.list(r$stats$flat))
+  expect_true(is.finite(r$stats$ll_gap)); expect_true(is.list(r$flat)); expect_s3_class(r$prior, "data.frame")
   expect_identical(get_last_stage(h), "sample")
   expect_s3_class(h, "emc")
   d <- diagnose(h)
@@ -60,6 +28,11 @@ test_that("hardfit() runs the stages, writes the record and continues", {
   expect_gte(unname(chain_n(h2)[1, "sample"]), n1 + 20)
   expect_identical(h2[[1]]$sample_kernel, h[[1]]$sample_kernel)
   expect_identical(h2[[1]]$stop_record$previous$trace, r$trace)
+  # the restart after a cull: one draw kept, reburn draws under the same kernel, one draw kept
+  rs <- EMC2:::cull_restart(h2, 20, function(e, n) run_emc(e, "sample", stop_criteria = list(iter = n), step_size = n, max_tries = 1,
+                                                        cores_for_chains = 1, verbose = FALSE, particle_factor = 10, trim = FALSE))
+  expect_equal(unname(chain_n(rs)[, "sample"]), rep(1, 2)); expect_identical(rs[[1]]$sample_kernel, h2[[1]]$sample_kernel)
+  expect_false(identical(rs[[1]]$samples$theta_mu[, rs[[1]]$samples$idx], h2[[1]]$samples$theta_mu[, h2[[1]]$samples$idx]))
   # validation
   expect_error(hardfit(emc, abort_gd = 1), "above 1")
   expect_error(hardfit(emc, min_ess = -1), "min_ess")
@@ -98,7 +71,7 @@ test_that("diagnose() reads the outcome classes from the draws and the record", 
   # a chain shifted throughout on every group mean: the rule fails along identified directions
   shift <- samples_LNR; shift[[1]]$samples$theta_mu[, it] <- shift[[1]]$samples$theta_mu[, it] + 20
   ds <- diagnose(shift, min_ess = NULL)
-  expect_false(ds$rule$met); expect_gt(ds$stop$rhat_ident, 1.1); expect_equal(ds$class, "region_mode")
+  expect_false(ds$rule$met); expect_gt(ds$stats$rhat_ident, 1.1); expect_equal(ds$class, "region_mode")
   # chains apart along a ridge (a + b pinned, a - b free): the identified direction agrees
   set.seed(5); ridge <- samples_LNR; p <- nrow(ridge[[1]]$samples$theta_mu)
   for(i in seq_along(ridge)){
@@ -109,7 +82,7 @@ test_that("diagnose() reads the outcome classes from the draws and the record", 
     ridge[[i]]$samples$theta_mu <- m
   }
   dr <- diagnose(ridge, min_ess = NULL)
-  expect_false(dr$rule$met); expect_lt(dr$stop$rhat_ident, 1.1); expect_gt(dr$stop$rhat_b, 1.5)
+  expect_false(dr$rule$met); expect_lt(dr$stats$rhat_ident, 1.1); expect_gt(dr$stats$rhat_b, 1.5)
   expect_equal(dr$class, "ridge_only")
   # the record decides aborted and met, and the trace decides falling
   ab <- shift; ab[[1]]$stop_record <- list(aborted = list(try = 20, rule = 2, abort_gd = 1.5), met = FALSE)

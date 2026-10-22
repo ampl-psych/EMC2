@@ -10,7 +10,7 @@ diagnose(
   stage = get_last_stage(emc),
   window = NULL,
   max_gd = NULL,
-  gd_quantile = 0.99,
+  gd_quantile = NULL,
   min_ess = 100,
   max_ll_gap = 100,
   max_subj_spread = 15,
@@ -30,8 +30,8 @@ diagnose(
 uses; \code{NULL} (default) uses the last two thirds of the stage}
 
 \item{max_gd, gd_quantile, min_ess, max_ll_gap, max_subj_spread}{The stop rule's
-thresholds, as in \code{\link[=hardfit]{hardfit()}} (\code{max_gd = NULL}: 1.1, or 1.05 for
-\code{type = "single"})}
+thresholds, as in \code{\link[=hardfit]{hardfit()}} (\code{NULL} for the first two: its defaults
+by type)}
 
 \item{rhat_ident_max, drift_se}{The ridge-only class's thresholds (defaults
 1.1 and 3)}
@@ -45,7 +45,7 @@ many prior SDs from its prior mean is flagged in \code{prior} (default 3)}
 }
 \value{
 A list of class \code{emc.diagnose} with \code{class}, \code{falling},
-\code{next_step}, \code{rule}, \code{stop}, \code{chains}, \code{subjects}, \code{flat},
+\code{next_step}, \code{rule}, \code{stats}, \code{chains}, \code{subjects}, \code{flat},
 \code{prior}, \code{record} and \code{culls}.
 }
 \description{
@@ -60,7 +60,7 @@ chain comparison, or the last \code{window} draws):
 \itemize{
 \item \code{rule}: the stop rule's Rhat (the \code{gd_quantile} quantile of the
 subject-level Rhats and every group-level Rhat) and the plain maximum.
-\item \code{stop}: min ESS and its parameter; \code{rhat_b}, the Rhat of the group
+\item \code{stats}: min ESS and its parameter; \code{rhat_b}, the Rhat of the group
 means projected on the direction along which the chains differ most, and
 \code{rhat_ident}, on the direction the posterior pins down most tightly (the
 best-identified combination of parameters); the chain log-likelihood gap

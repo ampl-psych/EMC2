@@ -11,7 +11,7 @@ hardfit(
   step_size = 100,
   max_tries = 40,
   max_gd = NULL,
-  gd_quantile = 0.99,
+  gd_quantile = NULL,
   min_ess = 100,
   max_ll_gap = 100,
   max_subj_spread = 15,
@@ -49,7 +49,8 @@ per chain (default 1000).}
 or 1.05 for \code{type = "single"}.}
 
 \item{gd_quantile}{Numeric in (0, 1]. The quantile of the subject-level
-Rhats the rule reads (default .99; 1 is the maximum).}
+Rhats the rule reads; \code{NULL} (default) is .99, or 1 (the maximum) for
+\code{type = "single"}.}
 
 \item{min_ess, max_ll_gap, max_subj_spread}{Numeric thresholds of the three
 criteria above (defaults 100, 100, 15); \code{NULL} turns one off.}
@@ -139,31 +140,25 @@ its own log posterior, has its state replaced by a copy of a healthy chain's
 more at its end (\code{exit = TRUE} in the record, no persistence needed);
 sample does it once and then restarts its draws after \code{reburn} (100)
 iterations, with the check count. Replacing a chain's state during warm-up
-changes a starting point, not the posterior.
+changes a starting point, not the posterior. A note is printed when a
+hierarchical object has fewer than 6 chains: the replacement, and the
+detection of a subject with two modes, need healthy chains to compare with.
 
 \strong{Early stop} (\code{abort_gd}, \code{abort_try}): at check \code{abort_try} of the
 sample stage, a fit whose rule Rhat is still above \code{abort_gd} ends there
-with a warning and \code{stop_record$aborted}. In replays of 46 hierarchical and
-single-subject fits above 1.5 at check 20, none met the rule later.
+with a warning and \code{stop_record$aborted}. The defaults were calibrated on
+replayed hard fits; see \code{vignette("convergence")}.
 
 \strong{The record} \code{emc[[1]]$stop_record}: \code{criteria} (the thresholds that
-were on), \code{met}, \code{tries}, \code{rule} (the Rhat the rule read last), \code{stats}
-(min ESS and its parameter, \code{rhat_b} and \code{rhat_ident} — Rhat along the
-direction the chains disagree on most and along the best-identified
-direction —, the log-likelihood gap and its worst chain, the subject spread
-and its subject, the drift statistics \code{flat}, and \code{prior}, each group
-mean's posterior mean in prior SDs from its prior mean), \code{culls} (count; the list
-is \code{emc[[1]]$culls}), \code{discards}, \code{aborted}, \code{restarts}, \code{trace}
-(one row per check: draws, rule, plain max Rhat, min ESS, gap, spread) and
-\code{previous} (the record of an earlier \code{hardfit()} call on the same
-object). \code{\link[=diagnose]{diagnose()}} reads it, and the draws, into one of the outcome
-classes.
-
-Chains: the replacement of a bad chain and the detection of a subject with
-two posterior modes need healthy chains to compare with; with 3 chains a
-two-mode subject goes undetected in a quarter to a third of runs, with 6 in
-about one in ten. A note is printed when a hierarchical object has fewer
-than 6 chains (\code{make_emc(n_chains = 6)}).
+were on), \code{met}, \code{tries}, \code{rule} (the Rhat the rule read last),
+\code{stats} (the stop statistics of the last check, as described in
+\code{\link[=diagnose]{diagnose()}}), \code{flat} (the drift statistics) and \code{prior} (each group
+mean's posterior mean in prior SDs from its prior mean), \code{culls} (count
+for this call; the list is \code{emc[[1]]$culls}), \code{discards}, \code{aborted},
+\code{restarts}, \code{trace} (one row per check: draws, rule, plain max Rhat,
+min ESS, gap, spread, culls, dropped), \code{previous} (the record of an
+earlier \code{hardfit()} call on the same object) and \code{time} (minutes).
+\code{\link[=diagnose]{diagnose()}} reads it, and the draws, into one of the outcome classes.
 }
 \examples{
 \dontrun{

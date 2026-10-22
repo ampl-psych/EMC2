@@ -61,6 +61,8 @@ test_that("without a group level (type single) the subject parameters are the se
   st <- EMC2:::sample_stop_stats(single)
   expect_true(is.finite(st$ess_min)); expect_match(st$ess_min_par, ":")
   expect_true(is.finite(st$rhat_b)); expect_true(is.finite(st$ll_gap))
+  expect_equal(EMC2:::rule_defaults("single")[c("max_gd", "gd_quantile")], list(max_gd = 1.05, gd_quantile = 1))
+  expect_equal(EMC2:::rule_defaults("standard", max_gd = 1.2)[c("max_gd", "gd_quantile")], list(max_gd = 1.2, gd_quantile = .99))
 })
 
 test_that("the first third is dropped only when every criterion is then met", {

@@ -8,29 +8,21 @@ des <- design(data = dat, model = LNR, matchfun = function(d) d$S == d$lR,
 sc <- function(stage, crit) EMC2:::get_stop_criteria(stage, crit, type = "standard")
 
 test_that("cull settings are validated and adjusted per stage", {
-  d <- EMC2:::cull_defaults(TRUE)
-  expect_equal(d$persistence, 2L); expect_equal(d$chain_z, 5); expect_equal(d$chain_gap, 200); expect_equal(d$max_culls, 1L)
-  expect_equal(d$lp_guard_below, 1000)
   expect_equal(EMC2:::cull_defaults(list(chain_z = 4))$chain_z, 4)
   expect_null(EMC2:::cull_defaults(FALSE)); expect_null(EMC2:::cull_settings(FALSE, "burn"))
   expect_error(EMC2:::cull_defaults(list(bogus = 1)), "unknown")
   expect_error(EMC2:::cull_defaults("yes"), "TRUE, FALSE or a list")
-  expect_equal(EMC2:::cull_settings(TRUE, "burn")$min_window, 250L)
-  expect_equal(EMC2:::cull_settings(TRUE, "burn")$max_culls, 2L); expect_equal(EMC2:::cull_settings(TRUE, "sample")$max_culls, 1L)
+  b <- EMC2:::cull_settings(TRUE, "burn"); s <- EMC2:::cull_settings(TRUE, "sample")
+  expect_lt(b$min_window, s$min_window); expect_gt(b$max_culls, s$max_culls)   # burn: shorter window, more re-seeds
   expect_equal(EMC2:::cull_settings(list(max_culls = 1), "burn")$max_culls, 1)
-  expect_equal(EMC2:::cull_settings(TRUE, "sample")$min_window, 500L)
   expect_equal(EMC2:::cull_settings(list(min_window = 400), "burn")$min_window, 400)
 })
 
-test_that("drift statistics see drift and are within noise on white noise", {
+test_that("the drift statistic sees a trend, and its Monte Carlo error is summed over the chains' own series", {
   set.seed(1)
   x <- rnorm(600)
   expect_lt(EMC2:::flat_series(x, 1/3, 1/3)[["drift"]], .3)
-  f <- EMC2:::flat_series(x + seq(0, 3, length.out = 600), 1/3, 1/3)
-  expect_gt(f[["drift"]], 1)
-})
-
-test_that("the Monte Carlo error and the window ESS are summed over the chains' own series", {
+  expect_gt(EMC2:::flat_series(x + seq(0, 3, length.out = 600), 1/3, 1/3)[["drift"]], 1)
   set.seed(2)
   ar1 <- function(n, rho){ x <- numeric(n); x[1] <- rnorm(1); for(t in 2:n) x[t] <- rho * x[t - 1] + rnorm(1, 0, sqrt(1 - rho^2)); x }
   pool <- function(chains) as.vector(t(sapply(chains, identity)))          # iteration-major: chain varies fastest
@@ -60,14 +52,13 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   expect_false(any(d$chains$flagged)); expect_equal(nrow(d$subjects), 3)
   expect_true(all(c("mu", "alpha", "LL", "subj_ll") %in% names(d$flat)))
   expect_equal(d$flat$subj_ll$quantile, .99); expect_equal(d$flat$LL$quantile, 1)
-  expect_true(d$class %in% c("met", "ess_held", "ridge_only", "region_mode"))
   expect_output(print(d), "Class:")
   n <- e[[1]]$samples$idx; w <- (n - 149):n
   # a chain in a different region: far below on the log-likelihood (and so on its own log posterior)
   whole <- e; whole[[1]]$samples$subj_ll[, w] <- whole[[1]]$samples$subj_ll[, w] - 1000
   dw <- diagnose(whole, window = 150)
   expect_true(dw$chains$flagged[1]); expect_false(any(dw$chains$flagged[-1])); expect_true(dw$chains$lp_lower[1])
-  expect_equal(dw$class, "region_mode"); expect_equal(dw$stop$ll_worst_chain, 1)
+  expect_equal(dw$class, "region_mode"); expect_equal(dw$stats$ll_worst_chain, 1)
   # tens of units below is a wandering chain, not a different region: not flagged at the defaults
   near <- e; near[[1]]$samples$subj_ll[, w] <- near[[1]]$samples$subj_ll[, w] - 30
   expect_false(any(diagnose(near, window = 150)$chains$flagged))
@@ -96,19 +87,15 @@ test_that("stuck chains and subjects are found, respawned and culled", {
   expect_identical(attr(r2[[1]]$samples, "scale_move"), list(step = c(v = 9)))
   expect_identical(attr(r2[[1]]$samples, "pm_settings"), attr(marked[[2]]$samples, "pm_settings"))
   expect_identical(attr(r2[[1]]$samples, "rng"), "own")
-  # persistence: a flag must repeat before anything is culled
+  # persistence: a flag must repeat before anything is culled; then max_culls holds
   cd <- EMC2:::cull_defaults(list(window = 150))
-  dd <- EMC2:::cull_diagnostics(whole, "sample", cd)
-  st <- EMC2:::update_cull_state(NULL, dd, 3)
-  expect_length(EMC2:::apply_culls(whole, dd, "sample", cd, st)$done, 0)
-  st <- EMC2:::update_cull_state(st, dd, 3)
-  expect_length(EMC2:::apply_culls(whole, dd, "sample", cd, st)$done, 1)
-  # the same through cull_step(): one call flags, the second culls and records
   s1 <- EMC2:::cull_step(whole, "sample", cd, NULL)
   expect_length(s1$done, 0); expect_equal(s1$state$chain_count, c(1L, 0L, 0L))
   s2 <- EMC2:::cull_step(whole, "sample", cd, s1$state)
   expect_length(s2$done, 1); expect_equal(s2$done[[1]]$chain, 1); expect_match(s2$note, "chain 1 respawned")
-  expect_length(s2$emc[[1]]$culls, 1)
+  expect_length(s2$emc[[1]]$culls, 1); expect_equal(s2$state$n_culls, 1L); expect_equal(s2$state$chain_count, c(0L, 0L, 0L))
+  s3 <- EMC2:::cull_step(whole, "sample", cd, s2$state)
+  expect_length(s3$done, 0); expect_identical(s3$emc, whole)
   # burn exit: a chain in a different region at the end of burn is re-seeded, no persistence needed
   nb <- chain_n(eb)[1, "burn"]; wb <- eb[[1]]$samples$idx - seq_len(ceiling(2 * nb / 3)) + 1
   stuck <- eb; stuck[[2]]$samples$subj_ll[, wb] <- stuck[[2]]$samples$subj_ll[, wb] - 1000

@@ -1,15 +1,7 @@
 test_that("fit continuation appends draws and preserves the sample kernel", {
   withr::local_seed(123)
   withr::local_options(emc.adapt_converge = FALSE)
-  dat <- data.frame(subjects = factor(rep(1:4, each = 2)), R = factor(1),
-                    rt = .2 + exp(c(-.7, -.2, .1, .4, .3, .8, -.4, .6)))
-  des <- design(data = dat, model = LNR, formula = list(m ~ 1),
-                constants = c(s = 0, t0 = log(.2)), report_p_vector = FALSE)
-  emc <- make_emc(dat, des, type = "standard", n_chains = 2)
-  criteria <- list(preburn = list(iter = 10), burn = list(iter = 10),
-                   adapt = list(iter = 20, min_unique = 5), sample = list(iter = 20))
-  emc <- fit(emc, cores_for_chains = 1, stop_criteria = criteria, verbose = FALSE,
-             particle_factor = 10, step_size = 20, trim = FALSE)
+  emc <- fit_tiny_lnr(tiny_lnr())
   path <- tempfile(fileext = ".rds")
   withr::defer(unlink(path))
   saveRDS(emc, path)
@@ -38,5 +30,23 @@ test_that("fit continuation appends draws and preserves the sample kernel", {
     fields <- c("step", "loc", "directions")
     expect_identical(attr(continued[[ch]]$samples, "scale_move")[fields],
                      attr(emc[[ch]]$samples, "scale_move")[fields])
+  }
+})
+
+test_that("run_emc() with an iteration-only criterion draws one block and keeps the kernel", {
+  withr::local_seed(123)
+  withr::local_options(emc.adapt_converge = FALSE)
+  emc <- fit_tiny_lnr(tiny_lnr())
+  one <- run_emc(emc, "sample", stop_criteria = list(iter = 20), step_size = 20, max_tries = 1,
+                 cores_for_chains = 1, verbose = FALSE, particle_factor = 10, trim = FALSE)
+  two <- run_emc(one, "sample", stop_criteria = list(iter = 20), step_size = 20, max_tries = 1,
+                 cores_for_chains = 1, verbose = FALSE, particle_factor = 10, trim = FALSE)
+  expect_equal(unname(chain_n(one)[, "sample"]), rep(40, 2))
+  expect_equal(unname(chain_n(two)[, "sample"]), rep(60, 2))
+  expect_identical(two[[1]]$sample_kernel, emc[[1]]$sample_kernel)
+  for(ch in seq_along(emc)){
+    fields <- c("step", "loc", "directions")
+    expect_identical(attr(two[[ch]]$samples, "scale_move")[fields], attr(emc[[ch]]$samples, "scale_move")[fields])
+    expect_equal(filter_obj(two[[ch]]$samples$theta_mu, seq_len(emc[[ch]]$samples$idx)), emc[[ch]]$samples$theta_mu)
   }
 })

@@ -56,7 +56,7 @@ holds:
 | argument | default | criterion |
 |---|---|---|
 | `max_gd` | 1.1 (1.05 for `type = "single"`) | the rule's Rhat is below this |
-| `gd_quantile` | .99 | the rule reads this quantile of the subject-level Rhats (and every group-level Rhat); 1 is the plain maximum |
+| `gd_quantile` | .99 (1 for `type = "single"`) | the rule reads this quantile of the subject-level Rhats (and every group-level Rhat); 1 is the plain maximum |
 | `min_ess` | 100 | the smallest effective sample size over the group means and log group SDs, summed over chains |
 | `max_ll_gap` | 100 | the chains' summed subject log-likelihoods lie within this many units |
 | `max_subj_spread` | 15 | every subject's chain log-likelihoods lie within this many units |
@@ -263,7 +263,7 @@ d$class        # "met", "ess_held", "aborted", "ridge_only" or "region_mode"
 d$falling      # TRUE if the rule Rhat fell over the last three checks of an unmet fit
 d$next_step    # the advice printed last
 d$rule         # rule, max, threshold, quantile, met
-d$stop         # ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
+d$stats        # ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
                # subj_spread, subj_spread_n5, subj_spread_subject
 d$chains       # the chain table
 d$subjects     # the subject table (all subjects)
@@ -450,8 +450,10 @@ r$met        # TRUE if every criterion passed on one set of draws
 r$tries      # checks used since the last restart
 r$rule       # the Rhat the rule read at the last check
 r$stats      # ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
-             # subj_spread, subj_spread_n5, subj_spread_subject, flat (the drift statistics)
-r$culls      # chains replaced; the list (stage, iteration, chain, donor, gap, z)
+             # subj_spread, subj_spread_n5, subj_spread_subject (as d$stats)
+r$flat       # the drift statistics (as d$flat)
+r$prior      # the prior-tension table (as d$prior)
+r$culls      # chains replaced in this call; the list (stage, iteration, chain, donor, gap, z)
              # is emc[[1]]$culls
 r$discards   # checks at which the first third was dropped
 r$aborted    # NULL, or list(try, rule, abort_gd)
@@ -481,8 +483,8 @@ that explain the grade:
 grade <- function(f){
   d <- diagnose(f)
   data.frame(class = d$class, falling = d$falling, rule = d$rule$rule,
-             ess_min = d$stop$ess_min, rhat_ident = d$stop$rhat_ident,
-             ll_gap = d$stop$ll_gap, subj_spread = d$stop$subj_spread,
+             ess_min = d$stats$ess_min, rhat_ident = d$stats$rhat_ident,
+             ll_gap = d$stats$ll_gap, subj_spread = d$stats$subj_spread,
              flagged = paste(d$chains$chain[d$chains$flagged], collapse = ","))
 }
 do.call(rbind, lapply(fits, grade))

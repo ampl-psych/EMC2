@@ -209,6 +209,29 @@ run_emc <- function(emc, stage, stop_criteria,
   return(emc)
 }
 
+# Record the history_proposals setting on the object (NULL keeps the saved
+# one). A change invalidates the sample kernel and the particle settings, and
+# the latest draws become burn history so that adapt rebuilds them: the
+# returned `stage` then says where to restart. Shared by fit() and hardfit().
+set_history_proposals <- function(emc, history_proposals = NULL){
+  previous <- isTRUE(emc[[1]]$history_proposals)
+  if(is.null(history_proposals)) history_proposals <- previous
+  if(!is.logical(history_proposals) || length(history_proposals) != 1 || is.na(history_proposals))
+    stop("history_proposals must be TRUE or FALSE")
+  stage <- NULL
+  if(history_proposals != previous){
+    emc[[1]]$sample_kernel <- NULL
+    for(i in seq_along(emc)) attr(emc[[i]]$samples, "pm_settings") <- NULL
+    if(get_last_stage(emc) %in% c("adapt", "sample")){
+      emc <- subset(emc, stage = get_last_stage(emc))
+      for(i in seq_along(emc)) emc[[i]]$samples$stage[] <- "burn"
+      stage <- "adapt"
+    }
+  }
+  emc[[1]]$history_proposals <- history_proposals
+  list(emc = emc, stage = stage)
+}
+
 # Build the fixed sample kernel from adapt's tail, then tune it for 100 discarded draws.
 kernel_window <- 250
 adapt_converge <- list(min = 250, max = 1000, rhat = 1.2, stall = 3)
