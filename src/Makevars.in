@@ -13,11 +13,13 @@ PKG_CXXFLAGS = @OMP_CXXFLAGS@ @EXTRA_CXXFLAGS@
 
 SAMPLER_OBJECTS = sampler/group.o sampler/infnt_factor.o sampler/likelihood.o \
   sampler/particle.o sampler/proposals.o sampler/runner.o sampler/sem.o
+NLE_OBJECTS = crdm.o flow_ddm.o flow_race.o mlp_lik.o
 OBJECTS = CensorSpec.o ParamTable.o RcppExports.o TrendEngine.o TruncSpec.o \
   build_info.o custom_trend_interface.o fa.o group_designs.o hcubature.o kernels.o \
   math_utils_apple.o math_utils_generic.o model_DDM.o model_LBA.o model_RDM.o \
   model_exgaussian.o model_lnr.o model_multinomial.o mri.o param_table_interface.o \
-  particle_ll.o rCDM.o sampler.o transform_utils.o utility_functions.o $(SAMPLER_OBJECTS)
+  particle_ll.o rCDM.o sampler.o transform_utils.o utility_functions.o $(SAMPLER_OBJECTS) \
+  $(NLE_OBJECTS)
 
 all: $(SHLIB)
 
