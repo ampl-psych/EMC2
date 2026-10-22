@@ -105,7 +105,8 @@ nn_cell <- function(model, mean = NULL, sd = NULL, constants = NULL, formula = N
   if (!is.numeric(k) || length(k) != 1L || !(k > 0)) stop("k must be a positive number")
   if (is.null(Rlevels)) Rlevels <- if (joint) c("lower", "upper") else c("a", "b")
   if (is.null(formula)) {
-    samp <- setdiff(c(reg$pars, reg$pre_pars), c(names(reg$fixed), names(constants), "s"))
+    model_pars <- if (isTRUE(reg$scaled)) reg$sc_pars else reg$pars
+    samp <- setdiff(c(model_pars, reg$pre_pars), c(names(reg$fixed), names(constants), "s"))
     formula <- lapply(samp, function(p)
       stats::as.formula(if (!joint && p == "v") "v ~ 0 + lR" else paste(p, "~ 1"), env = baseenv()))
   }
@@ -271,10 +272,13 @@ nn_resolve_prior <- function(given, sp, owner, default, what_arg, what, by_sampl
 # Natural-scale region of a model parameter: the training box for a network
 # input, else the model's bound.
 nn_param_box <- function(p, reg, ml) {
-  if (p %in% reg$pars) return(c(reg$lower[[p]], reg$upper[[p]]))
-  mm <- ml$bound$minmax
-  if (!is.null(mm) && p %in% colnames(mm)) return(unname(mm[, p]))
-  c(-Inf, Inf)
+  b <- if (p %in% reg$pars) c(reg$lower[[p]], reg$upper[[p]])
+       else { mm <- ml$bound$minmax; if (!is.null(mm) && p %in% colnames(mm)) unname(mm[, p]) else c(-Inf, Inf) }
+  # Clip open-ended natural bounds so sampled-space bounds are finite for prior defaults.
+  tr <- ml$transform$func[[p]]
+  if (identical(tr, "exp"))   { b[1] <- max(b[1], 1e-4); b[2] <- min(b[2], 1e3) }
+  if (identical(tr, "pnorm")) { b[1] <- max(b[1], 1e-3); b[2] <- min(b[2], 1 - 1e-3) }
+  b
 }
 
 # EMC2's transforms (map.R): exp -> lower + exp(x), pnorm -> lower + (upper -

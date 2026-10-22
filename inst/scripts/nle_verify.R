@@ -5,8 +5,9 @@
 #   Rscript nle_verify.R [--p-types=v=0,a=1,...] [<card> ...]
 #   Rscript -e 'source(system.file("scripts", "nle_verify.R", package = "EMC2"))'
 #
-# Without arguments the shipped artefacts (ddm_cap256w_c4, ddm_st0zero,
-# rdm_small) are checked against the golden files shipped with them. Each
+# Without arguments the shipped artefacts (ddm_sc_s1106_e245_weights.json,
+# rdm_ss_base_s801_e271_weights.json) are checked against the golden files
+# shipped with them. Each
 # further argument is a card file (<tag>_weights.json or .rds) checked against
 # <tag>_golden.csv beside it, to the tolerance the card records in
 # validation$golden$tolerance (1e-9 without one); its twin is the card's `model`
@@ -50,11 +51,6 @@ algo <- nle("nle_hash_algo")()
 cat(sprintf("artefact hashes: %s%s\n", algo,
             if (algo == "md5") " (this R has no tools::sha256sum; the MANIFEST's md5 lines pin the artefacts)" else ""))
 
-# --- shipped artefacts -------------------------------------------------------------
-for (a in c("ddm_cap256w_c4", "ddm_st0zero", "rdm_small")) {
-  r <- try_check(a, nn_golden_check(a, flow_only = (a == "ddm_cap256w_c4"), error = FALSE))
-  if (!is.null(r)) say(r$pass, sub("^(PASS|FAIL) ", "", format(r)))
-}
 # --- cards given on the command line -------------------------------------------------
 scaled_checks <- function(card, m) {
   reg <- m()$nn

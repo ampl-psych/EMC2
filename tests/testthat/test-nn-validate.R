@@ -40,11 +40,11 @@ test_that("nn_cell builds matched network and control cells with named priors", 
   expect_false("s" %in% names(cell$mean))
   expect_output(print(cell), "training region")
   # defaults: every sampled network input, strictly inside the region
+  # DDMnn is flow_scaled with st0 fixed at 0, so st0 is not sampled
   d <- nn_cell(DDMnn)
-  expect_setequal(names(d$mean), c("v", "a", "t0", "Z", "SZ", "sv", "st0"))
+  expect_setequal(names(d$mean), c("v", "a", "t0", "Z", "SZ", "sv"))
   expect_true(all(d$box$inside))
-  # the st0 = 0 artefact: st0 is fixed, so not sampled
-  expect_false("st0" %in% names(nn_cell(function() DDMnn("ddm_st0zero"))$mean))
+  expect_false("st0" %in% names(d$mean))
 })
 
 test_that("nn_cell and nn_in_box warn about priors that leave the training region (never refuse)", {
@@ -75,9 +75,12 @@ test_that("nn_cell and nn_in_box warn about priors that leave the training regio
 })
 
 test_that("a race card's control limits are read and warned about, never enforced", {
-  card <- readRDS(system.file("extdata", "flownn", "rdm_small.rds", package = "EMC2"))
+  skip_if_not_installed("jsonlite")
+  src <- system.file("extdata", "flownn", "rdm_ss_base_s801_e271_weights.json", package = "EMC2")
+  card <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
   card$control_limits <- list(s = c(0.5, 2), vb_over_s2_max = 354)
-  f <- tempfile(fileext = ".rds"); saveRDS(card, f)
+  f <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(card, auto_unbox = TRUE, digits = NA), f)
   m <- register_nn_model(f)
   expect_equal(m()$nn$control_limits$vb_over_s2_max, 354)
   # a prior on s that reaches below 0.5, with s sampled
@@ -86,7 +89,7 @@ test_that("a race card's control limits are read and warned about, never enforce
                          sd = .05),
                  "limits the card states for its analytic control")
   card$control_limits <- list(s = "wide")
-  saveRDS(card, f)
+  writeLines(jsonlite::toJSON(card, auto_unbox = TRUE, digits = NA), f)
   expect_error(register_nn_model(f), "control_limits\\$s")
 })
 

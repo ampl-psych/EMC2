@@ -18,12 +18,11 @@ nn_reference_cases <- function(card = NULL) {
     list(model = "RDMnn", formula = list(v ~ lR, B ~ 1, t0 ~ 1, A ~ 1), constants = c(s = log(1)),
          factors = list(subjects = 1, S = levels), Rlevels = levels)
   cases <- list(
-    ddm_cap256w_c4 = ddm("DDMnn", list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1, st0 ~ 1)),
-    ddm_st0zero = ddm("DDMnn:ddm_st0zero", list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1)),
-    rdm_small_2 = race(c("a", "b")),
-    rdm_small_3 = race(c("a", "b", "c")))
+    ddm_default = ddm("DDMnn", list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1)),
+    rdm_2acc   = race(c("a", "b")),
+    rdm_3acc   = race(c("a", "b", "c")))
   if (!is.null(card))
-    cases$card <- ddm("card", list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, sv ~ 1, st0 ~ 1),
+    cases$card <- ddm("card", list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1),
                       constants = NULL, card = card)
   cases
 }
@@ -31,7 +30,6 @@ nn_reference_cases <- function(card = NULL) {
 nn_reference_model <- function(case) {
   switch(case$model,
          DDMnn = EMC2::DDMnn,
-         "DDMnn:ddm_st0zero" = function() EMC2::DDMnn("ddm_st0zero"),
          RDMnn = EMC2::RDMnn,
          card = EMC2::register_nn_model(case$card, twin = EMC2::DDM),
          stop("unknown model ", case$model))
@@ -50,8 +48,7 @@ nn_reference_p <- function(des, case) {
     p[grepl("^v_lR", names(p))] <- log(1.8)
     p[c("B", "t0", "A")] <- log(c(1, .25, .3))
   } else {
-    vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3),
-              sv = log(.5), st0 = log(.1))
+    vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3), sv = log(.5))
     p[] <- vals[names(p)]
   }
   p

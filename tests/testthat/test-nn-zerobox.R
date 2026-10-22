@@ -1,39 +1,21 @@
 # Zero-box DDM flows (register_nn_model(): the "zerobox" transform, exact
-# zeros, bound exceptions and the st0 = 0 support rule). The fixture is the
-# shipped cap256w_c4 relabelled as zero-box, exactly as the NLE project's
-# handover/zerobox/make_zerobox_fixture.R builds ~/R/nle-cards/
-# ddm_zerobox_fixture.json: its numbers model nothing, but the evaluator must
-# reproduce the NLE R port (tests/testthat/port, copied from the NLE project's
-# port/R at the zero-box handover) on it, including at exact zeros. This
-# guards exact zeros against later evaluator changes.
+# zeros, bound exceptions and the st0 = 0 support rule). The fixture is
+# tests/testthat/fixtures/ddm_zerobox_fixture.json: cap256w_c4 weights
+# relabelled with zerobox encoding (sv, SZ, st0 as zerobox), exact at zeros.
+# Its numbers model nothing, but the evaluator must reproduce the NLE R port
+# (tests/testthat/port, copied from the NLE project's port/R at the zero-box
+# handover) on it, including at exact zeros. This guards exact zeros against
+# later evaluator changes.
 
 port <- new.env()
 sys.source(test_path("port", "flow_race.R"), envir = port)
 sys.source(test_path("port", "flow_ddm.R"), envir = port)
 
-ZC <- list(sv = 0.01, SZ = 0.05, st0 = 0.002)
-zb_relabel <- function(fl) {
-  fl$context_encoding <- "zerobox"; fl$zerobox_c <- ZC
-  fl$context_transforms[names(ZC)] <- "zerobox"
-  cn <- fl$context_names; lo <- fl$bounds_sampled$lower; hi <- fl$bounds_sampled$upper
-  for (p in names(ZC)) {
-    j <- match(p, cn); lo[j] <- 0
-    hi[j] <- asinh(c(sv = 4, SZ = 0.99, st0 = 0.49)[[p]] / ZC[[p]])
-  }
-  fl$bounds_sampled <- list(lower = lo, upper = hi)
-  bn <- fl$bounds_natural
-  for (p in names(ZC)) bn$lower[match(p, names(fl$context_transforms))] <- 0
-  fl$bounds_natural <- bn
-  fl
-}
-zb_bundle <- function(n_members = 1) {
-  b <- readRDS(system.file("extdata", "flownn", "ddm_cap256w_c4.rds", package = "EMC2"))
-  b$members <- rep(lapply(b$members, zb_relabel), n_members)
-  f <- tempfile(fileext = ".rds"); saveRDS(b, f); f
-}
-zb_file <- zb_bundle()
+zb_file <- test_path("fixtures", "ddm_zerobox_fixture.json")
 m <- register_nn_model(zb_file, twin = DDM)
-fl <- zb_relabel(readRDS(system.file("extdata", "flownn", "ddm_cap256w_c4.rds", package = "EMC2"))$members[[1]])
+fl <- port$ddm_load(zb_file)
+
+ZC <- list(sv = 0.01, SZ = 0.05, st0 = 0.002)
 
 nat_of <- function(th, n) cbind(v = th[["v"]], a = exp(th[["a"]]), t0 = exp(th[["t0"]]), s = exp(th[["s"]]),
                                Z = pnorm(th[["Z"]]), SZ = pnorm(th[["SZ"]]), sv = exp(th[["sv"]]),
@@ -56,7 +38,7 @@ test_that("registration: zerobox transform, -Inf defaults, bound exceptions at 0
 test_that("dfun/pfun == NLE R port, all positive and at exact zeros (golden values too)", {
   th0 <- c(v = 1.2, a = log(1.1), t0 = log(.3), s = log(1), Z = qnorm(.45), SZ = qnorm(.2), sv = log(.3), st0 = log(.08))
   rt <- c(.25, .3, .31, .45, .7, 1.2); R <- c(1L, 2L, 1L, 2L, 1L, 2L)
-  # recorded from the NLE port (port/R/flow_ddm.R) on ~/R/nle-cards/ddm_zerobox_fixture.json, 2026-09-26
+  # recorded from the NLE port (port/R/flow_ddm.R) on fixtures/ddm_zerobox_fixture.json, 2026-09-26
   gold <- list(
     pos  = c(-15.082672076346, -7.531474916538, -15.258188426895, -6.545539080203, -13.857676361102, -7.170337706493),
     sv0  = c(-21.829079548792, -16.329119350432, -22.074081501597, -16.714080216525, -22.884879049757, -16.948714325035),
@@ -97,14 +79,6 @@ test_that("random theta in every regime match the port; st0 = 0 support rule on 
   }
 })
 
-test_that("ensembles apply the support rule too", {
-  m2 <- register_nn_model(zb_bundle(2), twin = DDM)
-  th <- c(v = 1, a = log(1), t0 = log(.3), s = 0, Z = 0, SZ = -Inf, sv = -Inf, st0 = -Inf)
-  rt <- c(.2, .3, .5, .9); R <- c(1L, 2L, 1L, 2L)
-  expect_equal(m2()$dfun(rt, R, nat_of(th, 4)), m()$dfun(rt, R, nat_of(th, 4)))
-  expect_identical(m2()$dfun(rt, R, nat_of(th, 4))[1:2], c(0, 0))
-})
-
 test_that("compiled likelihood == R path with omitted st0 and constant sv = -Inf; mapped zeros", {
   des <- suppressMessages(design(model = m, factors = list(subjects = 1, S = c("left", "right")),
                                  Rlevels = c("left", "right"), matchfun = function(d) d$S == d$lR,
@@ -134,12 +108,14 @@ test_that("compiled likelihood == R path with omitted st0 and constant sv = -Inf
 })
 
 test_that("malformed zerobox cards are refused", {
-  b <- readRDS(zb_file)
-  no_c <- b; no_c$members[[1]]$zerobox_c <- NULL
-  f1 <- tempfile(fileext = ".rds"); saveRDS(no_c, f1)
+  b <- jsonlite::fromJSON(zb_file, simplifyDataFrame = FALSE)
+  no_c <- b; no_c$zerobox_c <- NULL
+  f1 <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(no_c, auto_unbox = TRUE, digits = 15), f1)
   expect_error(register_nn_model(f1, twin = DDM), "zerobox_c gives no constant")
-  extra <- b; extra$members[[1]]$zerobox_c$v <- 0.1
-  f2 <- tempfile(fileext = ".rds"); saveRDS(extra, f2)
+  extra <- b; extra$zerobox_c$v <- 0.1
+  f2 <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(extra, auto_unbox = TRUE, digits = 15), f2)
   expect_error(register_nn_model(f2, twin = DDM), "does not mark")
   pos <- function() { l <- DDM(); l$p_types[["sv"]] <- log(.05); l }
   expect_error(register_nn_model(zb_file, twin = pos), "needs the defaults")

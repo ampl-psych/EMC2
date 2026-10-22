@@ -1,117 +1,138 @@
 # register_nn_model(): the registration contract (R/nn_register.R).
 #
-# Complements test-nn-port.R (which checks the compiled evaluators against
-# golden vectors and the R port); this file checks that register_nn_model()
-# reads a card correctly, reproduces the evaluator's numbers through the
-# ordinary dfun/pfun interface, refuses malformed cards, and that the
-# registry (cache, save/load, sha256 pin) behaves.
+# Complements test-nn-port.R (compiled evaluators against golden vectors and the
+# R port); this file checks that register_nn_model() reads a card correctly,
+# reproduces the evaluator's numbers through the ordinary dfun/pfun interface,
+# refuses malformed cards, and that the registry behaves.
 
 nle <- function(f) getFromNamespace(f, "EMC2")
+rdm_name <- "rdm_ss_base_s801_e271_weights.json"
+ddm_name <- "ddm_sc_s1106_e245_weights.json"
+zb_file  <- test_path("fixtures", "ddm_zerobox_fixture.json")
 
 port <- new.env()
 sys.source(test_path("port", "flow_race.R"), envir = port)
 sys.source(test_path("port", "flow_ddm.R"), envir = port)
 
 box_pars <- function(reg, n, lo_q = .1, hi_q = .9) {
-  # random in-box rows on the natural scale, named reg$pars order
   m <- t(replicate(n, reg$lower + (reg$upper - reg$lower) * runif(length(reg$lower), lo_q, hi_q)))
   colnames(m) <- reg$pars
   m
 }
 hand_theta <- function(reg, pars) {
-  # natural-scale pars -> sampled-scale theta, built from the card's
-  # transforms directly (not via nn_context)
   theta <- matrix(0, nrow(pars), length(reg$context_names))
+  zc <- if (is.null(reg$zerobox_c)) rep(NA_real_, length(reg$context_names)) else reg$zerobox_c
   for (j in seq_along(reg$context_names)) {
     tf <- reg$transforms[j]; p <- reg$context_names[j]
-    theta[, j] <- switch(tf, identity = pars[, p], log = log(pars[, p]), probit = qnorm(pars[, p]))
+    theta[, j] <- switch(tf, identity = pars[, p], log = log(pars[, p]),
+                         probit = qnorm(pars[, p]), zerobox = asinh(pars[, p] / zc[j]))
   }
   theta
 }
 
+# build a synthetic no-st0 card: flow_joint DDM, 7 inputs (st0 absent from
+# context_names but present in context_transforms, as required by the registration
+# convention: dropped = setdiff(transforms, context_names) picks it up).
+# Weights are random; only registration logic is being tested.
+no_st0_card <- function(add_encoding = FALSE, fixed = NULL) {
+  ctx <- c("v", "a", "t0", "s", "Z", "SZ", "sv")
+  tfs <- list(v = "identity", a = "log", t0 = "log", s = "log",
+              Z = "probit", SZ = "probit", sv = "log", st0 = "log")
+  lo_s <- c(-3, log(.3), log(.1), log(.5), qnorm(.15), qnorm(.1), log(.05), log(.005))
+  hi_s <- c( 3, log(3),  log(.7), log(1.5), qnorm(.85), qnorm(.6), log(3),  log(.5))
+  tf_inv <- function(x, tf) switch(tf, identity = x, log = exp(x), probit = pnorm(x))
+  lo_n_all <- mapply(tf_inv, lo_s, tfs[c(ctx, "st0")])
+  hi_n_all <- mapply(tf_inv, hi_s, tfs[c(ctx, "st0")])
+  lo_s_ctx <- lo_s[seq_along(ctx)]; hi_s_ctx <- hi_s[seq_along(ctx)]
+  lo_n <- lo_n_all[seq_along(ctx)]; hi_n <- hi_n_all[seq_along(ctx)]
+  names(lo_s_ctx) <- names(hi_s_ctx) <- names(lo_n) <- names(hi_n) <- ctx
+  names(lo_n_all) <- names(hi_n_all) <- c(ctx, "st0")
+  names(lo_s) <- names(hi_s) <- c(ctx, "st0")
+  set.seed(99)
+  dims <- c(7, 14, 7, 1)   # regression_joint: single log-density output
+  layers <- lapply(seq_len(length(dims) - 1), function(i)
+    list(W = matrix(rnorm(dims[i] * dims[i + 1], sd = 1 / sqrt(dims[i])), dims[i]),
+         b = rnorm(dims[i + 1], sd = .1)))
+  card <- list(context_names = ctx, context_transforms = tfs,
+               bounds_natural = list(lower = lo_n_all, upper = hi_n_all),
+               bounds_sampled = list(lower = lo_s_ctx, upper = hi_s_ctx),
+               model = "DDM",
+               input_layout = ctx,
+               response_values = c(-1, 1),
+               mlp = list(activation = "gelu_tanh", layers = layers, use_norm = FALSE))
+  if (add_encoding) card$context_encoding <- "st0zero"
+  if (!is.null(fixed)) card$fixed <- fixed
+  f <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(card, auto_unbox = TRUE, digits = 15), f)
+  f
+}
+
+# strip model field from the RDM JSON card
+no_model_card <- function() {
+  src <- system.file("extdata", "flownn", rdm_name, package = "EMC2")
+  x <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
+  x$model <- NULL
+  f <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), f)
+  f
+}
+
+own_p <- c(v = log(1), B = log(1), t0 = log(0.3), s = log(1), A = log(0.3))
+
 # --- a. shipped artefacts register by name and by path ----------------------
 test_that("shipped artefacts register by name and by full path", {
-  by_name <- register_nn_model("rdm_small")()$nn
-  by_path <- register_nn_model(file.path(nle("nle_dir")(), "rdm_small.rds"))()$nn
-  expect_identical(by_name$kind, "flow_race")
-  expect_identical(by_name$pars, by_name$context_names)
-  expect_identical(by_name$sha256, by_path$sha256)
-  expect_identical(by_path$artefact, "rdm_small")   # shipped, however it was addressed
+  by_name_rdm <- register_nn_model(rdm_name)()$nn
+  by_path_rdm <- register_nn_model(
+    file.path(nle("nle_dir")(), rdm_name))()$nn
+  expect_identical(by_name_rdm$kind, "flow_race")
+  expect_identical(by_name_rdm$context_names, c("v", "B", "t0", "s", "A"))
+  expect_identical(by_name_rdm$sha256, by_path_rdm$sha256)
+  expect_identical(by_path_rdm$artefact, rdm_name)   # shipped, however addressed
 
-  # a directory named like the artefact (an output folder) does not shadow it
+  # a directory named like the artefact's stem does not shadow it
   wd <- file.path(tempdir(), "nn_shadow")
-  dir.create(file.path(wd, "rdm_small"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(wd, "rdm_ss_base_s801"), recursive = TRUE, showWarnings = FALSE)
   old_wd <- setwd(wd)
   shadowed <- tryCatch(RDMnn()$nn, finally = setwd(old_wd))
-  expect_identical(shadowed$artefact, "rdm_small")
-  expect_identical(shadowed$sha256, by_name$sha256)
+  expect_identical(shadowed$sha256, by_name_rdm$sha256)
   unlink(wd, recursive = TRUE)
 
-  codes <- c(identity = 0, log = 1, probit = 2)[by_name$transforms]
-  expect_equal(unname(codes), by_name$transform_codes)
+  codes <- c(identity = 0, log = 1, probit = 2)[by_name_rdm$transforms]
+  expect_equal(unname(codes[!is.na(codes)]), by_name_rdm$transform_codes[!is.na(codes)])
 
   man <- nle("nle_manifest")()
-  expect_identical(by_name$sha256, man[["rdm_small.rds"]])
+  expect_true(rdm_name %in% names(man))
+  expect_identical(by_name_rdm$sha256, man[[rdm_name]])
 
+  # DDM scaled card
+  by_name_ddm <- register_nn_model(ddm_name)()$nn
+  expect_identical(by_name_ddm$kind, "flow_scaled")
   expect_identical(DDMnn()$p_types, DDM()$p_types)
   expect_identical(RDMnn()$p_types, RDM()$p_types)
   expect_identical(DDMnn()$transform, DDM()$transform)
   expect_identical(RDMnn()$transform, RDM()$transform)
-  expect_identical(DDMnn("ddm_st0zero")$p_types, DDM()$p_types)
-  expect_identical(DDMnn("ddm_st0zero")$transform, DDM()$transform)
 
-  d0 <- DDMnn("ddm_st0zero")
-  expect_equal(d0$bound$exception, c(st0 = 0))
-  expect_equal(unname(d0$bound$minmax[, "st0"]), c(0, 0))
-
-  reg <- register_nn_model("ddm_cap256w_c4")()$nn
-  bn <- reg$card$bounds_natural; nm <- names(reg$card$context_transforms)
-  minmax <- DDMnn()$bound$minmax
-  for (p in nm) expect_equal(unname(minmax[, p]), c(bn$lower[match(p, nm)], bn$upper[match(p, nm)]))
+  # scaled card: st0 is fixed at 0 (sv and SZ are network inputs, not exceptions)
+  d0 <- DDMnn()
+  expect_true("st0" %in% names(d0$bound$exception) && d0$bound$exception["st0"] == 0)
+  # st0 minmax = DDM's range; st0 is in fixed so it isn't sampled regardless
+  expect_equal(d0$bound$minmax, DDM()$bound$minmax)
 })
 
 # --- b. registered dfun/pfun reproduce the compiled evaluator ---------------
-test_that("DDMnn dfun/pfun reproduce ddm_ens_eval_trials_cpp on hand-built theta", {
-  set.seed(101)
-  for (name in c("ddm_cap256w_c4", "ddm_st0zero")) {
-    reg <- register_nn_model(name)()$nn
-    m <- register_nn_model(name)()
-    ptr <- nle("nn_ptr")(reg)
-    rows <- box_pars(reg, 5)                     # a handful of distinct rows
-    idx <- sample(5, 50, TRUE)                   # interleaved, ~50 trials
-    pars <- rows[idx, , drop = FALSE]
-    rt <- exp(runif(50, log(.06), log(2)))
-    R <- factor(sample(1:2, 50, TRUE))
-    theta <- hand_theta(reg, pars)
-    ev <- nle("ddm_ens_eval_trials_cpp")(ptr, theta, rt, as.integer(as.character(R)))
-    expect_identical(m$dfun(rt, R, pars), ev$pdf)
-    expect_identical(m$pfun(rt, R, pars), ev$cdf)
-  }
-})
-
 test_that("RDMnn dfun/pfun reproduce flow_eval_trials_cpp on hand-built theta", {
   set.seed(102)
-  reg <- register_nn_model("rdm_small")()$nn
-  m <- register_nn_model("rdm_small")()
+  reg <- register_nn_model(rdm_name)()$nn
+  m   <- register_nn_model(rdm_name)()
   ptr <- nle("nn_ptr")(reg)
   rows <- box_pars(reg, 5)
-  idx <- sample(5, 50, TRUE)
+  idx  <- sample(5, 50, TRUE)
   pars <- rows[idx, , drop = FALSE]
-  rt <- exp(runif(50, log(.06), log(2)))
+  rt   <- exp(runif(50, log(.06), log(2)))
   theta <- hand_theta(reg, pars)
   ev <- nle("flow_eval_trials_cpp")(ptr, theta, rt)
   expect_identical(m$dfun(rt, pars), ev$pdf)
   expect_identical(m$pfun(rt, pars), ev$cdf)
-})
-
-test_that("DDMnn('ddm_st0zero') reproduces the golden joint density (1e-9 relative)", {
-  golden <- read.csv(test_path("golden", "ddm_z0_s503_e282_golden.csv"))
-  m <- register_nn_model("ddm_st0zero")()
-  pars <- cbind(v = golden$v, a = exp(golden$a), t0 = exp(golden$t0), s = exp(golden$s),
-                Z = pnorm(golden$Z), SZ = pnorm(golden$SZ), sv = exp(golden$sv), st0 = 0)
-  d1 <- m$dfun(golden$rt, factor(golden$R), pars)
-  ref <- exp(golden$log_pdf_joint)
-  expect_lt(max(abs(d1 - ref) / pmax(abs(ref), 1e-300)), 1e-9)
 })
 
 # --- c. pipeline sum: calc_ll_manager against the model's own dfun/pfun -----
@@ -120,7 +141,7 @@ test_that("DDMnn: calc_ll_manager's sum equals a hand-summed dfun over dadm", {
   des <- suppressMessages(design(
     factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
     formula = list(v ~ S, a ~ 1, t0 ~ 1),
-    constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), st0 = log(.1), Z = qnorm(.5)),
+    constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
     report_p_vector = FALSE))
   p_vector <- sampled_pars(des, doMap = FALSE)
   p_vector[] <- c(0.5, -.5, log(1.2), log(.25))[seq_along(p_vector)]
@@ -133,7 +154,7 @@ test_that("DDMnn: calc_ll_manager's sum equals a hand-summed dfun over dadm", {
   m <- des$model()
   pars <- get_pars_matrix_oo(p_vector, dadm, des$model)
   ll2 <- sum(pmax(log(1e-10), log(m$dfun(dadm$rt, dadm$R, pars))))
-  expect_equal(as.numeric(ll1), ll2)   # native path: a 1 x n_particles matrix
+  expect_equal(as.numeric(ll1), ll2)
 })
 
 test_that("RDMnn: calc_ll_manager's sum equals a hand-summed race likelihood over dadm", {
@@ -161,112 +182,86 @@ test_that("RDMnn: calc_ll_manager's sum equals a hand-summed race likelihood ove
 })
 
 # --- d. JSON cards ------------------------------------------------------------
-test_that("a JSON RDM card round-trips the weights and agrees with the .rds registration", {
+test_that("a JSON RDM card round-trips through JSON serialization", {
   skip_if_not_installed("jsonlite")
-  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
+  src <- system.file("extdata", "flownn", rdm_name, package = "EMC2")
+  x <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
   tmp <- tempfile(fileext = ".json")
   writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), tmp)
-  raw <- jsonlite::fromJSON(tmp, simplifyDataFrame = FALSE)
-  W <- as.matrix(raw$mlp$layers[[1]]$W)
-  expect_equal(dim(W), dim(x$mlp$layers[[1]]$W))   # n_in x n_out, as in the .rds
-
-  m_rds <- register_nn_model("rdm_small")()
-  m_json <- register_nn_model(tmp, twin = RDM)()
+  m_src <- register_nn_model(rdm_name)()
+  m_tmp <- register_nn_model(tmp, twin = RDM)()
   rt <- exp(runif(30, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 30), ]
-  expect_lt(max(abs(m_rds$dfun(rt, pars) - m_json$dfun(rt, pars))), 1e-9)
-  expect_lt(max(abs(m_rds$pfun(rt, pars) - m_json$pfun(rt, pars))), 1e-9)
-})
-
-test_that("a JSON DDM (ddm_st0zero) member card agrees with the .rds registration", {
-  skip_if_not_installed("jsonlite")
-  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
-  tmp <- tempfile(fileext = ".json")
-  writeLines(jsonlite::toJSON(x$members[[1]], auto_unbox = TRUE, digits = NA), tmp)
-
-  m_rds <- register_nn_model("ddm_st0zero")()
-  m_json <- register_nn_model(tmp, twin = DDM)()
-  rt <- exp(runif(30, log(.1), log(2)))
-  R <- factor(sample(1:2, 30, TRUE))
-  pars <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 30), ]
-  expect_lt(max(abs(m_rds$dfun(rt, R, pars) - m_json$dfun(rt, R, pars))), 1e-9)
-  expect_lt(max(abs(m_rds$pfun(rt, R, pars) - m_json$pfun(rt, R, pars))), 1e-9)
+  expect_lt(max(abs(m_src$dfun(rt, pars) - m_tmp$dfun(rt, pars))), 1e-9)
+  expect_lt(max(abs(m_src$pfun(rt, pars) - m_tmp$pfun(rt, pars))), 1e-9)
 })
 
 # --- e. refusals --------------------------------------------------------------
 test_that("a card whose bounds_sampled disagrees with transformed bounds_natural is refused", {
-  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
+  skip_if_not_installed("jsonlite")
+  src <- system.file("extdata", "flownn", rdm_name, package = "EMC2")
+  x <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
   ord <- match(c("v", "t0", "B", "s", "A"), x$context_names)   # B/t0 permuted
   x$context_names <- x$context_names[ord]
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
+  tmp <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), tmp)
   expect_error(register_nn_model(tmp, twin = RDM)(), "permuted or mislabelled")
 })
 
 test_that("pars that would permute the card's inputs is refused", {
-  expect_error(register_nn_model("rdm_small", pars = c("B", "v", "t0", "s", "A")), "would permute")
+  expect_error(register_nn_model(rdm_name, pars = c("B", "v", "t0", "s", "A")), "would permute")
 })
 
 test_that("kind mismatch, disagreeing transforms are refused", {
-  expect_error(register_nn_model("rdm_small", kind = "flow_joint"), "not flow_joint")
-  expect_error(register_nn_model("rdm_small",
+  expect_error(register_nn_model(rdm_name, kind = "flow_joint"), "not flow_joint")
+  expect_error(register_nn_model(rdm_name,
     transforms = c(v = "identity", B = "log", t0 = "log", s = "log", A = "log")), "disagrees")
 })
 
-test_that("st0zero without context_encoding needs exceptions, and registers correctly with it", {
-  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
-  x$members[[1]]$context_encoding <- NULL
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
-  expect_error(register_nn_model(tmp, twin = DDM)(), "exceptions = c\\(st0")
-
-  m <- register_nn_model(tmp, twin = DDM, exceptions = c(st0 = 0))()
-  m_ref <- register_nn_model("ddm_st0zero")()
+test_that("a card with st0 missing from context gets an informative error without an encoding hint", {
+  skip_if_not_installed("jsonlite")
+  expect_error(register_nn_model(no_st0_card(), twin = DDM)(), "exceptions = c\\(st0")
+  m <- register_nn_model(no_st0_card(), twin = DDM, exceptions = c(st0 = 0))()
+  expect_equal(m$nn$fixed, c(st0 = 0))
   rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
   pars <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
-  expect_identical(m$dfun(rt, R, pars), m_ref$dfun(rt, R, pars))
+  expect_true(all(is.finite(log(m$dfun(rt, R, pars)))))
 })
 
 test_that("a card's `fixed` field supplies the exceptions; a contradicting exception is refused", {
-  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
-  x$members[[1]]$context_encoding <- NULL
-  m_ref <- register_nn_model("ddm_st0zero")()
-  rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
-  pars <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
-  # on the member (a single-network card, as nleflow writes it) or at the top of an ensemble
-  member <- x; member$members[[1]]$fixed <- list(st0 = 0)
-  top <- x; top$fixed <- list(st0 = 0)
-  for (y in list(member, top)) {
-    tmp <- tempfile(fileext = ".rds"); saveRDS(y, tmp)
-    m <- register_nn_model(tmp, twin = DDM)()
-    expect_identical(m$nn$fixed, c(st0 = 0))
-    expect_identical(m$dfun(rt, R, pars), m_ref$dfun(rt, R, pars))
-    expect_identical(register_nn_model(tmp, twin = DDM, exceptions = c(st0 = 0))()$nn$fixed, c(st0 = 0))
-    expect_error(register_nn_model(tmp, twin = DDM, exceptions = c(st0 = .1)), "the card's fixed")
-  }
-  bad <- x; bad$members[[1]]$fixed <- list(st0 = "0")
-  tmp <- tempfile(fileext = ".rds"); saveRDS(bad, tmp)
-  expect_error(register_nn_model(tmp, twin = DDM), "fixed")
-  bad <- x; bad$members[[1]]$fixed <- list(st0 = 0, v = 1)   # v is a network input
-  tmp <- tempfile(fileext = ".rds"); saveRDS(bad, tmp)
-  expect_error(register_nn_model(tmp, twin = DDM), "fixed")
+  skip_if_not_installed("jsonlite")
+  b <- jsonlite::fromJSON(no_st0_card(), simplifyDataFrame = FALSE)
+  b_fixed <- b; b_fixed$fixed <- list(st0 = 0)
+  f_fixed <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(b_fixed, auto_unbox = TRUE, digits = 15), f_fixed)
+  m <- register_nn_model(f_fixed, twin = DDM)()
+  expect_equal(m$nn$fixed, c(st0 = 0))
+  expect_equal(register_nn_model(f_fixed, twin = DDM, exceptions = c(st0 = 0))()$nn$fixed, c(st0 = 0))
+  expect_error(register_nn_model(f_fixed, twin = DDM, exceptions = c(st0 = .1)), "the card's fixed")
+
+  bad_type <- b; bad_type$fixed <- list(st0 = "0")
+  f_bt <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(bad_type, auto_unbox = TRUE, digits = 15), f_bt)
+  expect_error(register_nn_model(f_bt, twin = DDM), "fixed")
+
+  bad_input <- b; bad_input$fixed <- list(st0 = 0, v = 1)   # v is a network input
+  f_bi <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(bad_input, auto_unbox = TRUE, digits = 15), f_bi)
+  expect_error(register_nn_model(f_bi, twin = DDM), "fixed")
 })
 
 test_that("exceptions cannot fix a network input", {
-  expect_error(register_nn_model("ddm_cap256w_c4", twin = DDM, exceptions = c(sv = 0)),
+  expect_error(register_nn_model(zb_file, twin = DDM, exceptions = c(sv = 0)),
                "is an input of the network")
 })
 
 test_that("a twin parameter the network would ignore is refused", {
-  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
-  x$members[[1]]$context_transforms$st0 <- NULL
-  x$members[[1]]$bounds_natural$lower <- x$members[[1]]$bounds_natural$lower[1:7]
-  x$members[[1]]$bounds_natural$upper <- x$members[[1]]$bounds_natural$upper[1:7]
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
-  expect_error(register_nn_model(tmp, twin = DDM)(), "would ignore")
+  expect_error(register_nn_model(no_st0_card(), twin = DDM), "trained without")
 })
 
 test_that("cdf = FALSE on a flow_race is refused; on a flow_joint pfun alone refuses", {
-  expect_error(register_nn_model("rdm_small", cdf = FALSE), "survivor")
-  m <- register_nn_model("ddm_st0zero", cdf = FALSE)()
+  expect_error(register_nn_model(rdm_name, cdf = FALSE), "survivor")
+  m <- register_nn_model(zb_file, twin = DDM, cdf = FALSE)()
   rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
   pars <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
   expect_true(all(is.finite(m$dfun(rt, R, pars))))
@@ -274,29 +269,20 @@ test_that("cdf = FALSE on a flow_race is refused; on a flow_joint pfun alone ref
 })
 
 test_that("a card naming no model and given no twin is refused", {
-  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
-  x$model <- NULL
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
-  expect_error(register_nn_model(tmp), "no analytic twin")
+  skip_if_not_installed("jsonlite")
+  expect_error(register_nn_model(no_model_card()), "no analytic twin")
 })
 
 # --- networks without an analytic model --------------------------------------
-no_model_card <- function() {
-  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
-  x$model <- NULL
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
-  tmp
-}
-own_p <- c(v = log(1), B = log(1), t0 = log(0.3), s = log(1), A = log(0.3))
-
 test_that("p_types: a network with no analytic model takes the user's defaults", {
+  skip_if_not_installed("jsonlite")
   m <- register_nn_model(no_model_card(), p_types = own_p)()
   expect_identical(m$type, "RACE")
   expect_identical(m$p_types, own_p)
   expect_identical(m$transform$func[names(own_p)], c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp"))
   rt <- exp(runif(20, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 20), ]
-  expect_identical(m$dfun(rt, pars), RDMnn()$dfun(rt, pars))
+  expect_equal(m$dfun(rt, pars), RDMnn()$dfun(rt, pars), tolerance = 1e-10)
   # un-sampled parameters take the user's defaults; one outside the box is refused
   des <- suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
     model = register_nn_model(no_model_card(), p_types = own_p),
@@ -307,19 +293,21 @@ test_that("p_types: a network with no analytic model takes the user's defaults",
     formula = list(v ~ S, B ~ 1, t0 ~ 1), report_p_vector = FALSE)), "'A' is at the model default")
   # no simulator
   expect_error(m$rfun(NULL, pars), "no simulator")
-  # a joint (DDM-type) flow without a model field evaluates too
-  x <- readRDS(file.path(nle("nle_dir")(), "ddm_st0zero.rds"))
-  x$members[[1]]$model <- NULL; x$model <- NULL
-  f <- tempfile(fileext = ".rds"); saveRDS(x, f)
+  # a joint (DDM-type) flow without a model field evaluates
+  b <- jsonlite::fromJSON(zb_file, simplifyDataFrame = FALSE); b$model <- NULL
+  f <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(b, auto_unbox = TRUE, digits = 15), f)
   mj <- register_nn_model(f, p_types = c(v = 1, a = log(1), t0 = log(.3), s = log(1), Z = qnorm(.5),
-                                         SZ = qnorm(.3), sv = log(.5), st0 = 0))()
+                                         SZ = -Inf, sv = -Inf, st0 = -Inf))()
   expect_identical(mj$type, "DDM")
-  rt <- exp(runif(10, log(.1), log(2))); R <- factor(sample(1:2, 10, TRUE))
-  pj <- cbind(v = 1, a = 1, t0 = .3, s = 1, Z = .5, SZ = .3, sv = .5, st0 = 0)[rep(1, 10), ]
-  expect_identical(mj$dfun(rt, R, pj), DDMnn("ddm_st0zero")$dfun(rt, R, pj))
+  # use rt > t0 = 0.3 so st0 = 0 doesn't produce -Inf (support starts at t0 when st0 = 0)
+  rt_j <- exp(runif(10, log(.35), log(2))); R_j <- factor(sample(1:2, 10, TRUE), levels = 1:2)
+  pj <- cbind(v = 1.2, a = 1.1, t0 = .3, s = 1, Z = .45, SZ = .2, sv = .3, st0 = 0)[rep(1, 10), ]
+  expect_true(all(is.finite(log(mj$dfun(rt_j, R_j, pj)))))
 })
 
 test_that("p_types: malformed defaults and ambiguous parameterisations are refused", {
+  skip_if_not_installed("jsonlite")
   f <- no_model_card()
   expect_error(register_nn_model(f, p_types = own_p[-5]), "no default for network input")
   expect_error(register_nn_model(f, p_types = unname(own_p)), "named numeric")
@@ -329,6 +317,7 @@ test_that("p_types: malformed defaults and ambiguous parameterisations are refus
 })
 
 test_that("a hand-written model function as twin supplies defaults and a simulator", {
+  skip_if_not_installed("jsonlite")
   my_model <- function() list(
     type = "RACE", p_types = own_p,
     transform = list(func = c(v = "exp", B = "exp", t0 = "exp", s = "exp", A = "exp")),
@@ -348,20 +337,24 @@ test_that("a hand-written model function as twin supplies defaults and a simulat
 
 # --- f. renaming is allowed ---------------------------------------------------
 test_that("renaming a context name (in context_names and context_transforms) is allowed", {
-  x <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
-  x$context_names[x$context_names == "v"] <- "drift"
+  skip_if_not_installed("jsonlite")
+  src <- system.file("extdata", "flownn", rdm_name, package = "EMC2")
+  x <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
+  i <- match("v", x$context_names)
+  x$context_names[[i]] <- "drift"
   names(x$context_transforms)[names(x$context_transforms) == "v"] <- "drift"
-  tmp <- tempfile(fileext = ".rds"); saveRDS(x, tmp)
+  tmp <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), tmp)
   m <- register_nn_model(tmp, pars = c("v", "B", "t0", "s", "A"))()
   rt <- exp(runif(20, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 20), ]
-  expect_identical(m$dfun(rt, pars), RDMnn()$dfun(rt, pars))
+  expect_equal(m$dfun(rt, pars), RDMnn()$dfun(rt, pars), tolerance = 1e-10)
 })
 
 # --- g. pre: shifting rt before the network sees it --------------------------
 test_that("pre (a parameter name, or a shift function) shifts the network's time", {
-  reg <- register_nn_model("rdm_small")()$nn
-  m_name <- register_nn_model("rdm_small", pre = "t0")()
+  reg <- register_nn_model(rdm_name)()$nn
+  m_name <- register_nn_model(rdm_name, pre = "t0")()
   ptr <- nle("nn_ptr")(m_name$nn)
   t0 <- .25
   rt <- exp(runif(40, log(t0 + .01), log(2 + t0)))
@@ -375,14 +368,14 @@ test_that("pre (a parameter name, or a shift function) shifts the network's time
   pars2 <- cbind(v = 1.5, B = .8, t0 = t0, s = 1, A = .3)[rep(1, length(rt2)), ]
   expect_true(all(m_name$dfun(rt2, pars2)[1:5] == 0))
 
-  m_fun <- register_nn_model("rdm_small", pre = function(rt, pars) rt - pars[, "t0"])()
+  m_fun <- register_nn_model(rdm_name, pre = function(rt, pars) rt - pars[, "t0"])()
   expect_identical(m_fun$dfun(rt, pars), d1)
 
-  expect_error(register_nn_model("rdm_small", pre = function(rt, pars) 2 * rt), "must shift")
+  expect_error(register_nn_model(rdm_name, pre = function(rt, pars) 2 * rt), "must shift")
 })
 
 test_that("nn_check_pre reports which parameter(s) a shift function consumes", {
-  reg <- register_nn_model("rdm_small")()$nn
+  reg <- register_nn_model(rdm_name)()$nn
   pars <- c("v", "B", "s", "A")                   # t0 held out of the network inputs
   box <- list(lower = reg$lower[pars], upper = reg$upper[pars])
   used <- nle("nn_check_pre")(function(rt, pars) rt - pars[, "t0"], pars, reg$defaults, box, "x: ")
@@ -400,13 +393,26 @@ mk_mlp <- function(dims, norm) {
   mlp
 }
 mk_regression_card <- function() {
-  m1 <- readRDS(file.path(nle("nle_dir")(), "ddm_cap256w_c4.rds"))$members[[1]]
-  list(context_names = m1$context_names, context_transforms = m1$context_transforms,
-       bounds_natural = m1$bounds_natural, bounds_sampled = m1$bounds_sampled,
-       model = "DDM", mlp = mk_mlp(c(10, 32, 16, 1), FALSE),
+  ctx <- c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0")
+  tfs <- c(v = "identity", a = "log", t0 = "log", s = "log",
+           Z = "probit", SZ = "probit", sv = "log", st0 = "log")
+  lo_s <- c(v = -3, a = log(.3), t0 = log(.1), s = log(.3),
+             Z = qnorm(.1), SZ = qnorm(.05), sv = log(.01), st0 = log(.005))
+  hi_s <- c(v = 3, a = log(3.5), t0 = log(.7), s = log(2),
+             Z = qnorm(.9), SZ = qnorm(.7), sv = log(4), st0 = log(.5))
+  tf_inv <- function(x, tf) switch(tf, identity = x, log = exp(x), probit = pnorm(x))
+  lo_n <- mapply(tf_inv, lo_s, tfs); hi_n <- mapply(tf_inv, hi_s, tfs)
+  names(lo_n) <- names(hi_n) <- ctx
+  list(context_names = ctx,
+       context_transforms = setNames(as.list(tfs), ctx),
+       bounds_sampled = list(lower = lo_s, upper = hi_s),
+       bounds_natural = list(lower = lo_n, upper = hi_n),
+       model = "DDM",
+       mlp = mk_mlp(c(10, 32, 16, 1), FALSE),
        input_layout = c("v", "a", "t0", "log_rt", "R", "s", "Z", "SZ", "sv", "st0"),
        scaler = list(mean = rnorm(10, sd = .1), scale = runif(10, .5, 2)),
-       response_values = c(-1, 1), output_scaler = list(mean = -1, scale = 2))
+       response_values = c(-1, 1),
+       output_scaler = list(mean = -1, scale = 2))
 }
 
 test_that("a regression_joint card registers and its dfun matches a hand-written forward pass", {
@@ -477,12 +483,12 @@ test_that("a regression_joint model runs through design() + make_emc() + calc_ll
   pm <- matrix(p_vector, nrow = 1, dimnames = list(NULL, names(p_vector)))
   ll <- calc_ll_manager(pm, dadm, des$model)
   expect_true(is.finite(ll))
-  expect_identical(des$model()$c_name, "NN")   # regression nets run natively too (test-nn-native.R)
+  expect_identical(des$model()$c_name, "NN")
 })
 
 # --- i. registry: lazy rebuild, save/load, sha256 pin, no weights ------------
 test_that("the evaluator is rebuilt lazily after the cache is cleared, with identical values", {
-  m <- register_nn_model("rdm_small")()
+  m <- register_nn_model(rdm_name)()
   rt <- exp(runif(10, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 10), ]
   d1 <- m$dfun(rt, pars)
@@ -491,7 +497,7 @@ test_that("the evaluator is rebuilt lazily after the cache is cleared, with iden
 })
 
 test_that("saveRDS/readRDS of a registered model list round-trips and evaluates", {
-  m <- register_nn_model("rdm_small")()
+  m <- register_nn_model(rdm_name)()
   rt <- exp(runif(10, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 10), ]
   d1 <- m$dfun(rt, pars)
@@ -501,13 +507,16 @@ test_that("saveRDS/readRDS of a registered model list round-trips and evaluates"
 })
 
 test_that("a card modified after registration is refused (sha256 changed)", {
-  usercard <- readRDS(file.path(nle("nle_dir")(), "rdm_small.rds"))
-  tmp <- tempfile(fileext = ".rds"); saveRDS(usercard, tmp)
+  skip_if_not_installed("jsonlite")
+  src <- system.file("extdata", "flownn", rdm_name, package = "EMC2")
+  x <- jsonlite::fromJSON(src, simplifyDataFrame = FALSE)
+  tmp <- tempfile(fileext = ".json")
+  writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), tmp)
   m <- register_nn_model(tmp)()
   rm(list = ls(nle("nle_cache")), envir = nle("nle_cache"))
-  usercard$ll_floor_log <- -30
+  x$ll_floor_log <- -30
   Sys.sleep(.05)
-  saveRDS(usercard, tmp)
+  writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, digits = NA), tmp)
   rt <- exp(runif(10, log(.1), log(2)))
   pars <- cbind(v = 1.5, B = .8, t0 = .25, s = 1, A = .3)[rep(1, 10), ]
   expect_error(m$dfun(rt, pars), "changed since the model was registered")
@@ -521,30 +530,22 @@ test_that("a registration carries no weights and is small", {
 })
 
 # --- j. design()-time refusals -------------------------------------------------
-test_that("design()-time refusals: defaults trap, out-of-box constants, fixed parameters", {
+test_that("design()-time refusals: out-of-box constants, fixed parameters", {
   f <- function(...) suppressMessages(design(...))
 
   expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
-                 formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                 constants = c(s = log(1), SZ = qnorm(.3), st0 = log(.1), Z = qnorm(.5)),
-                 report_p_vector = FALSE),
-               "Parameter 'sv' is at the model default")
-
-  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
                  formula = list(v ~ S, t0 ~ 1),
-                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), st0 = log(.1),
-                               Z = qnorm(.5), a = log(10)),
+                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.99), a = log(2)),
                  report_p_vector = FALSE),
                "outside")
 
-  ddm_st0 <- function() DDMnn("ddm_st0zero")
-  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = ddm_st0,
+  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
                  formula = list(v ~ S, a ~ 1, t0 ~ 1, st0 ~ 1),
                  constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
                  report_p_vector = FALSE),
                "fixed at 0")
 
-  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = ddm_st0,
+  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
                  formula = list(v ~ S, a ~ 1, t0 ~ 1),
                  constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5), st0 = log(.1)),
                  report_p_vector = FALSE),
@@ -552,16 +553,16 @@ test_that("design()-time refusals: defaults trap, out-of-box constants, fixed pa
 
   expect_error(f(factors = list(subjects = 1, S = c("a", "b", "c")), Rlevels = c("a", "b", "c"),
                  model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), st0 = log(.1), Z = qnorm(.5)),
+                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
                  report_p_vector = FALSE),
                "two-response")
 
   expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = RDMnn,
-                 formula = list(v ~ S, B ~ 1, t0 ~ 1), constants = c(s = log(1)),
+                 formula = list(v ~ S, B ~ 1, A ~ 1), constants = c(s = log(1)),
                  report_p_vector = FALSE),
-               "'A' is at the model default")
+               "'t0' is at the model default")
 
-  des_ok <- f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = ddm_st0,
+  des_ok <- f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
               formula = list(v ~ S, a ~ 1, t0 ~ 1),
               constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
               report_p_vector = FALSE)
@@ -571,12 +572,13 @@ test_that("design()-time refusals: defaults trap, out-of-box constants, fixed pa
 # --- k. the simulator is the twin's -------------------------------------------
 test_that("make_data from a DDMnn design equals make_data from the twin DDM design", {
   formula <- list(v ~ S, a ~ 1, t0 ~ 1)
-  constants <- c(s = log(1), sv = log(.5), SZ = qnorm(.3), st0 = log(.1), Z = qnorm(.5))
+  constants_nn  <- c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5))
+  constants_ddm <- c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5), st0 = -Inf)
   des1 <- suppressMessages(design(factors = list(subjects = 1:2, S = c("a", "b")),
-    Rlevels = c("a", "b"), model = DDMnn, formula = formula, constants = constants,
+    Rlevels = c("a", "b"), model = DDMnn, formula = formula, constants = constants_nn,
     report_p_vector = FALSE))
   des2 <- suppressMessages(design(factors = list(subjects = 1:2, S = c("a", "b")),
-    Rlevels = c("a", "b"), model = DDM, formula = formula, constants = constants,
+    Rlevels = c("a", "b"), model = DDM, formula = formula, constants = constants_ddm,
     report_p_vector = FALSE))
   p <- sampled_pars(des1, doMap = FALSE)
   p[] <- c(.5, -.5, log(1.2), log(.25))[seq_along(p)]

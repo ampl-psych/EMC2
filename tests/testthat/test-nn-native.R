@@ -4,6 +4,7 @@
 # long double; the race survivor is log(1 - F) computed directly natively).
 
 nle <- function(f) getFromNamespace(f, "EMC2")
+rdm_name <- "rdm_ss_base_s801_e271_weights.json"
 ll_manager <- function(...) nle("calc_ll_manager")(...)
 
 # The same model on the R path
@@ -71,7 +72,7 @@ expect_native_matches_r <- function(P, dadm, model) {
   invisible(llN)
 }
 
-ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1, st0 ~ 1),
+ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1),
                        constants = c(s = 0))
   suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
                           model = model, formula = formula, constants = constants,
@@ -79,8 +80,7 @@ ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1
 
 ddm_p <- function(des) {
   p <- sampled_pars(des, doMap = FALSE)
-  vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3),
-            sv = log(.5), st0 = log(.1))
+  vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3), sv = log(.5))
   p[] <- vals[names(p)]
   p
 }
@@ -99,18 +99,10 @@ race_p <- function(des) {
 }
 
 # --- a. agreement with the R path ---------------------------------------------
-test_that("DDMnn (cap256w_c4): native equals the R path, all parameters sampled", {
+test_that("DDMnn default (flow_scaled, st0 fixed at 0): native equals the R path", {
   des <- ddm_design()
   p <- ddm_p(des)
   s <- setup_nn(des, p, 150)
-  expect_native_matches_r(proposals_around(p), s$dadm, s$model)
-})
-
-test_that("DDMnn (ddm_st0zero, st0 fixed at 0): native equals the R path", {
-  des <- ddm_design(model = function() DDMnn("ddm_st0zero"),
-                    formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1))
-  p <- ddm_p(des)
-  s <- setup_nn(des, p, 120)
   expect_native_matches_r(proposals_around(p), s$dadm, s$model)
 })
 
@@ -124,7 +116,7 @@ test_that("RDMnn: native equals the R path with two and three accumulators", {
 })
 
 test_that("pre = 't0': times at or below t0 get zero density / survivor one, as on the R path", {
-  m <- register_nn_model("rdm_small", pre = "t0")
+  m <- register_nn_model(rdm_name, pre = "t0")
   des <- race_design(model = m)
   p <- race_p(des)
   s <- setup_nn(des, p, 120)
@@ -151,14 +143,14 @@ test_that("absent accumulators (a RACE column) contribute survivor one, as on th
 
 # --- b. which models run natively ----------------------------------------------
 test_that("a pre function takes the R path; flows otherwise run natively", {
-  m_fun <- register_nn_model("rdm_small", pre = function(rt, pars) rt - pars[, "t0"])()
+  m_fun <- register_nn_model(rdm_name, pre = function(rt, pars) rt - pars[, "t0"])()
   expect_null(m_fun$c_name)
   expect_null(m_fun$nn$native)
-  expect_identical(register_nn_model("rdm_small", pre = "t0")()$c_name, "NN")
+  expect_identical(register_nn_model(rdm_name, pre = "t0")()$c_name, "NN")
   expect_identical(DDMnn()$c_name, "NN")
   expect_identical(RDMnn()$c_name, "NN")
 
-  m <- register_nn_model("rdm_small", pre = function(rt, pars) rt - pars[, "t0"])
+  m <- register_nn_model(rdm_name, pre = function(rt, pars) rt - pars[, "t0"])
   des <- race_design(model = m)
   p <- race_p(des)
   s <- setup_nn(des, p, 60)
@@ -188,9 +180,8 @@ test_that("censored or truncated data are refused on both paths", {
   expect_error(ll_manager(P, d2, r_path(s$model)), "truncated")
 })
 
-test_that("the run-time refusals (fixed parameter, default outside the box) match the R path", {
-  # a fixed parameter set to another value behind design()'s back
-  des <- ddm_design(model = function() DDMnn("ddm_st0zero"), formula = list(v ~ S, a ~ 1, t0 ~ 1),
+test_that("the run-time refusal (st0 fixed at 0): changing it behind design()'s back is refused", {
+  des <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1),
                     constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0))
   p <- ddm_p(des)
   s <- setup_nn(des, p, 30)
@@ -204,25 +195,15 @@ test_that("the run-time refusals (fixed parameter, default outside the box) matc
   on.exit(options(old))
   expect_error(ll_manager(P, d, s$model), "fixed at 0")
   options(old)
-
-  # an un-sampled parameter back at the twin's default (sv = 0, outside the box)
-  des2 <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                     constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0, st0 = log(.1)))
-  s2 <- setup_nn(des2, ddm_p(des2), 30)
-  P2 <- matrix(ddm_p(des2), 1, dimnames = list(NULL, names(ddm_p(des2))))
-  d2 <- s2$dadm
-  attr(d2, "constants")[["sv"]] <- -Inf
-  expect_error(ll_manager(P2, d2, s2$model), "'sv' is at the model default")
-  expect_error(ll_manager(P2, d2, r_path(s2$model)), "'sv' is at the model default")
 })
 
-test_that("a sampled parameter that reaches its default exactly is out of bounds, not refused", {
-  # SZ is sampled; probit -40 underflows to SZ = 0, the twin's default outside
-  # the box (an optimiser or a wild proposal can get there): floored, no error
+test_that("a sampled parameter outside the training box is floored at min_ll, not refused", {
+  # v is sampled; if the proposal puts kappa = v*a/s^2 outside the network's box,
+  # the likelihood is floored and no error is raised
   des <- ddm_design()
   p <- ddm_p(des)
   s <- setup_nn(des, p, 30)
-  P <- rbind(p, replace(p, "SZ", -40))
+  P <- rbind(p, replace(p, "v", 15))   # v = 15 → kappa >> 10, outside the box
   for (m in list(s$model, r_path(s$model))) {
     ll <- as.numeric(ll_manager(P, s$dadm, m))
     expect_true(is.finite(ll[1]))
@@ -253,7 +234,7 @@ test_that("after save/load and a cleared cache the native path rebuilds the eval
 test_that("a native fit's stored log-likelihoods are the R path's on its draws", {
   skip_on_cran()
   des <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                    constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0, st0 = log(.1)))
+                    constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0))
   p <- ddm_p(des)
   s <- setup_nn(des, p, 60, seed = 11)
   emc <- suppressMessages(make_emc(s$dat, des, type = "single", n_chains = 2,
@@ -318,12 +299,20 @@ test_that("mlp_joint: trials whose time is below the LAN's box of rt are floored
 
 mk_reg_model <- function() {
   set.seed(5)
-  m1 <- readRDS(file.path(nle("nle_dir")(), "ddm_cap256w_c4.rds"))$members[[1]]
-  layers <- function(dims) lapply(seq_len(length(dims) - 1), function(i)
-    list(W = matrix(rnorm(dims[i] * dims[i + 1], sd = 1 / sqrt(dims[i])), dims[i]), b = rnorm(dims[i + 1], sd = .1)))
-  card <- list(context_names = m1$context_names, context_transforms = m1$context_transforms,
-               bounds_natural = m1$bounds_natural, bounds_sampled = m1$bounds_sampled, model = "DDM",
-               mlp = list(activation = "gelu_tanh", layers = layers(c(10, 32, 16, 1)), use_norm = FALSE),
+  ctx <- c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0")
+  tfs <- c(v="identity", a="log", t0="log", s="log", Z="probit", SZ="probit", sv="log", st0="log")
+  lo_s <- c(v=-3, a=log(.3), t0=log(.1), s=log(.3), Z=qnorm(.1), SZ=qnorm(.05), sv=log(.01), st0=log(.005))
+  hi_s <- c(v=3, a=log(3.5), t0=log(.7), s=log(2), Z=qnorm(.9), SZ=qnorm(.7), sv=log(4), st0=log(.5))
+  tf_inv <- function(x, tf) switch(tf, identity=x, log=exp(x), probit=pnorm(x))
+  lo_n <- mapply(tf_inv, lo_s, tfs); hi_n <- mapply(tf_inv, hi_s, tfs)
+  names(lo_n) <- names(hi_n) <- ctx
+  dims <- c(10, 32, 16, 1)
+  layers <- function(d) lapply(seq_len(length(d) - 1), function(i)
+    list(W = matrix(rnorm(d[i] * d[i + 1], sd = 1 / sqrt(d[i])), d[i]), b = rnorm(d[i + 1], sd = .1)))
+  card <- list(context_names = ctx, context_transforms = setNames(as.list(tfs), ctx),
+               bounds_natural = list(lower = lo_n, upper = hi_n),
+               bounds_sampled = list(lower = lo_s, upper = hi_s), model = "DDM",
+               mlp = list(activation = "gelu_tanh", layers = layers(dims), use_norm = FALSE),
                input_layout = c("v", "a", "t0", "log_rt", "R", "s", "Z", "SZ", "sv", "st0"),
                scaler = list(mean = rnorm(10, sd = .1), scale = runif(10, .5, 2)),
                response_values = c(-1, 1), output_scaler = list(mean = -1, scale = 2))

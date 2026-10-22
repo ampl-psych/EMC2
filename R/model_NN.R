@@ -3,88 +3,50 @@
 #
 # The likelihoods come from rational-quadratic spline flows trained on
 # simulated data (Wuth, 2026, MSc thesis, UvA; NLE project). The trained
-# artefacts ship as inst/extdata/flownn/*.rds, are pinned by sha256 in
+# artefacts ship as inst/extdata/flownn/*.json, are pinned by sha256 in
 # inst/extdata/flownn/MANIFEST, and are evaluated by compiled code
 # (src/flow_ddm.cpp, src/flow_race.cpp, derived from the NLE handover package,
 # which defines the models; the batched evaluator core is src/nle_flow.h).
 
-#' The Diffusion Decision Model — Neural-Network Likelihood
+#' The Diffusion Decision Model — Neural-Network Likelihood (Scaled)
 #'
 #' Variant of [DDM] whose joint likelihood of response and rt is computed by
-#' trained neural networks (neural likelihood estimation) instead of the
-#' numerical-integral density: a normalizing flow for the rt distribution
-#' conditional on parameters and response, and a classifier for the choice
-#' probability. Evaluation takes microseconds per trial.
+#' a scaled normalizing flow (neural likelihood estimation, kind
+#' `"flow_scaled"`): the network models the unit-scale decision time given
+#' kappa = v*a/s^2, eta = sv*a/s^2, Z and SZ, with an exact zero at
+#' sv = SZ = 0. Evaluation takes microseconds per trial.
 #'
 #' @details
 #'
-#' Parameters, transforms, defaults and bounds' meaning match [DDM]; the
-#' natural-scale ranges below are the flow's **training region** (a bounding
-#' hyper-box, read from the artefact): parameter vectors outside it are
-#' rejected (likelihood floored at `min_ll`), both through the model's `bound`
-#' and inside the compiled evaluator.
+#' Parameters, transforms, and defaults match [DDM]; the natural-scale ranges
+#' are the flow's **training region** (a bounding hyper-box read from the
+#' artefact): parameter vectors outside it are rejected (likelihood floored at
+#' `min_ll`).
 #'
-#' | **Parameter** | **Transform** | **Natural scale** | **Default**    | **Interpretation**            |
-#' |-----------|-----------|---------------|------------|---------------------------|
-#' | *v*       | -         | \[-6, 6\]       | 1          | Mean drift rate |
-#' | *a*       | log       | \[0.05, 5\]     | log(1)     | Boundary separation |
-#' | *t0*      | log       | \[0.05, 1\]     | log(0)     | Non-decision time |
-#' | *s*       | log       | \[0.1, 2\]      | log(1)     | Within-trial drift SD |
-#' | *Z*       | probit    | \[0.1, 0.9\]    | qnorm(0.5) | Relative start point |
-#' | *SZ*      | probit    | \[0.05, 0.99\]  | qnorm(0)   | Start-point variability |
-#' | *sv*      | log       | \[0.01, 4\]     | log(0)     | Between-trial drift SD |
-#' | *st0*     | log       | \[0.01, 0.49\]  | log(0)     | Non-decision variability |
-#'
-#' The defaults are **identical to [DDM]'s**, including `sv = SZ = st0 = 0`. The
-#' full-DDM artefact cannot represent those zeros, so an un-sampled `sv`, `SZ`
-#' or `st0` is refused with an error instead of silently changing the model:
-#' sample the parameter, or fix it inside the box (e.g.
-#' `constants = c(sv = log(0.5))`). The refusal happens in [design()] (and again
-#' at run time). The `"ddm_st0zero"` artefact was trained without `st0`: it
-#' admits exactly `st0 = 0` and refuses a sampled or non-zero `st0`.
-#'
-#' Unlike [DDM], `SZ` here is the raw proportion the flow was trained on, not
-#' remapped by `2 * SZ * min(Z, 1 - Z)`; data generation applies that remapping
-#' internally so `rfun` matches [DDM]'s parameter meaning exactly. Data are
-#' generated with the exact sampler (`WienR::rWDM`).
+#' The defaults are **identical to [DDM]'s**, including `sv = SZ = st0 = 0`.
+#' The network is exact at sv = 0 and SZ = 0 (zerobox encoding); st0 is fixed
+#' at 0 (the card was trained without st0 variability). An un-sampled `sv` or
+#' `SZ` at its default 0 is accepted as an exact zero; a sampled or non-zero
+#' `st0` is refused with an error.
 #'
 #' Loading a neural likelihood is not the same as being able to infer with it:
 #' check calibration and identifiability (parameter recovery, likelihood
 #' profiles, SBC) before drawing conclusions; [nn_cell()] and the validation
 #' kit run these checks against [DDM].
 #'
-#' **Calibration of `ddm_cap256w_c4`, and the t0 shift.** The artefact passes
-#' simulation-based calibration from N = 100 to 800 trials on every parameter
-#' (standardised bias within the 0.5 gate, coverage nominal), with one
-#' systematic feature: its t0 point estimates sit slightly high, by a shift
-#' that is constant on the log scale (about 0.002 at N = 800, i.e. 0.2% of
-#' t0; rank uniformity fails from N = 200 while interval coverage stays
-#' nominal). **No correction is applied by EMC2.** A fixed multiplicative
-#' correction of 0.00276 was proposed by the NLE project and reopened on
-#' 2026-10-13, when an exact test with saved draws found it over-corrects at
-#' N = 800 (mean rank .534, KS p .007); an out-of-sample test of about 0.0019
-#' is pending, and the shift is reported here as unresolved. For a DDM with
-#' `sv`, `SZ` or `st0` free the scaled DDM card (DDMnle, a `"flow_scaled"`
-#' card registered with [register_nn_model()]) replaces this artefact: it
-#' needs no t0 correction (t0 inside the envelope in all six variability
-#' models at N = 400). The record of the exact test is the NLE project's
-#' `sbc/t0corr_exact.R` and the progress log of
-#' `handover/ZERO_BOX_RETRAIN_PLAN.md`.
-#'
-#' `DDMnn(artefact)` is `register_nn_model(artefact, kind = "flow_joint",
-#' twin = DDM)()`; see [register_nn_model()] for the contract.
+#' `DDMnn(artefact)` is `register_nn_model(artefact, twin = DDM)()`; see
+#' [register_nn_model()] for the contract.
 #'
 #' Wuth, J. (2026). *Likelihood approximation in evidence accumulation
 #' models: A comparison of kernel density and neural likelihood methods*
 #' (MSc thesis, University of Amsterdam).
 #'
-#' @param artefact Name of a shipped artefact in `inst/extdata/flownn`:
-#'   `"ddm_cap256w_c4"` (default, full 8-parameter DDM) or `"ddm_st0zero"`
-#'   (7 parameters, `st0 = 0`).
+#' @param artefact Name of a shipped artefact in `inst/extdata/flownn`
+#'   (default `"ddm_sc_s1106_e245_weights.json"`, the DDMnle scaled card).
 #' @return A model list with all the necessary functions for EMC2 to sample
 #' @export
-DDMnn <- function(artefact = "ddm_cap256w_c4")
-  register_nn_model(artefact, kind = "flow_joint", twin = DDM)()
+DDMnn <- function(artefact = "ddm_sc_s1106_e245_weights.json")
+  register_nn_model(artefact, twin = DDM)()
 
 #' The Racing Diffusion Model — Neural-Network Likelihood
 #'
@@ -106,8 +68,8 @@ DDMnn <- function(artefact = "ddm_cap256w_c4")
 #' | *s*       | log       | \[0.1, 2\]      | log(1)     | Within-trial noise        |
 #'
 #' Unlike [RDM], `A = 0` and `v = 0` are not available (the flow trained on
-#' `A >= 1e-4`, `v >= 1e-3`). As for [DDMnn], an un-sampled `A` at its default
-#' `0` is refused with an error; fix it inside the box instead, e.g.
+#' `A >= 1e-4`, `v >= 1e-3`). An un-sampled `A` at its default `0` is refused
+#' with an error; fix it inside the box instead, e.g.
 #' `constants = c(A = log(1e-3))`. Out-of-box parameter vectors are rejected
 #' (likelihood floored at `min_ll`).
 #'
@@ -124,8 +86,8 @@ DDMnn <- function(artefact = "ddm_cap256w_c4")
 #' (MSc thesis, University of Amsterdam).
 #'
 #' @param artefact Name of a shipped artefact in `inst/extdata/flownn`
-#'   (default `"rdm_small"`).
+#'   (default `"rdm_ss_base_s801_e271_weights.json"`).
 #' @return A model list with all the necessary functions for EMC2 to sample
 #' @export
-RDMnn <- function(artefact = "rdm_small")
+RDMnn <- function(artefact = "rdm_ss_base_s801_e271_weights.json")
   register_nn_model(artefact, kind = "flow_race", twin = RDM)()
