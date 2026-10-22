@@ -494,9 +494,15 @@ refitted; those with a wide subject are compared across seeds on summed log-like
 
 ## What the diagnostics do not tell you
 
-- The prior-tension flag reads the group means against the prior on the group means. A
-  prior that is wrong on the group SDs (half-t scale) or on the covariance shows up as slow
-  fits with nothing flagged; `credible(emc)` against the prior is the check there.
+- The prior-tension flag reads one part of the prior: the group means against their prior
+  mean and SD (in `type = "single"`, the subject parameters against theirs). The half-t prior
+  on the group SDs and the prior on the group correlations have no location to compare
+  with, and the subject parameters of a hierarchical fit have no fixed prior at all (their
+  prior is the estimated group distribution). A half-t scale far below the true
+  between-subject SD shrinks every subject toward the mean and slows the fit in the same way,
+  with every group mean inside 3 prior SDs and nothing flagged. For those parts of the prior
+  the check is the posterior next to the prior: `plot_pars(emc, selection = "sigma2")` and
+  `plot_pars(emc, selection = "correlation")` draw both.
 - A single chain can make a long excursion and come back; Rhat over a window can read 1.26
   where Rhat over the whole run reads 1.06. The stop rule reads all kept draws, discards the
   first third only when that alone makes the stop pass, and records when it does.

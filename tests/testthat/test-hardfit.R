@@ -119,3 +119,31 @@ test_that("diagnose() reads the outcome classes from the draws and the record", 
   expect_equal(df$class, "region_mode"); expect_true(df$falling); expect_match(df$next_step, "continuation")
   expect_output(print(df), "still falling")
 })
+
+test_that("prior tension flags a group mean far from its prior mean, and is a report, not a criterion", {
+  d <- diagnose(samples_LNR, max_gd = 10, min_ess = NULL)
+  expect_s3_class(d$prior, "data.frame")
+  expect_equal(d$prior$parameter, rownames(samples_LNR[[1]]$samples$theta_mu))
+  expect_equal(d$prior$prior_sd, rep(1, 4)); expect_false(any(d$prior$flagged))
+  expect_false(grepl("Prior tension", paste(capture.output(print(d)), collapse = "\n")))
+  # the prior mean of m moved 10 SDs away: m flagged with the sign of the shift, the class unchanged
+  far <- samples_LNR; far[[1]]$prior$theta_mu_mean["m"] <- far[[1]]$prior$theta_mu_mean["m"] + 10
+  dfar <- diagnose(far, max_gd = 10, min_ess = NULL)
+  expect_equal(dfar$class, d$class)
+  expect_equal(dfar$prior$parameter[dfar$prior$flagged], "m"); expect_lt(dfar$prior$z[dfar$prior$parameter == "m"], -9)
+  expect_match(dfar$next_step, "posterior mean of m is more than 3 prior SDs")
+  expect_output(print(dfar), "Prior tension .*: m -")
+  expect_false(any(diagnose(far, max_gd = 10, min_ess = NULL, prior_se = 20)$prior$flagged))
+  # a vector prior variance, and no prior mean at all
+  vec <- far; vec[[1]]$prior$theta_mu_var <- diag(far[[1]]$prior$theta_mu_var)
+  expect_equal(diagnose(vec, max_gd = 10, min_ess = NULL)$prior, dfar$prior)
+  none <- samples_LNR; none[[1]]$prior$theta_mu_mean <- NULL
+  expect_null(diagnose(none, max_gd = 10, min_ess = NULL)$prior)
+  # no group level (type single): one row per parameter and subject, read against the parameter's prior
+  single <- far
+  for(i in seq_along(single)){ single[[i]]$samples$theta_mu <- NULL; single[[i]]$samples$theta_var <- NULL }
+  single[[1]]$type <- "single"
+  ps <- diagnose(single, max_gd = 10, min_ess = NULL)$prior
+  expect_equal(nrow(ps), 4 * dim(samples_LNR[[1]]$samples$alpha)[2])
+  expect_true(all(grepl("^m:", ps$parameter[ps$flagged])))
+})

@@ -15,7 +15,8 @@ diagnose(
   max_ll_gap = 100,
   max_subj_spread = 15,
   rhat_ident_max = 1.1,
-  drift_se = 3
+  drift_se = 3,
+  prior_se = 3
 )
 
 \method{print}{emc.diagnose}(x, ...)
@@ -35,6 +36,9 @@ thresholds, as in \code{\link[=hardfit]{hardfit()}} (\code{max_gd = NULL}: 1.1, 
 \item{rhat_ident_max, drift_se}{The ridge-only class's thresholds (defaults
 1.1 and 3)}
 
+\item{prior_se}{Numeric. A parameter whose posterior mean is more than this
+many prior SDs from its prior mean is flagged in \code{prior} (default 3)}
+
 \item{x}{An \code{emc.diagnose} object}
 
 \item{...}{Ignored}
@@ -42,7 +46,7 @@ thresholds, as in \code{\link[=hardfit]{hardfit()}} (\code{max_gd = NULL}: 1.1, 
 \value{
 A list of class \code{emc.diagnose} with \code{class}, \code{falling},
 \code{next_step}, \code{rule}, \code{stop}, \code{chains}, \code{subjects}, \code{flat},
-\code{record} and \code{culls}.
+\code{prior}, \code{record} and \code{culls}.
 }
 \description{
 Reads the stored draws of a fitted emc object (from \code{\link[=fit]{fit()}} or \code{\link[=hardfit]{hardfit()}})
@@ -91,6 +95,14 @@ compare seeds.
 
 \code{falling} is \code{TRUE} for an unmet fit whose rule Rhat decreased over its
 last three checks (from \code{stop_record$trace}): one continuation is worth it.
+
+\code{prior}: each group mean's posterior mean (\code{type = "single"}: each
+subject parameter's) in prior SDs from its prior mean, over the stage's draws
+pooled over chains; a parameter more than \code{prior_se} SDs away is flagged.
+Along a direction the data leave flat the prior is what sets the posterior,
+and a likelihood leaning the other way makes two shallow plateaus the chains
+cannot settle between. The flag is reported with the class, never used as a
+stop criterion.
 }
 \examples{
 d <- diagnose(samples_LNR)

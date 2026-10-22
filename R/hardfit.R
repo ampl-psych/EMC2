@@ -53,7 +53,8 @@
 #' (min ESS and its parameter, ``rhat_b`` and ``rhat_ident`` — Rhat along the
 #' direction the chains disagree on most and along the best-identified
 #' direction —, the log-likelihood gap and its worst chain, the subject spread
-#' and its subject, the drift statistics ``flat``), ``culls`` (count; the list
+#' and its subject, the drift statistics ``flat``, and ``prior``, each group
+#' mean's posterior mean in prior SDs from its prior mean), ``culls`` (count; the list
 #' is ``emc[[1]]$culls``), ``discards``, ``aborted``, ``restarts``, ``trace``
 #' (one row per check: draws, rule, plain max Rhat, min ESS, gap, spread) and
 #' ``previous`` (the record of an earlier ``hardfit()`` call on the same
@@ -252,7 +253,7 @@ hardfit <- function(emc, stage = NULL, iter = 1000, step_size = 100, max_tries =
                       max_subj_spread = if(single) NULL else max_subj_spread, iter = iter, abort_gd = abort_gd,
                       abort_try = if(is.null(abort_gd)) NULL else abort_try, cull = cull_s, max_tries = max_tries),
       met = met, tries = if(length(trace)) trace[[length(trace)]]$try else 0L, rule = rule,
-      stats = c(st, list(flat = flat)), culls = length(emc[[1]]$culls), discards = discards, aborted = aborted,
+      stats = c(st, list(flat = flat, prior = prior_tension(emc, "sample"))), culls = length(emc[[1]]$culls), discards = discards, aborted = aborted,
       restarts = restarts, trace = if(length(trace)) do.call(rbind, trace) else NULL, previous = previous,
       time = as.numeric(difftime(Sys.time(), t_start, units = "mins")))
     emc <- strip_duplicates(emc); class(emc) <- "emc"

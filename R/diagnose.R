@@ -44,6 +44,14 @@
 #' ``falling`` is ``TRUE`` for an unmet fit whose rule Rhat decreased over its
 #' last three checks (from ``stop_record$trace``): one continuation is worth it.
 #'
+#' ``prior``: each group mean's posterior mean (``type = "single"``: each
+#' subject parameter's) in prior SDs from its prior mean, over the stage's draws
+#' pooled over chains; a parameter more than ``prior_se`` SDs away is flagged.
+#' Along a direction the data leave flat the prior is what sets the posterior,
+#' and a likelihood leaning the other way makes two shallow plateaus the chains
+#' cannot settle between. The flag is reported with the class, never used as a
+#' stop criterion.
+#'
 #' @param emc An emc object
 #' @param stage The stage to diagnose (default the last stage run)
 #' @param window Integer. Draws at the end of the stage the chain comparison
@@ -53,15 +61,18 @@
 #'   ``type = "single"``)
 #' @param rhat_ident_max,drift_se The ridge-only class's thresholds (defaults
 #'   1.1 and 3)
+#' @param prior_se Numeric. A parameter whose posterior mean is more than this
+#'   many prior SDs from its prior mean is flagged in ``prior`` (default 3)
 #' @return A list of class ``emc.diagnose`` with ``class``, ``falling``,
 #'   ``next_step``, ``rule``, ``stop``, ``chains``, ``subjects``, ``flat``,
-#'   ``record`` and ``culls``.
+#'   ``prior``, ``record`` and ``culls``.
 #' @examples
 #' d <- diagnose(samples_LNR)
 #' d$class
 #' @export
 diagnose <- function(emc, stage = get_last_stage(emc), window = NULL, max_gd = NULL, gd_quantile = .99,
-                     min_ess = 100, max_ll_gap = 100, max_subj_spread = 15, rhat_ident_max = 1.1, drift_se = 3){
+                     min_ess = 100, max_ll_gap = 100, max_subj_spread = 15, rhat_ident_max = 1.1, drift_se = 3,
+                     prior_se = 3){
   emc <- restore_duplicates(emc)
   single <- emc[[1]]$type == "single"
   if(is.null(max_gd)) max_gd <- if(single) 1.05 else 1.1
@@ -98,12 +109,44 @@ diagnose <- function(emc, stage = get_last_stage(emc), window = NULL, max_gd = N
     ridge_only = "The chains agree on every identified quantity and disagree along a direction the data do not fix. Report the identified quantities (rhat_ident near 1); reparameterise or tighten the prior on the weakly identified parameter. Continuing helps only while the rule Rhat is still falling.",
     region_mode = "The chains disagree on something the data identify: a chain in a worse region (ll_worst_chain) or a subject with two modes (subj_spread_subject). Fit several seeds and compare their summed log-likelihoods; hold a seed 10 or more units below the best.")
   if(falling) next_step <- paste(next_step, "The rule Rhat fell over the last three checks: one continuation is worth trying.")
+  prior <- prior_tension(emc, stage, prior_se)
+  if(!is.null(prior) && any(prior$flagged))
+    next_step <- paste(next_step, sprintf("The posterior mean of %s is more than %s prior SDs from the prior mean: the prior and the likelihood pull against each other there; check the prior before continuing.",
+                                          paste(prior$parameter[prior$flagged], collapse = ", "), format(prior_se)))
   out <- list(class = class, falling = falling, next_step = next_step, rule = rule, stop = st, chains = d$chains,
-              subjects = d$subjects, flat = flat, record = record, culls = emc[[1]]$culls, stage = stage, draws = n,
+              subjects = d$subjects, flat = flat, prior = prior, record = record, culls = emc[[1]]$culls, stage = stage, draws = n,
               thresholds = list(min_ess = min_ess, max_ll_gap = max_ll_gap, max_subj_spread = max_subj_spread,
-                                rhat_ident_max = rhat_ident_max, drift_se = drift_se))
+                                rhat_ident_max = rhat_ident_max, drift_se = drift_se, prior_se = prior_se))
   class(out) <- "emc.diagnose"
   out
+}
+
+# Posterior mean of each group mean (no group level: each subject parameter,
+# named par:subject) in prior SDs from its prior mean, over the stage's draws
+# pooled over chains. NULL when the prior has no mean and variance for them
+# (the group means of a type whose prior is on something else).
+prior_tension <- function(emc, stage, prior_se = 3){
+  pr <- emc[[1]]$prior
+  if(is.null(pr$theta_mu_mean) || is.null(pr$theta_mu_var)) return(NULL)
+  draws <- lapply(emc, function(e){
+    its <- which(e$samples$stage == stage)
+    if(!is.null(e$samples$theta_mu)) return(e$samples$theta_mu[, its, drop = FALSE])
+    a <- e$samples$alpha[, , its, drop = FALSE]
+    nm <- if(dim(a)[2] > 1) as.vector(outer(dimnames(a)[[1]], dimnames(a)[[2]], paste, sep = ":")) else dimnames(a)[[1]]
+    matrix(a, prod(dim(a)[1:2]), dimnames = list(nm, NULL))
+  })
+  post <- rowMeans(do.call(cbind, draws))
+  pm <- pr$theta_mu_mean; pv <- pr$theta_mu_var
+  psd <- sqrt(if(is.matrix(pv)) diag(pv) else pv)
+  if(is.null(names(pm))) names(pm) <- names(post)[seq_along(pm)]
+  names(psd) <- names(pm)
+  nm <- names(post); key <- sub(":.*$", "", nm)                 # par:subject reads the parameter's prior
+  ok <- key %in% names(pm)
+  if(!any(ok)) return(NULL)
+  z <- (post[ok] - pm[key[ok]]) / psd[key[ok]]
+  data.frame(parameter = nm[ok], post_mean = unname(post[ok]), prior_mean = unname(pm[key[ok]]),
+             prior_sd = unname(psd[key[ok]]), z = unname(z), flagged = is.finite(z) & abs(unname(z)) > prior_se,
+             row.names = NULL)
 }
 
 #' @rdname diagnose
@@ -132,6 +175,11 @@ print.emc.diagnose <- function(x, ...){
   if(nrow(x$subjects) && any(x$subjects$spread > 5)){
     cat(sprintf("\nSubjects with spread > 5 (%d):\n", sum(x$subjects$spread > 5)))
     print(utils::head(x$subjects[x$subjects$spread > 5, , drop = FALSE], 10), row.names = FALSE, digits = 3)
+  }
+  if(!is.null(x$prior) && any(x$prior$flagged)){
+    p <- x$prior[x$prior$flagged, ]
+    cat(sprintf("\nPrior tension (posterior mean in prior SDs from the prior mean, beyond %s): %s\n", format(x$thresholds$prior_se),
+                paste(sprintf("%s %+.1f", p$parameter, p$z), collapse = ", ")))
   }
   if(!is.null(x$record)){
     r <- x$record

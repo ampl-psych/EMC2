@@ -151,7 +151,8 @@ were on), \code{met}, \code{tries}, \code{rule} (the Rhat the rule read last), \
 (min ESS and its parameter, \code{rhat_b} and \code{rhat_ident} — Rhat along the
 direction the chains disagree on most and along the best-identified
 direction —, the log-likelihood gap and its worst chain, the subject spread
-and its subject, the drift statistics \code{flat}), \code{culls} (count; the list
+and its subject, the drift statistics \code{flat}, and \code{prior}, each group
+mean's posterior mean in prior SDs from its prior mean), \code{culls} (count; the list
 is \code{emc[[1]]$culls}), \code{discards}, \code{aborted}, \code{restarts}, \code{trace}
 (one row per check: draws, rule, plain max Rhat, min ESS, gap, spread) and
 \code{previous} (the record of an earlier \code{hardfit()} call on the same
