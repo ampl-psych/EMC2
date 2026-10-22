@@ -1,8 +1,8 @@
 ---
-title: "Convergence: hard fits, and how to read the diagnostics"
+title: "Hard fits: hardfit() and diagnose()"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Convergence: hard fits, and how to read the diagnostics}
+  %\VignetteIndexEntry{Hard fits: hardfit() and diagnose()}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -11,258 +11,411 @@ vignette: >
 knitr::opts_chunk$set(eval = FALSE)
 ```
 
-`fit()` runs a chain of stages (preburn, burn, adapt, sample) and stops each one when its
-stop rule is met or its try budget is used up. For most models that is all you need. For
-hard fits — many subjects with a few extreme ones, race models with many effects on rates,
-DDMs with across-trial variability — `hardfit()` runs the same sampler under a stricter
-stop rule, watches for chains that have gone wrong, stops early when a fit will not
-converge, and records how the fit ended. `diagnose()` reads that record, or any fitted
-object, and says which of five outcomes you are looking at and what to do about it.
+`fit()` runs the sampler through its stages (preburn, burn, adapt, sample) and stops each
+one when its Rhat rule is met or its try budget is used up. For most models that is all you
+need. Some fits are hard: hundreds of subjects with a few extreme ones, race models with many
+effects on rates, DDMs with across-trial variability. In those, Rhat can pass with too few
+effective draws, a chain can sit in a degenerate region with the same Rhat as the others, a
+subject can have two posterior modes that the group-level Rhat never sees, and a fit that
+will never converge can run for hours.
 
-## What "converged" means in hardfit()
+Two functions cover this:
 
-A fit is converged when, on the kept sample-stage draws, all of the following hold:
+- **`hardfit()`** runs the same sampler as `fit()`, one check at a time, under a stricter stop
+  rule, replaces chains that have gone wrong, stops early when a fit will not converge, and
+  records how the fit ended.
+- **`diagnose()`** reads any fitted object — from `fit()` or `hardfit()` — and says which of
+  five outcomes you are looking at, why, and what to do next.
 
-1. **Rhat.** The split-Rhat of every group-level parameter, and the `.99` quantile of the
-   Rhats of all subject-level parameters, is below 1.1. This is the classical check: the
-   chains agree on where the posterior is. With hundreds of subjects the plain maximum is set
-   by one subject's worst parameter, so the rule reads the top 1% instead. For
-   `type = "single"` the rule is the maximum over the subject's parameters at 1.05.
-2. **Effective sample size.** The smallest effective sample size over the group means and the
-   log group standard deviations, summed over chains, is at least 100. Rhat below 1.1 can be
-   reached with 30–60 effective draws, which puts the Monte Carlo error of a posterior median
-   near a tenth of a posterior SD; 100 is the point beyond which more draws changed no
-   posterior summary in the fits we checked, and 200 roughly halves how many fits stop.
-3. **No chain in a different region.** The chains' summed subject log-likelihoods lie within
-   100 units of each other. Two chains with the same Rhat on the parameters but a likelihood
-   gap of hundreds of units are in different regions of the posterior, usually one of them
-   degenerate.
-4. **No subject in a different region.** For every subject, the chains' median log-likelihoods
-   for that subject lie within 15 units. A subject whose chains disagree by more than that has
-   two posterior modes, which the group-level Rhat cannot see.
+This vignette is about using them. The rules themselves and the evidence behind the
+thresholds are in the last section.
 
-The first criterion is the one that binds in almost every hard fit; the other three are
-safety nets that never fire when the chains agree, and each catches a case the Rhat alone
-passes.
-
-Independently of the stop rule, **culling** watches for a chain that has drifted into a
-degenerate region: a chain whose likelihood is more than 200 units below the best chain's
-(and more than 5 within-chain spreads), for two checks running, and either more than 1,000
-below or also lower on its own log posterior, has its state replaced by a copy of a healthy
-chain's. The check runs at every burn check, once more at the end of burn-in, and at every
-sample-stage check. Replacing a chain's state during burn-in is a change of starting point
-and does not alter the posterior; a replacement in the sample stage restarts the kept draws.
-
-Finally, an **early stop**: a fit whose rule Rhat is still above 1.5 at the 20th sample-stage
-check is ended there and marked as aborted. Of 46 fits in that position (hierarchical and
-single-subject), none met the rule later, so continuing them spends compute for nothing.
-
-## Running a hard fit
+## Quick start
 
 ```{r}
 emc <- make_emc(data, design, n_chains = 6)
 emc <- hardfit(emc)
+diagnose(emc)
 ```
 
-Six chains rather than three roughly halves the chance that a two-mode subject goes
-unnoticed, and give the chain replacement healthy chains to copy from; `hardfit()` prints a
-note when a hierarchical object has fewer. The defaults are the four criteria above, culling
-on, the early stop at Rhat 1.5 and check 20, and 40 checks of 100 draws per stage (`fit()`'s
-default is 20). Every threshold is an argument, and `NULL` turns a criterion off:
+Six chains rather than three: the chain replacement needs healthy chains to copy from, and a
+subject with two posterior modes is detected only when at least one chain finds each mode
+(with 3 chains it is missed in a quarter to a third of runs, with 6 in about one in ten).
+`hardfit()` prints a note when a hierarchical object has fewer than 6 chains.
+
+The defaults are the ones below; a fit that returns `diagnose(emc)$class == "met"` has
+passed all of them.
+
+## Running a hard fit
+
+### The stop rule
+
+`hardfit()` ends the sample stage when, on one set of kept draws, every criterion that is on
+holds:
+
+| argument | default | criterion |
+|---|---|---|
+| `max_gd` | 1.1 (1.05 for `type = "single"`) | the rule's Rhat is below this |
+| `gd_quantile` | .99 | the rule reads this quantile of the subject-level Rhats (and every group-level Rhat); 1 is the plain maximum |
+| `min_ess` | 100 | the smallest effective sample size over the group means and log group SDs, summed over chains |
+| `max_ll_gap` | 100 | the chains' summed subject log-likelihoods lie within this many units |
+| `max_subj_spread` | 15 | every subject's chain log-likelihoods lie within this many units |
+| `iter` | 1000 | the stage holds at least this many new draws per chain |
+
+`NULL` turns one of the first five off. Everything is an argument:
 
 ```{r}
 emc <- hardfit(emc, max_gd = 1.1, gd_quantile = .99, min_ess = 100, max_ll_gap = 100,
-               max_subj_spread = 15, cull = TRUE, abort_gd = 1.5, abort_try = 20,
-               max_tries = 40, iter = 1000, step_size = 100)
+               max_subj_spread = 15, iter = 1000, step_size = 100, max_tries = 40)
 ```
 
-`hardfit()` drives the same sampler as `fit()` one check at a time, so a fit started with
-`fit()` can be continued with `hardfit()` and the reverse; the kernel adapted during warm-up
-is kept either way.
+`step_size` is the number of draws per chain between checks, and `max_tries` the number of
+checks before an unmet stage ends (`fit()`'s default is 20). An unmet stage ends with a
+warning pointing to `diagnose()`, and keeps every draw.
+
+When the rule fails on all the stage's draws but passes with the first third dropped, the
+shorter history is used only if every other criterion then passes too; the drop is recorded.
+Otherwise nothing is thrown away.
+
+### Chain replacement
+
+`cull = TRUE` (the default) watches, at every burn and sample check, for a chain held in a
+different region from the others: its summed log-likelihood 200 units and 5 within-chain
+spreads below the best chain's, for two checks running, and either 1,000 units below or also
+lower on its own log posterior. Such a chain has its state replaced by a copy of a healthy
+chain's (kernel settings included). Burn may do this twice at its checks and once more at
+its end; sample does it once and then restarts its kept draws. Replacing a chain's state
+during warm-up changes a starting point, not the posterior.
+
+`cull = FALSE` turns it off; a list adjusts it, for example a more patient rule:
+
+```{r}
+emc <- hardfit(emc, cull = list(chain_gap = 500, persistence = 3))
+```
+
+The fields are `chain_gap` (200), `chain_z` (5), `persistence` (2), `lp_guard_below` (1000),
+`max_culls` (1 in sample, 2 in burn), `reburn` (100 iterations after a sample-stage
+replacement before the kept draws restart), `window` and `min_window` (the draws the
+comparison uses; by default the last two thirds of the stage, at least 500 in sample and 250
+in burn).
+
+### The early stop
+
+`abort_gd = 1.5, abort_try = 20`: at the 20th sample-stage check, a fit whose rule Rhat is
+still above 1.5 ends there, with a warning, and is recorded as `aborted`. In replays of 46
+fits in that position none met the rule later, so continuing spends compute for nothing.
+`abort_gd = NULL` turns it off.
+
+### The other stages
+
+Burn runs under `fit()`'s mean-Rhat rule, one check at a time with the chain replacement
+between checks; `burn = list(mean_gd = 1.1, max_tries = 40)` sets its threshold and budget.
+Preburn and adapt run exactly as in `fit()`. The sampler, its kernel and its draws are
+`fit()`'s throughout: `hardfit()` only decides when to stop, which chains to replace and
+what to record.
+
+### Continuing, saving, cores
+
+A call on a fitted object continues its sample stage: another `iter` draws per chain are
+added and the rule is re-checked, with the earlier record kept under `stop_record$previous`.
+A fit started with `fit()` can be continued with `hardfit()` and the reverse; the adapted
+kernel is kept either way.
+
+```{r}
+emc <- hardfit(emc)                                   # continue
+emc <- hardfit(emc, fileName = "fit.RData")           # saved after every check
+emc <- hardfit(emc, cores_for_chains = 6, cores_per_chain = 4)
+emc <- hardfit("fit.RData")                           # resume from the file
+```
+
+`fileName`, `cores_for_chains`, `cores_per_chain`, `particle_factor`, `search_width`,
+`on_singular` and `history_proposals` mean what they mean in `fit()`.
+
+### Single-subject fits
+
+For `type = "single"` the rule reads the maximum Rhat over the subject's parameters, at
+1.05, and the effective-size floor applies to those parameters; the subject-spread criterion
+does not apply. The likelihood-gap veto and the chain replacement work as above.
 
 ## Reading the progress line
 
-Each sample-stage check prints one line:
+Burn prints `fit()`'s line with the chain replacements added; each sample-stage check prints
+one line with every criterion on it. From a 518-subject LBA fit with 6 chains:
 
 ```
-[sample | try=7 | iters=700 | Rhat=2.072 (rule; max 11.310) | min ESS=47 (v_CIcong) |
- LL gap=56 | subject spread=15.6 (s353; 6 > 5)] Duration: 47.1 s - ETA (to max_tries): 25.9 min
+Running burn stage
+[burn | try=1 | iters=100 | Mean Rhat=1.412] Duration: 1.2 min - ETA (to max_tries): 46.8 min
+[burn | try=2 | iters=200 | Mean Rhat=1.216] Duration: 1.2 min - ETA (to max_tries): 47.3 min
+[burn | try=3 | iters=200 | Mean Rhat=1.067 (first 100 draws dropped)] Duration: 1.4 min - ...
+Running adapt stage
+...
+Running sample stage
+[sample | try=1 | iters=100 | Rhat=2.126 (rule; max 8.431) | min ESS=36 (v_CIcong) |
+ LL gap=51 | subject spread=5.9 (s331; 2 > 5)] Duration: 1.3 min - ETA (to max_tries): 11.6 min
+[sample | try=2 | iters=200 | Rhat=2.260 (rule; max 8.358) | min ESS=62 (v_CIcong) |
+ LL gap=66 | subject spread=5.9 (s331; 1 > 5)] Duration: 1.3 min - ETA (to max_tries): 10.1 min
+...
+[sample | try=10 | iters=1000 | Rhat=1.604 (rule; max 7.767) | min ESS=73 (lsd:v_iMd) |
+ LL gap=24 | subject spread=5.3 (s331; 1 > 5)] Duration: 1.4 min - ETA (to max_tries): 0.0 s
+Warning message:
+Max tries reached before all stopping criteria were met (see diagnose(emc)).
 ```
 
-- `Rhat=2.072 (rule; max 11.310)`: the value the stop rule compares with 1.1, and the plain
-  maximum over every parameter. When the two differ by this much, one subject is far from
-  the others; the rule has put it in the top 1% and is reading the rest.
-- `min ESS=47 (v_CIcong)`: the smallest effective sample size and its parameter. The parameter
-  tells you where the mixing is slow: here a rate effect, typically the direction along which
-  the chains disagree.
-- `LL gap=56`: the largest difference between chains in summed log-likelihood. Healthy fits
-  sit under 40; the veto is 100; a cull needs 200.
-- `subject spread=15.6 (s353; 6 > 5)`: the subject with the widest disagreement between
-  chains, its spread in log-likelihood units, and how many subjects exceed 5. Subject s353
-  here has two modes and the chains have split between them.
+(each check is one line; wrapped here for the page)
 
-A cull prints on the line of the check it happened at:
+- `Rhat=2.126 (rule; max 8.431)`: the value the stop rule compares with 1.1, and the plain
+  maximum over every parameter. When the two differ by this much, one subject is far from the
+  others on one parameter; the rule has put it in the top 1% and is reading the rest.
+- `min ESS=36 (v_CIcong)`: the smallest effective sample size and its parameter (`lsd:` marks
+  a log group SD). The parameter says where mixing is slow — here a rate effect, typically the
+  direction along which the chains disagree.
+- `LL gap=51`: the largest difference between chains in summed log-likelihood. Healthy fits sit
+  under 40; the veto is 100; a replacement needs 200.
+- `subject spread=5.9 (s331; 2 > 5)`: the subject whose chains disagree most, its spread in
+  log-likelihood units, and how many subjects exceed 5. A spread above 15 is a subject with two
+  modes and chains in both.
+
+A chain replacement prints on the line of the check it happened at:
 
 ```
-... | chain 2 respawned from chain 5 (log-likelihood 8986 below, z = 74.7); sample stage restarted]
+[burn | try=4 | iters=400 | Mean Rhat=1.979 |
+ chain 2 respawned from chain 5 (log-likelihood 8986 below, z = 74.7)] ...
+[sample | try=6 | iters=100 | Rhat=1.31 (rule; max 2.1) | ... |
+ chain 3 respawned from chain 1 (log-likelihood 412 below, z = 9.3);
+ sample stage restarted] ...
 ```
 
-and the early stop as a warning naming the check, the value and the threshold.
-
-## The record
-
-After the sample stage the fit carries a record of how it ended:
-
-```{r}
-str(emc[[1]]$stop_record)
-#> $ criteria: the thresholds that were on
-#> $ met     : TRUE if every criterion passed on one set of draws
-#> $ tries   : checks used (since the last restart)
-#> $ rule    : the Rhat the stop rule read at the last check
-#> $ stats   : ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
-#>             subj_spread, subj_spread_n5, subj_spread_subject, flat (the drift statistics below)
-#> $ culls   : number of chains replaced (the list is emc[[1]]$culls)
-#> $ discards: checks at which the first third was dropped (only when that met the rule)
-#> $ aborted : NULL, or the check, value and threshold of an early stop
-#> $ restarts: sample-stage restarts after a cull
-#> $ trace   : one row per check: draws, rule, max Rhat, min ESS, LL gap, subject spread
-#> $ previous: the record of an earlier hardfit() call on the same object
-```
-
-Two statistics in `stats` are not on the progress line and are the most useful for an
-unmet fit:
-
-- `rhat_b` is the Rhat of the draws projected on the direction along which the chain means
-  differ most. It is close to the largest parameter Rhat and says how far apart the chains are.
-- `rhat_ident` is the Rhat projected on the direction the posterior pins down most tightly,
-  that is the combination of parameters the data identify best. If `rhat_ident` is near 1
-  while `rhat_b` is large, the chains agree on everything the data determine and disagree
-  only along a direction the data do not.
+and the early stop as a warning naming the check, the Rhat and the threshold.
 
 ## diagnose()
 
 ```{r}
 d <- diagnose(emc)
 d
-d$class
 ```
 
-`diagnose()` works on any fitted object, whether or not it has a record, because it reads
-the draws: the rule Rhat and the four statistics, a per-chain table (median summed
-log-likelihood, gap to the best chain, whether the chain is lower on its own log posterior,
-whether it would be culled), the per-subject spread, the drift statistics, and the class.
-
-### The drift statistics
-
-The record and `diagnose()` carry a second kind of diagnostic, which asks a different
-question from Rhat and ESS: is the posterior location still *moving* during the sample
-stage? For each of four series the draws of all chains are pooled, the first third is
-compared with the last third, and the difference of medians is expressed in IQR units
-("drift"), with the Monte Carlo error of that difference ("se"):
+`diagnose()` works on any fitted object because it reads the draws; a record written by
+`hardfit()` is used when there is one. The print is one screen. For the fit whose progress
+line is above:
 
 ```
-Drift (first vs last third, in IQRs; se): mu 0.60 (0.21), alpha 0.62 (0.25), LL 0.08 (0.05), subj_ll 0.14 (0.07)
+Class: ridge_only, rule Rhat still falling (sample stage, 1000 draws per chain, 6 chains)
+Rule Rhat 1.604 (threshold 1.1; plain max 7.767) | min ESS 73 (lsd:v_iMd) |
+ rhat_b 1.369, rhat_ident 1.032
+LL gap 24 (worst chain 6) | subject spread 5.3 (s331; 1 > 5)
+Drift (first vs last third, in IQRs; se): mu 0.63 (0.13), alpha 0.37 (0.06),
+ LL 0.11 (0.06), subj_ll 0.19 (0.05)
+
+Chains (median summed log-likelihood; gap to the best chain, z in within-chain spreads;
+ own log posterior lower than the others'; would be culled):
+ chain median_ll    gap      z median_lp lp_lower flagged
+     1     62429 22.619 0.4243     65547    FALSE   FALSE
+     2     62443  8.439 0.1583     64834     TRUE   FALSE
+     3     62442  9.224 0.1731     64939     TRUE   FALSE
+     4     62451  0.000 0.0000     65229    FALSE   FALSE
+     5     62433 18.597 0.3489     64807     TRUE   FALSE
+     6     62427 24.219 0.4544     65251    FALSE   FALSE
+
+Subjects with spread > 5 (1):
+ subject spread best worst
+    s331   5.27    3     5
+
+Record: met FALSE, tries 10, restarts 0, culls 0, discards 0
+
+The chains agree on every identified quantity and disagree along a direction the data do
+not fix. Report the identified quantities (rhat_ident near 1); reparameterise or tighten
+the prior on the weakly identified parameter. Continuing helps only while the rule Rhat is
+still falling. The rule Rhat fell over the last three checks: one continuation is worth
+trying.
 ```
 
-- `mu`: the group-level means (maximum over parameters);
-- `alpha`: the subject-level parameters (`.99` quantile over all of them);
-- `LL`: the summed log-likelihood;
-- `subj_ll`: the per-subject log-likelihoods (`.99` quantile).
+Line by line:
 
-A drift within about 3 of its se is noise. Rhat compares the chains with each other at the
-same time, ESS measures how autocorrelated each chain is; the drift statistics would be the
-only ones to notice all chains sliding together, along a ridge in the same direction, with
-Rhat unaffected. In practice such a slide also makes the autocorrelation enormous, so the
-ESS floor catches it first, and the drift statistics are reported rather than used as a
-stop criterion. Their value is in reading an unmet fit. The pattern
+1. **The class** (one of five, below), whether the rule Rhat is still falling, and what was read.
+2. **The stop rule and its statistics.** Two are not on the progress line and are the most
+   useful for an unmet fit. `rhat_b` is the Rhat of the group means projected on the direction
+   along which the chain means differ most: how far apart the chains are. `rhat_ident` is the
+   Rhat projected on the direction the posterior pins down most tightly — the combination of
+   parameters the data identify best. `rhat_ident` near 1 with `rhat_b` large means the chains
+   agree on everything the data determine and disagree along a direction the data do not.
+3. **The likelihood comparison**: the chain furthest below the best, and the widest subject.
+4. **Drift**: is the posterior still *moving* during the stage? For the group means (`mu`,
+   maximum over parameters), the subject parameters (`alpha`, .99 quantile), the summed
+   log-likelihood (`LL`) and the subject log-likelihoods (`subj_ll`, .99 quantile), the draws
+   of all chains are pooled and the first third is compared with the last: the shift of the
+   median in IQR units, with its Monte Carlo error in brackets. Within about 3 se is noise.
+   Parameters drifting while the likelihood does not (here `mu` 0.63 at 5 se, `LL` 0.11 at
+   2 se) is the ridge signature: the chains are sliding along a direction the likelihood is
+   flat on. `LL` or `subj_ll` drifting well beyond its se means a chain or a subject is still
+   changing region.
+5. **The chain table**: each chain's median summed log-likelihood over the last two thirds of
+   the stage, its gap to the best chain in units and in within-chain spreads (`z`), its own log
+   posterior and whether that is below the others' (`lp_lower`), and whether the replacement
+   rule would act on it (`flagged`). Here no chain is more than 24 units from the best.
+6. **The subject table**, widest spread first, with the chains at either end.
+7. **The record**, when the object has one.
+8. **What to do next.**
+
+The object behind the print:
+
+```{r}
+d$class        # "met", "ess_held", "aborted", "ridge_only" or "region_mode"
+d$falling      # TRUE if the rule Rhat fell over the last three checks of an unmet fit
+d$next_step    # the advice printed last
+d$rule         # rule, max, threshold, quantile, met
+d$stop         # ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
+               # subj_spread, subj_spread_n5, subj_spread_subject
+d$chains       # the chain table
+d$subjects     # the subject table (all subjects)
+d$flat         # drift, mcse, ess, worst parameter, for mu, alpha, LL, subj_ll
+d$record       # emc[[1]]$stop_record, or NULL
+```
+
+The thresholds the class is read against are arguments with the `hardfit()` defaults
+(`max_gd`, `gd_quantile`, `min_ess`, `max_ll_gap`, `max_subj_spread`), plus `rhat_ident_max`
+(1.1) and `drift_se` (3) for the ridge class, so a fit from `fit()` can be graded under any
+rule after the fact:
+
+```{r}
+diagnose(emc, min_ess = 200)$class
+diagnose(emc, stage = "burn")          # the chain comparison on burn draws
+```
+
+### Prior tension
+
+One more line appears when the prior is pulling against the data:
 
 ```
-LL 0.08 (0.05), subj_ll 0.14 (0.07)     stationary
-mu 0.60 (0.21), alpha 0.62 (0.25)       moving
+Prior tension (posterior mean in prior SDs from the prior mean, beyond 3): v +4.2, t0 -3.6
 ```
 
-means the parameters are still drifting while the likelihood is not: the chains are moving
-along a direction the likelihood is flat on. That is the ridge signature of outcome 4 below.
-Drift in `LL` or `subj_ll` well beyond its se means a chain or a subject is still changing
-region, outcome 5.
+`d$prior` holds, for every group mean (for `type = "single"`, every subject parameter), its
+posterior mean in prior SDs from the prior mean; `prior_se = 3` sets the flag. The flag never
+changes the class. It matters most with `ridge_only`: along a direction the data leave flat
+the prior is what sets the posterior, and a likelihood leaning the other way — a few
+log-likelihood units toward low `t0`, say, against a prior whose mean sits several SDs the
+other side of every subject — makes two shallow plateaus the chains cannot settle between.
+Such a fit continues for hours with the rule Rhat creeping down. `next_step` says so when a
+parameter is flagged: check the prior before continuing, and if it was set without thought
+for the scale of these data, refit with one that was.
 
-## Five outcomes, and what to do with each
+## The five outcomes, and what to do with each
 
-### 1. `met`
-
-```
-met = TRUE, tries = 33, rule = 1.085, stats$ess_min = 133, ll_gap = 23, subj_spread = 3.1
-```
-
-Converged under every criterion. Use the fit. `culls > 0` here is harmless: a chain started
-badly and was replaced early.
-
-### 2. `ess_held`: Rhat passed, ESS short
+### `met`
 
 ```
-met = FALSE, rule = 1.07, stats$ess_min = 54 (lsd:B), tries = 40
+Class: met (sample stage, 3300 draws per chain, 6 chains)
+Rule Rhat 1.085 (threshold 1.1; plain max 1.21) | min ESS 133 (v) |
+ rhat_b 1.07, rhat_ident 1.01
+LL gap 23 (worst chain 4) | subject spread 3.1 (s105; 0 > 5)
 ```
 
-The old rule would have called this converged. The chains agree but the group SD of `B` has
-only 54 effective draws, so its posterior median is known to about 0.17 posterior SDs.
-Continue the fit:
+Converged under every criterion. Use the fit. `culls > 0` in the record is harmless here: a
+chain started badly during warm-up and was replaced.
+
+### `ess_held`: Rhat passed, effective size short
+
+```
+Class: ess_held (sample stage, 4000 draws per chain, 6 chains)
+Rule Rhat 1.07 (threshold 1.1; plain max 1.18) | min ESS 54 (lsd:B) | ...
+Record: met FALSE, tries 40, ...
+The chains agree but the effective sample size is short: continue the fit (hardfit(emc))
+once or twice.
+```
+
+`fit()` would have called this converged. The chains agree, but the group SD of `B` has 54
+effective draws, so its posterior median is known to about 0.17 posterior SDs. Continue:
 
 ```{r}
 emc <- hardfit(emc)
 ```
 
-A continuation adds another 1,000 draws per chain and re-checks. Expect ESS to grow roughly
-with the draws (0.5–1.5 per 100 draws per chain in slow fits); once or twice is usually enough.
+Expect the effective size to grow with the draws (0.5–1.5 per 100 draws per chain in slow
+fits); once or twice is usually enough.
 
-### 3. `aborted`
-
-```
-met = FALSE, aborted = list(try = 20, rule = 2.246, abort_gd = 1.5)
-```
-
-Do not continue it. Look at `rhat_ident` and the LL gap to decide which of the next two cases
-it is, then act on the model or the start points, not the iteration count.
-
-### 4. `ridge_only`
+### `aborted`
 
 ```
-met = FALSE, tries = 40, rule = 1.23, stats: rhat_b = 2.22, rhat_ident = 1.006,
-  ess_min = 31 (v_lMd), ll_gap = 28, subj_spread = 4.0,
-  drift: mu 0.60 (0.21), alpha 0.62 (0.25), LL 0.08 (0.05), subj_ll 0.14 (0.07)
+Class: aborted (sample stage, 2000 draws per chain, 6 chains)
+Rule Rhat 2.246 (threshold 1.1; plain max 9.1) | ...
+Record: met FALSE, tries 20, aborted at check 20 (rule 2.246 > 1.5), ...
 ```
 
-The chains agree on every identified quantity (`rhat_ident` near 1) and on the likelihood (gap
-28, `LL` drift within noise), and are still moving along one direction (`mu` and `alpha`
-drift three times their se). To see which direction, look at the within-chain correlations
-of the group means:
+Do not continue it. The chain table, `rhat_ident` and the subject table say which of the next
+two cases it is; act on the model or the starting points, not the iteration count.
+
+### `ridge_only`
+
+The fit printed in full above. The chains agree on every identified quantity (`rhat_ident`
+1.03) and on the likelihood (gap 24, `LL` drift within noise) and still differ along one
+direction (`rhat_b` 1.37; `mu` and `alpha` drifting at 5–6 se). To see which direction, look
+at the within-chain correlations of the group means:
 
 ```{r}
 cor(t(emc[[1]]$samples$theta_mu[, emc[[1]]$samples$stage == "sample"]))
 ```
 
 A pair at −0.99 or beyond is the ridge. In race models it is typically the rate intercept
-against its match effect: the rate of the losing accumulator, which few errors leave almost
+against its match effect — the rate of the losing accumulator, which few errors leave almost
 unidentified. The posterior along that direction is set by the prior, not the data, and no
-amount of running will make six chains agree on it quickly.
+amount of running makes six chains agree on it quickly.
 
 What to do: report the identified quantities (sums or differences of the correlated pair,
-and everything else, all of which have Rhat near 1) and say that the ridge direction is
-prior-determined; or reparameterise so the identified combination is a parameter; or
-tighten the prior on the weakly identified rate. Continuing helps only if the rule Rhat was
-still falling at the last checks (`diagnose(emc)$falling`).
+and everything else, all with Rhat near 1) and say the ridge direction is prior-determined;
+or reparameterise so the identified combination is a parameter; or tighten the prior on the
+weakly identified rate. Continue only while `falling` is `TRUE`, and at most once or twice.
 
-### 5. `region_mode`
+### `region_mode`
+
+Two different things print this class, and the print says which.
+
+**A chain in a worse region.** The same model and data as above, a different seed, fitted
+with `fit()` and read afterwards:
 
 ```
-met = FALSE, rule = 1.56, stats: rhat_ident = 1.56, ll_gap = 125,
-  subj_spread = 15.4 (s254; 7 > 5), drift: LL 0.9 (0.1), subj_ll 2.4 (0.2)
+Class: region_mode (sample stage, 4000 draws per chain, 6 chains)
+Rule Rhat 260.953 (threshold 1.1; plain max 260.953) | min ESS 71 (B_CIRincong) |
+ rhat_b 334.030, rhat_ident 177.856
+LL gap 4394 (worst chain 2) | subject spread 86.9 (s304; 389 > 5)
+Drift (first vs last third, in IQRs; se): mu 0.47 (2.17), alpha 0.21 (0.06),
+ LL 0.03 (0.06), subj_ll 0.27 (0.05)
+
+Chains (...):
+ chain median_ll      gap       z median_lp lp_lower flagged
+     1     62440    0.000  0.0000     64972    FALSE   FALSE
+     2     58045 4394.299 81.8792     42536     TRUE    TRUE
+     3     62434    5.556  0.1035     64803    FALSE   FALSE
+     4     62363   76.652  1.4283     65357    FALSE   FALSE
+     5     62370   69.564  1.2962     64345     TRUE   FALSE
+     6     59780 2659.804 49.5603     49579     TRUE    TRUE
 ```
 
-The chains disagree on something the data identify, and the likelihood itself is still
-moving (`LL` and `subj_ll` drift far beyond their se). Either a chain is in a worse region
-(`ll_gap` large, `ll_worst_chain` names it) or one or more subjects have two modes
-(`subj_spread` large, the subject named). For a subject with two modes, the chains that found
-the better one have the higher subject log-likelihood; compare across seeds:
+Chains 2 and 6 sit 4,394 and 2,660 log-likelihood units below the other four, 50–80
+within-chain spreads away, and lower on their own log posterior: `flagged = TRUE`, the
+replacement rule would have acted on them during warm-up. Every Rhat is meaningless while
+they are there. Under `hardfit()` such chains are replaced at the first burn checks; for a
+fit that already has them, drop the flagged chains or refit.
+
+**A subject with two modes.** A 518-subject RDM fit whose rule Rhat passed:
+
+```
+Class: region_mode (sample stage, 1400 draws per chain, 6 chains)
+Rule Rhat 1.092 (threshold 1.1; plain max 3.036) | min ESS 94 (v_lMd) |
+ rhat_b 1.062, rhat_ident 1.029
+LL gap 79 (worst chain 1) | subject spread 66.3 (s543; 1 > 5)
+
+Chains (...):          all gaps under 80, none flagged
+
+Subjects with spread > 5 (1):
+ subject spread best worst
+    s543   66.3    4     5
+```
+
+Rhat is met, the chains are within 80 units of each other, and one subject's chains disagree
+by 66 units: s543 has two posterior modes and chains 4 and 5 are in different ones. Nothing
+at the group level shows it (plain max Rhat 3.0 is this subject). The chains that found the
+better mode have the higher log-likelihood for that subject, and the decision is between
+seeds, not within one fit:
 
 ```{r}
 fits <- list(hardfit(emc_a), hardfit(emc_b), hardfit(emc_c))   # three seeds
@@ -271,37 +424,115 @@ sapply(fits, function(f) sum(apply(f[[1]]$samples$subj_ll, 1, median)))
 
 A seed whose summed log-likelihood sits ten or more units below the best is in a worse mode:
 hold it and use the others. No stop rule or chain replacement can fix a case where most
-chains sit in the worse mode; several seeds are the only reliable detector, and 6 chains
-rather than 3 roughly halves the chance that a two-mode subject goes unnoticed.
+chains sit in the worse mode; several seeds are the only reliable detector.
 
 ### Unmet at `max_tries`, still falling
 
 ```
-trace$rule at checks 20, 30, 40: 1.50, 1.42, 1.354
+Class: ridge_only, rule Rhat still falling ...
+Record: met FALSE, tries 40 ...
+trace$rule at checks 20, 30, 40: 1.50, 1.42, 1.35
 ```
 
-`diagnose()` reports `falling = TRUE` when the rule Rhat decreased over the last three
-checks of an unmet fit. The fit is converging slowly: one continuation (at most two) is
-worth it. If the Rhat rises under continuation instead, the problem is structural (case 4
-or 5), not slow mixing.
+`falling = TRUE` means the rule Rhat decreased over the last three checks of an unmet fit:
+it is converging slowly, and one continuation (at most two) is worth it. If the Rhat rises
+under continuation instead, the problem is structural (`ridge_only` or `region_mode`), not
+slow mixing.
+
+## The record
+
+A fit from `hardfit()` carries how it ended:
+
+```{r}
+r <- emc[[1]]$stop_record
+r$criteria   # the thresholds that were on (NULL = off)
+r$met        # TRUE if every criterion passed on one set of draws
+r$tries      # checks used since the last restart
+r$rule       # the Rhat the rule read at the last check
+r$stats      # ess_min, ess_min_par, rhat_b, rhat_ident, ll_gap, ll_z, ll_worst_chain,
+             # subj_spread, subj_spread_n5, subj_spread_subject, flat (the drift statistics)
+r$culls      # chains replaced; the list (stage, iteration, chain, donor, gap, z)
+             # is emc[[1]]$culls
+r$discards   # checks at which the first third was dropped
+r$aborted    # NULL, or list(try, rule, abort_gd)
+r$restarts   # sample-stage restarts after a replacement
+r$trace      # one row per check: try, draws, rule, max_rhat, ess_min, ll_gap,
+             # subj_spread, culls, dropped
+r$previous   # the record of an earlier hardfit() call on this object
+r$time       # minutes
+```
+
+`trace` is the progress line as data:
+
+```
+   try draws     rule max_rhat  ess_min   ll_gap subj_spread culls dropped
+1    1   100 2.126364 8.431421 36.09112 51.20082    5.944289     0       0
+2    2   200 2.259881 8.358336 62.02619 65.75251    5.857075     0       0
+...
+10  10  1000 1.604459 7.766886 73.41182 24.13929    5.266177     0       0
+```
 
 ## Grading a set of fits
 
-With many fits, grade them from `diagnose()` rather than by eye:
+With many fits, grade them from `diagnose()` rather than by eye, and keep the statistics
+that explain the grade:
 
 ```{r}
-grades <- sapply(fits, function(f) diagnose(f)$class)
-table(grades)
+grade <- function(f){
+  d <- diagnose(f)
+  data.frame(class = d$class, falling = d$falling, rule = d$rule$rule,
+             ess_min = d$stop$ess_min, rhat_ident = d$stop$rhat_ident,
+             ll_gap = d$stop$ll_gap, subj_spread = d$stop$subj_spread,
+             flagged = paste(d$chains$chain[d$chains$flagged], collapse = ","))
+}
+do.call(rbind, lapply(fits, grade))
 ```
+
+`met` fits are done. `ess_held` and `falling` fits get one continuation. `ridge_only` fits
+are reported on their identified quantities. `region_mode` fits with a flagged chain are
+refitted; those with a wide subject are compared across seeds on summed log-likelihood.
 
 ## What the diagnostics do not tell you
 
-- A parameter whose posterior mean is several prior SDs from the prior mean is under
-  tension between the prior and the likelihood; chains can sit for a long time on a shallow
-  plateau between the two. Check `credible(emc)` against the prior means for any fit that is
-  slow for no visible reason.
+- The prior-tension flag reads the group means against the prior on the group means. A
+  prior that is wrong on the group SDs (half-t scale) or on the covariance shows up as slow
+  fits with nothing flagged; `credible(emc)` against the prior is the check there.
 - A single chain can make a long excursion and come back; Rhat over a window can read 1.26
-  where Rhat over the whole run reads 1.06. The stop rule reads all kept draws, discarding
-  the first third only when that alone makes the stop pass, and records when it does.
+  where Rhat over the whole run reads 1.06. The stop rule reads all kept draws, discards the
+  first third only when that alone makes the stop pass, and records when it does.
 - The two-mode check needs at least one chain in each mode. With 3 chains a two-mode subject
   goes undetected in a quarter to a third of runs; with 6, about one in ten.
+
+## Why these rules
+
+**Rhat at the .99 quantile.** With hundreds of subjects the plain maximum Rhat is set by one
+subject's worst parameter, which can stay above 1.1 for thousands of draws while every group
+parameter and 99% of subject parameters have settled. The rule reads the top 1% instead and
+every group-level Rhat in full. For `type = "single"` there is no group level and the rule is
+the maximum, at 1.05.
+
+**Effective size 100.** Rhat below 1.1 can be reached with 30–60 effective draws, which puts
+the Monte Carlo error of a posterior median near a tenth of a posterior SD. In the fits we
+checked, 100 is the point beyond which more draws changed no posterior summary, and 200
+roughly halved how many fits ever stopped.
+
+**Likelihood gap 100, subject spread 15.** Two chains with the same parameter Rhats but a
+likelihood gap of hundreds of units are in different regions of the posterior, usually one
+of them degenerate; healthy chains sit within 40 units. A subject whose chains disagree by
+more than 15 units has two modes. The chain comparison uses the summed subject
+log-likelihood and never the log posterior under pooled group parameters, whose group-density
+term differs between healthy chains by hundreds of units; the own-log-posterior guard is
+applied only below a gap of 1,000, where it could veto a real difference by noise.
+
+**Replacement, not deletion.** A chain in a degenerate region during warm-up is a bad start
+and is replaced from a healthy chain's state, kernel settings included; the posterior is
+untouched. In the sample stage a replacement restarts the kept draws, once. Twelve chains
+bought nothing over six.
+
+**Early stop at 1.5 after 20 checks.** Of 46 hierarchical and single-subject fits above 1.5
+at check 20, none met the rule later.
+
+**Drift is reported, not a stop criterion.** The drift statistics would be the only ones to
+notice all chains sliding together along a ridge, with Rhat unaffected; in practice the
+slide also makes the autocorrelation enormous, so the effective-size floor fires first.
+Their value is in reading an unmet fit.
