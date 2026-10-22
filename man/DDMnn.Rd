@@ -2,80 +2,43 @@
 % Please edit documentation in R/model_NN.R
 \name{DDMnn}
 \alias{DDMnn}
-\title{The Diffusion Decision Model — Neural-Network Likelihood}
+\title{The Diffusion Decision Model — Neural-Network Likelihood (Scaled)}
 \usage{
-DDMnn(artefact = "ddm_cap256w_c4")
+DDMnn(artefact = "ddm_sc_s1106_e245_weights.json")
 }
 \arguments{
-\item{artefact}{Name of a shipped artefact in \code{inst/extdata/flownn}:
-\code{"ddm_cap256w_c4"} (default, full 8-parameter DDM) or \code{"ddm_st0zero"}
-(7 parameters, \code{st0 = 0}).}
+\item{artefact}{Name of a shipped artefact in \code{inst/extdata/flownn}
+(default \code{"ddm_sc_s1106_e245_weights.json"}, the DDMnle scaled card).}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample
 }
 \description{
 Variant of \link{DDM} whose joint likelihood of response and rt is computed by
-trained neural networks (neural likelihood estimation) instead of the
-numerical-integral density: a normalizing flow for the rt distribution
-conditional on parameters and response, and a classifier for the choice
-probability. Evaluation takes microseconds per trial.
+a scaled normalizing flow (neural likelihood estimation, kind
+\code{"flow_scaled"}): the network models the unit-scale decision time given
+kappa = v\emph{a/s^2, eta = sv}a/s^2, Z and SZ, with an exact zero at
+sv = SZ = 0. Evaluation takes microseconds per trial.
 }
 \details{
-Parameters, transforms, defaults and bounds' meaning match \link{DDM}; the
-natural-scale ranges below are the flow's \strong{training region} (a bounding
-hyper-box, read from the artefact): parameter vectors outside it are
-rejected (likelihood floored at \code{min_ll}), both through the model's \code{bound}
-and inside the compiled evaluator.\tabular{lllll}{
-   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Interpretation} \cr
-   \emph{v} \tab - \tab [-6, 6] \tab 1 \tab Mean drift rate \cr
-   \emph{a} \tab log \tab [0.05, 5] \tab log(1) \tab Boundary separation \cr
-   \emph{t0} \tab log \tab [0.05, 1] \tab log(0) \tab Non-decision time \cr
-   \emph{s} \tab log \tab [0.1, 2] \tab log(1) \tab Within-trial drift SD \cr
-   \emph{Z} \tab probit \tab [0.1, 0.9] \tab qnorm(0.5) \tab Relative start point \cr
-   \emph{SZ} \tab probit \tab [0.05, 0.99] \tab qnorm(0) \tab Start-point variability \cr
-   \emph{sv} \tab log \tab [0.01, 4] \tab log(0) \tab Between-trial drift SD \cr
-   \emph{st0} \tab log \tab [0.01, 0.49] \tab log(0) \tab Non-decision variability \cr
-}
+Parameters, transforms, and defaults match \link{DDM}; the natural-scale ranges
+are the flow's \strong{training region} (a bounding hyper-box read from the
+artefact): parameter vectors outside it are rejected (likelihood floored at
+\code{min_ll}).
 
-
-The defaults are \strong{identical to \link{DDM}'s}, including \code{sv = SZ = st0 = 0}. The
-full-DDM artefact cannot represent those zeros, so an un-sampled \code{sv}, \code{SZ}
-or \code{st0} is refused with an error instead of silently changing the model:
-sample the parameter, or fix it inside the box (e.g.
-\code{constants = c(sv = log(0.5))}). The refusal happens in \code{\link[=design]{design()}} (and again
-at run time). The \code{"ddm_st0zero"} artefact was trained without \code{st0}: it
-admits exactly \code{st0 = 0} and refuses a sampled or non-zero \code{st0}.
-
-Unlike \link{DDM}, \code{SZ} here is the raw proportion the flow was trained on, not
-remapped by \code{2 * SZ * min(Z, 1 - Z)}; data generation applies that remapping
-internally so \code{rfun} matches \link{DDM}'s parameter meaning exactly. Data are
-generated with the exact sampler (\code{WienR::rWDM}).
+The defaults are \strong{identical to \link{DDM}'s}, including \code{sv = SZ = st0 = 0}.
+The network is exact at sv = 0 and SZ = 0 (zerobox encoding); st0 is fixed
+at 0 (the card was trained without st0 variability). An un-sampled \code{sv} or
+\code{SZ} at its default 0 is accepted as an exact zero; a sampled or non-zero
+\code{st0} is refused with an error.
 
 Loading a neural likelihood is not the same as being able to infer with it:
 check calibration and identifiability (parameter recovery, likelihood
 profiles, SBC) before drawing conclusions; \code{\link[=nn_cell]{nn_cell()}} and the validation
 kit run these checks against \link{DDM}.
 
-\strong{Calibration of \code{ddm_cap256w_c4}, and the t0 shift.} The artefact passes
-simulation-based calibration from N = 100 to 800 trials on every parameter
-(standardised bias within the 0.5 gate, coverage nominal), with one
-systematic feature: its t0 point estimates sit slightly high, by a shift
-that is constant on the log scale (about 0.002 at N = 800, i.e. 0.2\% of
-t0; rank uniformity fails from N = 200 while interval coverage stays
-nominal). \strong{No correction is applied by EMC2.} A fixed multiplicative
-correction of 0.00276 was proposed by the NLE project and reopened on
-2026-10-13, when an exact test with saved draws found it over-corrects at
-N = 800 (mean rank .534, KS p .007); an out-of-sample test of about 0.0019
-is pending, and the shift is reported here as unresolved. For a DDM with
-\code{sv}, \code{SZ} or \code{st0} free the scaled DDM card (DDMnle, a \code{"flow_scaled"}
-card registered with \code{\link[=register_nn_model]{register_nn_model()}}) replaces this artefact: it
-needs no t0 correction (t0 inside the envelope in all six variability
-models at N = 400). The record of the exact test is the NLE project's
-\code{sbc/t0corr_exact.R} and the progress log of
-\code{handover/ZERO_BOX_RETRAIN_PLAN.md}.
-
-\code{DDMnn(artefact)} is \code{register_nn_model(artefact, kind = "flow_joint", twin = DDM)()}; see \code{\link[=register_nn_model]{register_nn_model()}} for the contract.
+\code{DDMnn(artefact)} is \code{register_nn_model(artefact, twin = DDM)()}; see
+\code{\link[=register_nn_model]{register_nn_model()}} for the contract.
 
 Wuth, J. (2026). \emph{Likelihood approximation in evidence accumulation
 models: A comparison of kernel density and neural likelihood methods}

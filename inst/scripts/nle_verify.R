@@ -6,8 +6,8 @@
 #   Rscript -e 'source(system.file("scripts", "nle_verify.R", package = "EMC2"))'
 #
 # Without arguments the shipped artefacts (ddm_sc_s1106_e245_weights.json,
-# rdm_ss_base_s801_e271_weights.json) are checked against the golden files
-# shipped with them. Each
+# rdm_ss_base_s801_e271_weights.json, rtcon2_r3_s2_e006_weights.json) are
+# checked against the golden files shipped with them. Each
 # further argument is a card file (<tag>_weights.json or .rds) checked against
 # <tag>_golden.csv beside it, to the tolerance the card records in
 # validation$golden$tolerance (1e-9 without one); its twin is the card's `model`
@@ -106,6 +106,12 @@ for (a in c("ddm_sc_s1106_e245_weights.json", "rdm_ss_base_s801_e271_weights.jso
   if (!inherits(reg, "error") && reg()$nn$kind == "flow_scaled")
     try_check(paste(a, "scaled checks"), scaled_checks(a, reg))
 }
+# RTCON2 (flow_cat) has no analytic twin in EMC2: it registers through RTCONnn.
+# Tolerance 1e-8: on the upper-censored rows the mass 1 - F, F within 1e-6 of
+# 1, keeps about ten digits (3e-10 against the float64 reference on macOS).
+r <- try_check("rtcon2_r3_s2_e006_weights.json",
+               nn_golden_check(RTCONnn("rtcon2_r3_s2_e006_weights.json"), tol = 1e-8, error = FALSE))
+if (!is.null(r)) say(r$pass, sub("^(PASS|FAIL) ", "", format(r)))
 
 for (card in args) {
   if (!file.exists(card)) { say(FALSE, "no such card ", card); next }

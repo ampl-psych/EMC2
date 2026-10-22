@@ -31,8 +31,8 @@ permutation is refused).}
 \code{"probit"}, \code{"zerobox"}), in the network's order or named. Default: the card's
 \code{context_transforms}; if both are given they must agree.}
 
-\item{kind}{\code{"flow_joint"}, \code{"flow_race"}, \code{"regression_joint"} or
-\code{"mlp_joint"}. Default:
+\item{kind}{\code{"flow_joint"}, \code{"flow_scaled"}, \code{"flow_cat"}, \code{"flow_race"},
+\code{"regression_joint"} or \code{"mlp_joint"}. Default:
 inferred from the card; if given it must match.}
 
 \item{cdf}{Whether the network provides a CDF. Default \code{TRUE} for flows,
@@ -109,7 +109,7 @@ weights (\code{flow_mlp} + \code{classifier_mlp} + \code{spline} + \code{scaler}
 \code{context_transforms} that is not in
 \code{context_names} was fixed when the network was trained; its value must be
 given in \code{exceptions} unless the card records it (field \code{fixed}: named
-natural-scale values, e.g. \code{{"s": 1, "SZ": 0}}) or implies it
+natural-scale values, e.g. \verb{\{"s": 1, "SZ": 0\}}) or implies it
 (\code{context_encoding = "st0zero"} implies \code{st0 = 0}). \code{.rds} bundles may hold an ensemble
 (\code{members}, \code{"flow_joint"} only); \code{.json} cards need the \pkg{jsonlite}
 package.
@@ -198,6 +198,20 @@ respect (parameters, transforms, bounds, the exact zeros \code{sv = SZ = st0 = 0
 apply, and \code{cdf} is \code{FALSE} (no CDF of rt is offered). \code{SZ} is the
 start-point proportion throughout (see \code{\link[=nn_sz_convert]{nn_sz_convert()}} for the
 conventions).
+\item \code{"flow_cat"}: a K-category joint flow (card fields \code{n_categories}, even,
+and \code{conv}): a K-way classifier plus a spline flow for the decision time
+given the category. The category is \code{k = rating_fold(R, RR)} over the two
+response levels and the rating column \code{RR} (1..K/2, an extra response of
+the model: the first level counts its ratings down, the second up). The
+non-decision time is applied outside the network by an exact uniform
+convolution whose mean and range are the parameters \code{conv$mean} and
+\code{conv$range} (e.g. \code{t0} and \code{st0}, not network inputs). Lower and upper
+censored trials (\code{missingness} codes 1 and 2, from \code{\link[=make_missing]{make_missing()}}) are
+scored by the network's CDF. A card with a \code{mix} block integrates a
+latent trial strength by Gauss-Hermite quadrature outside the network;
+its \code{context_names} are then the model's natural parameters, from which
+the evaluator derives the network's own inputs (\code{mix$net_names}). See
+\code{\link[=RTCONnn]{RTCONnn()}}.
 \item \code{"flow_race"}: a spline flow for one accumulator's finishing time; a race
 model like \link{RDM} (\code{dfun}/\code{pfun} per accumulator; the survivor function
 of the losing accumulators needs the CDF, so \code{cdf = FALSE} is refused).

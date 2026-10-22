@@ -150,6 +150,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cat_build
+SEXP cat_build(List fl);
+RcppExport SEXP _EMC2_cat_build(SEXP flSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type fl(flSEXP);
+    rcpp_result_gen = Rcpp::wrap(cat_build(fl));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cat_ptr_valid
+bool cat_ptr_valid(SEXP ptr_);
+RcppExport SEXP _EMC2_cat_ptr_valid(SEXP ptr_SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    rcpp_result_gen = Rcpp::wrap(cat_ptr_valid(ptr_));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cat_eval_trials_cpp
+List cat_eval_trials_cpp(SEXP ptr_, NumericMatrix theta, NumericVector rt, NumericVector t0, NumericVector st0, IntegerVector k, IntegerVector miss, NumericVector LC, NumericVector UC);
+RcppExport SEXP _EMC2_cat_eval_trials_cpp(SEXP ptr_SEXP, SEXP thetaSEXP, SEXP rtSEXP, SEXP t0SEXP, SEXP st0SEXP, SEXP kSEXP, SEXP missSEXP, SEXP LCSEXP, SEXP UCSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr_(ptr_SEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rt(rtSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type t0(t0SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type st0(st0SEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type k(kSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type miss(missSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type LC(LCSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type UC(UCSEXP);
+    rcpp_result_gen = Rcpp::wrap(cat_eval_trials_cpp(ptr_, theta, rt, t0, st0, k, miss, LC, UC));
+    return rcpp_result_gen;
+END_RCPP
+}
 // ddm_build
 SEXP ddm_build(List fl);
 RcppExport SEXP _EMC2_ddm_build(SEXP flSEXP) {
@@ -1044,6 +1085,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_rcrdm_rows", (DL_FUNC) &_EMC2_rcrdm_rows, 7},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
+    {"_EMC2_cat_build", (DL_FUNC) &_EMC2_cat_build, 1},
+    {"_EMC2_cat_ptr_valid", (DL_FUNC) &_EMC2_cat_ptr_valid, 1},
+    {"_EMC2_cat_eval_trials_cpp", (DL_FUNC) &_EMC2_cat_eval_trials_cpp, 9},
     {"_EMC2_ddm_build", (DL_FUNC) &_EMC2_ddm_build, 1},
     {"_EMC2_ddm_build_ensemble", (DL_FUNC) &_EMC2_ddm_build_ensemble, 1},
     {"_EMC2_ddm_ptr_valid", (DL_FUNC) &_EMC2_ddm_ptr_valid, 1},

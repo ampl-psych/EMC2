@@ -4,11 +4,11 @@
 \alias{RDMnn}
 \title{The Racing Diffusion Model — Neural-Network Likelihood}
 \usage{
-RDMnn(artefact = "rdm_small")
+RDMnn(artefact = "rdm_ss_base_s801_e271_weights.json")
 }
 \arguments{
 \item{artefact}{Name of a shipped artefact in \code{inst/extdata/flownn}
-(default \code{"rdm_small"}).}
+(default \code{"rdm_ss_base_s801_e271_weights.json"}).}
 }
 \value{
 A model list with all the necessary functions for EMC2 to sample
@@ -31,8 +31,8 @@ are the flow's \strong{training region}, read from the artefact:\tabular{lllll}{
 
 
 Unlike \link{RDM}, \code{A = 0} and \code{v = 0} are not available (the flow trained on
-\code{A >= 1e-4}, \code{v >= 1e-3}). As for \link{DDMnn}, an un-sampled \code{A} at its default
-\code{0} is refused with an error; fix it inside the box instead, e.g.
+\code{A >= 1e-4}, \code{v >= 1e-3}). An un-sampled \code{A} at its default \code{0} is refused
+with an error; fix it inside the box instead, e.g.
 \code{constants = c(A = log(1e-3))}. Out-of-box parameter vectors are rejected
 (likelihood floored at \code{min_ll}).
 

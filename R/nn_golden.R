@@ -23,7 +23,17 @@
 #' of the natural value, `-Inf` at an exact zero), `R`, `rt`, `log_pdf_joint`,
 #' `cdf_defective` and `log_p_R`; for a LAN (`mlp_joint`) the inputs on the
 #' natural scale, `rt`, `choice` or `R`, and the log density. For a
-#' `flow_scaled` card `rt` is the unit-scale time `u`.
+#' `flow_scaled` card `rt` is the unit-scale time `u`. For a K-category flow
+#' (`flow_cat`) the inputs in `context_names` order on the sampled scale (a
+#' `zerobox` input as the log of the natural value, `-Inf` at zero), the
+#' convolution's mean and range (`t0`, `st0`, seconds), the category `k`
+#' (1..K), `rt`, optionally `miss` (0 observed; 1 / 2 lower / upper
+#' censored, `rt` then being the bound), `log_pdf` (the convolved joint log
+#' density, or the log censored mass) and `cdf` (the convolved defective CDF
+#' of `k` at `rt`; `NA` on censored rows). A `flow_cat` card that embeds the
+#' exporter's network-level golden vectors (`golden$cases` on
+#' `golden$net_context_sampled`) is checked against those too (outputs
+#' `net_log_pdf`, `net_cdf`).
 #'
 #' Shipped artefacts carry their golden files in
 #' `system.file("extdata", "flownn", "golden", package = "EMC2")`; a card
@@ -65,6 +75,7 @@ nn_golden_check <- function(x, golden = NULL, tol = NULL, flow_only = FALSE, err
     flow_race = nn_golden_race(reg, g),
     flow_joint = , flow_scaled = nn_golden_joint(reg, g, flow_only),
     regression_joint = , mlp_joint = nn_golden_mlp(reg, g),
+    flow_cat = nn_golden_cat(reg, g),
     stop("No golden check for kind ", reg$kind))
   pass <- all(is.finite(d)) && all(d <= tol)
   out <- structure(list(label = reg$label, kind = reg$kind, golden = golden, n = nrow(g), max_abs = d,
@@ -185,4 +196,59 @@ nn_golden_mlp <- function(reg, g) {
   colnames(pars) <- reg$pars
   lp <- log(nn_eval_joint(reg, as.numeric(g[["rt", exact = TRUE]]), R, pars, "pdf"))
   c(log_pdf = max(nn_golden_diff(lp, as.numeric(g[[lp_col[1]]]))))
+}
+
+# A K-category flow: the golden file's model-level rows through the evaluator
+# (the mix, the convolution and censoring included) and, if the card embeds the
+# exporter's network-level vectors, those through the network alone.
+nn_golden_cat <- function(reg, g) {
+  need <- c(reg$conv[["mean"]], reg$conv[["range"]], "k", "rt", "log_pdf", "cdf")
+  miss <- setdiff(need, names(g))
+  if (length(miss)) stop("Golden file lacks column(s) ", paste(miss, collapse = ", "))
+  # sampled (storage) scale -> natural; a zerobox input is stored as its log
+  P <- sapply(seq_along(reg$pars), function(j) {
+    x <- as.numeric(g[[reg$context_names[j]]])
+    switch(reg$transforms[j], identity = x, log = , zerobox = exp(x), probit = stats::pnorm(x))
+  })
+  P <- matrix(P, nrow(g), dimnames = list(NULL, reg$pars))
+  n <- nrow(g)
+  ms <- if (is.null(g[["miss", exact = TRUE]])) integer(n) else as.integer(g[["miss", exact = TRUE]])
+  rt <- as.numeric(g[["rt", exact = TRUE]])
+  ev <- cat_eval_trials_cpp(nn_ptr(reg), nn_cat_theta(P, reg), ifelse(ms == 0L, rt, 0),
+                            as.numeric(g[[reg$conv[["mean"]]]]), as.numeric(g[[reg$conv[["range"]]]]),
+                            ifelse(ms == 0L, as.integer(g[["k", exact = TRUE]]), NA_integer_), ms,
+                            ifelse(ms == 1L, rt, 0), ifelse(ms == 2L, rt, Inf))
+  obs <- ms == 0L
+  d <- c(log_pdf = max(nn_golden_diff(ev$log_pdf, as.numeric(g[["log_pdf", exact = TRUE]]))),
+         cdf = if (any(obs)) max(nn_golden_diff(ev$cdf[obs], as.numeric(g[["cdf", exact = TRUE]][obs]))) else 0)
+  c(d, nn_golden_cat_net(reg))
+}
+
+# The exporter's network-level golden vectors embedded in a flow_cat card
+# (golden$cases: row, k, t, log_pdf, cdf on golden$net_context_sampled, the
+# network's inputs on its own scale): the network alone, no mix, t0 = st0 = 0.
+nn_golden_cat_net <- function(reg) {
+  res <- if (!is.null(reg$artefact)) nn_shipped(reg$artefact) else list(path = reg$path)
+  m <- nn_card(res)$card$members[[1]]
+  gd <- m[["golden", exact = TRUE]]
+  if (is.null(gd[["cases", exact = TRUE]]) || is.null(gd[["net_context_sampled", exact = TRUE]])) return(NULL)
+  key <- paste0("ptr:flow_cat_net:", reg$sha256)
+  ptr <- nle_cache[[key]]
+  if (is.null(ptr) || !cat_ptr_valid(ptr)) {
+    mx <- m[["mix", exact = TRUE]]
+    if (!is.null(mx)) {          # the network on its own inputs: no quadrature
+      m$mix <- NULL
+      m$bounds_sampled <- mx[["net_bounds_sampled", exact = TRUE]]
+    }
+    ptr <- cat_build(m)
+    nle_cache[[key]] <- ptr
+  }
+  cs <- gd[["cases", exact = TRUE]]
+  num <- function(f) vapply(cs, function(x) as.numeric(x[[f]]), 0)
+  X <- as.matrix(gd[["net_context_sampled", exact = TRUE]])[num("row") + 1L, , drop = FALSE]
+  n <- length(cs)
+  ev <- cat_eval_trials_cpp(ptr, X, num("t"), numeric(n), numeric(n), as.integer(num("k")), integer(n),
+                            numeric(n), rep(Inf, n))
+  c(net_log_pdf = max(nn_golden_diff(ev$log_pdf, num("log_pdf"))),
+    net_cdf = max(nn_golden_diff(ev$cdf, num("cdf"))))
 }

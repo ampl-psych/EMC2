@@ -16,6 +16,10 @@
 //               kappa = v a / s^2, eta = sv a / s^2, Z, SZ; c = (s/a)^2 and the uniform st0
 //               window are exact: f = c g(u) (st0 = 0), [G(u1) - G(u0)] / st0 (st0 > 0),
 //               as port/R/ddm_scaled.R's ddm_sc_density() (the R reference)
+//   flow_cat:   K categories k = rating_fold(R, RR); the card's convolution
+//               parameters (t0, st0) shift and smear the decision time exactly,
+//               censored rows (missingness 1 / 2) are scored from LC / UC by the
+//               evaluator (flow_cat.cpp; R reference nn_loglik_cat())
 // Bounds, expansion and clamping are the pipeline's, as for other models.
 // This reproduces the R path (dfun/pfun via log_likelihood_ddm/race), which
 // stays the reference; the one numerical difference is that the survivor is
@@ -43,11 +47,17 @@ struct NnCheck {        // a run-time refusal (see nn_check_pars() in R)
 struct NnSpec {
   bool race = false;                       // flow_race; else a joint (two-response) network
   bool mlp_kind = false;                   // regression_joint / mlp_joint (plain MLP)
+  bool cat_kind = false;                   // flow_cat: K categories, uniform t0/st0 convolution, censoring
   bool scaled = false;                     // scaled DDM card (see the header)
   int sc_col[8] = {-1, -1, -1, -1, -1, -1, -1, -1};   // v, a, sv, t0, st0, s, Z, SZ
   const MlpLik* mlp = nullptr;
   const DdmEnsemble* ddm = nullptr;
   const FlowModel* flow = nullptr;
+  const CatModel* cat = nullptr;
+  int conv_mean_col = -1, conv_range_col = -1;   // flow_cat: t0 and st0 of the convolution
+  std::vector<int> k;                      // flow_cat: category 0..K-1 (-1 on censored rows)
+  std::vector<int> miss;                   // flow_cat: 0 observed, 1 lower, 2 upper censored
+  std::vector<double> LC, UC;              // flow_cat: censoring bounds per row
   int nc = 0;                              // network inputs
   std::vector<int> col;                    // ParamTable column per input
   std::vector<int> tf;                     // 0 identity, 1 log, 2 probit, 3 zerobox
@@ -92,6 +102,7 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   if (kind == "flow_joint") s.race = false;
   else if (kind == "flow_race") s.race = true;
   else if (kind == "regression_joint" || kind == "mlp_joint") s.mlp_kind = true;
+  else if (kind == "flow_cat") s.cat_kind = true;
   else stop(what + "no compiled likelihood for kind '" + kind + "'");
 
   s.n_rows = data.nrow();
@@ -100,12 +111,18 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   if (!s.race && n_lR != 1) stop(what + "a joint (DDM-type) network takes one data row per trial");
 
   // Censoring and truncation need the network's CDF inside the pipeline's
-  // censor/truncation machinery, which is not wired for neural likelihoods.
+  // censor/truncation machinery, which is not wired for neural likelihoods,
+  // except the K-category flow, whose evaluator handles lower/upper censoring
+  // (codes 1 and 2) itself through its CDF.
   if (nn_has_col(data, "missingness")) {
     IntegerVector miss = data["missingness"];
     for (int i = 0; i < miss.size(); ++i)
-      if (!IntegerVector::is_na(miss[i]))
-        stop(what + "censored data (a non-missing 'missingness' code) is not supported");
+      if (!IntegerVector::is_na(miss[i])) {
+        if (s.cat_kind && (miss[i] == 1 || miss[i] == 2)) continue;
+        stop(what + (s.cat_kind ? "missingness code " + std::to_string((int)miss[i]) + " is not supported " +
+                                  "(only 1, lower-censored, and 2, upper-censored)"
+                                : "censored data (a non-missing 'missingness' code) is not supported"));
+      }
   }
   if (nn_has_col(data, "LT")) {
     NumericVector lt = data["LT"];
@@ -122,10 +139,11 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   SEXP ptr = nn["ptr"];
   if (s.race) { s.flow = nle_flow_handle(ptr); s.nc = nle_flow_n_ctx(s.flow); }
   else if (s.mlp_kind) { s.mlp = nle_mlp_handle(ptr); s.nc = nle_mlp_n_ctx(s.mlp); }
+  else if (s.cat_kind) { s.cat = nle_cat_handle(ptr); s.nc = nle_cat_n_ctx(s.cat); }
   else        { s.ddm = nle_ddm_handle(ptr);   s.nc = nle_ddm_n_ctx(s.ddm); }
   s.scaled = nn.containsElementNamed("scaled") && as<bool>(nn["scaled"]);
   if (s.scaled) {
-    if (s.race || s.mlp_kind) stop(what + "only a joint flow can be a scaled DDM card");
+    if (s.race || s.mlp_kind || s.cat_kind) stop(what + "only a joint flow can be a scaled DDM card");
     if (s.nc != 4) stop(what + "a scaled DDM card takes 4 inputs (kappa, eta, Z, SZ)");
     CharacterVector sp = nn["sc_pars"];
     if (sp.size() != 8) stop(what + "sc_pars must name v, a, sv, t0, st0, s, Z, SZ");
@@ -156,6 +174,16 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
     s.tf.push_back(codes[j]);
     s.tfc.push_back(codes[j] == 3 ? zc[j] : NAN);
   }
+  if (s.cat_kind) {                         // the convolution's mean and range
+    for (int w = 0; w < 2; ++w) {
+      const char* field = w == 0 ? "conv_mean" : "conv_range";
+      if (!nn.containsElementNamed(field)) stop(what + "the registration names no " + field);
+      const std::string nm = as<std::string>(nn[field]);
+      auto it = pt.name_to_base_idx.find(nm);
+      if (it == pt.name_to_base_idx.end()) stop(what + "the model does not supply convolution parameter '" + nm + "'");
+      (w == 0 ? s.conv_mean_col : s.conv_range_col) = it->second;
+    }
+  }
   const std::string pre = as<std::string>(nn["pre"]);
   if (!pre.empty() && s.scaled) stop(what + "a scaled DDM card takes t0 itself; pre must be empty");
   if (!pre.empty()) {
@@ -185,7 +213,31 @@ inline NnSpec make_nn_spec(const Rcpp::List& nn, const Rcpp::DataFrame& data,
   // data
   s.rt_keep = data["rt"];
   s.rt = s.rt_keep.begin();
-  if (!s.race) {
+  if (s.cat_kind) {
+    // category k = rating_fold(R, RR, K / 2): the first response level counts
+    // its ratings down (R = 1: k = Kr - RR), the second up (R = 2: k = Kr + RR - 1)
+    const int K = nle_cat_n_categories(s.cat), Kr = K / 2;
+    if (2 * Kr != K) stop(what + "rating_fold needs an even number of categories");
+    IntegerVector R = data["R"];
+    if (!nn_has_col(data, "RR")) stop(what + "a K-category network needs the rating column RR");
+    NumericVector RR = data["RR"];
+    s.k.assign(s.n_rows, -1); s.miss.assign(s.n_rows, 0);
+    s.LC.assign(s.n_rows, 0.0); s.UC.assign(s.n_rows, R_PosInf);
+    if (nn_has_col(data, "missingness")) {
+      IntegerVector ms = data["missingness"];
+      for (int i = 0; i < s.n_rows; ++i) s.miss[i] = IntegerVector::is_na(ms[i]) ? 0 : ms[i];
+    }
+    if (nn_has_col(data, "LC")) { NumericVector lc = data["LC"]; for (int i = 0; i < s.n_rows; ++i) s.LC[i] = lc[i]; }
+    if (nn_has_col(data, "UC")) { NumericVector uc = data["UC"]; for (int i = 0; i < s.n_rows; ++i) s.UC[i] = uc[i]; }
+    for (int i = 0; i < s.n_rows; ++i) {
+      if (s.miss[i] != 0) continue;
+      if (IntegerVector::is_na(R[i]) || (R[i] != 1 && R[i] != 2) || NumericVector::is_na(RR[i]))
+        stop(what + "an observed row needs a response R (1 or 2) and a rating RR");
+      const int rr = (int)RR[i];
+      if (rr < 1 || rr > Kr) stop(what + "RR must lie in 1.." + std::to_string(Kr));
+      s.k[i] = (R[i] == 1) ? (Kr - rr) : (Kr + rr - 1);
+    }
+  } else if (!s.race) {
     IntegerVector R = data["R"];
     s.R.assign(R.begin(), R.end());
     for (int i = 0; i < s.n_rows; ++i)
@@ -299,6 +351,22 @@ inline void nn_trial_ll_scaled(const NnSpec& s, const ParamTable& pt, NnScratch&
 inline void nn_trial_ll(const NnSpec& s, const ParamTable& pt, NnScratch& w,
                         double min_ll, double* ll_trial) {
   if (s.scaled) { nn_trial_ll_scaled(s, pt, w, ll_trial); return; }
+  if (s.cat_kind) {
+    // every row goes to the evaluator (censored rows have no rt; the evaluator
+    // scores them from LC / UC), the convolution parameters alongside
+    const int m = s.n_rows;
+    w.th.resize((size_t)m * s.nc);
+    for (int j = 0; j < s.nc; ++j) {
+      const double* c = pt.base.colptr(s.col[j]);
+      std::copy(c, c + m, w.th.data() + (size_t)j * m);
+    }
+    w.lp.resize(m);
+    nle_cat_native(s.cat, w.th.data(), m, s.tf.data(), s.tfc.data(), s.rt,
+                   pt.base.colptr(s.conv_mean_col), pt.base.colptr(s.conv_range_col),
+                   s.k.data(), s.miss.data(), s.LC.data(), s.UC.data(), w.lp.data());
+    std::copy(w.lp.begin(), w.lp.end(), ll_trial);
+    return;
+  }
   const double* pre = s.pre_col >= 0 ? pt.base.colptr(s.pre_col) : nullptr;
   // rows the network evaluates: time > 0 (else zero density / CDF, as the
   // R path's dfun/pfun) and, in a race, accumulators taking part

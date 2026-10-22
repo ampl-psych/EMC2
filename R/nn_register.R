@@ -71,7 +71,7 @@ nle_manifest <- function() {
   stats::setNames(lapply(all, function(h) h[[algo]]), names(all))
 }
 
-nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint", "flow_scaled")
+nn_kinds <- c("flow_joint", "flow_race", "regression_joint", "mlp_joint", "flow_scaled", "flow_cat")
 nn_mlp_kinds <- c("regression_joint", "mlp_joint")
 # card versions this EMC2 reads (card_version; absent = 0). The format is
 # described in vignette("neural-likelihood-cards").
@@ -283,7 +283,12 @@ nn_fill_sampled_box <- function(m) {
 }
 
 nn_infer_kind <- function(m) {
-  if (!is.null(m[["flow_mlp", exact = TRUE]]) && !is.null(m[["classifier_mlp", exact = TRUE]])) if (!is.null(m[["scaling", exact = TRUE]])) "flow_scaled" else "flow_joint"
+  if (!is.null(m[["flow_mlp", exact = TRUE]]) && !is.null(m[["classifier_mlp", exact = TRUE]])) {
+    if (identical(m[["kind", exact = TRUE]], "flow_cat") ||
+        (!is.null(m[["n_categories", exact = TRUE]]) && m[["n_categories", exact = TRUE]] > 2)) "flow_cat"
+    else if (!is.null(m[["scaling", exact = TRUE]])) "flow_scaled"
+    else "flow_joint"
+  }
   else if (!is.null(m[["mlp", exact = TRUE]]) && !is.null(m[["spline", exact = TRUE]])) "flow_race"
   else if (!is.null(m[["mlp", exact = TRUE]])) if (identical(m[["kind", exact = TRUE]], "mlp_joint")) "mlp_joint" else "regression_joint"
   else stop("Cannot tell what kind of network this card holds (neither flow_mlp + classifier_mlp nor mlp)")
@@ -295,7 +300,8 @@ nn_ptr <- function(reg) {
   key <- paste0("ptr:", reg$kind, ":", reg$sha256)
   ptr <- nle_cache[[key]]
   valid <- !is.null(ptr) && switch(reg$kind, flow_joint = , flow_scaled = ddm_ptr_valid(ptr),
-                                   flow_race = flow_ptr_valid(ptr), mlp_lik_valid(ptr))
+                                   flow_race = flow_ptr_valid(ptr), flow_cat = cat_ptr_valid(ptr),
+                                   mlp_lik_valid(ptr))
   if (!valid) {
     res <- if (!is.null(reg$artefact)) nn_shipped(reg$artefact) else list(path = reg$path)
     hit <- nn_card(res)
@@ -304,7 +310,7 @@ nn_ptr <- function(reg) {
            "(sha256 ", reg$sha256, ", now ", hit$sha256, "); re-register it and re-make the design")
     mem <- hit$card$members
     ptr <- switch(reg$kind, flow_joint = , flow_scaled = ddm_build_ensemble(mem),
-                  flow_race = flow_build(mem[[1]]),
+                  flow_race = flow_build(mem[[1]]), flow_cat = cat_build(mem[[1]]),
                   mlp_lik_build(mem[[1]], reg$lower_s, reg$upper_s, reg$oob))
     nle_cache[[key]] <- ptr
   }
@@ -444,6 +450,20 @@ nn_ptr <- function(reg) {
 #'   apply, and `cdf` is `FALSE` (no CDF of rt is offered). `SZ` is the
 #'   start-point proportion throughout (see [nn_sz_convert()] for the
 #'   conventions).
+#' * `"flow_cat"`: a K-category joint flow (card fields `n_categories`, even,
+#'   and `conv`): a K-way classifier plus a spline flow for the decision time
+#'   given the category. The category is `k = rating_fold(R, RR)` over the two
+#'   response levels and the rating column `RR` (1..K/2, an extra response of
+#'   the model: the first level counts its ratings down, the second up). The
+#'   non-decision time is applied outside the network by an exact uniform
+#'   convolution whose mean and range are the parameters `conv$mean` and
+#'   `conv$range` (e.g. `t0` and `st0`, not network inputs). Lower and upper
+#'   censored trials (`missingness` codes 1 and 2, from [make_missing()]) are
+#'   scored by the network's CDF. A card with a `mix` block integrates a
+#'   latent trial strength by Gauss-Hermite quadrature outside the network;
+#'   its `context_names` are then the model's natural parameters, from which
+#'   the evaluator derives the network's own inputs (`mix$net_names`). See
+#'   [RTCONnn()].
 #' * `"flow_race"`: a spline flow for one accumulator's finishing time; a race
 #'   model like [RDM] (`dfun`/`pfun` per accumulator; the survivor function
 #'   of the losing accumulators needs the CDF, so `cdf = FALSE` is refused).
@@ -540,8 +560,8 @@ nn_ptr <- function(reg) {
 #' @param transforms The scale of each input (`"identity"`, `"log"`,
 #'   `"probit"`, `"zerobox"`), in the network's order or named. Default: the card's
 #'   `context_transforms`; if both are given they must agree.
-#' @param kind `"flow_joint"`, `"flow_race"`, `"regression_joint"` or
-#'   `"mlp_joint"`. Default:
+#' @param kind `"flow_joint"`, `"flow_scaled"`, `"flow_cat"`, `"flow_race"`,
+#'   `"regression_joint"` or `"mlp_joint"`. Default:
 #'   inferred from the card; if given it must match.
 #' @param cdf Whether the network provides a CDF. Default `TRUE` for flows,
 #'   `FALSE` for the MLP kinds. With `cdf = FALSE`, `pfun` refuses.
@@ -764,6 +784,39 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   if (any(ctx == "b" & pars == "B") && "A" %in% setdiff(names(pt), names(fixed)[fixed == 0]))
     stop(what, "the network's input 'b' (the threshold, B + A) is registered as 'B', which is exact ",
          "only without start-point variability: fix it with exceptions = c(A = 0)")
+  # flow_cat: the convolution's mean and range (card `conv`) are parameters
+  # the network does not take; they are consumed like a `pre` shift
+  conv <- NULL
+  if (kind == "flow_cat") {
+    if (!is.null(pre) || !is.null(m1[["pre", exact = TRUE]]))
+      stop(what, "a K-category network applies t0 by its uniform convolution; pre is not allowed")
+    cv <- m1[["conv", exact = TRUE]]
+    if (is.null(cv) || is.null(cv[["mean", exact = TRUE]]) || is.null(cv[["range", exact = TRUE]]))
+      stop(what, "a flow_cat card must name the convolution parameters: conv = list(mean = , range = )")
+    conv <- c(mean = as.character(cv[["mean", exact = TRUE]]), range = as.character(cv[["range", exact = TRUE]]))
+    bad <- setdiff(conv, names(pt))
+    if (length(bad)) stop(what, "convolution parameter(s) ", paste(bad, collapse = ", "), " are not parameters of the model")
+    if (any(conv %in% pars)) stop(what, "the convolution parameters cannot also be network inputs")
+    nk <- m1[["n_categories", exact = TRUE]]
+    if (!is.numeric(nk) || length(nk) != 1L || nk < 2) stop(what, "a flow_cat card must give n_categories (>= 2)")
+    # the mix block: a latent trial strength integrated by quadrature outside
+    # the network; the network's own inputs (mix.net_names) are derived from
+    # the registration-facing inputs (context_names), which stay the model's
+    # natural parameters per design row
+    mx <- m1[["mix", exact = TRUE]]
+    if (!is.null(mx)) {
+      need <- c(mx[["mean", exact = TRUE]], mx[["sd", exact = TRUE]], unlist(mx[["map_inputs", exact = TRUE]]),
+                unlist(mx[["direct", exact = TRUE]]))
+      bad <- setdiff(need, ctx)
+      if (length(bad)) stop(what, "mix names ", paste(bad, collapse = ", "), " which are not in context_names")
+      nodes <- mx[["nodes", exact = TRUE]]
+      if (!is.numeric(nodes) || length(nodes) != 1L || nodes < 1 ||
+          length(mx[["gh_x", exact = TRUE]]) != nodes || length(mx[["gh_w", exact = TRUE]]) != nodes)
+        stop(what, "mix needs nodes, gh_x and gh_w of that length")
+      if (length(mx[["net_names", exact = TRUE]]) != length(m1[["scaler", exact = TRUE]][["mean", exact = TRUE]]))
+        stop(what, "mix.net_names must have one entry per network input (the scaler's length)")
+    }
+  }
   if (!is.null(m1[["pre", exact = TRUE]])) {
     card_pre <- m1[["pre", exact = TRUE]]
     if (!is.character(card_pre) || length(card_pre) != 1L)
@@ -774,7 +827,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
            " contradicts the card, whose network models rt - ", card_pre, " (pre = \"", card_pre, "\")")
   }
   pre_pars <- nn_check_pre(pre, pars, defaults, box, what)
-  ignored <- setdiff(names(pt), c(if (scaled) nn_scaled_pars else pars, names(fixed), pre_pars))
+  ignored <- setdiff(names(pt), c(if (scaled) nn_scaled_pars else pars, names(fixed), pre_pars, conv))
   if (length(ignored))
     stop(what, "the model's parameter(s) ", paste(ignored, collapse = ", "), " are not network inputs, ",
          "not used by pre and not fixed by exceptions: the network would ignore them")
@@ -845,6 +898,13 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   in_pars <- intersect(pars, names(defaults))
   refuse_default <- in_pars[!nn_inside(in_pars, defaults[in_pars], lower, upper, closed)]
   exception <- reg_exception(reg_fixed = fixed, zb = intersect(closed, names(pt)), tl = tl)
+  # the convolution is exact outside the network, so the twin's exceptions on
+  # its parameters (e.g. st0 = 0) hold as they do for the analytic model
+  if (kind == "flow_cat") {
+    te <- tl$bound$exception
+    keep <- intersect(names(te), setdiff(conv, names(exception)))
+    exception[keep] <- te[keep]
+  }
   if (scaled) {
     # the DDM's own bounds and exceptions (sv = SZ = st0 = 0): the network's
     # box on kappa, eta, Z and SZ is applied by the evaluator
@@ -857,8 +917,10 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     if (length(sc_fixed)) fixed <- c(fixed, sc_fixed[!names(sc_fixed) %in% names(fixed)])
   }
 
+  # (a card's embedded golden vectors stay with the card: every saved design
+  # carries the registration)
   card_meta <- m1[setdiff(names(m1), c("mlp", "flow_mlp", "classifier_mlp", "scaler",
-                                        "classifier_scaler", "spline"))]
+                                        "classifier_scaler", "spline", "golden"))]
   card_meta <- c(card_meta, card[["top", exact = TRUE]][setdiff(names(card[["top", exact = TRUE]]), names(card_meta))])
   reg <- list(
     kind = kind, label = label, artefact = res$artefact, path = res$path, sha256 = hit$sha256,
@@ -867,6 +929,7 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
     hybrid = hybrid, wald = wald,
     lower = lower, upper = upper, lower_s = box$lower_s, upper_s = box$upper_s,
     fixed = fixed, pre = pre, pre_pars = pre_pars, cdf = cdf,
+    conv = conv, n_categories = if (kind == "flow_cat") as.integer(m1[["n_categories", exact = TRUE]]),
     defaults = defaults, refuse_default = refuse_default, tr_filled = tr_filled,
     ll_floor = m1[["ll_floor_log", exact = TRUE]], oob = oob, n_members = length(card[["members", exact = TRUE]]),
     input_layout = m1[["input_layout", exact = TRUE]], card = card_meta, card_version = card[["version", exact = TRUE]],
@@ -1203,7 +1266,17 @@ nn_model_list <- function(reg, tl, minmax) {
           twin_rfun(data, tp)
         },
     nn = reg)
-  if (isTRUE(reg$scaled)) {
+  if (reg$kind == "flow_cat") {
+    # K categories = the two response levels x K / 2 ratings (rating_fold); the
+    # rating column RR is an extra response, censoring codes 1 and 2 are scored
+    # by the evaluator (nn_loglik_cat), the convolution parameters t0 / st0 come
+    # from the model's parameter matrix
+    ml$extra_responses <- "RR"
+    ml$check_data <- function(data) nn_cat_check_data(data, reg)
+    ml$dfun <- function(rt, R, RR, pars) nn_eval_cat(reg, rt, R, RR, pars)$pdf
+    ml$pfun <- function(rt, R, RR, pars) nn_eval_cat(reg, rt, R, RR, pars)$cdf
+    ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) nn_loglik_cat(pars, dadm, reg, min_ll)
+  } else if (isTRUE(reg$scaled)) {
     ml$dfun <- function(rt, R, pars) nn_eval_scaled(reg, rt, R, pars, "pdf")
     ml$pfun <- function(rt, R, pars) nn_eval_scaled(reg, rt, R, pars, "cdf")
     ml$log_likelihood <- function(pars, dadm, model, min_ll = log(1e-10)) {
@@ -1250,6 +1323,8 @@ nn_native_spec <- function(reg) {
        zerobox_c = reg$zerobox_c,
        scaled = isTRUE(reg$scaled), sc_pars = if (isTRUE(reg$scaled)) reg$sc_pars else character(0),
        pre = if (is.null(reg$pre)) "" else reg$pre,
+       conv_mean = if (is.null(reg$conv)) "" else unname(reg$conv[["mean"]]),
+       conv_range = if (is.null(reg$conv)) "" else unname(reg$conv[["range"]]),
        hybrid = if (is.null(reg$hybrid)) "" else reg$hybrid,
        wald_pars = reg$wald$pars, wald_lower = reg$wald$lower, wald_upper = reg$wald$upper,
        fixed = reg$fixed,
@@ -1331,6 +1406,87 @@ nn_eval_race <- function(reg, rt, pars, what) {
   out
 }
 
+# K-category flow (flow_cat). Category k = rating_fold(R, RR, K / 2): the first
+# response level counts its ratings down, the second up (NEW.3 .. OLD.3 for
+# K = 6). Rows with R or RR missing are censored rows (scored from LC / UC).
+nn_cat_category <- function(R, RR, K) {
+  Kr <- K %/% 2
+  if (2L * Kr != K) stop("rating_fold needs an even number of categories")
+  R <- as.integer(R); RR <- as.integer(round(RR))
+  k <- ifelse(R == 1L, Kr - RR + 1L, Kr + RR)
+  k[is.na(R) | is.na(RR)] <- NA_integer_
+  k
+}
+
+# The evaluator's inputs: for a card with a `mix` block the natural-scale
+# sources (the evaluator derives the network inputs itself), else the network
+# inputs on the network's scale.
+nn_cat_theta <- function(pars, reg) {
+  if (!is.null(reg$card$mix)) {
+    miss <- setdiff(reg$pars, colnames(pars))
+    if (length(miss)) stop("Neural likelihood '", reg$label, "' needs parameter(s) ", paste(miss, collapse = ", "), " which the model does not supply")
+    return(unname(as.matrix(pars[, reg$pars, drop = FALSE])))
+  }
+  nn_context(pars, reg)
+}
+
+# dfun / pfun of a flow_cat model on observed rows: the convolved joint density
+# of (k, rt) and the convolved defective CDF of category k at rt.
+nn_eval_cat <- function(reg, rt, R, RR, pars) {
+  k <- nn_cat_category(R, RR, reg$n_categories)
+  n <- length(rt)
+  out <- cat_eval_trials_cpp(nn_ptr(reg), nn_cat_theta(pars, reg), as.numeric(rt),
+                             as.numeric(pars[, reg$conv[["mean"]]]), as.numeric(pars[, reg$conv[["range"]]]),
+                             k, integer(n), numeric(n), rep(Inf, n))
+  list(pdf = exp(out$log_pdf), cdf = out$cdf)
+}
+
+# The R path of a flow_cat model (the reference for the compiled branch in
+# src/model_NN.h): trial log-likelihoods over the compressed dadm, censored rows
+# from LC / UC, expanded and floored as log_likelihood_ddm does.
+nn_loglik_cat <- function(pars, dadm, reg, min_ll = log(1e-10)) {
+  n <- nrow(dadm)
+  miss <- dadm[["missingness"]]; if (is.null(miss)) miss <- rep(NA_integer_, n)
+  miss[is.na(miss)] <- 0L
+  LC <- dadm[["LC"]]; if (is.null(LC)) LC <- rep(0, n)
+  UC <- dadm[["UC"]]; if (is.null(UC)) UC <- rep(Inf, n)
+  k <- nn_cat_category(dadm$R, dadm$RR, reg$n_categories)
+  k[miss != 0L] <- NA_integer_
+  rt <- dadm$rt; rt[is.na(rt)] <- 0
+  ok <- attr(pars, "ok"); if (is.null(ok)) ok <- rep(TRUE, n)
+  ll <- rep(min_ll, n)
+  if (any(ok)) {
+    P <- pars[ok, , drop = FALSE]
+    out <- cat_eval_trials_cpp(nn_ptr(reg), nn_cat_theta(P, reg), as.numeric(rt[ok]),
+                               as.numeric(P[, reg$conv[["mean"]]]), as.numeric(P[, reg$conv[["range"]]]),
+                               k[ok], as.integer(miss[ok]), as.numeric(LC[ok]), as.numeric(UC[ok]))
+    ll[ok] <- out$log_pdf
+  }
+  ll[is.na(ll)] <- min_ll
+  sum(pmax(min_ll, ll[attr(dadm, "expand")]))
+}
+
+# Data checks of a flow_cat model: two response levels, a rating RR in
+# 1..K/2 on every observed row, censoring codes 1 / 2 only (as src/model_NN.h),
+# no truncation.
+nn_cat_check_data <- function(data, reg) {
+  what <- paste0("Neural likelihood '", reg$label, "': ")
+  if (length(levels(data$R)) != 2L) stop(what, "needs exactly two response levels")
+  if (!"RR" %in% names(data)) stop(what, "needs a rating column RR")
+  miss <- data[["missingness"]]; if (is.null(miss)) miss <- rep(NA_integer_, nrow(data))
+  if (any(!is.na(miss) & !(miss %in% c(1L, 2L))))
+    stop(what, "only missingness codes 1 (lower-censored) and 2 (upper-censored) are supported")
+  obs <- is.na(miss)
+  if (any(is.na(data$R[obs]))) stop(what, "R is NA on a trial that is not censored")
+  RR <- data$RR[obs]
+  if (any(is.na(RR)) || any(RR != round(RR)) || any(RR < 1 | RR > reg$n_categories %/% 2))
+    stop(what, "RR must be an integer in 1..", reg$n_categories %/% 2, " on every observed row")
+  lt <- data[["LT"]]; ut <- data[["UT"]]
+  if ((!is.null(lt) && any(lt > 0 & is.finite(lt), na.rm = TRUE)) || (!is.null(ut) && any(is.finite(ut))))
+    stop(what, "truncation is not supported")
+  invisible(TRUE)
+}
+
 # ---------------------------------------------------------------------------
 # Refusals
 # ---------------------------------------------------------------------------
@@ -1393,11 +1549,12 @@ nn_rt_resolution_warning <- function(design, rt_resolution) {
 }
 
 # Censoring and truncation are not wired for neural likelihoods; both paths
-# refuse such data (src/model_NN.h makes the same checks).
+# refuse such data (src/model_NN.h makes the same checks). The K-category flow
+# scores lower / upper censoring itself (nn_cat_check_data).
 nn_check_data <- function(dadm, reg) {
   what <- paste0("Neural likelihood '", reg$label, "': ")
   miss <- dadm[["missingness"]]
-  if (!is.null(miss) && any(!is.na(miss)))
+  if (!is.null(miss) && any(!is.na(miss)) && !identical(reg$kind, "flow_cat"))
     stop(what, "censored data (a non-missing 'missingness' code) is not supported")
   lt <- dadm[["LT"]]
   if (!is.null(lt) && any(lt > 0 & is.finite(lt), na.rm = TRUE))

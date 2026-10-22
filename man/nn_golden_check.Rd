@@ -7,7 +7,7 @@
 nn_golden_check(
   x,
   golden = NULL,
-  tol = 1e-09,
+  tol = NULL,
   flow_only = FALSE,
   error = TRUE,
   twin = NULL,
@@ -22,9 +22,11 @@ registration, a card path, or a shipped artefact's name.}
 or the shipped one.}
 
 \item{tol}{The largest absolute difference accepted, per output
-(\code{log_pdf} and the CDF). The exporters' float64 port and EMC2 agree to
-about \code{1e-12}; \code{1e-9} leaves room for a different BLAS. A LAN converted
-from a float32 ONNX file needs about \code{1e-4}.}
+(\code{log_pdf} and the CDF). Default: the tolerance the card records in
+\code{validation$golden$tolerance}, else \code{1e-9}. The exporters' float64 port
+and EMC2 agree to about \code{1e-12}; \code{1e-9} leaves room for a different
+BLAS. A LAN converted from a float32 ONNX file needs about \code{1e-4}, which
+\verb{nleflow convert} records in the card.}
 
 \item{flow_only}{For a joint flow: compare the flow's part only (the joint
 log density minus \code{log_p_R}, and the CDF divided by \code{P(R)}), for a golden
@@ -58,7 +60,17 @@ on the network's scale, \code{rt}, \code{log_pdf}, \code{cdf}, \code{log_sf}; fo
 of the natural value, \code{-Inf} at an exact zero), \code{R}, \code{rt}, \code{log_pdf_joint},
 \code{cdf_defective} and \code{log_p_R}; for a LAN (\code{mlp_joint}) the inputs on the
 natural scale, \code{rt}, \code{choice} or \code{R}, and the log density. For a
-\code{flow_scaled} card \code{rt} is the unit-scale time \code{u}.
+\code{flow_scaled} card \code{rt} is the unit-scale time \code{u}. For a K-category flow
+(\code{flow_cat}) the inputs in \code{context_names} order on the sampled scale (a
+\code{zerobox} input as the log of the natural value, \code{-Inf} at zero), the
+convolution's mean and range (\code{t0}, \code{st0}, seconds), the category \code{k}
+(1..K), \code{rt}, optionally \code{miss} (0 observed; 1 / 2 lower / upper
+censored, \code{rt} then being the bound), \code{log_pdf} (the convolved joint log
+density, or the log censored mass) and \code{cdf} (the convolved defective CDF
+of \code{k} at \code{rt}; \code{NA} on censored rows). A \code{flow_cat} card that embeds the
+exporter's network-level golden vectors (\code{golden$cases} on
+\code{golden$net_context_sampled}) is checked against those too (outputs
+\code{net_log_pdf}, \code{net_cdf}).
 
 Shipped artefacts carry their golden files in
 \code{system.file("extdata", "flownn", "golden", package = "EMC2")}; a card

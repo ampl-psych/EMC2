@@ -37,6 +37,18 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
     .Call(`_EMC2_sp_new`, iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm)
 }
 
+cat_build <- function(fl) {
+    .Call(`_EMC2_cat_build`, fl)
+}
+
+cat_ptr_valid <- function(ptr_) {
+    .Call(`_EMC2_cat_ptr_valid`, ptr_)
+}
+
+cat_eval_trials_cpp <- function(ptr_, theta, rt, t0, st0, k, miss, LC, UC) {
+    .Call(`_EMC2_cat_eval_trials_cpp`, ptr_, theta, rt, t0, st0, k, miss, LC, UC)
+}
+
 ddm_build <- function(fl) {
     .Call(`_EMC2_ddm_build`, fl)
 }

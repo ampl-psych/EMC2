@@ -6,6 +6,7 @@
 nle <- function(f) getFromNamespace(f, "EMC2")
 rdm_name <- "rdm_ss_base_s801_e271_weights.json"
 ddm_name <- "ddm_sc_s1106_e245_weights.json"
+rtcon_name <- "rtcon2_r3_s2_e006_weights.json"
 
 # reference R implementation of the port (source of truth: NLE handover)
 port <- new.env()
@@ -14,7 +15,7 @@ sys.source(test_path("port", "flow_ddm.R"), envir = port)
 
 test_that("artefacts are pinned and report what was loaded", {
   man <- nle("nle_manifest")()
-  expect_setequal(names(man), c(ddm_name, rdm_name))
+  expect_setequal(names(man), c(ddm_name, rdm_name, rtcon_name))
   reg_rdm <- register_nn_model(rdm_name)()$nn
   expect_identical(reg_rdm$kind, "flow_race")
   expect_identical(reg_rdm$context_names, c("v", "B", "t0", "s", "A"))
@@ -22,6 +23,68 @@ test_that("artefacts are pinned and report what was loaded", {
   expect_identical(reg_ddm$kind, "flow_scaled")
   expect_output(nle("nle_artefact_info")(rdm_name), "(sha256|md5)=")
   expect_error(register_nn_model("no_such_artefact"), "No neural-likelihood artefact")
+})
+
+# --- K-category flow (flow_cat): RTCON2 ---------------------------------------
+test_that("the RTCON2 card registers as a flow_cat model", {
+  # no analytic twin in EMC2: a bare registration says so; RTCONnn supplies the parameterisation
+  expect_error(register_nn_model(rtcon_name), "no analytic twin")
+  reg <- register_nn_model(rtcon_name, twin = nle("rtcon2_twin"))()$nn
+  expect_identical(reg$kind, "flow_cat")
+  ml <- RTCONnn()
+  expect_identical(ml$nn$kind, "flow_cat")
+  expect_identical(ml$nn$n_categories, 6L)
+  expect_identical(unname(ml$nn$conv), c("t0", "st0"))
+  expect_identical(ml$nn$pars, c("mu", "s", "C1", "g2", "g3", "g4", "g5", "a", "sb", paste0("B", 1:6)))
+  expect_identical(ml$extra_responses, "RR")
+  expect_identical(ml$c_name, "NN")
+  expect_equal(ml$bound$exception[c("sb", "st0")], c(sb = 0, st0 = 0))
+  expect_null(ml$nn$card$golden)       # the card's embedded golden vectors are not carried by designs
+})
+
+test_that("flow_cat: compiled likelihood = R path = multithreaded, with censoring", {
+  set.seed(1)
+  n <- 200
+  dat <- data.frame(subjects = factor(1), S = factor(sample(c("new", "old"), n, TRUE)),
+                    R = factor(sample(c("new", "old"), n, TRUE)), RR = sample(1:3, n, TRUE),
+                    rt = 0.45 + rexp(n, 2))
+  fl <- c(list(mu ~ S), lapply(c("s", "C1", "g2", "g3", "g4", "g5", "a", "sb", paste0("B", 1:6), "t0", "st0"),
+                               function(p) stats::as.formula(paste(p, "~ 1"))))
+  utils::capture.output(des <- suppressMessages(design(data = dat, model = RTCONnn, formula = fl)))
+  pv <- c(mu = 0, mu_Sold = 1.2, s = 0, C1 = -1, g2 = .8, g3 = .8, g4 = .8, g5 = .8, a = log(.04), sb = log(.8),
+          B1 = log(2), B2 = log(2), B3 = log(2), B4 = log(2), B5 = log(2), B6 = log(2), t0 = log(.38))
+  for (st0 in c(log(.1), -Inf)) for (cens in c(FALSE, TRUE)) {
+    d <- dat
+    if (cens) { d <- make_missing(dat, LC = 0.5, UC = 1.6); d$RR[!is.na(d$missingness)] <- NA }
+    emc <- suppressMessages(make_emc(d, des, type = "single", n_chains = 1, compress = TRUE,
+                                     rt_resolution = .001, verbose = FALSE))
+    dadm <- emc[[1]]$data[[1]]; model <- emc[[1]]$model
+    P <- matrix(c(pv, st0 = st0), 1, dimnames = list(NULL, c(names(pv), "st0")))
+    native <- nle("calc_ll_manager")(P, dadm, model)
+    mr <- model(); mr$c_name <- NULL
+    rpath <- nle("calc_ll_manager")(P, dadm, function() mr)
+    o <- options(emc.ll_backend = "multithreaded", emc.n_threads = 2)
+    mt <- nle("calc_ll_manager")(P, dadm, model)
+    options(o)
+    expect_true(is.finite(native))
+    expect_lt(abs(native - rpath), 1e-10)
+    expect_lt(abs(native - mt), 1e-10)
+  }
+  # out of the training box (s below 0.2): every trial at the floor
+  P[, "s"] <- log(.1)
+  expect_equal(as.numeric(nle("calc_ll_manager")(P, dadm, model)), n * log(1e-10))
+})
+
+test_that("flow_cat: data checks", {
+  dat <- data.frame(subjects = factor(1), R = factor(c("new", "old", "old")), RR = c(1, 2, 3), rt = c(.6, .7, .8))
+  utils::capture.output(des <- suppressMessages(design(data = dat, model = RTCONnn, formula = list(mu ~ 1))))
+  bad <- dat; bad$RR[2] <- 4
+  expect_error(make_emc(bad, des, type = "single", rt_resolution = .001, verbose = FALSE), "RR must be an integer in 1..3")
+  bad <- dat; bad$RR <- NULL
+  expect_error(make_emc(bad, des, type = "single", rt_resolution = .001, verbose = FALSE), "needs a rating column RR")
+  bad <- make_missing(dat, UC = .75); bad$missingness[3] <- 3L
+  expect_error(make_emc(bad, des, type = "single", rt_resolution = .001, verbose = FALSE), "only missingness codes 1")
+  expect_error(design(data = dat, model = RTCONnn, formula = list(mu ~ RR)), "cannot be used as predictors")
 })
 
 # --- batched MLP forward pass (no artefact needed) --------------------------

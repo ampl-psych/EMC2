@@ -10,6 +10,12 @@ test_that("the shipped artefacts pass their golden checks", {
   expect_output(print(r), paste0("^PASS golden check of '", rdm_card, "'"))
   z <- nn_golden_check("ddm_sc_s1106_e245_weights.json")
   expect_true(z$pass); expect_lt(max(z$max_abs), 1e-9)
+  # RTCON2 (flow_cat): the model-level rows (mix, convolution, censoring) and the
+  # card's embedded network-level vectors; 1e-8 as nle_verify.R (the
+  # upper-censored masses 1 - F lose digits to cancellation)
+  k <- nn_golden_check(RTCONnn, tol = 1e-8)
+  expect_true(k$pass); expect_identical(k$kind, "flow_cat"); expect_equal(k$n, 528)
+  expect_setequal(names(k$max_abs), c("log_pdf", "cdf", "net_log_pdf", "net_cdf"))
 })
 
 test_that("a perturbed golden row fails loudly, with the output and size named", {
