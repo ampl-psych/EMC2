@@ -8,7 +8,10 @@ CXX_STD = CXX17
 # The sampler owns threading; Armadillo must not print from worker threads.
 PKG_CPPFLAGS = -I../inst/include -DPNORM_MODE=@PNORM_MODE@ -DARMA_WARN_LEVEL=0 -DARMA_DONT_USE_OPENMP
 LINALG_LIBS  = $(LAPACK_LIBS) $(BLAS_LIBS) @FORTRAN_LIBS@
-PKG_LIBS     = @OMP_LIBS@ $(LINALG_LIBS) @ACCELERATE_LIBS@
+# Accelerate (macOS) before R's BLAS / LAPACK: a symbol binds to the first
+# library on the line that exports it, so this order is what makes Accelerate
+# the BLAS of every Armadillo product in the package (tests/testthat/test-build-linalg.R).
+PKG_LIBS     = @OMP_LIBS@ @ACCELERATE_LIBS@ $(LINALG_LIBS)
 PKG_CXXFLAGS = @OMP_CXXFLAGS@ @EXTRA_CXXFLAGS@
 
 SAMPLER_OBJECTS = sampler/group.o sampler/infnt_factor.o sampler/likelihood.o \
