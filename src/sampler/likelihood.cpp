@@ -37,7 +37,8 @@ struct Likelihoods::Part {
         Rcpp::as<Rcpp::List>(spec["designs"]), model["c_name"],
         optional_list(field(model, "bound")), optional_list(field(model, "transform")),
         optional_list(field(model, "pre_transform")), std::log(1e-10),
-        field(model, "trend")) {
+        field(model, "trend"), 1,
+        field(spec, "nn")) { // neural likelihoods: nn_native_args(), see native_likelihood_inputs()
     for (arma::uword j = 0; j < columns.n_elem; ++j) direct = direct && columns[j] == j;
   }
   Part(const Part& other)

@@ -32,10 +32,13 @@ native_likelihood_inputs <- function(pmwgs) {
       if (is.numeric(designs)) attr(dadm, "designs") <- attr(dadms[[designs]], "designs")
       columns <- which(shared == i)
       constants <- attr(dadm, "constants")
+      # neural likelihoods: the registration and the live evaluator, as calc_ll_manager()
+      nn <- if (identical(model$c_name, "NN")) nn_native_args(model$nn, constants)
       if (is.null(constants)) constants <- NA_real_
       specs[[i]] <- list(data = dadm, model = model, constants = constants,
         designs = get_designs_expanded(dadm, model), columns = columns,
-        component = i, par_names = if (joint) sub(".*[|]", "", par_names[columns]) else par_names[columns])
+        component = i, par_names = if (joint) sub(".*[|]", "", par_names[columns]) else par_names[columns],
+        nn = nn)
     }
     Filter(Negate(is.null), specs)
   })
