@@ -26,7 +26,8 @@ artefact_member <- function(name) {
 
 test_that("artefacts are pinned and report what was loaded", {
   man <- nle("nle_manifest")()
-  expect_setequal(names(man), c("ddm_cap256w_c4.rds", "ddm_st0zero.rds", "rdm_small.rds"))
+  expect_setequal(names(man), c("ddm_cap256w_c4.rds", "ddm_st0zero.rds", "rdm_small.rds",
+                                "ddm_sc_s1106_e245_weights.json", "rdm_ss_base_s801_e271_weights.json"))
   reg <- register_nn_model("ddm_cap256w_c4")()$nn
   expect_identical(reg$context_names, c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0"))
   expect_equal(as.numeric(reg$card$checkpoint_step_flow), 72)

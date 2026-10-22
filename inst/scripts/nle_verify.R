@@ -55,7 +55,6 @@ for (a in c("ddm_cap256w_c4", "ddm_st0zero", "rdm_small")) {
   r <- try_check(a, nn_golden_check(a, flow_only = (a == "ddm_cap256w_c4"), error = FALSE))
   if (!is.null(r)) say(r$pass, sub("^(PASS|FAIL) ", "", format(r)))
 }
-
 # --- cards given on the command line -------------------------------------------------
 scaled_checks <- function(card, m) {
   reg <- m()$nn
@@ -101,6 +100,15 @@ scaled_checks <- function(card, m) {
     say(worst < 1e-9, sprintf("oracle (network replaced by the analytic unit-scale DDM) of '%s': max |dlog| %.2e against 1e-9",
                               reg$label, worst))
   } else cat("skip oracle check: the NLE reference ddm_scaled.R is not at hand (set EMC2_NLE_PORT)\n")
+}
+
+# --- shipped JSON artefacts ---------------------------------------------------------
+for (a in c("ddm_sc_s1106_e245_weights.json", "rdm_ss_base_s801_e271_weights.json")) {
+  r <- try_check(a, nn_golden_check(a, error = FALSE))
+  if (!is.null(r)) say(r$pass, sub("^(PASS|FAIL) ", "", format(r)))
+  reg <- tryCatch(register_nn_model(a), error = function(e) e)
+  if (!inherits(reg, "error") && reg()$nn$kind == "flow_scaled")
+    try_check(paste(a, "scaled checks"), scaled_checks(a, reg))
 }
 
 for (card in args) {

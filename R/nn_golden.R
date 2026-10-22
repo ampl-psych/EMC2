@@ -108,8 +108,10 @@ nn_golden_reg <- function(x, twin, ...) {
 # <tag>_golden.csv beside a card file (tag: the file name without
 # _weights.json / .json / .rds); the shipped golden for a shipped artefact.
 nn_golden_path <- function(reg) {
-  if (!is.null(reg$artefact))
-    return(file.path(nle_dir(), "golden", paste0(reg$artefact, "_golden.csv")))
+  if (!is.null(reg$artefact)) {
+    tag <- sub("(_weights)?\\.(json|rds)$", "", reg$artefact, ignore.case = TRUE)
+    return(file.path(nle_dir(), "golden", paste0(tag, "_golden.csv")))
+  }
   tag <- sub("(_weights)?\\.(json|rds)$", "", basename(reg$path), ignore.case = TRUE)
   file.path(dirname(reg$path), paste0(tag, "_golden.csv"))
 }

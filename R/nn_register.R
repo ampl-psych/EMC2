@@ -145,8 +145,10 @@ nn_resolve <- function(path) {
   list(path = path, artefact = art)
 }
 
-nn_shipped <- function(name)
-  list(path = normalizePath(file.path(nle_dir(), paste0(name, ".rds")), mustWork = TRUE), artefact = name)
+nn_shipped <- function(name) {
+  fname <- if (grepl("\\.(json|rds)$", name, ignore.case = TRUE)) name else paste0(name, ".rds")
+  list(path = normalizePath(file.path(nle_dir(), fname), mustWork = TRUE), artefact = name)
+}
 
 # Read and normalise a card, once per session per file version.
 nn_card <- function(res) {
@@ -160,12 +162,13 @@ nn_card <- function(res) {
   sha <- nle_file_hash(path)
   if (!is.null(res$artefact)) {
     algo <- nle_hash_algo()
-    pinned <- nle_manifest()[[paste0(res$artefact, ".rds")]]
+    mkey <- if (grepl("\\.rds$", res$path, ignore.case = TRUE)) paste0(res$artefact, ".rds") else basename(res$path)
+    pinned <- nle_manifest()[[mkey]]
     if (is.null(pinned))
-      stop("Artefact ", res$artefact, ".rds cannot be checked on ", R.version.string, ": this R has no ",
+      stop("Artefact ", mkey, " cannot be checked on ", R.version.string, ": this R has no ",
            "tools::sha256sum (R >= 4.5), and inst/extdata/flownn/MANIFEST carries no md5 line for it")
     if (!identical(pinned, sha))
-      stop("Artefact ", res$artefact, ".rds does not match the ", algo, " pinned in inst/extdata/flownn/MANIFEST")
+      stop("Artefact ", mkey, " does not match the ", algo, " pinned in inst/extdata/flownn/MANIFEST")
   }
   raw <- if (grepl("\\.rds$", path, ignore.case = TRUE)) readRDS(path) else
     if (grepl("\\.json$", path, ignore.case = TRUE)) nn_read_json(path) else
