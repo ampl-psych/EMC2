@@ -149,17 +149,13 @@ test_that("with the network replaced by the analytic unit-scale DDM, the likelih
 # The compiled path through a design, as a fit evaluates it, against the R
 # path, in the six regimes of the NLE project's eight-case review.
 scaled_cell <- function(m, regime) {
-  reg <- m()$nn
   PM <- c(v = 1, a = log(.8), t0 = log(.3), Z = qnorm(.5), sv = log(.1), SZ = qnorm(.2), st0 = log(.05))
   PS <- c(v = .15, a = .15, t0 = .1, Z = .05, sv = .15, SZ = .15, st0 = .15)
   pin <- stats::setNames(rep(-Inf, length(regime)), regime)
-  # For scaled cards: parameters in reg$fixed (e.g. st0=0) must be constants, not sampled
-  fixed_pin <- if (length(reg$fixed)) stats::setNames(rep(-Inf, length(reg$fixed)), names(reg$fixed)) else NULL
-  all_pin <- c(pin, fixed_pin[setdiff(names(fixed_pin), names(pin))])
-  free <- setdiff(names(PM), names(all_pin))
+  free <- setdiff(names(PM), regime)
   suppressWarnings(nn_cell(m, mean = PM[free], sd = PS[free],
                            formula = lapply(free, function(p) stats::as.formula(paste(p, "~ 1"))),
-                           constants = if (length(all_pin)) all_pin else NULL,
+                           constants = if (length(pin)) pin else NULL,
                            factors = list(S = c("left", "right")), Rlevels = c("left", "right")))
 }
 
@@ -193,7 +189,7 @@ test_that("the SZ conventions meet at their three boundaries (golden rows)", {
   ev <- port$ddm_sc_card_evaluator(cards[[1]])
   grid <- expand.grid(Z = c(.1, .3, .5, .7, .9), SZ = c(0, .05, .2, .5, .99))
   # 1. EMC2's DDM(): proportion -> width through Ttransform; the conversion inverts it exactly
-  pars <- cbind(v = 1, a = 1, sv = .1, t0 = .2, st0 = 0, s = 1, Z = grid$Z, SZ = grid$SZ)
+  pars <- cbind(v = 1, a = 1, sv = .1, t0 = .2, st0 = .05, s = 1, Z = grid$Z, SZ = grid$SZ)
   width <- DDM()$Ttransform(pars, NULL)[, "SZ"]
   expect_equal(width, nn_sz_convert(grid$SZ, grid$Z, "proportion", "width"), tolerance = 1e-15)
   expect_equal(nn_sz_convert(width, grid$Z, "width", "proportion"), grid$SZ, tolerance = 1e-15)

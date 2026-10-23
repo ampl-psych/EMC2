@@ -26,10 +26,12 @@
 #' `min_ll`).
 #'
 #' The defaults are **identical to [DDM]'s**, including `sv = SZ = st0 = 0`.
-#' The network is exact at sv = 0 and SZ = 0 (zerobox encoding); st0 is fixed
-#' at 0 (the card was trained without st0 variability). An un-sampled `sv` or
-#' `SZ` at its default 0 is accepted as an exact zero; a sampled or non-zero
-#' `st0` is refused with an error.
+#' The network is exact at sv = 0 and SZ = 0 (zerobox encoding); an un-sampled
+#' `sv` or `SZ` at its default 0 is accepted as an exact zero. `st0` is not a
+#' network input: the uniform non-decision-time window is applied exactly
+#' outside the network, as a difference of the flow's CDF over the window
+#' (`st0 = 0` gives the density itself), so `st0` may be sampled or held at
+#' any value, 0 included.
 #'
 #' Loading a neural likelihood is not the same as being able to infer with it:
 #' check calibration and identifiability (parameter recovery, likelihood

@@ -72,7 +72,7 @@ expect_native_matches_r <- function(P, dadm, model) {
   invisible(llN)
 }
 
-ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1),
+ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1, st0 ~ 1),
                        constants = c(s = 0))
   suppressMessages(design(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"),
                           model = model, formula = formula, constants = constants,
@@ -80,7 +80,8 @@ ddm_design <- function(model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1
 
 ddm_p <- function(des) {
   p <- sampled_pars(des, doMap = FALSE)
-  vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3), sv = log(.5))
+  vals <- c(v = 1, v_Sb = -.5, a = log(1.2), t0 = log(.25), Z = 0, SZ = qnorm(.3), sv = log(.5),
+            st0 = log(.1))
   p[] <- vals[names(p)]
   p
 }
@@ -99,11 +100,17 @@ race_p <- function(des) {
 }
 
 # --- a. agreement with the R path ---------------------------------------------
-test_that("DDMnn default (flow_scaled, st0 fixed at 0): native equals the R path", {
+test_that("DDMnn default (flow_scaled): native equals the R path, all parameters sampled", {
   des <- ddm_design()
   p <- ddm_p(des)
   s <- setup_nn(des, p, 150)
   expect_native_matches_r(proposals_around(p), s$dadm, s$model)
+  # st0 at its exception (exactly 0)
+  des0 <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1, Z ~ 1, SZ ~ 1, sv ~ 1),
+                     constants = c(s = 0, st0 = -Inf))
+  p0 <- ddm_p(des0)
+  s0 <- setup_nn(des0, p0, 150)
+  expect_native_matches_r(proposals_around(p0), s0$dadm, s0$model)
 })
 
 test_that("RDMnn: native equals the R path with two and three accumulators", {
@@ -178,23 +185,6 @@ test_that("censored or truncated data are refused on both paths", {
   d2$LT <- 0; d2$UT <- 3
   expect_error(ll_manager(P, d2, s$model), "truncated")
   expect_error(ll_manager(P, d2, r_path(s$model)), "truncated")
-})
-
-test_that("the run-time refusal (st0 fixed at 0): changing it behind design()'s back is refused", {
-  des <- ddm_design(formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                    constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0))
-  p <- ddm_p(des)
-  s <- setup_nn(des, p, 30)
-  P <- matrix(p, 1, dimnames = list(NULL, names(p)))
-  expect_true(is.finite(ll_manager(P, s$dadm, s$model)))
-  d <- s$dadm
-  attr(d, "constants")[["st0"]] <- log(.1)
-  expect_error(ll_manager(P, d, s$model), "fixed at 0")
-  expect_error(ll_manager(P, d, r_path(s$model)), "fixed at 0")
-  old <- options(emc.ll_backend = "multithreaded", emc.n_threads = 2)
-  on.exit(options(old))
-  expect_error(ll_manager(P, d, s$model), "fixed at 0")
-  options(old)
 })
 
 test_that("a sampled parameter outside the training box is floored at min_ll, not refused", {
@@ -297,27 +287,31 @@ test_that("mlp_joint: trials whose time is below the LAN's box of rt are floored
   expect_lt(rel_diff(llN, ll_manager(P, d, r_path(s$model))), 1e-9)
 })
 
-mk_reg_model <- function() {
+# fix_st0: a card trained at st0 = 0 (st0 not an input), registered with that value fixed
+mk_reg_model <- function(fix_st0 = FALSE) {
   set.seed(5)
-  ctx <- c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0")
+  all_ctx <- c("v", "a", "t0", "s", "Z", "SZ", "sv", "st0")
   tfs <- c(v="identity", a="log", t0="log", s="log", Z="probit", SZ="probit", sv="log", st0="log")
   lo_s <- c(v=-3, a=log(.3), t0=log(.1), s=log(.3), Z=qnorm(.1), SZ=qnorm(.05), sv=log(.01), st0=log(.005))
   hi_s <- c(v=3, a=log(3.5), t0=log(.7), s=log(2), Z=qnorm(.9), SZ=qnorm(.7), sv=log(4), st0=log(.5))
   tf_inv <- function(x, tf) switch(tf, identity=x, log=exp(x), probit=pnorm(x))
   lo_n <- mapply(tf_inv, lo_s, tfs); hi_n <- mapply(tf_inv, hi_s, tfs)
-  names(lo_n) <- names(hi_n) <- ctx
-  dims <- c(10, 32, 16, 1)
+  names(lo_n) <- names(hi_n) <- all_ctx
+  ctx <- if (fix_st0) setdiff(all_ctx, "st0") else all_ctx
+  layout <- c("v", "a", "t0", "log_rt", "R", "s", "Z", "SZ", "sv", "st0")
+  if (fix_st0) layout <- setdiff(layout, "st0")
+  dims <- c(length(layout), 32, 16, 1)
   layers <- function(d) lapply(seq_len(length(d) - 1), function(i)
     list(W = matrix(rnorm(d[i] * d[i + 1], sd = 1 / sqrt(d[i])), d[i]), b = rnorm(d[i + 1], sd = .1)))
-  card <- list(context_names = ctx, context_transforms = setNames(as.list(tfs), ctx),
+  card <- list(context_names = ctx, context_transforms = setNames(as.list(tfs), all_ctx),
                bounds_natural = list(lower = lo_n, upper = hi_n),
-               bounds_sampled = list(lower = lo_s, upper = hi_s), model = "DDM",
+               bounds_sampled = list(lower = lo_s[ctx], upper = hi_s[ctx]), model = "DDM",
                mlp = list(activation = "gelu_tanh", layers = layers(dims), use_norm = FALSE),
-               input_layout = c("v", "a", "t0", "log_rt", "R", "s", "Z", "SZ", "sv", "st0"),
-               scaler = list(mean = rnorm(10, sd = .1), scale = runif(10, .5, 2)),
+               input_layout = layout,
+               scaler = list(mean = rnorm(dims[1], sd = .1), scale = runif(dims[1], .5, 2)),
                response_values = c(-1, 1), output_scaler = list(mean = -1, scale = 2))
   tmp <- tempfile(fileext = ".rds"); saveRDS(card, tmp)
-  register_nn_model(tmp)
+  register_nn_model(tmp, exceptions = if (fix_st0) c(st0 = 0))
 }
 
 test_that("regression_joint: native equals the R path (per-trial rt and the response enter the network)", {
@@ -327,4 +321,32 @@ test_that("regression_joint: native equals the R path (per-trial rt and the resp
   p[] <- c(.5, -.5, log(1.2), log(.25))[seq_along(p)]
   s <- setup_nn(des, p, 150)
   expect_native_matches_r(proposals_around(p, sd = .05), s$dadm, s$model)
+})
+
+test_that("the run-time refusals (fixed parameter, default outside the box) match the R path", {
+  # a fixed parameter set to another value behind design()'s back
+  des <- ddm_design(model = mk_reg_model(fix_st0 = TRUE), formula = list(v ~ S, a ~ 1, t0 ~ 1),
+                    constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0))
+  p <- ddm_p(des)
+  s <- setup_nn(des, p, 30)
+  P <- matrix(p, 1, dimnames = list(NULL, names(p)))
+  expect_true(is.finite(ll_manager(P, s$dadm, s$model)))
+  d <- s$dadm
+  attr(d, "constants")[["st0"]] <- log(.1)
+  expect_error(ll_manager(P, d, s$model), "fixed at 0")
+  expect_error(ll_manager(P, d, r_path(s$model)), "fixed at 0")
+  old <- options(emc.ll_backend = "multithreaded", emc.n_threads = 2)
+  on.exit(options(old))
+  expect_error(ll_manager(P, d, s$model), "fixed at 0")
+  options(old)
+
+  # an un-sampled parameter back at the twin's default (sv = 0, outside the box)
+  des2 <- ddm_design(model = mk_reg_model(), formula = list(v ~ S, a ~ 1, t0 ~ 1),
+                     constants = c(s = 0, sv = log(.5), SZ = qnorm(.3), Z = 0, st0 = log(.1)))
+  s2 <- setup_nn(des2, ddm_p(des2), 30)
+  P2 <- matrix(ddm_p(des2), 1, dimnames = list(NULL, names(ddm_p(des2))))
+  d2 <- s2$dadm
+  attr(d2, "constants")[["sv"]] <- -Inf
+  expect_error(ll_manager(P2, d2, s2$model), "'sv' is at the model default")
+  expect_error(ll_manager(P2, d2, r_path(s2$model)), "'sv' is at the model default")
 })

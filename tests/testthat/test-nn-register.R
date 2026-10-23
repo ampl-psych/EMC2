@@ -112,11 +112,12 @@ test_that("shipped artefacts register by name and by full path", {
   expect_identical(DDMnn()$transform, DDM()$transform)
   expect_identical(RDMnn()$transform, RDM()$transform)
 
-  # scaled card: st0 is fixed at 0 (sv and SZ are network inputs, not exceptions)
+  # scaled card: the DDM's bounds and exceptions (sv = SZ = st0 = 0 admitted);
+  # st0 is free, its uniform window exact outside the network
   d0 <- DDMnn()
-  expect_true("st0" %in% names(d0$bound$exception) && d0$bound$exception["st0"] == 0)
-  # st0 minmax = DDM's range; st0 is in fixed so it isn't sampled regardless
+  expect_equal(d0$bound$exception, DDM()$bound$exception)
   expect_equal(d0$bound$minmax, DDM()$bound$minmax)
+  expect_length(d0$nn$fixed, 0)
 })
 
 # --- b. registered dfun/pfun reproduce the compiled evaluator ---------------
@@ -539,17 +540,23 @@ test_that("design()-time refusals: out-of-box constants, fixed parameters", {
                  report_p_vector = FALSE),
                "outside")
 
-  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
-                 formula = list(v ~ S, a ~ 1, t0 ~ 1, st0 ~ 1),
-                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
-                 report_p_vector = FALSE),
-               "fixed at 0")
-
-  expect_error(f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = DDMnn,
-                 formula = list(v ~ S, a ~ 1, t0 ~ 1),
-                 constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5), st0 = log(.1)),
-                 report_p_vector = FALSE),
-               "fixed at 0")
+  # a card trained at st0 = 0 (st0 fixed); DDMnn samples st0 or holds it at any value
+  st0_fixed <- register_nn_model(no_st0_card(), twin = DDM, exceptions = c(st0 = 0))
+  for (m in list(st0_fixed, DDMnn)) {
+    sampled <- function() f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = m,
+                            formula = list(v ~ S, a ~ 1, t0 ~ 1, st0 ~ 1),
+                            constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5)),
+                            report_p_vector = FALSE)
+    moved <- function() f(factors = list(subjects = 1, S = c("a", "b")), Rlevels = c("a", "b"), model = m,
+                          formula = list(v ~ S, a ~ 1, t0 ~ 1),
+                          constants = c(s = log(1), sv = log(.5), SZ = qnorm(.3), Z = qnorm(.5), st0 = log(.1)),
+                          report_p_vector = FALSE)
+    if (identical(m, DDMnn)) {
+      expect_s3_class(sampled(), "emc.design"); expect_s3_class(moved(), "emc.design")
+    } else {
+      expect_error(sampled(), "fixed at 0"); expect_error(moved(), "fixed at 0")
+    }
+  }
 
   expect_error(f(factors = list(subjects = 1, S = c("a", "b", "c")), Rlevels = c("a", "b", "c"),
                  model = DDMnn, formula = list(v ~ S, a ~ 1, t0 ~ 1),

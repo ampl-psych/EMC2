@@ -907,14 +907,12 @@ register_nn_model <- function(path, pars = NULL, transforms = NULL, kind = NULL,
   }
   if (scaled) {
     # the DDM's own bounds and exceptions (sv = SZ = st0 = 0): the network's
-    # box on kappa, eta, Z and SZ is applied by the evaluator
+    # box on kappa, eta, Z and SZ is applied by the evaluator; st0 is free (the
+    # uniform window is exact outside the network, by a CDF difference), its
+    # exception admitting st0 = 0 as for the analytic DDM
     if (is.null(twin_mm)) stop(what, "the twin of a scaled DDM card must carry bound$minmax")
     minmax <- twin_mm
-    ex <- if (is.null(tl$bound$exception)) stats::setNames(numeric(0), character(0)) else tl$bound$exception
-    exception <- ex
-    # st0 has no scaled network input and is truly fixed; add it to fixed for design-time checks
-    sc_fixed <- ex[setdiff(names(ex), c("v", "a", "s", "sv", "t0", "Z", "SZ"))]
-    if (length(sc_fixed)) fixed <- c(fixed, sc_fixed[!names(sc_fixed) %in% names(fixed)])
+    exception <- if (is.null(tl$bound$exception)) stats::setNames(numeric(0), character(0)) else tl$bound$exception
   }
 
   # (a card's embedded golden vectors stay with the card: every saved design

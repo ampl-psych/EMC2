@@ -40,11 +40,10 @@ test_that("nn_cell builds matched network and control cells with named priors", 
   expect_false("s" %in% names(cell$mean))
   expect_output(print(cell), "training region")
   # defaults: every sampled network input, strictly inside the region
-  # DDMnn is flow_scaled with st0 fixed at 0, so st0 is not sampled
+  # DDMnn (flow_scaled): the DDM's parameters, st0 included (exact outside the network)
   d <- nn_cell(DDMnn)
-  expect_setequal(names(d$mean), c("v", "a", "t0", "Z", "SZ", "sv"))
+  expect_setequal(names(d$mean), c("v", "a", "t0", "Z", "SZ", "sv", "st0"))
   expect_true(all(d$box$inside))
-  expect_false("st0" %in% names(d$mean))
 })
 
 test_that("nn_cell and nn_in_box warn about priors that leave the training region (never refuse)", {
