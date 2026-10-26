@@ -10,7 +10,7 @@
 #include "model_exgaussian.h"
 using namespace Rcpp;
 
-// Combined pdf+cdf fill — hot path, takes pre-allocated scratch
+// Combined density and survival fill, using pre-allocated scratch.
 using race_combined_fn = void(*)(const double*           rts_ptr,
                                  const ParamTable&       pt,
                                  const RaceSpec&         spec,
@@ -18,7 +18,7 @@ using race_combined_fn = void(*)(const double*           rts_ptr,
                                  const std::vector<int>& idx_los,
                                  double* __restrict__    raw,
                                  RaceScratch&            scratch,
-                                 const std::vector<int>& is_ok);
+                                 const std::vector<int>& is_ok, bool log_p);
 
 // Survivor function, needed for censoring & truncation
 using survivor_fn = void(*)(const std::vector<int>& idx,
@@ -27,19 +27,11 @@ using survivor_fn = void(*)(const std::vector<int>& idx,
                             const RaceSpec& spec,
                             double* __restrict__ out,
                             RaceScratch& scratch,
-                            const std::vector<int>& is_ok);
+                            const std::vector<int>& is_ok, bool log_p);
 
-// Survivor function with known responses, for censoring  (& GNG tasks)
-using survivor_with_response_fn = void(*)(const std::vector<int>&    idx,
-                                          const std::vector<int>&    winner,
-                                          const std::vector<double>& lower,
-                                          const std::vector<double>& upper,
-                                          int                        n_acc,
-                                          const ParamTable&          pt,
-                                          const RaceSpec&            spec,
-                                          double* __restrict__       out,
-                                          const std::vector<int>& is_ok);
-
+// Diffusion interval probability: response 0 includes both boundaries.
+using response_interval_fn = double(*)(const ParamTable&, const RaceSpec&, int, int,
+                                       double, double);
 
 // ---------------------------------------------------------------------------
 // RaceModelSetup
@@ -47,9 +39,9 @@ using survivor_with_response_fn = void(*)(const std::vector<int>&    idx,
 
 struct RaceModelSetup {
   RaceSpec                 spec;
-  race_combined_fn         fill_both;   // single-pass pdf+cdf — use this in hot path
+  race_combined_fn         fill_both;
   survivor_fn              fill_survivor;
-  survivor_with_response_fn fill_survivor_with_response;
+  response_interval_fn log_response_interval = nullptr;
 };
 
 inline std::pair<int,int> race_scratch_slots(const String& type) {
@@ -76,7 +68,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_s        = pt.base_index_for("s");
     s.fill_both                   = drdm_prdm_fast;
     s.fill_survivor               = rdm_survivor;
-    s.fill_survivor_with_response = rdm_survivor_with_response;
   } else if (type == "LBA") {
     s.spec.col_v        = pt.base_index_for("v");
     s.spec.col_sv       = pt.base_index_for("sv");
@@ -85,7 +76,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_t0       = pt.base_index_for("t0");
     s.fill_both                   = dlba_plba_fast;
     s.fill_survivor               = lba_survivor;
-    s.fill_survivor_with_response = lba_survivor_with_response;
   } else if (type == "REXG") {
     s.spec.col_mu       = pt.base_index_for("mu");
     s.spec.col_sigma    = pt.base_index_for("sigma");
@@ -93,7 +83,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_t0       = pt.base_index_for("t0");
     s.fill_both                   = dexg_pexg_fast;
     s.fill_survivor               = exg_survivor;
-    s.fill_survivor_with_response = exg_survivor_with_response;
   } else if(type == "DDM") {
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_a        = pt.base_index_for("a");
@@ -106,15 +95,14 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     // no fill function, directly called from the branch in calc_ll instead
     // signature mismatch -- no idx_win / idx_los in the DDM
     s.fill_both                   = nullptr;
-    s.fill_survivor               = ddm_survivor;
-    s.fill_survivor_with_response = ddm_survivor_with_response;
+    s.fill_survivor               = nullptr;
+    s.log_response_interval       = ddm_log_response_interval;
   } else { // LNR
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.fill_both                   = dlnr_plnr_fast;
     s.fill_survivor               = lnr_survivor;
-    s.fill_survivor_with_response = lnr_survivor_with_response;
   }
 
   return s;

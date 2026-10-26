@@ -1,5 +1,10 @@
 # EMC2 (development)
 
+## Numerical accuracy
+
+-   Improved tail accuracy and fixed truncation and censoring calculations.
+-   Removed pnorm precision modes and fast-math build options.
+
 ## Sampler
 
 -   `burn`, `adapt` and `sample` use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. Burn and adaptation share proposal machinery; `preburn` retains the search kernel.

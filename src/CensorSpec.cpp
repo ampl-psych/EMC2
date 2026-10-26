@@ -1,156 +1,152 @@
 #include <Rcpp.h>
 #include <algorithm>
 #include "CensorSpec.h"
+#include "composite_functions.h"
 
 using namespace Rcpp;
 
+// One direct time integral for all independent race models. Ordinary
+// probabilities use the existing cubature; log scaling handles underflow.
+double CensorSpec::log_interval(int base,int winner,double lower,double upper,
+                               const std::vector<int>& is_ok) const {
+  if (!(upper>lower)) return neg_inf();
+  if (setup->log_response_interval)
+    return setup->log_response_interval(*pt,setup->spec,base,winner+1,lower,upper);
+  const int win=base+winner;
+  if (!participating[win]) return neg_inf();
+  lower=std::max(lower,pt->base(win,setup->spec.col_t0));
+  if (!(upper>lower)) return neg_inf();
+  winner_row[0]=win;
+  active_rows.clear();
+  breaks.clear();
+  breaks.push_back(lower);
+  for (int k=0;k<n_acc;++k) {
+    const int row=base+k;
+    if (!participating[row]) continue;
+    if (row!=win) active_rows.push_back(row);
+    const double onset=pt->base(row,setup->spec.col_t0);
+    if (onset>lower && onset<upper) breaks.push_back(onset);
+  }
+  breaks.push_back(upper);
+  std::sort(breaks.begin(),breaks.end());
+  breaks.erase(std::unique(breaks.begin(),breaks.end()),breaks.end());
+  auto density=[&](double t,bool log_p) {
+    bound_work[win]=t;
+    for (int row:active_rows) bound_work[row]=t;
+    setup->fill_both(bound_work.data(),*pt,setup->spec,winner_row,active_rows,
+                     log_p_lower.data(),*scratch,is_ok,log_p);
+    double value=log_p_lower[win];
+    for (int row:active_rows)
+      if (log_p) value+=log_p_lower[row]; else value*=log_p_lower[row];
+    return value;
+  };
+  double result=neg_inf();
+  for (std::size_t segment=1;segment<breaks.size();++segment) {
+    const double lo=breaks[segment-1],hi=breaks[segment];
+    const bool infinite=is_pos_inf(hi);
+    const double scale=infinite ? std::max(1.0,std::fabs(lo)) : hi-lo;
+    auto probability=[&](double u) {
+      const double denominator=infinite ? 1-u : 1.0;
+      if (denominator==0.0) return 0.0;
+      return density(lo+scale*u/denominator,false)*scale/(denominator*denominator);
+    };
+    using Function=decltype(probability);
+    auto integrand=[](unsigned,const double* x,void* p,unsigned,double* out) -> int {
+      out[0]=(*static_cast<Function*>(p))(x[0]);return 0;
+    };
+    double a=0,b=1,value=0,error=0;
+    constexpr double tolerance=1e-8;
+    hcubature(integrand,&probability,1,&a,&b,6000,0,tolerance,&value,&error);
+    double lp;
+    if (is_finite(value) && value>1e-280 && error<=tolerance*value) lp=std::log(value);
+    else {
+      auto log_probability=[&](double u) {
+        if (infinite && u==1.0) return neg_inf();
+        const double t=infinite ? lo+scale*u/(1-u) : lo+scale*u;
+        return density(t,true)+std::log(scale)-(infinite ? 2*std::log1p(-u) : 0.0);
+      };
+      lp=log_integral_unit(log_probability,-1.0,tolerance);
+    }
+    result=log_sum_exp(result,lp);
+  }
+  return result;
+}
 
-// -----------------------------------------------------------------------------
-// fill_censored_rows()
-//
-// 1. Calls setup->fill_survivor for LC and UC bounds into p_lower / p_upper
-//    (raw survivors per accumulator row, length n_rows)
-// 2. Reduces across n_acc accumulators per trial:
-//      prod_LC = prod_k p_lower[base + k]
-//      prod_UC = prod_k p_upper[base + k]
-// 3. Uses truncation survivors to calculate S_lower = S_RACE(LT) - S_RACE(LC)
-//    and S_upper = S_RACE(UC) - S_RACE(UT)
-// 4. Fills S_upper in ll_trial
-// -----------------------------------------------------------------------------
+// Censored likelihoods remain on the log scale through truncation normalization.
 void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
                                     const std::vector<int>& is_ok,
-                                    std::vector<double>& ll_trial,
-                                    const bool return_log = false) const
+                                    std::vector<double>& ll_trial) const
 {
-  // Fill p_lower: S_k(LC - t0) for active LC rows, 1.0 elsewhere (default -- at t=0, S=1)
-  std::fill(p_lower.begin(), p_lower.end(), 1.0);
-  setup->fill_survivor(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch, is_ok);
+  if (setup->log_response_interval) {
+    auto fill=[&](const std::vector<int>& idx,bool left,bool right) {
+      for (int trial:idx) {
+        const int base=trial*n_acc;
+        if (!is_ok[base]) continue;
+        const double lt=trunc.LT.empty() ? 0.0 : trunc.LT[base];
+        const double ut=trunc.UT.empty() ? pos_inf() : trunc.UT[base];
+        double lp=neg_inf();
+        if (left) lp=log_interval(base,-1,lt,std::min(LC[base],ut),is_ok);
+        if (right) lp=log_sum_exp(lp,log_interval(base,-1,std::max(UC[base],lt),ut,is_ok));
+        ll_trial[trial]=lp;
+      }
+    };
+    fill(idx_L_tr,true,false);
+    fill(idx_U_tr,false,true);
+    fill(idx_B_tr,true,true);
+  } else {
+    std::fill(log_p_lower.begin(), log_p_lower.end(), 0.0);
+    std::fill(log_p_upper.begin(), log_p_upper.end(), 0.0);
+    setup->fill_survivor(idx_L, LC, *pt, setup->spec, log_p_lower.data(), *scratch, is_ok, true);
+    setup->fill_survivor(idx_U, UC, *pt, setup->spec, log_p_upper.data(), *scratch, is_ok, true);
 
-  // Survivor implementations leave t <= t0 untouched, where S(t - t0) = 1.
-  std::fill(p_upper.begin(), p_upper.end(), 1.0);
-  setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch, is_ok);
-
-  // Lower censoring
-  for (int row : idx_L_tr) {
-    if (!is_ok[row * n_acc]) continue;
-    const int base = row * n_acc;
-    double prod_LC = 1.0;
-    for(int k = 0; k < n_acc; ++k) {
-      if (!participating[base + k]) continue;  // skip non-participating accumulator
-      prod_LC *= p_lower[base + k];
+    auto race_survival = [&](const std::vector<double>& p,int trial) {
+      double sum=0.0;
+      for (int k=0; k<n_acc; ++k) {
+        const int row=trial*n_acc+k;
+        if (participating[row]) sum+=p[row];
+      }
+      return sum;
+    };
+    for (int row : idx_L_tr) {
+      if (!is_ok[row*n_acc]) continue;
+      ll_trial[row]=log_diff_exp(trunc.log_S_lower[row],race_survival(log_p_lower,row));
     }
-    const double p = trunc.S_lower[row] - prod_LC; // P(LT <= T <= LC) = S_RACE(LT) - S_RACE(LC)
-    ll_trial[row] = p;
-  }
-
-  // Upper censoring
-  for(int row : idx_U_tr) {
-    if (!is_ok[row * n_acc]) continue;
-    const int base = row * n_acc;
-    double prod_UC = 1.0;
-    for(int k = 0; k < n_acc; ++k) {
-      if (!participating[base + k]) continue;  // skip non-participating accumulator
-      prod_UC *= p_upper[base + k];
+    for (int row : idx_U_tr) {
+      if (!is_ok[row*n_acc]) continue;
+      ll_trial[row]=log_diff_exp(race_survival(log_p_upper,row),trunc.log_S_upper[row]);
     }
-    const double p = prod_UC - trunc.S_upper[row]; // P(UC <= T <= UT) = S_RACE(UC) - S_RACE(UT)
-    ll_trial[row] = p;
-  }
-
-  // Both censoring -- doesn't need truncation
-  for(int row : idx_B_tr) {
-    if (!is_ok[row * n_acc]) continue;
-    const int base = row * n_acc;
-    double prod_LC = 1.0, prod_UC = 1.0;
-    for(int k = 0; k < n_acc; ++k) {
-      if (!participating[base + k]) continue;  // skip non-participating accumulator
-      prod_UC *= p_upper[base + k];
-      prod_LC *= p_lower[base + k];
-    }
-    const double p = (1-prod_LC) + prod_UC;        // P(T <= LC || P >= UC) = (1-S_RACE(LC)) + S_RACE(UC)
-    ll_trial[row] = p;
-  }
-
-  // -------------------------------------------------------------------------
-  // Known-response cases — numerical integration
-  // Integrates f_winner(t) * prod_{j != winner} S_j(t) over the censoring window.
-  // Bounds are per-trial vectors built from trunc.LT/UT and LC/UC.
-  // -------------------------------------------------------------------------
-
-  // Lower-censored, known response: integrate over [LT, LC]
-  if (!idx_L_known.empty()) {
-    const int n = (int)idx_L_known.size();
-    for (int j = 0; j < n; ++j) {
-      const int base = idx_L_known[j];
-      lo_L[j] = trunc.LT.empty() ? 0.0 : trunc.LT[base];
-      hi_L[j] = LC[base];
-    }
-    setup->fill_survivor_with_response(idx_L_known, winner_L_known, lo_L, hi_L,
-                                       n_acc, *pt, setup->spec, out_L.data(), is_ok);
-    for (int j = 0; j < n; ++j)
-      ll_trial[idx_L_known[j] / n_acc] = out_L[j];
-  }
-
-  // Upper-censored, known response: integrate over [UC, UT]
-  if (!idx_U_known.empty()) {
-    const int n = (int)idx_U_known.size();
-    for (int j = 0; j < n; ++j) {
-      const int base = idx_U_known[j];
-      // Don't integrate to inf but to CENS_UPPER_CAP
-      lo_U[j] = UC[base];
-      hi_U[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
-    }
-    setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo_U, hi_U,
-                                       n_acc, *pt, setup->spec, out_U.data(), is_ok);
-    for (int j = 0; j < n; ++j) {
-      ll_trial[idx_U_known[j] / n_acc] = out_U[j];
+    for (int row : idx_B_tr) {
+      if (!is_ok[row*n_acc]) continue;
+      ll_trial[row]=log_sum_exp(
+        log_diff_exp(trunc.log_S_lower[row],race_survival(log_p_lower,row)),
+        log_diff_exp(race_survival(log_p_upper,row),trunc.log_S_upper[row]));
     }
   }
 
-  // Both-censored, known response: sum integrals over [LT, LC] and [UC, UT]
-  if (!idx_B_known.empty()) {
-    const int n = (int)idx_B_known.size();
-    for (int j = 0; j < n; ++j) {
-      const int base = idx_B_known[j];
-      lo1_B[j] = trunc.LT.empty() ? 0.0 : trunc.LT[base];
-      hi1_B[j] = LC[base];
-      lo2_B[j] = UC[base];
-      hi2_B[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
+  // Known responses and silent accumulators share the same interval evaluator.
+  auto fill_known = [&](const std::vector<int>& idx, const std::vector<int>& winner,
+                        bool lower, bool upper) {
+    for (std::size_t j=0; j<idx.size(); ++j) {
+      const int base=idx[j], trial=base/n_acc;
+      if (!is_ok[base]) continue;
+      const double lt=trunc.LT.empty() ? 0.0 : trunc.LT[base];
+      const double ut=trunc.UT.empty() ? pos_inf() : trunc.UT[base];
+      double lp=neg_inf();
+      if (lower) lp=log_interval(base,winner[j],lt,std::min(LC[base],ut),is_ok);
+      if (upper) lp=log_sum_exp(lp,log_interval(base,winner[j],std::max(UC[base],lt),ut,is_ok));
+      ll_trial[trial]=lp;
     }
-    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo1_B, hi1_B,
-                                       n_acc, *pt, setup->spec, out1_B.data(), is_ok);
-    setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo2_B, hi2_B,
-                                       n_acc, *pt, setup->spec, out2_B.data(), is_ok);
-    for (int j = 0; j < n; ++j)
-      ll_trial[idx_B_known[j] / n_acc] = out1_B[j] + out2_B[j];
-  }
-
-  // Silent accumulator correction — add defective winner integral to ll_trial
-  if (!idx_silent.empty()) {
-    const int n = (int)idx_silent.size();
-    for (int j = 0; j < n; ++j) {
-      lo_silent[j] = 0.0;
-      hi_silent[j] = UC[idx_silent[j] + winner_silent[j]];  // base + k to index UC
-    }
-    setup->fill_survivor_with_response(
-        idx_silent, winner_silent,
-        lo_silent, hi_silent,
-        n_acc, *pt, setup->spec, out_silent.data(), is_ok);
-    for (int j = 0; j < n; ++j) {
-      const int trial = idx_silent[j] / n_acc;
-      // ll_trial[trial] currently holds log(S_race(UC)) — need to undo log,
-      // add integration term, re-apply log
-      ll_trial[trial] = ll_trial[trial] + out_silent[j];
-    }
-  }
-
-  // Single log-transform over all censored trials
-  if(return_log) {
-    for (int trial : idx_L_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
-    for (int trial : idx_U_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
-    for (int trial : idx_B_tr)        ll_trial[trial] = std::log(ll_trial[trial]);
-    for (int j = 0; j < (int)idx_L_known.size(); ++j) { int t = idx_L_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
-    for (int j = 0; j < (int)idx_U_known.size(); ++j) { int t = idx_U_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
-    for (int j = 0; j < (int)idx_B_known.size(); ++j) { int t = idx_B_known[j] / n_acc; ll_trial[t] = std::log(ll_trial[t]);}
+  };
+  fill_known(idx_L_known,winner_L_known,true,false);
+  fill_known(idx_U_known,winner_U_known,false,true);
+  fill_known(idx_B_known,winner_B_known,true,true);
+  for (std::size_t j=0; j<idx_silent.size(); ++j) {
+    const int base=idx_silent[j], trial=base/n_acc;
+    if (!is_ok[base]) continue;
+    const double lt=trunc.LT.empty() ? 0.0 : trunc.LT[base];
+    const double ut=trunc.UT.empty() ? pos_inf() : trunc.UT[base];
+    ll_trial[trial]=log_sum_exp(ll_trial[trial],
+      log_interval(base,winner_silent[j],lt,std::min(UC[base+winner_silent[j]],ut),is_ok));
   }
 }
 
@@ -228,10 +224,8 @@ CensorSpec make_censor_spec(const DataFrame& data,
     }
   }
 
-  censor.has_silent_trial.assign(n_trials, false);  // initialised before the trial loop above
   censor.idx_silent.reserve(n_trials);
   censor.winner_silent.reserve(n_trials);
-  censor.idx_silent_trials.reserve(n_trials);
 
   // Trial-level loop (step by n_acc): populate trial index lists
   for (int base = 0; base < censor.n_rows; base += n_acc) {
@@ -254,14 +248,10 @@ CensorSpec make_censor_spec(const DataFrame& data,
     if (has_silent) {
       // Silent accumulators contribute S_race(UC) via idx_U_tr
       censor.idx_U_tr.push_back(base / n_acc);
-      censor.has_silent_trial[base / n_acc] = true;
       for (int k = 0; k < n_acc; ++k) {
         if (missingness_ptr[base + k] == 4) {
           censor.idx_silent.push_back(base);
           censor.winner_silent.push_back(k);
-          // Only push trial once — first silent accumulator for this trial
-          if (censor.idx_silent_trials.empty() || censor.idx_silent_trials.back() != base / n_acc)
-            censor.idx_silent_trials.push_back(base / n_acc);
           }
       }
       continue;  // skip regular miss aggregation for this trial
@@ -297,26 +287,22 @@ CensorSpec make_censor_spec(const DataFrame& data,
   if (!censor.idx_U.empty() && censor.UC.empty())
     Rcpp::stop("missingness contains upper-censored rows (2, 3 or 4) but no UC column found in data");
 
+  std::vector<bool> unknown(n_trials,false);
+  for (int trial:censor.idx_L_tr) unknown[trial]=true;
+  for (int trial:censor.idx_U_tr) unknown[trial]=true;
+  for (int trial:censor.idx_B_tr) unknown[trial]=true;
+  auto known=[&](int row) { return !unknown[row/n_acc]; };
+  censor.idx_L.erase(std::remove_if(censor.idx_L.begin(),censor.idx_L.end(),known),censor.idx_L.end());
+  censor.idx_U.erase(std::remove_if(censor.idx_U.begin(),censor.idx_U.end(),known),censor.idx_U.end());
+
   // Working buffers for analytical survivor products
-  censor.p_lower.resize(censor.n_rows);
-  censor.p_upper.resize(censor.n_rows);
+  censor.log_p_lower.resize(censor.n_rows);
+  censor.log_p_upper.resize(censor.n_rows);
 
-  // Pre-allocate integration buffers — sized to each known-response index list.
-  // These are reused every particle iteration with no further allocation.
-  const int n_L = (int)censor.idx_L_known.size();
-  const int n_U = (int)censor.idx_U_known.size();
-  const int n_B = (int)censor.idx_B_known.size();
-
-  censor.lo_L.resize(n_L);  censor.hi_L.resize(n_L);  censor.out_L.resize(n_L);
-  censor.lo_U.resize(n_U);  censor.hi_U.resize(n_U);  censor.out_U.resize(n_U);
-  censor.lo1_B.resize(n_B); censor.hi1_B.resize(n_B); censor.out1_B.resize(n_B);
-  censor.lo2_B.resize(n_B); censor.hi2_B.resize(n_B); censor.out2_B.resize(n_B);
-
-  // More buffers for handling silent accumulator cases
-  const int n_s = (int)censor.idx_silent.size();
-  censor.lo_silent.resize(n_s);
-  censor.hi_silent.resize(n_s);
-  censor.out_silent.resize(n_s);
+  censor.bound_work.resize(censor.n_rows);
+  censor.active_rows.reserve(n_acc);
+  censor.winner_row.resize(1);
+  censor.breaks.reserve(n_acc+2);
 
   return censor;
 }

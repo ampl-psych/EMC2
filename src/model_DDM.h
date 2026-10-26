@@ -12,9 +12,6 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 #include "utility_functions.h"
-//#include "pdf_fncs.h"
-//#include "fncs_seven.h"
-//#include "tools.h"
 #include "pnorm_utils.h"
 #include "hcubature.h"
 #include "RaceSpec.h"
@@ -22,7 +19,7 @@ using namespace Rcpp;
 // Struct for cubature
 struct my_params {
   double t;
-  int low_or_up;
+  int low_or_up; // density boundary, -1 or +1
   double a;
   double v;
   double t0;
@@ -41,24 +38,8 @@ void fill_ddm(const double* rts,
               double* __restrict__ ll_row,
               const std::vector<int>& is_ok);
 
-// Survival function for the DDM
-void ddm_survivor(const std::vector<int>& idx,
-                  const std::vector<double>& bound,
-                  const ParamTable& pt,
-                  const RaceSpec& spec,
-                  double* __restrict__ out,
-                  RaceScratch& scratch,
-                  const std::vector<int>& is_ok);
-
-void ddm_survivor_with_response(const std::vector<int>&    idx,
-                                const std::vector<int>&    winner,
-                                const std::vector<double>& lower,
-                                const std::vector<double>& upper,
-                                int                        n_acc,
-                                const ParamTable&          pt,
-                                const RaceSpec&            spec,
-                                double* __restrict__       out,
-                                const std::vector<int>& is_ok);
+double ddm_log_response_interval(const ParamTable& pt,const RaceSpec& spec,int row,
+                                 int response,double lower,double upper);
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars);
 

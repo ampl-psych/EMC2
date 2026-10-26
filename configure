@@ -16,8 +16,6 @@ set -e
 # --------------------------------------------------------------------------- #
 #  Defaults                                                                    #
 # --------------------------------------------------------------------------- #
-PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
-FAST_MATH=no        # fast-math disabled by default
 ENABLE_NATIVE=no    # native optimizations disabled by default
 ENABLE_OPENMP=yes
 
@@ -31,14 +29,7 @@ for arg in "$@"; do
 
 configure options for EMC2:
 
-  --with-pnorm-mode=N     Select pnorm implementation (default: 1):
-                            1  Hart (1968)     near-double precision (~1.2e-15),
-                                               thread-safe  [default]
-                            2  A&S 7.1.26      single-precision quality (~1.5e-7),
-                                               thread-safe, best vectorisability
-
-  --enable-fast-math      Add -ffast-math -fno-math-errno (default: disabled).
-                          Improves speed but may affect floating-point semantics.
+  Normal probabilities use the thread-safe Cody implementation.
 
   --native                Add -march=native (default: disabled).
                           Improves speed via architecture-specific optimizations.
@@ -50,26 +41,10 @@ configure options for EMC2:
 
 Examples:
   R CMD INSTALL .
-  R CMD INSTALL --configure-args="--with-pnorm-mode=1 --enable-fast-math --native" .
+  R CMD INSTALL --configure-args="--native" .
 
 EOF
       exit 0
-      ;;
-    --with-pnorm-mode=*)
-      PNORM_MODE="${arg#*=}"
-      case "$PNORM_MODE" in
-        1|2) ;;
-        *)
-          echo "configure: error: --with-pnorm-mode must be 1 or 2 (got '$PNORM_MODE')" >&2
-          exit 1
-          ;;
-      esac
-      ;;
-    --enable-fast-math)
-      FAST_MATH=yes
-      ;;
-    --disable-fast-math)
-      FAST_MATH=no
       ;;
     --native)
       ENABLE_NATIVE=yes
@@ -78,7 +53,8 @@ EOF
       ENABLE_OPENMP=no
       ;;
     *)
-      echo "configure: warning: unrecognised option '$arg' (ignored)" >&2
+      echo "configure: error: unrecognised option '$arg'" >&2
+      exit 1
       ;;
   esac
 done
@@ -95,9 +71,6 @@ FORTRAN_LIBS=$(sh tools/check-linalg.sh "$R_BIN") || exit 1
 #  Extra user-requested flags                                                  #
 # --------------------------------------------------------------------------- #
 EXTRA_CXXFLAGS=""
-if [ "$FAST_MATH" = "yes" ]; then
-  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
-fi
 if [ "$ENABLE_NATIVE" = "yes" ]; then
   EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native"
 fi
@@ -119,8 +92,7 @@ esac
 #  Summary                                                                     #
 # --------------------------------------------------------------------------- #
 echo "configure: EMC2 build configuration"
-echo "  PNORM_MODE    : $PNORM_MODE"
-echo "  fast-math     : $FAST_MATH"
+echo "  pnorm         : Cody (direct tails)"
 echo "  native        : $ENABLE_NATIVE"
 echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
 echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
@@ -131,7 +103,6 @@ echo "  OpenMP pause  : $OMP_PAUSE"
 #  Write src/Makevars from src/Makevars.in                                    #
 # --------------------------------------------------------------------------- #
 sed \
-  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
@@ -144,8 +115,6 @@ sed \
 # --------------------------------------------------------------------------- #
 OMP_LIBS_HEADER=$(printf '%s\n' "$OMP_LIBS" | sed 's/"/\\\\"/g')
 sed \
-  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
-  -e "s|@FAST_MATH@|${FAST_MATH}|g" \
   -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
   -e "s|@OMP_LIBS@|${OMP_LIBS_HEADER}|g" \

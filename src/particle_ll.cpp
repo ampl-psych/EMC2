@@ -416,13 +416,14 @@ void c_log_likelihood_race(ParamTable& pt,
                            int     ll_row_size,
                            double* ll_buf_ptr,
                            RaceScratch& scratch,
-                           const std::vector<int>& is_ok)
+                           const std::vector<int>& is_ok, bool log_p)
 {
   const int n_winners = (int)idx_win.size();
 
+  if (log_p) std::fill(ll_row_ptr,ll_row_ptr+ll_row_size,0.0);
   setup.fill_both(rts_ptr, pt, setup.spec,
-                  idx_win, idx_los, ll_row_ptr, scratch, is_ok);
-  vec_log(ll_row_ptr, ll_row_size);
+                  idx_win, idx_los, ll_row_ptr, scratch, is_ok, log_p);
+  if (!log_p) vec_log(ll_row_ptr, ll_row_size);
 
   if (n_acc == 1) {
     for (int t = 0; t < n_winners; ++t)
@@ -482,8 +483,12 @@ inline void c_log_likelihood_ordered(const ParamTable&       pt,
     const double scale    = sc_col[i];
     const double upper    = (level == n_lR) ? R_PosInf : cut_buf[i];
     const double lower    = (level == 1)    ? R_NegInf : cut_buf[i - 1];
-    const double prob     = c_ordered_cdf(upper, location, scale, probit) - c_ordered_cdf(lower, location, scale, probit);
-    ll_buf[i/n_lR] = std::log(prob);
+    if (probit) {
+      ll_buf[i/n_lR]=pnorm_detail::normal_interval((lower-location)/scale,(upper-location)/scale,true);
+    } else {
+      const double prob=c_ordered_cdf(upper,location,scale,false)-c_ordered_cdf(lower,location,scale,false);
+      ll_buf[i/n_lR]=std::log(prob);
+    }
   }
   // vec_log(ll_buf, n_rows);
 }
@@ -876,7 +881,7 @@ struct LikelihoodContext::Impl {
       // Re-fill row-wise likelihoods — skipped accumulators contribute 1.
       std::fill(s.ll_row.begin(), s.ll_row.end(), 1.0);
       c_log_likelihood_race(s.pt_local, setup, rts_ptr, idx_win, idx_los, n_lR,
-                            s.ll_row.data(), n_rows, s.ll_buf.data(), s.scratch, s.is_ok);
+                            s.ll_row.data(), n_rows, s.ll_buf.data(), s.scratch, s.is_ok, s.trunc.any());
       break;
     }
 
@@ -884,9 +889,10 @@ struct LikelihoodContext::Impl {
     if (model == DDM || model == RACE) {
       if (s.trunc.any()) s.trunc.calculate_normalization_constant(s.is_ok);
       // Censoring needs the normalization constant and fills rows, doesn't add.
-      if (s.censor.any()) s.censor.fill_censored_rows(s.trunc, s.is_ok, s.ll_buf, true);
+      if (s.censor.any()) s.censor.fill_censored_rows(s.trunc, s.is_ok, s.ll_buf);
       if (s.trunc.any())
-        for (int t = 0; t < n_choice_trials; ++t) s.ll_buf[t] -= s.trunc.log_Z[t];
+        for (int t = 0; t < n_choice_trials; ++t)
+          s.ll_buf[t] = is_finite(s.trunc.log_Z[t]) ? s.ll_buf[t]-s.trunc.log_Z[t] : min_ll;
     }
 
     // 4) Handle not-ok parameter values (out of bound)

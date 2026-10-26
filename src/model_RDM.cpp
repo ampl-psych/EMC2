@@ -2,7 +2,6 @@
 
 using namespace Rcpp;
 
-
 // ---------------------------------------------------------------------------
 // R-exported scalar functions
 // ---------------------------------------------------------------------------
@@ -33,8 +32,6 @@ NumericVector pWald(NumericVector t, NumericVector v,
   return cdf;
 }
 
-
-
 // This new filling function checks whether A==0, if so --> runs digt0 and pigt0
 void drdm_prdm_fast(const double* rt,
                     const ParamTable& pt,
@@ -43,7 +40,7 @@ void drdm_prdm_fast(const double* rt,
                     const std::vector<int>& idx_los,
                     double* __restrict__ ll_row,
                     RaceScratch& scratch,
-                    const std::vector<int>& is_ok)
+                    const std::vector<int>& is_ok, bool log_p)
 {
   // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
   const double* __restrict__ v  = &pt.base(0, spec.col_v);
@@ -84,12 +81,12 @@ void drdm_prdm_fast(const double* rt,
 
     // first guard against teff < 0 (non-decision time can't be > rt)
     const double teff = rt[i] - t0[i];
-    if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
+    if (teff <= 0.0) { ll_row[i] = log_p ? neg_inf() : 0.0; continue; }
 
     // Check whether A equals 0
     if (A[i] < A_EPS) {
       const double k = B[i] / s[i];
-      if (k > K_MAX || k < 0.0) { ll_row[i] = 0.0; continue; }  // degenerate
+      if (k > K_MAX || k < 0.0) { ll_row[i] = log_p ? neg_inf() : 0.0; continue; }  // degenerate
       sc_teff[n_win_noA] = teff;
       sc_v   [n_win_noA] = v[i];
       sc_B   [n_win_noA] = B[i];
@@ -114,7 +111,7 @@ void drdm_prdm_fast(const double* rt,
     double l = sc_v[j] * inv_s;
     double k = sc_B[j] * inv_s;
     clamp_l(l);
-    sc_out[j] = digt0(sc_teff[j], k, l);
+    sc_out[j] = digt0(sc_teff[j], k, l, log_p);
   }
 
   // --- Compute: digt_core winners ---
@@ -125,19 +122,19 @@ void drdm_prdm_fast(const double* rt,
     double l = sc_v_c[j]       * inv_s;
     double k = sc_B_c[j]       * inv_s + a;
     clamp_a_l(a, l); // clamp a and l
-    sc_out_c[j] = digt_core(sc_teff_c[j], k, l, a);
+    sc_out_c[j] = digt_core(sc_teff_c[j], k, l, a, log_p);
   }
 
   // --- Scatter: noA winners ---
   for (int j = 0; j < n_win_noA; ++j) {
     const double val = sc_out[j];
-    ll_row[sc_idx[j]] = (std::isfinite(val) && val >= 0.0) ? val : 0.0;    // guard against pdf < 0
+    ll_row[sc_idx[j]] = log_p ? val : ((std::isfinite(val) && val >= 0.0) ? val : 0.0);    // guard against pdf < 0
   }
 
   // --- Scatter: core winners ---
   for (int j = 0; j < n_win_core; ++j) {
     const double val = sc_out_c[j];
-    ll_row[sc_idx_c[j]] = (std::isfinite(val) && val >= 0.0) ? val : 0.0;  // guard against pdf < 0
+    ll_row[sc_idx_c[j]] = log_p ? val : ((std::isfinite(val) && val >= 0.0) ? val : 0.0);  // guard against pdf < 0
   }
 
   // =========================================================================
@@ -154,12 +151,12 @@ void drdm_prdm_fast(const double* rt,
 
     // first guard against teff < 0 (non-decision time can't be > rt)
     const double teff = rt[i] - t0[i];
-    if (teff <= 0.0) { ll_row[i] = 1.0; continue; }
+    if (teff <= 0.0) { ll_row[i] = log_p ? 0.0 : 1.0; continue; }
 
     // fill scratch depending on whether we have A tiny or not
     if (A[i] < A_EPS) {
       const double k = B[i] / s[i];
-      if (k > K_MAX || k < 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
+      if (k > K_MAX || k < 0.0) { ll_row[i] = log_p ? 0.0 : 1.0; continue; }  // survival = 1
       sc_teff[n_los_noA] = teff;
       sc_v   [n_los_noA] = v[i];
       sc_B   [n_los_noA] = B[i];
@@ -184,7 +181,7 @@ void drdm_prdm_fast(const double* rt,
     double l = sc_v[j] * inv_s;
     double k = sc_B[j] * inv_s;
     clamp_l(l);
-    sc_out[j] = pigt0(sc_teff[j], k, l);
+    sc_out[j] = pigt0(sc_teff[j], k, l, false, log_p);
   }
 
   // --- Compute: pigt_core losers ---
@@ -195,23 +192,23 @@ void drdm_prdm_fast(const double* rt,
     double l = sc_v_c[j]       * inv_s;
     double k = sc_B_c[j]       * inv_s + a;
     clamp_a_l(a, l);
-    sc_out_c[j] = pigt_core(sc_teff_c[j], k, l, a);
+    sc_out_c[j] = pigt_core(sc_teff_c[j], k, l, a, false, log_p);
   }
 
   // --- Scatter: noA losers ---
   for (int j = 0; j < n_los_noA; ++j) {
     double val = sc_out[j];
-    if (!std::isfinite(val) || val < 0.0) val = 0.0;    // guard against cdf < 0
-    else if (val > 1.0)                    val = 1.0;   // guard against cdf > 1
-    ll_row[sc_idx[j]] = 1.0 - val;                      // fill in survival (not CDF)
+    if (!log_p && (!std::isfinite(val) || val < 0.0)) val = 0.0;    // guard against survival < 0
+    else if (!log_p && val > 1.0)                    val = 1.0;   // guard against survival > 1
+    ll_row[sc_idx[j]] = val;                      // direct survival
   }
 
   // --- Scatter: core losers ---
   for (int j = 0; j < n_los_core; ++j) {
     double val = sc_out_c[j];
-    if (!std::isfinite(val) || val < 0.0) val = 0.0;    // guard against cdf < 0
-    else if (val > 1.0)                    val = 1.0;   // guard against cdf > 1
-    ll_row[sc_idx_c[j]] = 1.0 - val;                    // fill in survival (not CDF)
+    if (!log_p && (!std::isfinite(val) || val < 0.0)) val = 0.0;    // guard against survival < 0
+    else if (!log_p && val > 1.0)                    val = 1.0;   // guard against survival > 1
+    ll_row[sc_idx_c[j]] = val;                    // direct survival
   }
 }
 
@@ -219,7 +216,7 @@ void drdm_prdm_fast(const double* rt,
 // rdm_fill_truncate: fills raw survivors S_k(bound - t0) for the given idx set
 // Call twice at the call site — once with (idx_LT+idx_both, LT, ll_lower)
 //                             — once with (idx_UT+idx_both, UT, ll_upper)
-// Unvisited rows retain their std::fill default (1.0 for lower, 0.0 for upper)
+// Unvisited rows retain the caller's default; active pre-start bounds have S=1.
 // =============================================================================
 void rdm_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,
@@ -227,7 +224,7 @@ void rdm_survivor(const std::vector<int>& idx,
                   const RaceSpec& spec,
                   double* __restrict__ out,
                   RaceScratch& scratch,
-                  const std::vector<int>& is_ok)
+                  const std::vector<int>& is_ok, bool log_p)
 {
   const int n = (int)idx.size();
 
@@ -260,12 +257,11 @@ void rdm_survivor(const std::vector<int>& idx,
     const int i        = idx[j];
     if (!is_ok[i]) continue;
     const double teff  = bound[i] - t0[i];
-    //if (teff <= 0.0) { out[i] = 1.0; continue; }  // S(t<=0) = 1, skip
-    if (teff <= 0.0) { continue; }  // S(t<=0) = 1, skip but leave out untouched - reverts to default value
+    if (teff <= 0.0) { out[i] = log_p ? 0.0 : 1.0; continue; }  // S(t<=0) = 1.
 
     if (A[i] < A_EPS) {
       const double k = B[i] / s[i];
-      if (k > K_MAX || k < 0.0) { out[i] = 1.0; continue; }  // degenerate
+      if (k > K_MAX || k < 0.0) { out[i] = log_p ? 0.0 : 1.0; continue; }  // degenerate
       sc_teff[n_noA] = teff;
       sc_v   [n_noA] = v[i];
       sc_B   [n_noA] = B[i];
@@ -290,7 +286,7 @@ void rdm_survivor(const std::vector<int>& idx,
     double l = sc_v[j] * inv_s;
     double k = sc_B[j] * inv_s;
     clamp_l(l);
-    sc_out[j] = pigt0(sc_teff[j], k, l);
+    sc_out[j] = pigt0(sc_teff[j], k, l, false, log_p);
   }
 
   // --- Compute: pigt_core core ---
@@ -301,217 +297,9 @@ void rdm_survivor(const std::vector<int>& idx,
     double l = sc_v_c[j]       * inv_s;
     double k = sc_B_c[j]       * inv_s + a;
     clamp_a_l(a, l);
-    sc_out_c[j] = pigt_core(sc_teff_c[j], k, l, a);
+    sc_out_c[j] = pigt_core(sc_teff_c[j], k, l, a, false, log_p);
   }
 
-  // --- Scatter: noA — store survival (1 - CDF) ---
-  for (int j = 0; j < n_noA; ++j) {
-    double val = sc_out[j];
-    if (!std::isfinite(val) || val < 0.0) val = 0.0;
-    else if (val > 1.0)                   val = 1.0;
-    out[sc_idx[j]] = 1.0 - val;
-  }
-
-  // --- Scatter: core — store survival (1 - CDF) ---
-  for (int j = 0; j < n_core; ++j) {
-    double val = sc_out_c[j];
-    if (!std::isfinite(val) || val < 0.0) val = 0.0;
-    else if (val > 1.0)                    val = 1.0;
-    out[sc_idx_c[j]] = 1.0 - val;
-  }
+  for (int j = 0; j < n_noA; ++j) out[sc_idx[j]] = sc_out[j];
+  for (int j = 0; j < n_core; ++j) out[sc_idx_c[j]] = sc_out_c[j];
 }
-
-// -----------------------------------------------------------------------------
-// RDM survivor with known response — numerical integration
-//
-// Computes P(winner finishes first in [lower, upper]) for one trial by
-// integrating f_winner(t) * prod_{j != winner} S_j(t) over [lower, upper].
-// -----------------------------------------------------------------------------
-
-// Per-trial parameter block, pointing into caller-owned contiguous arrays.
-// All arrays are length n_acc.
-struct RDMIntegrand {
-  int           n_acc;
-  int           winner;   // 0-based within-trial index
-  const double* k;        // (B + 0.5*A) / s per accumulator
-  const double* l;        // v / s
-  const double* a;        // 0.5 * A / s  (0 when A < A_EPS)
-  const double* t0;
-};
-
-// hcubature callback: x[0] = absolute time t
-// retval[0] = f_winner(t - t0_winner) * prod_{j != winner} S_j(t - t0_j)
-inline int int_rdm_survivor(unsigned /*dim*/, const double* x, void* p,
-                            unsigned /*fdim*/, double* retval)
-{
-  const RDMIntegrand* P = static_cast<const RDMIntegrand*>(p);
-  const double t       = x[0];
-  const int    w       = P->winner;
-  const double t_eff_w = t - P->t0[w];
-
-  // Density of winner — early exit if zero (t <= t0 or degenerate)
-  const double dens = (P->a[w] < A_EPS)
-    ? digt0(t_eff_w, P->k[w], P->l[w])
-      : digt_core(t_eff_w, P->k[w], P->l[w], P->a[w]);
-  if (!(dens > 0.0)) { retval[0] = 0.0; return 0; }
-
-  // Survivor of each loser
-  double out = dens;
-  for (int j = 0; j < P->n_acc; ++j) {
-    if (j == w) continue;
-    const double t_eff_j = t - P->t0[j];
-    const double cdf = (P->a[j] < A_EPS)
-      ? pigt0(t_eff_j, P->k[j], P->l[j])
-        : pigt_core(t_eff_j, P->k[j], P->l[j], P->a[j]);
-    out *= (1.0 - cdf);
-  }
-  retval[0] = out;
-  return 0;
-}
-
-// Integrate f_winner * prod S_losers over [lower, upper] for one trial.
-// k/l/a/t0 are pre-scaled, length n_acc, caller-owned — no allocation here.
-inline double rdm_survivor_scalar(const double* k, const double* l,
-                                  const double* a, const double* t0,
-                                  int n_acc, int winner,
-                                  double lower, double upper,
-                                  double abstol = 1e-8, double reltol = 1e-6,
-                                  int maxeval = 6000)
-{
-  RDMIntegrand ig{ n_acc, winner, k, l, a, t0 };
-  double val = 0.0, err = 0.0;
-  hcubature(int_rdm_survivor, static_cast<void*>(&ig), 1, &lower, &upper,
-            maxeval, abstol, reltol, &val, &err);
-  if (!std::isfinite(val) || val < 0.0) return 0.0;
-  if (val > 1.0)                         return 1.0;
-  return val;
-}
-
-// -----------------------------------------------------------------------------
-// rdm_survivor_with_response()
-//
-// For each entry j in idx:
-//   - idx[j]    = base row (t * n_acc) into ParamTable
-//   - winner[j] = within-trial winner index [0, n_acc-1]
-//   - lower[j]  = lower integration bound for this trial
-//   - upper[j]  = upper integration bound for this trial
-//   - out[j]    = integral result, one value per trial
-//
-// Scratch buffers are allocated once (length n_acc) and reused across trials.
-// -----------------------------------------------------------------------------
-void rdm_survivor_with_response(const std::vector<int>&    idx,
-                                const std::vector<int>&    winner,
-                                const std::vector<double>& lower,
-                                const std::vector<double>& upper,
-                                int                        n_acc,
-                                const ParamTable&          pt,
-                                const RaceSpec&            spec,
-                                double* __restrict__       out,
-                                const std::vector<int>& is_ok)
-{
-  std::vector<double> k_buf(n_acc), l_buf(n_acc), a_buf(n_acc), t0_buf(n_acc);
-
-  const int n = (int)idx.size();
-  for (int j = 0; j < n; ++j) {
-    const int base = idx[j];  // = t * n_acc
-    if (!is_ok[base]) { out[j] = 0.0; continue; }
-
-    // Gather and pre-scale parameters for all accumulators in this trial
-    for (int acc = 0; acc < n_acc; ++acc) {
-      const int    row   = base + acc;
-      const double inv_s = 1.0 / pt.base(row, spec.col_s);
-      const double A_acc = pt.base(row, spec.col_A);
-      l_buf[acc]  = pt.base(row, spec.col_v) * inv_s;
-      a_buf[acc]  = (A_acc < A_EPS) ? 0.0 : 0.5 * A_acc * inv_s;
-      k_buf[acc]  = pt.base(row, spec.col_B) * inv_s + a_buf[acc];
-      t0_buf[acc] = pt.base(row, spec.col_t0);
-    }
-
-    out[j] = rdm_survivor_scalar(k_buf.data(), l_buf.data(),
-                                 a_buf.data(), t0_buf.data(),
-                                 n_acc, winner[j], lower[j], upper[j]);
-  }
-}
-
-
-
-
-// ---------------------------------------------------------------------------
-// Fast ParamTable-based functions
-// ---------------------------------------------------------------------------
-// void drdm_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const std::vector<int>& idx,
-//                double* __restrict__ ll_row)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   for (int j = 0; j < (int)idx.size(); ++j) {
-//     const int i = idx[j];
-//
-//     const double t_eff = rt[i] - t0[i];
-//     if (t_eff <= 0.0) { ll_row[i] = 0.0; continue; }
-//
-//     const double inv_s = 1.0 / s[i];
-//     double pdf;
-//     if (A[i] < A_EPS) {
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s;
-//       clamp_l(l);
-//       pdf = digt0(t_eff, k, l);
-//     } else {
-//       double a = 0.5 * A[i] * inv_s;
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s + a;
-//       clamp_a_l(a, l);
-//       pdf = digt_core(t_eff, k, l, a);
-//     }
-//     ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
-//   }
-// }
-
-
-// void prdm_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const std::vector<int>& idx,
-//                double* __restrict__ ll_row)
-// {
-//   const double* __restrict__ rt = rts.begin();
-//   const double* __restrict__ v  = &pt.base(0, spec.col_v);
-//   const double* __restrict__ B  = &pt.base(0, spec.col_B);
-//   const double* __restrict__ A  = &pt.base(0, spec.col_A);
-//   const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
-//   const double* __restrict__ s  = &pt.base(0, spec.col_s);
-//
-//   for (int j = 0; j < (int)idx.size(); ++j) {
-//     const int i = idx[j];
-//
-//     const double t_eff = rt[i] - t0[i];
-//     if (t_eff <= 0.0) { ll_row[i] = 1.0; continue; }  // survival = 1
-//
-//     const double inv_s = 1.0 / s[i];
-//     double cdf;
-//     if (A[i] < A_EPS) {
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s;
-//       clamp_l(l);
-//       cdf = pigt0(t_eff, k, l);
-//     } else {
-//       double a = 0.5 * A[i] * inv_s;
-//       double l = v[i] * inv_s;
-//       double k = B[i] * inv_s + a;
-//       clamp_a_l(a, l);
-//       cdf = pigt_core(t_eff, k, l, a);
-//     }
-//     if (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
-//     else if (cdf > 1.0)                    cdf = 1.0;
-//     ll_row[i] = 1.0 - cdf;  // survival
-//   }
-// }
