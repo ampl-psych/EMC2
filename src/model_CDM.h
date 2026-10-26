@@ -263,7 +263,7 @@ inline double log_i0_stable_scalar(double x) {
 // Fills in log-density per trial
 inline void c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix pars,
                    const std::vector<bool>& participating,
-                   double* __restrict__ ll_buf, int n) {
+                   double* __restrict__ ll_buf, int n, const std::vector<int>& is_ok) {
   using namespace cdm_internal;
 
   // Extract columns by index according to R model: v, theta, a, t0, s, sv
@@ -286,7 +286,7 @@ inline void c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix pars,
 
   // Joint density computation
   for (int i = 0; i < n; ++i) {
-    if (!participating[i]) continue;  // leave ll_buf[i] at its default 0.0
+    if (!participating[i] || !is_ok[i]) continue;  // leave ll_buf[i] at its default 0.0
 
     const double ai = a[i];
     const double sigi = sig[i];
@@ -346,7 +346,7 @@ inline void c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix pars,
 
 // Returns log-density per trial for SDM (R, R2)
 inline void c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, NumericMatrix pars, const std::vector<bool>& participating,
-                            double* __restrict__ ll_buf, int n) {
+                            double* __restrict__ ll_buf, int n, const std::vector<int>& is_ok) {
   using namespace cdm_internal;
 
   NumericVector v   = pars(_, 0);
@@ -369,7 +369,7 @@ inline void c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, Numer
   const double log_surface = std::log(4.0 * PI);
 
   for (int i = 0; i < n; ++i) {
-    if (!participating[i]) continue;  // leave ll_buf[i] at its default 0.0
+    if (!participating[i] || !is_ok[i]) continue;  // leave ll_buf[i] at its default 0.0
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -418,7 +418,7 @@ inline void c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, Numer
 // Returns log-density per trial for HSDM (R, R2, R3)
 inline void c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, NumericVector R3s, NumericMatrix pars,
                    const std::vector<bool>& participating,
-                   double* __restrict__ ll_buf, int n) {
+                   double* __restrict__ ll_buf, int n, const std::vector<int>& is_ok) {
   using namespace cdm_internal;
 
   NumericVector v   = pars(_, 0);
@@ -443,7 +443,7 @@ inline void c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, Nume
   const double log_surface = std::log(2.0 * PI * PI);
 
   for (int i = 0; i < n; ++i) {
-    if (!participating[i]) { continue; }
+    if (!participating[i] || !is_ok[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -498,7 +498,7 @@ inline void c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s, Nume
 
 // Returns log-density per trial for PSDM (R)
 inline void c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, const std::vector<bool>& participating,
-                    double* __restrict__ ll_buf, int n) {
+                    double* __restrict__ ll_buf, int n, const std::vector<int>& is_ok) {
   using namespace cdm_internal;
 
   NumericVector v   = pars(_, 0);
@@ -518,7 +518,7 @@ inline void c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, con
   const double log_two = std::log(2.0);
 
   for (int i = 0; i < n; ++i) {
-    if (!participating[i]) { continue; }
+    if (!participating[i] || !is_ok[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];
@@ -572,7 +572,7 @@ inline void c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix pars, con
 // Returns log-density per trial for PHSDM (R, R2)
 inline void c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s,
                               NumericMatrix pars, const std::vector<bool>& participating,
-                              double* __restrict__ ll_buf, int n) {
+                              double* __restrict__ ll_buf, int n, const std::vector<int>& is_ok) {
   using namespace cdm_internal;
 
   NumericVector v   = pars(_, 0);
@@ -594,7 +594,7 @@ inline void c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector R2s,
   const double log_pi = std::log(PI);
 
   for (int i = 0; i < n; ++i) {
-    if (!participating[i]) { continue; }
+    if (!participating[i] || !is_ok[i]) { continue; }
     const double ai = a[i];
     const double sigi = sig[i];
     const double vi = v[i];

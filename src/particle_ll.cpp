@@ -402,30 +402,6 @@ inline double clamp_sum(const double* ll_ptr, const int n, const double min_ll,
   return sum_ll;
 }
 
-// is_ok handling - shared by all models
-inline void apply_bounds(std::vector<int>&             is_ok,
-                         double*                       ll,
-                         int                           n_trials,
-                         int                           n_lR,
-                         double                        min_ll,
-                         const std::vector<bool>&      participating)   // length n_rows, all true if no missingness
-{
-  if (n_lR == 1) {
-#pragma omp simd
-    for (int t = 0; t < n_trials; ++t)
-      ll[t] = (!is_ok[t] && participating[t]) ? min_ll : ll[t];
-
-  } else {
-    for (int t = 0; t < n_trials; ++t)
-      for (int k = 0; k < n_lR; ++k) {
-        const int row = t * n_lR + k;
-        if (!participating[row]) continue;
-        if (!is_ok[row]) { ll[t] = min_ll; break; }
-      }
-  }
-}
-
-
 // =============================================================================
 // Likelihood functions — called by LikelihoodContext::Impl::evaluate_particle
 // =============================================================================
@@ -439,12 +415,13 @@ void c_log_likelihood_race(ParamTable& pt,
                            double* ll_row_ptr,
                            int     ll_row_size,
                            double* ll_buf_ptr,
-                           RaceScratch& scratch)
+                           RaceScratch& scratch,
+                           const std::vector<int>& is_ok)
 {
   const int n_winners = (int)idx_win.size();
 
   setup.fill_both(rts_ptr, pt, setup.spec,
-                  idx_win, idx_los, ll_row_ptr, scratch);
+                  idx_win, idx_los, ll_row_ptr, scratch, is_ok);
   vec_log(ll_row_ptr, ll_row_size);
 
   if (n_acc == 1) {
@@ -468,13 +445,14 @@ void c_log_likelihood_DDM(const double* rts,
                           const ParamTable& pt,
                           const RaceSpec& spec,
                           const std::vector<int>& idx_all,
-                          double* __restrict__ ll_row)
+                          double* __restrict__ ll_row,
+                          const std::vector<int>& is_ok)
 {
   // this is perhaps a bit pointless to have? only for naming convention...
   fill_ddm(rts, R, pt,
            spec,
            idx_all,
-           ll_row);
+           ll_row, is_ok);
 }
 
 
@@ -486,7 +464,8 @@ inline void c_log_likelihood_ordered(const ParamTable&       pt,
                                      int                     n_lR,
                                      double* __restrict__    cut_buf,
                                      bool                    probit,
-                                     double* __restrict__    ll_buf)
+                                     double* __restrict__    ll_buf,
+                                     const std::vector<int>& is_ok)
 {
   const double* loc_col = pt.base.colptr(spec.col_location);
   const double* sc_col  = pt.base.colptr(spec.col_scale);
@@ -497,6 +476,7 @@ inline void c_log_likelihood_ordered(const ParamTable&       pt,
   const int n_winners = (int)idx_win.size();
   for (int t = 0; t < n_winners; ++t) {
     const int    i        = idx_win[t];
+    if (!is_ok[i]) continue;
     const int    level    = lR_ptr[i];
     const double location = loc_col[i];
     const double scale    = sc_col[i];
@@ -512,13 +492,15 @@ inline void c_log_likelihood_multinomial_logit(const ParamTable&       pt,
                                                const ChoiceOnlySpec&   spec,
                                                const std::vector<int>& idx_win,
                                                int                     n_lR,
-                                               double* __restrict__    ll_buf)
+                                               double* __restrict__    ll_buf,
+                                               const std::vector<int>& is_ok)
 {
   const double* util_col    = pt.base.colptr(spec.col_utility);
   const int     n_winners   = (int)idx_win.size();
 
   for (int t = 0; t < n_winners; ++t) {
     const int base = (idx_win[t] / n_lR) * n_lR;  // trial base row
+    if (!is_ok[base]) continue;
 
     double max_u = util_col[base];
     for (int r = 1; r < n_lR; ++r)
@@ -538,10 +520,12 @@ inline void c_log_likelihood_multinomial_probit(const ParamTable& pt,
                                                const ChoiceOnlySpec& spec,
                                                const std::vector<int>& idx_win,
                                                int n_lR,
-                                               double* ll_buf)
+                                               double* ll_buf,
+                                               const std::vector<int>& is_ok)
 {
   const double* utility = pt.base.colptr(spec.col_utility);
   for (int winner : idx_win) {
+    if (!is_ok[winner]) continue;
     const int trial = winner / n_lR;
     const int base = trial * n_lR;
     ll_buf[trial] = std::log(multinomial_probit_probability(utility + base, n_lR, winner - base));
@@ -553,13 +537,15 @@ void c_log_likelihood_MRI_white(const ParamTable& pt,
                                 const std::vector<const double*>& mean_cols,
                                 const double* __restrict__ y,
                                 int n,
-                                double* __restrict__ ll_buf)
+                                double* __restrict__ ll_buf,
+                                const std::vector<int>& is_ok)
 {
   const double* sigma = pt.base.colptr(spec.col_sigma);
 
   const int nm = spec.n_mean_cols;
 
   for (int i = 0; i < n; i++) {
+    if (!is_ok[i]) continue;
     double s = 0.0;
     for (int j = 0; j < nm; j++) s += mean_cols[j][i];
     ll_buf[i] = DNORM(y[i], s, sigma[i]);
@@ -572,7 +558,8 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
                               const std::vector<const double*>& mean_cols,
                               const double* __restrict__ y,
                               int n,
-                              double* __restrict__ ll_buf)
+                              double* __restrict__ ll_buf,
+                              const std::vector<int>& is_ok)
 {
   const double* sigma = pt.base.colptr(spec.col_sigma);
   const double* rho   = pt.base.colptr(spec.col_rho);
@@ -582,18 +569,20 @@ void c_log_likelihood_MRI_ar1(const ParamTable& pt,
   // t = 0: stationary
   double s_prev = 0.0;
   for (int j = 0; j < nm; j++) s_prev += mean_cols[j][0];
-  ll_buf[0] = DNORM(y[0], s_prev, sigma[0]);
+  if (is_ok[0]) ll_buf[0] = DNORM(y[0], s_prev, sigma[0]);
 
   // t >= 1: AR(1) conditional
   for (int i = 1; i < n; i++) {
     double s_curr = 0.0;
     for (int j = 0; j < nm; j++) s_curr += mean_cols[j][i];
 
-    const double rho_i    = rho[i];
-    const double cond_sd  = sigma[i] * std::sqrt(1.0 - rho_i * rho_i);
-    const double cond_mean = s_curr + rho_i * (y[i - 1] - s_prev);
-
-    ll_buf[i] = DNORM(y[i], cond_mean, cond_sd);
+    if (is_ok[i]) {
+      const double rho_i = rho[i];
+      const double cond_sd = sigma[i] * std::sqrt(1.0 - rho_i * rho_i);
+      const double cond_mean = s_curr + rho_i * (y[i - 1] - s_prev);
+      ll_buf[i] = DNORM(y[i], cond_mean, cond_sd);
+    }
+    // The next conditional still needs this row's mean when this row is invalid.
     s_prev = s_curr;
   }
   vec_log(ll_buf, n);
@@ -619,7 +608,6 @@ struct LikelihoodContext::Impl {
     std::vector<double> ll_buf, ll_row, cut_buf;
     std::vector<const double*> mean_cols;
     RaceScratch scratch;
-    RaceModelSetup ddm_setup{};
     CensorSpec censor;
     TruncSpec trunc;
     SSSpec ss;
@@ -793,14 +781,8 @@ struct LikelihoodContext::Impl {
       } else if (model == DDM || model == RACE) {
         auto slots = race_scratch_slots(type);
         s.scratch.reserve(slots.first, slots.second, n_rows);
-        const RaceModelSetup* local_setup = &setup;
-        if (model == DDM) {
-          s.ddm_setup = setup;
-          s.ddm_setup.spec.is_ok = s.is_ok.data();
-          local_setup = &s.ddm_setup;
-        }
-        s.censor = make_censor_spec(data, n_choice_trials, n_lR, participating, local_setup, s.pt_local, s.scratch);
-        s.trunc = make_trunc_spec(data, n_choice_trials, n_lR, participating, local_setup, s.pt_local, s.scratch);
+        s.censor = make_censor_spec(data, n_choice_trials, n_lR, participating, &setup, s.pt_local, s.scratch);
+        s.trunc = make_trunc_spec(data, n_choice_trials, n_lR, participating, &setup, s.pt_local, s.scratch);
         if (model == RACE) s.ll_row.resize(n_rows);
       }
     }
@@ -832,34 +814,44 @@ struct LikelihoodContext::Impl {
                            int n_particles, double* trialwise) const {
     // 1) Map p_vector to trialwise parameters
     fill_particle(s, particles, row, n_particles);
-    // Skip invalid DDM rows before density/CDF evaluation; apply the same penalty below.
-    if (model == DDM) c_do_bound(s.pt_local, bound_specs, s.is_ok);
+    // Bounds apply after all mappings and trends. A participating accumulator
+    // outside its bounds invalidates the whole trial, including its integrals.
+    c_do_bound(s.pt_local, bound_specs, s.is_ok);
+    const bool continuous = model == MRI || model == MRI_AR1 || model == CDM || model == PSDM || model == PHSDM;
+    const int stride = continuous ? 1 : n_lR;
+    for (int t = 0; t < n_choice_trials; ++t) {
+      const int base = t * stride;
+      bool ok = true;
+      for (int k = 0; k < stride; ++k)
+        if (participating[base + k] && !s.is_ok[base + k]) { ok = false; break; }
+      std::fill_n(s.is_ok.begin() + base, stride, ok);
+    }
 
     // 2) Calculate raw (compressed) trialwise log-likelihoods
-    // DDM takes logs in place, so skipped trials start at 1; others start at log(1).
+    // Preserve the existing initial values for skipped trials.
     std::fill(s.ll_buf.begin(), s.ll_buf.end(), model == DDM ? 1.0 : 0.0);
 
     switch (model) {
     case MRI:
-      c_log_likelihood_MRI_white(s.pt_local, mri, s.mean_cols, y, n_choice_trials, s.ll_buf.data());
+      c_log_likelihood_MRI_white(s.pt_local, mri, s.mean_cols, y, n_choice_trials, s.ll_buf.data(), s.is_ok);
       break;
     case MRI_AR1:
-      c_log_likelihood_MRI_ar1(s.pt_local, mri, s.mean_cols, y, n_choice_trials, s.ll_buf.data());
+      c_log_likelihood_MRI_ar1(s.pt_local, mri, s.mean_cols, y, n_choice_trials, s.ll_buf.data(), s.is_ok);
       break;
     case ORDERED_PROBIT:
     case ORDERED_LOGIT:
       c_log_likelihood_ordered(s.pt_local, choice, idx_win, lR_ptr, n_rows, n_lR,
-                               s.cut_buf.data(), model == ORDERED_PROBIT, s.ll_buf.data());
+                               s.cut_buf.data(), model == ORDERED_PROBIT, s.ll_buf.data(), s.is_ok);
       break;
     case MULTINOMIAL_LOGIT:
-      c_log_likelihood_multinomial_logit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data());
+      c_log_likelihood_multinomial_logit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data(), s.is_ok);
       break;
     case MULTINOMIAL_PROBIT:
-      c_log_likelihood_multinomial_probit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data());
+      c_log_likelihood_multinomial_probit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data(), s.is_ok);
       break;
     case SSEXG:
     case SSRDEX:
-      ss_log_likelihood(s.ss, min_ll, s.ll_buf.data());
+      ss_log_likelihood(s.ss, min_ll, s.ll_buf.data(), s.is_ok);
       break;
     case CDM:
     case PSDM:
@@ -869,38 +861,37 @@ struct LikelihoodContext::Impl {
       if (model == CDM) {
         // Sub-type dispatch: CDM -> HSDM (R,R2,R3) -> SDM (R,R2) -> CDM (R only)
         if (R2s.size() && R3s.size() && keep_indices.size() >= 8)
-          c_dHSDM(rts, Rs, R2s, R3s, s.pars, participating, s.ll_buf.data(), n_choice_trials);
+          c_dHSDM(rts, Rs, R2s, R3s, s.pars, participating, s.ll_buf.data(), n_choice_trials, s.is_ok);
         else if (R2s.size() && keep_indices.size() >= 7)
-          c_dSDM(rts, Rs, R2s, s.pars, participating, s.ll_buf.data(), n_choice_trials);
-        else c_dCDM(rts, Rs, s.pars, participating, s.ll_buf.data(), n_choice_trials);
+          c_dSDM(rts, Rs, R2s, s.pars, participating, s.ll_buf.data(), n_choice_trials, s.is_ok);
+        else c_dCDM(rts, Rs, s.pars, participating, s.ll_buf.data(), n_choice_trials, s.is_ok);
       } else if (model == PSDM)
-        c_dPSDM(rts, Rs, s.pars, participating, s.ll_buf.data(), n_choice_trials);
-      else c_dPHSDM(rts, Rs, R2s, s.pars, participating, s.ll_buf.data(), n_choice_trials);
+        c_dPSDM(rts, Rs, s.pars, participating, s.ll_buf.data(), n_choice_trials, s.is_ok);
+      else c_dPHSDM(rts, Rs, R2s, s.pars, participating, s.ll_buf.data(), n_choice_trials, s.is_ok);
       break;
     case DDM:
-      c_log_likelihood_DDM(rts_ptr, Rs_ptr, s.pt_local, s.ddm_setup.spec, idx_all, s.ll_buf.data());
+      c_log_likelihood_DDM(rts_ptr, Rs_ptr, s.pt_local, setup.spec, idx_all, s.ll_buf.data(), s.is_ok);
       break;
     case RACE:
       // Re-fill row-wise likelihoods — skipped accumulators contribute 1.
       std::fill(s.ll_row.begin(), s.ll_row.end(), 1.0);
       c_log_likelihood_race(s.pt_local, setup, rts_ptr, idx_win, idx_los, n_lR,
-                            s.ll_row.data(), n_rows, s.ll_buf.data(), s.scratch);
+                            s.ll_row.data(), n_rows, s.ll_buf.data(), s.scratch, s.is_ok);
       break;
     }
 
     // 3) Handle truncation, censoring. Needs to be in this order!
     if (model == DDM || model == RACE) {
-      if (s.trunc.any()) s.trunc.calculate_normalization_constant();
+      if (s.trunc.any()) s.trunc.calculate_normalization_constant(s.is_ok);
       // Censoring needs the normalization constant and fills rows, doesn't add.
-      if (s.censor.any()) s.censor.fill_censored_rows(s.trunc, s.ll_buf, true);
+      if (s.censor.any()) s.censor.fill_censored_rows(s.trunc, s.is_ok, s.ll_buf, true);
       if (s.trunc.any())
         for (int t = 0; t < n_choice_trials; ++t) s.ll_buf[t] -= s.trunc.log_Z[t];
     }
 
     // 4) Handle not-ok parameter values (out of bound)
-    if (model != DDM) c_do_bound(s.pt_local, bound_specs, s.is_ok);
-    const bool continuous = model == MRI || model == MRI_AR1 || model == CDM || model == PSDM || model == PHSDM;
-    apply_bounds(s.is_ok, s.ll_buf.data(), n_choice_trials, continuous ? 1 : n_lR, min_ll, participating);
+    for (int t = 0; t < n_choice_trials; ++t)
+      if (!s.is_ok[t * stride]) s.ll_buf[t] = min_ll;
 
     // 5) Expand, clamp, sum. MRI has no expand.
     return (model == MRI || model == MRI_AR1) ?

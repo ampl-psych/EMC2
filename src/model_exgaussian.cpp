@@ -24,7 +24,8 @@ void dexg_pexg_fast(const double*           rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__    ll_row,
-                    RaceScratch&            scratch)
+                    RaceScratch&            scratch,
+                    const std::vector<int>& is_ok)
 {
   const double* __restrict__ mu    = &pt.base(0, spec.col_mu);
   const double* __restrict__ sigma = &pt.base(0, spec.col_sigma);
@@ -47,6 +48,7 @@ void dexg_pexg_fast(const double*           rt,
   int n_win = 0;
   for (int j = 0; j < (int)idx_win.size(); ++j) {
     const int i        = idx_win[j];
+    if (!is_ok[i]) continue;
     const double teff  = rt[i] - t0[i];
     if (teff <= 0.0) { ll_row[i] = 0.0; continue; }
 
@@ -81,6 +83,7 @@ void dexg_pexg_fast(const double*           rt,
   int n_los = 0;
   for (int j = 0; j < (int)idx_los.size(); ++j) {
     const int i        = idx_los[j];
+    if (!is_ok[i]) continue;
     const double teff  = rt[i] - t0[i];
     if (teff <= 0.0) { ll_row[i] = 1.0; continue; }   // S(t <= 0) = 1
 
@@ -129,7 +132,8 @@ void exg_survivor(const std::vector<int>&    idx,
                   const ParamTable&          pt,
                   const RaceSpec&            spec,
                   double* __restrict__       out,
-                  RaceScratch&               scratch)
+                  RaceScratch&               scratch,
+                  const std::vector<int>& is_ok)
 {
   const double* __restrict__ mu    = &pt.base(0, spec.col_mu);
   const double* __restrict__ sigma = &pt.base(0, spec.col_sigma);
@@ -148,6 +152,7 @@ void exg_survivor(const std::vector<int>&    idx,
   int n = 0;
   for (int j = 0; j < (int)idx.size(); ++j) {
     const int i       = idx[j];
+    if (!is_ok[i]) continue;
     const double teff = bound[i] - t0[i];
     if (teff <= 0.0) continue;  // S(t <= 0) = 1; leave out[i] at caller default
 
@@ -245,7 +250,8 @@ void exg_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out)
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok)
 {
   std::vector<double> mu_buf(n_acc), sigma_buf(n_acc),
   tau_buf(n_acc), t0_buf(n_acc);
@@ -253,6 +259,7 @@ void exg_survivor_with_response(const std::vector<int>&    idx,
   const int n = (int)idx.size();
   for (int j = 0; j < n; ++j) {
     const int base = idx[j];  // = trial * n_acc
+    if (!is_ok[base]) { out[j] = 0.0; continue; }
 
     for (int acc = 0; acc < n_acc; ++acc) {
       const int row  = base + acc;

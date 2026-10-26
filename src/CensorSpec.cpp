@@ -18,19 +18,21 @@ using namespace Rcpp;
 // 4. Fills S_upper in ll_trial
 // -----------------------------------------------------------------------------
 void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
+                                    const std::vector<int>& is_ok,
                                     std::vector<double>& ll_trial,
                                     const bool return_log = false) const
 {
   // Fill p_lower: S_k(LC - t0) for active LC rows, 1.0 elsewhere (default -- at t=0, S=1)
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
-  setup->fill_survivor(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch);
+  setup->fill_survivor(idx_L, LC, *pt, setup->spec, p_lower.data(), *scratch, is_ok);
 
   // Survivor implementations leave t <= t0 untouched, where S(t - t0) = 1.
   std::fill(p_upper.begin(), p_upper.end(), 1.0);
-  setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch);
+  setup->fill_survivor(idx_U, UC, *pt, setup->spec, p_upper.data(), *scratch, is_ok);
 
   // Lower censoring
   for (int row : idx_L_tr) {
+    if (!is_ok[row * n_acc]) continue;
     const int base = row * n_acc;
     double prod_LC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
@@ -43,6 +45,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
 
   // Upper censoring
   for(int row : idx_U_tr) {
+    if (!is_ok[row * n_acc]) continue;
     const int base = row * n_acc;
     double prod_UC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
@@ -55,6 +58,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
 
   // Both censoring -- doesn't need truncation
   for(int row : idx_B_tr) {
+    if (!is_ok[row * n_acc]) continue;
     const int base = row * n_acc;
     double prod_LC = 1.0, prod_UC = 1.0;
     for(int k = 0; k < n_acc; ++k) {
@@ -81,7 +85,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       hi_L[j] = LC[base];
     }
     setup->fill_survivor_with_response(idx_L_known, winner_L_known, lo_L, hi_L,
-                                       n_acc, *pt, setup->spec, out_L.data());
+                                       n_acc, *pt, setup->spec, out_L.data(), is_ok);
     for (int j = 0; j < n; ++j)
       ll_trial[idx_L_known[j] / n_acc] = out_L[j];
   }
@@ -96,7 +100,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       hi_U[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
     }
     setup->fill_survivor_with_response(idx_U_known, winner_U_known, lo_U, hi_U,
-                                       n_acc, *pt, setup->spec, out_U.data());
+                                       n_acc, *pt, setup->spec, out_U.data(), is_ok);
     for (int j = 0; j < n; ++j) {
       ll_trial[idx_U_known[j] / n_acc] = out_U[j];
     }
@@ -113,9 +117,9 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
       hi2_B[j] = (!trunc.UT.empty() && std::isfinite(trunc.UT[base])) ? trunc.UT[base] : CENS_UPPER_CAP;
     }
     setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo1_B, hi1_B,
-                                       n_acc, *pt, setup->spec, out1_B.data());
+                                       n_acc, *pt, setup->spec, out1_B.data(), is_ok);
     setup->fill_survivor_with_response(idx_B_known, winner_B_known, lo2_B, hi2_B,
-                                       n_acc, *pt, setup->spec, out2_B.data());
+                                       n_acc, *pt, setup->spec, out2_B.data(), is_ok);
     for (int j = 0; j < n; ++j)
       ll_trial[idx_B_known[j] / n_acc] = out1_B[j] + out2_B[j];
   }
@@ -130,8 +134,7 @@ void CensorSpec::fill_censored_rows(const TruncSpec& trunc,
     setup->fill_survivor_with_response(
         idx_silent, winner_silent,
         lo_silent, hi_silent,
-        n_acc, *pt, setup->spec, out_silent.data()
-    );
+        n_acc, *pt, setup->spec, out_silent.data(), is_ok);
     for (int j = 0; j < n; ++j) {
       const int trial = idx_silent[j] / n_acc;
       // ll_trial[trial] currently holds log(S_race(UC)) — need to undo log,

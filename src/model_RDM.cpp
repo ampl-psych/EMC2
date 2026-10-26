@@ -42,7 +42,8 @@ void drdm_prdm_fast(const double* rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__ ll_row,
-                    RaceScratch& scratch)
+                    RaceScratch& scratch,
+                    const std::vector<int>& is_ok)
 {
   // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
   const double* __restrict__ v  = &pt.base(0, spec.col_v);
@@ -79,6 +80,7 @@ void drdm_prdm_fast(const double* rt,
   int n_win_noA = 0, n_win_core = 0;
   for (int j = 0; j < n_win; ++j) {
     const int i       = idx_win[j];
+    if (!is_ok[i]) continue;
 
     // first guard against teff < 0 (non-decision time can't be > rt)
     const double teff = rt[i] - t0[i];
@@ -148,6 +150,7 @@ void drdm_prdm_fast(const double* rt,
   int n_los_noA = 0, n_los_core = 0;
   for (int j = 0; j < n_los; ++j) {
     const int i       = idx_los[j];
+    if (!is_ok[i]) continue;
 
     // first guard against teff < 0 (non-decision time can't be > rt)
     const double teff = rt[i] - t0[i];
@@ -223,7 +226,8 @@ void rdm_survivor(const std::vector<int>& idx,
                   const ParamTable& pt,
                   const RaceSpec& spec,
                   double* __restrict__ out,
-                  RaceScratch& scratch)
+                  RaceScratch& scratch,
+                  const std::vector<int>& is_ok)
 {
   const int n = (int)idx.size();
 
@@ -254,6 +258,7 @@ void rdm_survivor(const std::vector<int>& idx,
   int n_noA = 0, n_core = 0;
   for (int j = 0; j < n; ++j) {
     const int i        = idx[j];
+    if (!is_ok[i]) continue;
     const double teff  = bound[i] - t0[i];
     //if (teff <= 0.0) { out[i] = 1.0; continue; }  // S(t<=0) = 1, skip
     if (teff <= 0.0) { continue; }  // S(t<=0) = 1, skip but leave out untouched - reverts to default value
@@ -401,13 +406,15 @@ void rdm_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out)
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok)
 {
   std::vector<double> k_buf(n_acc), l_buf(n_acc), a_buf(n_acc), t0_buf(n_acc);
 
   const int n = (int)idx.size();
   for (int j = 0; j < n; ++j) {
     const int base = idx[j];  // = t * n_acc
+    if (!is_ok[base]) { out[j] = 0.0; continue; }
 
     // Gather and pre-scale parameters for all accumulators in this trial
     for (int acc = 0; acc < n_acc; ++acc) {

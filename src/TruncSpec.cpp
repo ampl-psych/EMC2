@@ -18,21 +18,22 @@ using namespace Rcpp;
 //    (used by CensorSpec::fill_censored_rows)
 // 4. Writes log(prod_LT - prod_UT) per trial into pre-allocated log_Z member
 // -----------------------------------------------------------------------------
-void TruncSpec::calculate_normalization_constant() const
+void TruncSpec::calculate_normalization_constant(const std::vector<int>& is_ok) const
 {
   // Fill p_lower: S_k(LT - t0) for active LT rows, 1.0 elsewhere (default)
   std::fill(p_lower.begin(), p_lower.end(), 1.0);
   std::fill(S_lower.begin(), S_lower.end(), 1.0);
-  setup->fill_survivor(idx_LT, LT, *pt, setup->spec, p_lower.data(), *scratch);
+  setup->fill_survivor(idx_LT, LT, *pt, setup->spec, p_lower.data(), *scratch, is_ok);
 
   // Fill p_upper: S_k(UT - t0) for active UT rows, 0.0 elsewhere (default)
   // Default 0.0 because S(Inf) = 0 — contributes nothing to the product difference
   std::fill(p_upper.begin(), p_upper.end(), 0.0);
   std::fill(S_upper.begin(), S_upper.end(), 0.0);
-  setup->fill_survivor(idx_UT, UT, *pt, setup->spec, p_upper.data(), *scratch);
+  setup->fill_survivor(idx_UT, UT, *pt, setup->spec, p_upper.data(), *scratch, is_ok);
 
   for (int t = 0; t < n_trials; ++t) {
     const int base = t * n_acc;
+    if (!is_ok[base]) { log_Z[t] = 1.0; continue; }
     double prod_LT = 1.0, prod_UT = 1.0;
     bool any_participating = false;
     for (int k = 0; k < n_acc; ++k) {
@@ -123,11 +124,11 @@ TruncSpec make_trunc_spec(const DataFrame& data,
       const int row = t * n_acc + k;
       if (active_LT) {
         trunc.LT[row] = lt;
-        trunc.idx_LT.push_back(row);
+        if (participating[row]) trunc.idx_LT.push_back(row);
       }
       if (active_UT) {
         trunc.UT[row] = ut;
-        trunc.idx_UT.push_back(row);
+        if (participating[row]) trunc.idx_UT.push_back(row);
       }
     }
   }

@@ -392,16 +392,18 @@ inline double observed_st_lp(const SSSpec& s, const ParamTable& pt, int trial) {
 } // namespace ssf
 
 // ---------------------------------------------------------------------------
-// Per-particle likelihood: fills ll_buf[trial] (compressed trials). Bounds,
-// clamping, expansion and summation are done by the caller (apply_bounds +
-// expand_clamp_sum), as for the race models. Thread-safe given a per-thread
+// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
+// checks bounds first and applies penalties, clamping, expansion and summation
+// afterwards, as for the race models. Thread-safe given a per-thread
 // SSSpec (rebind) and ParamTable.
 // ---------------------------------------------------------------------------
-inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf) {
+inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
+                              const std::vector<int>& is_ok) {
   const ParamTable& pt = *s.pt;
   s.memo.clear();
   s.memo_keys.clear();
   for (int t = 0; t < s.n_trials; ++t) {
+    if (!is_ok[s.base_row[t]]) continue;
     double v;
     switch (s.kind[t]) {
       case SSKind::ObsGo:

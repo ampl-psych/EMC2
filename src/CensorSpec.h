@@ -67,6 +67,7 @@ struct CensorSpec {
   }
 
   void fill_censored_rows(const TruncSpec& trunc,
+                          const std::vector<int>& is_ok,
                           std::vector<double>& ll_trial,
                           const bool return_log) const;
 

@@ -113,7 +113,8 @@ void dlnr_plnr_fast(const double* rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__ ll_row,
-                    RaceScratch& scratch)
+                    RaceScratch& scratch,
+                    const std::vector<int>& is_ok)
 {
   const double* __restrict__ m  = &pt.base(0, spec.col_m);
   const double* __restrict__ s  = &pt.base(0, spec.col_s);
@@ -137,7 +138,7 @@ void dlnr_plnr_fast(const double* rt,
 
   // --- Winners: compute (contiguous — vectorisable) ---
   for (int j = 0; j < n_win; ++j) {
-    if (std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
+    if (!is_ok[idx_win[j]] || std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
       sc_out[j] = 0.0;
       continue;
     }
@@ -158,7 +159,7 @@ void dlnr_plnr_fast(const double* rt,
 
   // --- Losers: compute (contiguous — vectorisable) ---
   for (int j = 0; j < n_los; ++j) {
-    if (std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
+    if (!is_ok[idx_los[j]] || std::isnan(sc_m[j]) || sc_t_eff[j] <= 0.0) {
       sc_out[j] = 0.0;
       continue;
     }
@@ -235,7 +236,8 @@ void lnr_survivor(const std::vector<int>&     idx,
                   const ParamTable&           pt,
                   const RaceSpec&             spec,
                   double* __restrict__        out,
-                  RaceScratch&                scratch)
+                  RaceScratch&                scratch,
+                  const std::vector<int>& is_ok)
 {
 
   const double* __restrict__ bound_ = bound.data();
@@ -253,6 +255,7 @@ void lnr_survivor(const std::vector<int>&     idx,
   int n = 0;
   for (int j = 0; j < (int)idx.size(); ++j) {
     const int i       = idx[j];
+    if (!is_ok[i]) continue;
     const double teff = bound_[i] - t0_[i];
     // if (teff <= 0.0) { out[i] = 1.0; continue; }  // S(t<=0) = 1, no CDF call needed
     if (teff <= 0.0) { continue; }  // Impossible parameter set - leave untouched, fall back to default value in out
@@ -358,13 +361,15 @@ void lnr_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out)
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok)
 {
   std::vector<double> m_buf(n_acc), s_buf(n_acc), t0_buf(n_acc);
 
   const int n = (int)idx.size();
   for (int j = 0; j < n; ++j) {
     const int base = idx[j];  // = t * n_acc
+    if (!is_ok[base]) { out[j] = 0.0; continue; }
 
     for (int acc = 0; acc < n_acc; ++acc) {
       const int row  = base + acc;

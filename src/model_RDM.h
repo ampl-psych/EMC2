@@ -34,14 +34,16 @@ void drdm_prdm_fast(const double*           rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__    ll_row,
-                    RaceScratch&            scratch);
+                    RaceScratch&            scratch,
+                    const std::vector<int>& is_ok);
 
 void rdm_survivor(const std::vector<int>& idx,
                   const std::vector<double>& bound,
                   const ParamTable& pt,
                   const RaceSpec& spec,
                   double* __restrict__ out,
-                  RaceScratch& scratch);
+                  RaceScratch& scratch,
+                  const std::vector<int>& is_ok);
 
 void rdm_survivor_with_response(const std::vector<int>&    idx,
                                 const std::vector<int>&    winner,
@@ -50,6 +52,7 @@ void rdm_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out);
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok);
 
 #endif // rdm_h

@@ -545,7 +545,8 @@ void fill_ddm(const double* rt_ptr,
               const ParamTable& pt,
               const RaceSpec& spec,
               const std::vector<int>& idx_all,
-              double* __restrict__ ll_row)
+              double* __restrict__ ll_row,
+              const std::vector<int>& is_ok)
 {
   // const int*    __restrict__ R_ptr  = R.begin();
 
@@ -565,6 +566,7 @@ void fill_ddm(const double* rt_ptr,
 
   for (int j = 0; j < n; ++j) {
     const int i       = idx_all[j];
+    if (!is_ok[i]) continue;
     const double pm   = (R_ptr[i] == 1) ? -1.0 : 1.0;
     const double teff = rt_ptr[i] - t0[i];
 
@@ -635,7 +637,8 @@ void ddm_survivor(const std::vector<int>&     idx,
                   const ParamTable&           pt,
                   const RaceSpec&             spec,
                   double* __restrict__        out,
-                  RaceScratch&                scratch)
+                  RaceScratch&                scratch,
+                  const std::vector<int>& is_ok)
 {
   const double* __restrict__ bd  = bound.data();
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
@@ -649,6 +652,7 @@ void ddm_survivor(const std::vector<int>&     idx,
 
   for (int j = 0; j < (int)idx.size(); ++j) {
     const int i = idx[j];
+    if (!is_ok[i]) continue;
 
     if (bd[i] - t0[i] <= 0.0) continue;
 
@@ -679,7 +683,8 @@ void ddm_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out)
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok)
 {
   // DDM has exactly 2 boundaries: winner=0 → upper (R=1), winner=1 → lower (R=2).
   // P(winner hits first in [lo, hi]) = CDF_winner(hi) - CDF_winner(lo).
@@ -698,6 +703,7 @@ void ddm_survivor_with_response(const std::vector<int>&    idx,
   const int n = (int)idx.size();
   for (int j = 0; j < n; ++j) {
     const int    i  = idx[j];           // base row = trial * n_acc, n_acc is always 1 for DDM
+    if (!is_ok[i]) { out[j] = 0.0; continue; }
     const int    R  = winner[j] + 1;    // 0-based winner → 1-based R (1=upper, 2=lower)
     const double lo = lower[j];
     const double hi = upper[j];

@@ -60,7 +60,8 @@ void dlba_plba_fast(const double* rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__ ll_row,
-                    RaceScratch& scratch)
+                    RaceScratch& scratch,
+                    const std::vector<int>& is_ok)
 {
   // Note that for the losers, the *SURVIVAL* probability is filled, *NOT* the CDF
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
@@ -97,6 +98,7 @@ void dlba_plba_fast(const double* rt,
   int n_win_core = 0, n_win_noA = 0;
   for (int j = 0; j < n_win; ++j) {
     const int i       = idx_win[j];
+    if (!is_ok[i]) continue;
     const double teff = rt[i] - t0[i];
     if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 0.0; continue; }
     if (A[i] > LBA_A_ASYMPTOTIC) {
@@ -149,6 +151,7 @@ void dlba_plba_fast(const double* rt,
   int n_los_core = 0, n_los_noA = 0;
   for (int j = 0; j < n_los; ++j) {
     const int i       = idx_los[j];
+    if (!is_ok[i]) continue;
     const double teff = rt[i] - t0[i];
     if (std::isnan(v[i]) || teff <= 0.0) { ll_row[i] = 1.0; continue; }
     if (A[i] > LBA_A_ASYMPTOTIC) {
@@ -288,7 +291,8 @@ void lba_survivor(const std::vector<int>&    idx,
                   const ParamTable&           pt,
                   const RaceSpec&             spec,
                   double* __restrict__        out,
-                  RaceScratch&                scratch)
+                  RaceScratch&                scratch,
+                  const std::vector<int>& is_ok)
 {
   const double* __restrict__ bound_ = bound.data();
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
@@ -320,6 +324,7 @@ void lba_survivor(const std::vector<int>&    idx,
   int n_core = 0, n_noA = 0;
   for (int j = 0; j < n; ++j) {
     const int i       = idx[j];
+    if (!is_ok[i]) continue;
     const double teff = bound_[i] - t0[i];
     // if (std::isnan(v[i]) || teff <= 0.0) { out[i] = 1.0; continue; }
     if (std::isnan(v[i]) || teff <= 0.0) { continue; }  // skip and leave out untouched - reverts to default value
@@ -452,7 +457,8 @@ void lba_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out)
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok)
 {
   std::vector<double> v_buf(n_acc), sv_buf(n_acc), B_buf(n_acc),
   A_buf(n_acc), t0_buf(n_acc);
@@ -460,6 +466,7 @@ void lba_survivor_with_response(const std::vector<int>&    idx,
   const int n = (int)idx.size();
   for (int j = 0; j < n; ++j) {
     const int base = idx[j];  // = t * n_acc
+    if (!is_ok[base]) { out[j] = 0.0; continue; }
 
     for (int acc = 0; acc < n_acc; ++acc) {
       const int row = base + acc;

@@ -71,7 +71,8 @@ void dlba_plba_fast(const double*           rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__    ll_row,
-                    RaceScratch&            scratch);
+                    RaceScratch&            scratch,
+                    const std::vector<int>& is_ok);
 
 void plba_fast(const Rcpp::NumericVector& rts,
                const ParamTable& pt,
@@ -85,7 +86,8 @@ void lba_survivor(const std::vector<int>& idx,
                   const ParamTable& pt,
                   const RaceSpec& spec,
                   double* __restrict__ out,
-                  RaceScratch& scratch);
+                  RaceScratch& scratch,
+                  const std::vector<int>& is_ok);
 
 void lba_survivor_with_response(const std::vector<int>&    idx,
                                 const std::vector<int>&    winner,
@@ -94,6 +96,7 @@ void lba_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out);
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok);
 
 #endif // model_LBA_h

@@ -17,7 +17,8 @@ using race_combined_fn = void(*)(const double*           rts_ptr,
                                  const std::vector<int>& idx_win,
                                  const std::vector<int>& idx_los,
                                  double* __restrict__    raw,
-                                 RaceScratch&            scratch);
+                                 RaceScratch&            scratch,
+                                 const std::vector<int>& is_ok);
 
 // Survivor function, needed for censoring & truncation
 using survivor_fn = void(*)(const std::vector<int>& idx,
@@ -25,7 +26,8 @@ using survivor_fn = void(*)(const std::vector<int>& idx,
                             const ParamTable& pt,
                             const RaceSpec& spec,
                             double* __restrict__ out,
-                            RaceScratch& scratch);
+                            RaceScratch& scratch,
+                            const std::vector<int>& is_ok);
 
 // Survivor function with known responses, for censoring  (& GNG tasks)
 using survivor_with_response_fn = void(*)(const std::vector<int>&    idx,
@@ -35,7 +37,8 @@ using survivor_with_response_fn = void(*)(const std::vector<int>&    idx,
                                           int                        n_acc,
                                           const ParamTable&          pt,
                                           const RaceSpec&            spec,
-                                          double* __restrict__       out);
+                                          double* __restrict__       out,
+                                          const std::vector<int>& is_ok);
 
 
 // ---------------------------------------------------------------------------

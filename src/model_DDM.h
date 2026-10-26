@@ -38,7 +38,8 @@ void fill_ddm(const double* rts,
               const ParamTable& pt,
               const RaceSpec& spec,
               const std::vector<int>& idx_all,
-              double* __restrict__ ll_row);
+              double* __restrict__ ll_row,
+              const std::vector<int>& is_ok);
 
 // Survival function for the DDM
 void ddm_survivor(const std::vector<int>& idx,
@@ -46,7 +47,8 @@ void ddm_survivor(const std::vector<int>& idx,
                   const ParamTable& pt,
                   const RaceSpec& spec,
                   double* __restrict__ out,
-                  RaceScratch& scratch);
+                  RaceScratch& scratch,
+                  const std::vector<int>& is_ok);
 
 void ddm_survivor_with_response(const std::vector<int>&    idx,
                                 const std::vector<int>&    winner,
@@ -55,7 +57,8 @@ void ddm_survivor_with_response(const std::vector<int>&    idx,
                                 int                        n_acc,
                                 const ParamTable&          pt,
                                 const RaceSpec&            spec,
-                                double* __restrict__       out);
+                                double* __restrict__       out,
+                                const std::vector<int>& is_ok);
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars);
 

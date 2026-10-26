@@ -44,7 +44,7 @@ struct TruncSpec {
 
   // Fills p_lower / p_upper, reduces across accumulators, returns log Z per trial
   // (length n_trials, ready to subtract from ll_trial)
-  void calculate_normalization_constant() const;
+  void calculate_normalization_constant(const std::vector<int>& is_ok) const;
 
   // Update paramtable for multithreading
   void rebind(ParamTable& pt, RaceScratch& scratch) {
