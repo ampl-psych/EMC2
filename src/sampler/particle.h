@@ -19,6 +19,17 @@ class Gaussian {
   double log_constant_ = 0;
 };
 
+class GaussianMixture {
+ public:
+  GaussianMixture(arma::mat means, const std::vector<arma::mat>& covariances);
+  arma::mat draw(Random& rng, int n, double scale) const;
+  arma::vec log_density(const arma::mat& x, double scale) const;
+ private:
+  arma::mat means_;
+  arma::vec weights_;
+  std::vector<Gaussian> kernels_;
+};
+
 class ParticleSampler {
  public:
   ParticleSampler(Random& rng, const Rcpp::List& sampler, const Rcpp::List& tune,
@@ -43,6 +54,7 @@ class ParticleSampler {
     arma::vec chain_mean, efficient_mean, likelihood_linear;
     arma::mat likelihood_precision;
     std::vector<Gaussian> chain, efficient;
+    std::vector<GaussianMixture> history;
     std::vector<Gaussian> conditional, local;
     std::vector<bool> has_local;
     arma::mat conditional_covariance;

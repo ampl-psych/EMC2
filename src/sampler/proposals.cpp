@@ -228,6 +228,34 @@ Rcpp::List chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha,
   Rcpp::List draw_names = alpha.attr("dimnames");
   SEXP par_names = draw_names.size() ? draw_names[0] : R_NilValue;
   const int count = static_cast<int>(std::nearbyint(draws.n_slices / 2.0));
+  // Keep one Gaussian per chain for the independent history proposal.
+  // Singular histories use the same covariance fallback as the pooled proposal.
+  const arma::uword per_chain = draws.n_slices / emc.size();
+  const bool use_history = present(first, "history_proposals") && Rcpp::as<bool>(first["history_proposals"]);
+  Rcpp::List history(use_history ? n : 0);
+  for (arma::uword s = 0; s < history.size(); ++s) {
+    arma::mat means(p, emc.size());
+    Rcpp::List covariances(emc.size());
+    for (R_xlen_t ch = 0; ch < emc.size(); ++ch) {
+      arma::mat x(p, per_chain);
+      arma::vec weights(per_chain);
+      for (arma::uword i = 0; i < per_chain; ++i) {
+        const arma::uword draw = ch * per_chain + i;
+        x.col(i) = draws.slice(draw).col(s);
+        weights[i] = likelihood(s, draw);
+      }
+      weights = arma::exp(weights - weights.max());
+      means.col(ch) = x * (weights / arma::accu(weights));
+      arma::mat covariance = arma::cov(x.t());
+      if (do_block)
+        for (arma::uword k = 0; k < p; ++k)
+          for (arma::uword l = 0; l < p; ++l)
+            if (components[k] != components[l]) covariance(k, l) = 0;
+      if (positive_definite(covariance)) covariances[ch] = covariance;
+    }
+    history[s] = Rcpp::List::create(Rcpp::Named("mu") = means,
+                                  Rcpp::Named("var") = covariances);
+  }
   Rcpp::List out = shallow(emc);
   for (R_xlen_t ch = 0; ch < emc.size(); ++ch) {
     Rcpp::List chain = shallow(emc[ch]);
@@ -283,10 +311,12 @@ Rcpp::List chain_proposals(Rcpp::List emc, Rcpp::NumericVector alpha,
     SEXP old_prop_var = chain.attr("prop_var");
     const double ratio = Rf_isNull(old_prop_var) ? 2 :
       std::sqrt(Rcpp::as<double>(old_prop_var) / prop_var);
-    const bool scaled = stage == "adapt" && Rcpp::as<std::string>(chain["type"]) != "single";
+    const bool scaled = (stage == "burn" || stage == "adapt") &&
+      Rcpp::as<std::string>(chain["type"]) != "single";
     if (stage != "sample" && !scaled) rescale_settings(chain, ratio);
     chain["chains_var"] = covariances;
     chain["chains_mu"] = means;
+    if (use_history) chain["history"] = history;
     Rf_copyMostAttrib(emc[ch], chain);
     chain.attr("prop_var") = prop_var;
     out[ch] = chain;

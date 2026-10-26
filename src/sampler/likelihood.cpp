@@ -310,7 +310,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
       std::copy_n(values + static_cast<size_t>(history[chain][i]) * p * n + s * p,
                   p, draws[s].colptr(chain * window + i));
   }
-  arma::mat group_precision, group_mean;
+  arma::mat group_precision, group_mean, group_covariance;
   bool group = Rcpp::as<std::string>(first["type"]) == "standard" && N >= 100;
   if (group) {
     try {
@@ -344,6 +344,7 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
       }
       // Group precision is the inverse of the average covariance.
       covariance /= N; group_mean /= chains;
+      group_covariance = covariance;
       // Use draw-based curvature only when all marginal precisions have CV < .5.
       const arma::vec cv = arma::sqrt(precision_m2 / (N - 1)) / precision_mean;
       group = cv.is_finite() && cv.max() < .5 && arma::inv_sympd(group_precision, covariance) &&
@@ -352,8 +353,8 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
   }
   // Finite differences remain available when group history is not stable enough.
   Likelihoods likelihood(ll_inputs, n_cores);
-  // Learn an affine velocity b + G z with the other proposals. The resulting
-  // direction is shared by the chains and stays fixed during sampling.
+  // Learn affine velocities b + G z from this chain's history. They stay fixed
+  // during sampling, along with the other proposal geometry.
   const arma::ivec groups = Rf_isNull(field(first, "par_group")) ? arma::ivec() :
     Rcpp::as<arma::ivec>(first["par_group"]);
   arma::mat centres(p, n);
@@ -380,22 +381,44 @@ Rcpp::List likelihood_precision(Rcpp::List emc, Rcpp::IntegerVector history_idx,
   }
   if (affine) {
     arma::mat information(p * (p + 1), p * (p + 1), arma::fill::zeros);
+    arma::mat positions(p + 1, p + 1, arma::fill::zeros);
     for (int s = 0; s < n; ++s) if (!scores[s].is_empty()) {
       arma::vec position(p + 1); position[0] = 1;
       position.tail(p) = (centres.col(s) - centre) / scale;
       information += arma::kron(position * position.t(), scores[s]);
+      positions += position * position.t();
     }
+    auto generator = [&](const arma::vec& field) {
+      const arma::mat velocity = arma::reshape(field, p, p + 1);
+      arma::mat out(p + 1, p + 1, arma::fill::zeros);
+      out.submat(0, 0, p - 1, p - 1) = arma::diagmat(scale) *
+        velocity.cols(1, p) * arma::diagmat(1 / scale);
+      out.submat(0, p, p - 1, p) = scale % velocity.col(0) -
+        out.submat(0, 0, p - 1, p - 1) * centre;
+      return arma::mat(out / arma::abs(out).max());
+    };
     arma::vec eigenvalues;
     arma::mat eigenvectors;
     if (information.is_finite() && arma::eig_sym(eigenvalues, eigenvectors, information)) {
-      const arma::mat velocity = arma::reshape(eigenvectors.col(0), p, p + 1);
-      arma::mat generator(p + 1, p + 1, arma::fill::zeros);
-      generator.submat(0, 0, p - 1, p - 1) = arma::diagmat(scale) *
-        velocity.cols(1, p) * arma::diagmat(1 / scale);
-      generator.submat(0, p, p - 1, p) = scale % velocity.col(0) -
-        generator.submat(0, 0, p - 1, p - 1) * centre;
-      generator /= arma::abs(generator).max();
-      result.attr("affine_generator") = Rcpp::wrap(generator);
+      Rcpp::List fields = Rcpp::List::create(generator(eigenvectors.col(0)));
+      // Retain fields whose likelihood curvature is weaker than the group
+      // precision. Whiten the field norm so nearly constant predictors do not
+      // acquire an artificially small information eigenvalue.
+      arma::mat precision, root;
+      if (!group_covariance.is_empty() && arma::inv_sympd(precision, group_covariance) &&
+          arma::chol(root, arma::kron(positions, arma::diagmat(scale) * precision * arma::diagmat(scale)))) {
+        const arma::mat inverse_root = arma::inv(arma::trimatu(root));
+        const arma::mat whitened = inverse_root.t() * information * inverse_root;
+        if (arma::eig_sym(eigenvalues, eigenvectors, arma::symmatu(whitened))) {
+          const arma::uvec weak = arma::find(eigenvalues < 1);
+          if (weak.n_elem > 1) {
+            fields = Rcpp::List(weak.n_elem);
+            for (arma::uword k = 0; k < weak.n_elem; ++k)
+              fields[k] = Rcpp::wrap(generator(inverse_root * eigenvectors.col(weak[k])));
+          }
+        }
+      }
+      result.attr("affine_generators") = fields;
     }
   }
   return result;

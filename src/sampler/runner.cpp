@@ -104,13 +104,17 @@ struct Population {
 class JointMoves {
   Rcpp::List settings;
   arma::vec step, loc, sum_step, sum_loc, mean, curvature, shift;
-  arma::mat directions, prior_directions;
+  arma::mat directions, prior_directions, prior_root;
   std::vector<arma::mat> proposals;
   std::vector<arma::vec> values;
   int uses;
   bool do_location;
-  arma::mat affine_generator, mean_precision, spread_generator;
-  arma::vec ridge_coordinate;
+  struct Flow {
+    arma::mat affine, spread;
+    arma::vec coordinate;
+  };
+  std::vector<Flow> flows;
+  arma::mat mean_precision;
   double spread_step = 0;
   double affine_step = .2, group_v = 2;
  public:
@@ -132,11 +136,12 @@ class JointMoves {
     arma::mat covariance(p, p, arma::fill::zeros);
     if (variance.hasAttribute("dim")) covariance = Rcpp::as<arma::mat>(variance);
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
+    prior_root = arma::chol(covariance, "lower");
     // Use the saved directions throughout a sampling stage. Otherwise estimate
     // curvature in prior-standardised coordinates and shrink the stiff directions.
     if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
     else {
-      const arma::mat root = arma::chol(covariance, "lower");
+      const arma::mat& root = prior_root;
       arma::mat precision(p, p, arma::fill::zeros);
       if (present(tune, "lik_prec")) {
         Rcpp::List likelihood = tune["lik_prec"];
@@ -161,40 +166,52 @@ class JointMoves {
         for (int j = 0; j < p; ++j) precision(j, j) = inverse[j % inverse.size()];
       }
     } else precision = group_inverse(covariance);
+    mean_precision = precision;
     // Cache the linear/quadratic terms of the normal mean-prior ratio.
     prior_directions = precision * directions;
     curvature = arma::sum(directions % prior_directions, 0).t();
     const Rcpp::List likelihood = present(tune, "lik_prec") ? Rcpp::as<Rcpp::List>(tune["lik_prec"]) : Rcpp::List();
-    SEXP generator = likelihood.attr("affine_generator");
-    if (!Rf_isNull(generator)) {
-      affine_generator = Rcpp::as<arma::mat>(generator);
+    SEXP fields = likelihood.attr("affine_generators");
+    Rcpp::List generators = Rf_isNull(fields) ? Rcpp::List() : Rcpp::List(fields);
+    if (generators.size()) {
       if (present(init, "affine_step")) affine_step = Rcpp::as<double>(init["affine_step"]);
       group_v = Rcpp::as<double>(prior["v"]);
-      mean_precision = precision;
-      const arma::vec b = affine_generator.submat(0, p, p - 1, p);
-      if (arma::dot(b, b) > 0) {
-        spread_step = present(init, "spread_step") ? Rcpp::as<double>(init["spread_step"]) : .2;
-        spread_generator = affine_generator;
-        ridge_coordinate = b / arma::dot(b, b);
-        // Enforce c' G=0, c' b=1: the learned flow then advances c' alpha by t.
-        spread_generator.submat(0, 0, p - 1, p - 1) -= b *
-          (ridge_coordinate.t() * affine_generator.submat(0, 0, p - 1, p - 1));
+      for (SEXP field : generators) {
+        Flow flow;
+        flow.affine = Rcpp::as<arma::mat>(field);
+        const arma::vec b = flow.affine.submat(0, p, p - 1, p);
+        if (arma::dot(b, b) > 0) {
+          spread_step = present(init, "spread_step") ? Rcpp::as<double>(init["spread_step"]) : .2;
+          flow.spread = flow.affine;
+          flow.coordinate = b / arma::dot(b, b);
+          // Enforce c' G=0, c' b=1: the learned flow then advances c' alpha by t.
+          flow.spread.submat(0, 0, p - 1, p - 1) -= b *
+            (flow.coordinate.t() * flow.affine.submat(0, 0, p - 1, p - 1));
+        }
+        flows.push_back(std::move(flow));
       }
     }
   }
   void draw(Random& rng, Population& pop, arma::mat& alpha, arma::vec& ll, Likelihoods& likelihood, bool frozen) {
     const int p = pop.state.tvar.n_rows, n = alpha.n_cols;
     arma::vec accepted(p, arma::fill::zeros), accepted_loc(p, arma::fill::zeros);
-    for (int k = 0; k < (do_location ? 2 * p : p); ++k) {
+    for (int k = 0; k < (do_location ? 2 * p + 1 : p); ++k) {
       const bool scale = k < p;
-      const int j = k % p;
-      const double delta = rng.rnorm(0, scale ? step[j] : loc[j]);
+      const bool coordinate = k == 2 * p;
+      const int j = coordinate ? std::min(p - 1, static_cast<int>(rng.runif(0, p))) : k % p;
+      const double delta = rng.rnorm(0, coordinate ? 1 : scale ? step[j] : loc[j]);
       const double factor = scale ? std::exp(delta) : 1;
       GroupState proposed;
       double lp = 0;
       if (scale) {
         proposed = pop.state;
         lp = pop.main.affine(proposed, j, delta, 0);
+      } else if (coordinate) {
+        // A prior-scale coordinate can cross flat tails missed by local curvature.
+        // Translating alpha and mu together leaves their group density unchanged.
+        shift = delta * prior_root.col(j);
+        lp = -arma::dot(shift, mean_precision * (pop.state.tmu - mean)) -
+          .5 * arma::dot(shift, mean_precision * shift);
       } else {
         // Translating alpha and mu equally leaves the conditional group density
         // unchanged. Only the mean prior and subject likelihoods enter the ratio.
@@ -222,87 +239,95 @@ class JointMoves {
           alpha.each_col() += shift;
           pop.state.tmu += shift;
           pop.state.subj_mu.each_col() += shift;
-          accepted_loc[j] = 1;
+          if (!coordinate) accepted_loc[j] = 1;
         }
       }
     }
-    // Follow the learned affine flow, moving subjects and group parameters together.
-    if (!affine_generator.is_empty()) {
-      const double delta = rng.rnorm(0, affine_step);
-      arma::mat flow;
-      bool accept = false;
-      if (arma::expmat(flow, delta * affine_generator)) {
-        const arma::mat A = flow.submat(0, 0, p - 1, p - 1);
-        const arma::vec b = flow.submat(0, p, p - 1, p);
-        const double logdet = delta * arma::trace(affine_generator);
-        GroupState proposed = pop.state;
-        proposed.tmu = A * pop.state.tmu + b;
-        proposed.subj_mu = A * pop.state.subj_mu;
-        proposed.subj_mu.each_col() += b;
-        proposed.tvar = A * pop.state.tvar * A.t();
-        const bool valid = arma::inv_sympd(proposed.tvinv, proposed.tvar);
-        const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
-        // Subject normal densities cancel the subject Jacobian. The remaining
-        // Jacobian for (mu, Sigma) is |A|^(p+2). Half-t auxiliaries stay fixed.
-        double lr = valid ? (2 - group_v - p) * logdet - group_v *
-          arma::dot(1 / pop.state.a_half, proposed.tvinv.diag() - pop.state.tvinv.diag()) -
-          .5 * (arma::dot(new_mean, mean_precision * new_mean) -
-                arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
-        for (int s = 0; s < n; ++s) proposals[s] = (A * alpha.col(s) + b).t();
-        likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
-        for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
-        accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
-        if (accept) {
-          for (int s = 0; s < n; ++s) { alpha.col(s) = proposals[s].row(0).t(); ll[s] = values[s][0]; }
-          pop.state = std::move(proposed);
-        }
-      }
-      if (!frozen) affine_step *= std::exp(.1 * (accept - .3));
-    }
-    // Stretch participant positions along the learned flow about their centroid.
-    // Integrate Sigma out of the acceptance ratio, then redraw it on acceptance.
-    if (spread_step > 0) {
-      const double delta = rng.rnorm(0, spread_step), stretch = std::expm1(delta);
-      const arma::vec centre = arma::mean(alpha, 1);
-      arma::mat next_alpha(p, n);
-      bool valid = true, accept = false;
-      for (int s = 0; s < n; ++s) {
-        const double t = stretch * arma::dot(ridge_coordinate, alpha.col(s) - centre);
-        arma::vec point(p + 1); point.head(p) = alpha.col(s); point[p] = 1;
+    // Choose from the cached weak fields independently of the current state.
+    // Each field keeps the same exact joint updates and likelihood cost.
+    if (!flows.empty()) {
+      const Flow& selected = flows[flows.size() == 1 ? 0 : static_cast<size_t>(rng.runif(0, flows.size()))];
+      const arma::mat& affine_generator = selected.affine;
+      const arma::mat& spread_generator = selected.spread;
+      const arma::vec& ridge_coordinate = selected.coordinate;
+      // Follow the learned affine flow, moving subjects and group parameters together.
+      {
+        const double delta = rng.rnorm(0, affine_step);
         arma::mat flow;
-        if (!arma::expmat(flow, t * spread_generator)) { valid = false; break; }
-        point = flow * point;
-        next_alpha.col(s) = point.head(p);
-        proposals[s] = next_alpha.col(s).t();
-      }
-      if (valid) {
-        GroupState proposed = pop.state;
-        const arma::vec change = arma::mean(next_alpha, 1) - centre;
-        proposed.tmu += change; proposed.subj_mu.each_col() += change;
-        const arma::mat residual = alpha - pop.state.subj_mu;
-        const arma::mat next_residual = next_alpha - proposed.subj_mu;
-        arma::mat old_scatter = residual * residual.t(), new_scatter = next_residual * next_residual.t();
-        old_scatter.diag() += 2 * group_v / pop.state.a_half;
-        new_scatter.diag() += 2 * group_v / pop.state.a_half;
-        double old_det, new_det;
-        arma::log_det_sympd(old_det, old_scatter);
-        valid = arma::log_det_sympd(new_det, new_scatter);
-        const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
-        // The centroid is fixed in the flow coordinate: n-1 coordinates stretch.
-        double lr = valid ? (n - 1) * delta - .5 * (group_v + p - 1 + n) * (new_det - old_det) -
-          .5 * (arma::dot(new_mean, mean_precision * new_mean) -
-                arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
-        likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
-        for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
-        accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
-        if (accept) {
-          proposed.tvar = group_inverse_wishart(rng, group_v + p - 1 + n, new_scatter);
-          proposed.tvinv = group_inverse(proposed.tvar);
-          for (int s = 0; s < n; ++s) ll[s] = values[s][0];
-          alpha = std::move(next_alpha); pop.state = std::move(proposed);
+        bool accept = false;
+        if (arma::expmat(flow, delta * affine_generator)) {
+          const arma::mat A = flow.submat(0, 0, p - 1, p - 1);
+          const arma::vec b = flow.submat(0, p, p - 1, p);
+          const double logdet = delta * arma::trace(affine_generator);
+          GroupState proposed = pop.state;
+          proposed.tmu = A * pop.state.tmu + b;
+          proposed.subj_mu = A * pop.state.subj_mu;
+          proposed.subj_mu.each_col() += b;
+          proposed.tvar = A * pop.state.tvar * A.t();
+          const bool valid = arma::inv_sympd(proposed.tvinv, proposed.tvar);
+          const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
+          // Subject normal densities cancel the subject Jacobian. The remaining
+          // Jacobian for (mu, Sigma) is |A|^(p+2). Half-t auxiliaries stay fixed.
+          double lr = valid ? (2 - group_v - p) * logdet - group_v *
+            arma::dot(1 / pop.state.a_half, proposed.tvinv.diag() - pop.state.tvinv.diag()) -
+            .5 * (arma::dot(new_mean, mean_precision * new_mean) -
+                  arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
+          for (int s = 0; s < n; ++s) proposals[s] = (A * alpha.col(s) + b).t();
+          likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
+          for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
+          accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
+          if (accept) {
+            for (int s = 0; s < n; ++s) { alpha.col(s) = proposals[s].row(0).t(); ll[s] = values[s][0]; }
+            pop.state = std::move(proposed);
+          }
         }
+        if (!frozen) affine_step *= std::exp(.1 * (accept - .3));
       }
-      if (!frozen) spread_step *= std::exp(.1 * (accept - .3));
+      // Stretch participant positions along the learned flow about their centroid.
+      // Integrate Sigma out of the acceptance ratio, then redraw it on acceptance.
+      if (spread_step > 0 && !spread_generator.is_empty()) {
+        const double delta = rng.rnorm(0, spread_step), stretch = std::expm1(delta);
+        const arma::vec centre = arma::mean(alpha, 1);
+        arma::mat next_alpha(p, n);
+        bool valid = true, accept = false;
+        for (int s = 0; s < n; ++s) {
+          const double t = stretch * arma::dot(ridge_coordinate, alpha.col(s) - centre);
+          arma::vec point(p + 1); point.head(p) = alpha.col(s); point[p] = 1;
+          arma::mat flow;
+          if (!arma::expmat(flow, t * spread_generator)) { valid = false; break; }
+          point = flow * point;
+          next_alpha.col(s) = point.head(p);
+          proposals[s] = next_alpha.col(s).t();
+        }
+        if (valid) {
+          GroupState proposed = pop.state;
+          const arma::vec change = arma::mean(next_alpha, 1) - centre;
+          proposed.tmu += change; proposed.subj_mu.each_col() += change;
+          const arma::mat residual = alpha - pop.state.subj_mu;
+          const arma::mat next_residual = next_alpha - proposed.subj_mu;
+          arma::mat old_scatter = residual * residual.t(), new_scatter = next_residual * next_residual.t();
+          old_scatter.diag() += 2 * group_v / pop.state.a_half;
+          new_scatter.diag() += 2 * group_v / pop.state.a_half;
+          double old_det, new_det;
+          arma::log_det_sympd(old_det, old_scatter);
+          valid = arma::log_det_sympd(new_det, new_scatter);
+          const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
+          // The centroid is fixed in the flow coordinate: n-1 coordinates stretch.
+          double lr = valid ? (n - 1) * delta - .5 * (group_v + p - 1 + n) * (new_det - old_det) -
+            .5 * (arma::dot(new_mean, mean_precision * new_mean) -
+                  arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
+          likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
+          for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
+          accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
+          if (accept) {
+            proposed.tvar = group_inverse_wishart(rng, group_v + p - 1 + n, new_scatter);
+            proposed.tvinv = group_inverse(proposed.tvar);
+            for (int s = 0; s < n; ++s) ll[s] = values[s][0];
+            alpha = std::move(next_alpha); pop.state = std::move(proposed);
+          }
+        }
+        if (!frozen) spread_step *= std::exp(.1 * (accept - .3));
+      }
     }
     // Warmup tuning; R freezes the geometric average of the adaptation tail.
     if (!frozen) {
@@ -318,7 +343,7 @@ class JointMoves {
     };
     save("step", step); save("loc", loc); save("log_step_sum", sum_step); save("log_loc_sum", sum_loc);
     settings["uses"] = uses;
-    if (!affine_generator.is_empty()) settings["affine_step"] = affine_step;
+    if (!flows.empty()) settings["affine_step"] = affine_step;
     if (spread_step > 0) settings["spread_step"] = spread_step;
     if (do_location) settings["directions"] = Rcpp::wrap(directions);
     return settings;

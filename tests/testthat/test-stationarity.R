@@ -51,7 +51,7 @@ test_that("hierarchical updates with affine and spread moves preserve a known jo
   template$chains_var <- rep(list(diag(2)), 3)
   # Fix the direction independently of the target draws below.
   template$lik_prec <- structure(vector("list", 3),
-    affine_generator = rbind(c(.2, .4, .3), c(-.3, .1, -.2), c(0, 0, 0)))
+    affine_generators = list(rbind(c(.2, .4, .3), c(-.3, .1, -.2), c(0, 0, 0))))
   # Separate particle blocks must condition on earlier updates.
   attr(template$data, "components") <- 1:2
 

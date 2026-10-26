@@ -613,11 +613,12 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
 #' group step, then an error.
 #' A list may set `max_retries` (integer, re-draw the group step on failure).
-#' @param history_proposals Logical. Add pooled-history proposals alongside curvature
-#' proposals during adaptation and sampling. Defaults to `FALSE` for new fits;
+#' @param history_proposals Logical. Add a mixture of per-chain history proposals
+#' during burn, adaptation and sampling. Defaults to `FALSE` for new fits;
 #' omitted on continuation, retains the saved choice. Changing it after adaptation
 #' uses the previous draws as warmup history and restarts adaptation. Mixture weights
-#' are learned during warmup and fixed in sample.
+#' are learned during warmup. History is refreshed after the final warmup block,
+#' then proposals and tuning are fixed during sampling.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{

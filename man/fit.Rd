@@ -71,11 +71,12 @@ covariance becomes computationally singular during sampling. \code{NULL}: up to 
 group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure).}
 
-\item{history_proposals}{Logical. Add pooled-history proposals alongside curvature
-proposals during adaptation and sampling. Defaults to \code{FALSE} for new fits;
+\item{history_proposals}{Logical. Add a mixture of per-chain history proposals
+during burn, adaptation and sampling. Defaults to \code{FALSE} for new fits;
 omitted on continuation, retains the saved choice. Changing it after adaptation
 uses the previous draws as warmup history and restarts adaptation. Mixture weights
-are learned during warmup and fixed in sample.}
+are learned during warmup. History is refreshed after the final warmup block,
+then proposals and tuning are fixed during sampling.}
 
 \item{...}{Additional optional arguments}
 }

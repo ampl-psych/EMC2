@@ -62,6 +62,40 @@ arma::vec Gaussian::log_density(const arma::mat& x, const arma::vec& mean,
   return out;
 }
 
+// Retain the separate history regions; averaging their centres can put the
+// proposal between them. All factors are fixed along with the sample kernel.
+GaussianMixture::GaussianMixture(arma::mat means, const std::vector<arma::mat>& covariances)
+  : means_(std::move(means)), weights_(covariances.size(), arma::fill::ones) {
+  weights_ /= weights_.n_elem;
+  for (const auto& covariance : covariances) kernels_.emplace_back(covariance);
+}
+
+arma::mat GaussianMixture::draw(Random& rng, int n, double scale) const {
+  std::vector<int> counts(kernels_.size());
+  rng.rmultinom(n, weights_.memptr(), weights_.n_elem, counts.data());
+  arma::mat out(n, means_.n_rows);
+  int offset = 0;
+  for (arma::uword k = 0; k < kernels_.size(); ++k) if (counts[k]) {
+    out.rows(offset, offset + counts[k] - 1) =
+      kernels_[k].draw(rng, means_.col(k), counts[k], scale);
+    offset += counts[k];
+  }
+  return out;
+}
+
+arma::vec GaussianMixture::log_density(const arma::mat& x, double scale) const {
+  arma::mat density(x.n_rows, kernels_.size());
+  for (arma::uword k = 0; k < kernels_.size(); ++k)
+    density.col(k) = kernels_[k].log_density(x, means_.col(k), scale);
+  arma::vec out(x.n_rows);
+  for (arma::uword i = 0; i < x.n_rows; ++i) {
+    const double largest = density.row(i).max();
+    out[i] = std::isfinite(largest) ?
+      largest + std::log(arma::mean(arma::exp(density.row(i) - largest))) : largest;
+  }
+  return out;
+}
+
 // =============================================================================
 // ParticleSampler — one set of proposals per subject and parameter block
 // =============================================================================
@@ -71,15 +105,14 @@ ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const 
   : rng(rng_), kernel_(kernel), exact_(flag(tune, "exact")), frozen_(flag(tune, "frozen")),
     history_(flag(tune, "history_proposals")),
     original_settings_(Rcpp::clone(pm_settings)) {
-  // Proposal order: group, local, chain, efficient. Burn uses a second local
-  // proposal in the chain slot; sample adds the conditional-history proposal.
+  // Proposal order: group, local, quadratic, optional history, efficient.
+  // Burn and adapt share the same kernel; sample adds the efficient proposal.
   proposals_ = kernel == "preburn" ? 2 : kernel == "sample" ? 4 : 3;
-  // Optional pooled history follows the quadratic; efficient stays last.
+  // Optional chain-history mixture follows the quadratic; efficient stays last.
   if (history_) ++proposals_;
   multiplier_ = kernel == "preburn" ? 2 : 1;
   local_.assign(proposals_, false);
   local_[1] = true;
-  if (kernel == "burn") local_[2] = true;
   n0_ = number(tune, "n0", 25);
   min_local_ = number(tune, "min_local");
   target_ess_ = number(tune, "target_ESS");
@@ -107,11 +140,24 @@ ParticleSampler::ParticleSampler(Random& rng_, const Rcpp::List& sampler, const 
     if (!Rf_isNull(efficient_mean)) subject.efficient_mean = Rcpp::as<arma::vec>(efficient_mean);
     const SEXP chain_covariance = subject_item(sampler, "chains_var", i);
     const SEXP efficient_covariance = subject_item(sampler, "eff_var", i);
+    const SEXP history = subject_item(sampler, "history", i);
     for (const auto& idx : indices_) {
       subject.chain.emplace_back(Rf_isNull(chain_covariance) ? Gaussian() :
         Gaussian(Rcpp::as<arma::mat>(chain_covariance).submat(idx, idx)));
       subject.efficient.emplace_back(Rf_isNull(efficient_covariance) ? Gaussian() :
         Gaussian(Rcpp::as<arma::mat>(efficient_covariance).submat(idx, idx)));
+      if (history_) {
+        const Rcpp::List h(history);
+        const Rcpp::List covariances = h["var"];
+        const arma::mat means = Rcpp::as<arma::mat>(h["mu"]);
+        std::vector<arma::mat> blocks;
+        for (R_xlen_t k = 0; k < covariances.size(); ++k) {
+          const arma::mat covariance = Rf_isNull(covariances[k]) ?
+            Rcpp::as<arma::mat>(chain_covariance) : Rcpp::as<arma::mat>(covariances[k]);
+          blocks.push_back(covariance.submat(idx, idx));
+        }
+        subject.history.emplace_back(means.rows(idx), blocks);
+      }
     }
     SEXP likelihood = subject_item(tune, "lik_prec", i);
     if (!Rf_isNull(likelihood)) {
@@ -192,15 +238,10 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
   centers[0] = mean.elem(idx);
   centers[1] = current.elem(idx);
   kernels[0] = &group_blocks_[b];
-  kernels[1] = kernel_ == "preburn" || kernel_ == "burn" ?
-    &group_blocks_[b] : &subject.chain[b];
+  kernels[1] = kernel_ == "preburn" ? &group_blocks_[b] : &subject.chain[b];
   if (proposals_ >= 3) {
-    centers[2] = kernel_ == "burn" ? current.elem(idx) : subject.chain_mean.elem(idx);
+    centers[2] = subject.chain_mean.elem(idx);
     kernels[2] = &subject.chain[b];
-  }
-  if (history_) {
-    centers[3] = subject.chain_mean.elem(idx);
-    kernels[3] = &subject.chain[b];
   }
   if (kernel_ == "sample") {
     centers[3 + history_] = subject.efficient_mean.elem(idx);
@@ -246,7 +287,9 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
   for (const auto j : active) {
     const int count = subject.counts[j];
     if (count == 0) continue;
-    proposed.rows(offset, offset + count - 1) = kernels[j]->draw(rng, centers[j], count, scales[j]);
+    proposed.rows(offset, offset + count - 1) = j == 3 && history_ ?
+      subject.history[b].draw(rng, count, scales[j]) :
+      kernels[j]->draw(rng, centers[j], count, scales[j]);
     offset += count;
   }
   subject.candidates.cols(idx) = proposed;
@@ -259,7 +302,9 @@ const arma::mat& ParticleSampler::prepare(int s, int b, const arma::vec& current
     arma::mat log_densities(rows, active.size());
     for (arma::uword k = 0; k < active.size(); ++k) {
       const int j = active[k];
-      log_densities.col(k) = std::log(mixture[k]) + kernels[j]->log_density(proposed, centers[j], scales[j]);
+      log_densities.col(k) = std::log(mixture[k]) +
+        (j == 3 && history_ ? subject.history[b].log_density(proposed, scales[j]) :
+          kernels[j]->log_density(proposed, centers[j], scales[j]));
     }
     arma::vec log_mixture(rows);
     for (arma::uword row = 0; row < rows; ++row) {

@@ -257,6 +257,14 @@ tune_sample_kernel <- function(emc, verbose, verboseProgress, fileName, particle
     }
     x
   })
+  if(isTRUE(emc[[1]]$history_proposals)){
+    # Include regions first visited during the final warmup, then freeze.
+    history <- create_chain_proposals(emc, do_block = FALSE)
+    for(i in seq_along(emc)){
+      emc[[i]]$history <- history[[i]]$history
+      emc[[1]]$sample_kernel$chains[[i]]$history <- history[[i]]$history
+    }
+  }
   map_scale_move(emc, scale_move_freeze)
 }
 
@@ -331,12 +339,11 @@ add_proposals <- function(emc, stage, n_cores, n_blocks, window = NULL){
 }
 
 # The first chain survives strip_duplicates(), so store the fixed kernel there.
-sample_kernel_fields <- c("chains_var", "chains_mu", "eff_mu", "eff_var")
+sample_kernel_fields <- c("chains_var", "chains_mu", "eff_mu", "eff_var", "lik_prec", "history")
 
 store_sample_kernel <- function(emc){
   emc[[1]]$sample_kernel <- list(
-    chains = lapply(emc, function(x) c(x[sample_kernel_fields], list(prop_var = attr(x, "prop_var")))),
-    lik_prec = emc[[1]]$lik_prec)
+    chains = lapply(emc, function(x) c(x[sample_kernel_fields], list(prop_var = attr(x, "prop_var")))))
   return(emc)
 }
 
@@ -345,16 +352,16 @@ restore_sample_kernel <- function(emc){
   for(i in 1:length(emc)){
     for(nm in sample_kernel_fields) emc[[i]][[nm]] <- kernel$chains[[i]][[nm]]
     attr(emc[[i]], "prop_var") <- kernel$chains[[i]]$prop_var
-    emc[[i]]$lik_prec <- kernel$lik_prec
   }
   return(emc)
 }
 
 create_lik_prec <- function(emc, n_cores, reset_directions = TRUE){
   history_idx <- proposal_window(emc[[1]]$samples$idx)
-  lik_prec <- native_lik_prec(emc, history_idx, native_likelihood_inputs(emc[[1]]), n_cores)
+  inputs <- native_likelihood_inputs(emc[[1]])
   for (i in seq_along(emc)) {
-    emc[[i]]$lik_prec <- lik_prec
+    # Estimate curvature within a chain; pooled centres can lie between modes.
+    emc[[i]]$lik_prec <- native_lik_prec(emc[i], history_idx, inputs, n_cores)
     sm <- attr(emc[[i]]$samples, "scale_move")
     if (reset_directions && !is.null(sm)) {
       sm$directions <- NULL
@@ -604,10 +611,8 @@ reset_pm_settings <- function(emc, stage){
     if(new_stage){
       x$iter <- 25
       x$mix <- NULL
-      # burn's epsilons belong to (prior-variance, chains_var) random
-      # walks; adapt's first scaled component is the chains_var one, so
-      # carry that epsilon (check_epsilon then pads the vector)
-      if(stage == "adapt") x$epsilon <- x$epsilon[length(x$epsilon)]
+      # Burn and adapt use the same local covariance; carry its tuned scale.
+      if(stage == "adapt") x$epsilon <- x$epsilon[1]
     }
     x
   })
@@ -996,6 +1001,7 @@ strip_duplicates <- function(emc, incl_props = TRUE) {
       emc[[i]]$eff_var <- NULL
       emc[[i]]$chains_var <- NULL
       emc[[i]]$chains_mu <- NULL
+      emc[[i]]$history <- NULL
       emc[[i]]$lik_prec <- NULL
     }
   }

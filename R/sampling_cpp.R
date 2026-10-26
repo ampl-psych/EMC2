@@ -46,6 +46,7 @@ prepare_native_stage <- function(pmwgs, stage, iter, particles, tune, on_singula
   tune$components <- attr(pmwgs$data, "components")
   tune$shared_ll_idx <- shared_likelihood_index(pmwgs)
   kernel <- if (is.null(tune$kernel)) stage else tune$kernel
+  if (kernel == "burn") kernel <- "adapt"
   tune$history_proposals <- isTRUE(pmwgs$history_proposals) && kernel %in% c("adapt", "sample")
   tune <- check_tune_settings(tune, pmwgs$n_pars, kernel, particles)
   tune$kernel <- kernel

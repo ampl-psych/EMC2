@@ -619,6 +619,7 @@ struct LikelihoodContext::Impl {
     std::vector<double> ll_buf, ll_row, cut_buf;
     std::vector<const double*> mean_cols;
     RaceScratch scratch;
+    RaceModelSetup ddm_setup{};
     CensorSpec censor;
     TruncSpec trunc;
     SSSpec ss;
@@ -792,8 +793,14 @@ struct LikelihoodContext::Impl {
       } else if (model == DDM || model == RACE) {
         auto slots = race_scratch_slots(type);
         s.scratch.reserve(slots.first, slots.second, n_rows);
-        s.censor = make_censor_spec(data, n_choice_trials, n_lR, participating, &setup, s.pt_local, s.scratch);
-        s.trunc = make_trunc_spec(data, n_choice_trials, n_lR, participating, &setup, s.pt_local, s.scratch);
+        const RaceModelSetup* local_setup = &setup;
+        if (model == DDM) {
+          s.ddm_setup = setup;
+          s.ddm_setup.spec.is_ok = s.is_ok.data();
+          local_setup = &s.ddm_setup;
+        }
+        s.censor = make_censor_spec(data, n_choice_trials, n_lR, participating, local_setup, s.pt_local, s.scratch);
+        s.trunc = make_trunc_spec(data, n_choice_trials, n_lR, participating, local_setup, s.pt_local, s.scratch);
         if (model == RACE) s.ll_row.resize(n_rows);
       }
     }
@@ -825,6 +832,8 @@ struct LikelihoodContext::Impl {
                            int n_particles, double* trialwise) const {
     // 1) Map p_vector to trialwise parameters
     fill_particle(s, particles, row, n_particles);
+    // Skip invalid DDM rows before density/CDF evaluation; apply the same penalty below.
+    if (model == DDM) c_do_bound(s.pt_local, bound_specs, s.is_ok);
 
     // 2) Calculate raw (compressed) trialwise log-likelihoods
     // DDM takes logs in place, so skipped trials start at 1; others start at log(1).
@@ -869,7 +878,7 @@ struct LikelihoodContext::Impl {
       else c_dPHSDM(rts, Rs, R2s, s.pars, participating, s.ll_buf.data(), n_choice_trials);
       break;
     case DDM:
-      c_log_likelihood_DDM(rts_ptr, Rs_ptr, s.pt_local, setup.spec, idx_all, s.ll_buf.data());
+      c_log_likelihood_DDM(rts_ptr, Rs_ptr, s.pt_local, s.ddm_setup.spec, idx_all, s.ll_buf.data());
       break;
     case RACE:
       // Re-fill row-wise likelihoods — skipped accumulators contribute 1.
@@ -889,7 +898,7 @@ struct LikelihoodContext::Impl {
     }
 
     // 4) Handle not-ok parameter values (out of bound)
-    c_do_bound(s.pt_local, bound_specs, s.is_ok);
+    if (model != DDM) c_do_bound(s.pt_local, bound_specs, s.is_ok);
     const bool continuous = model == MRI || model == MRI_AR1 || model == CDM || model == PSDM || model == PHSDM;
     apply_bounds(s.is_ok, s.ll_buf.data(), n_choice_trials, continuous ? 1 : n_lR, min_ll, participating);
 

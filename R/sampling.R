@@ -124,10 +124,9 @@ resolve_on_singular <- function(on_singular) {
 local_components <- function(stage, history_proposals = FALSE){
   local <- switch(stage,
          preburn = c(FALSE, TRUE),
-         burn = c(FALSE, TRUE, TRUE),
-         adapt = c(FALSE, TRUE, FALSE),
-         c(FALSE, TRUE, FALSE, FALSE))
-  if(history_proposals && stage %in% c("adapt", "sample")) local <- append(local, FALSE, after = 3)
+         sample = c(FALSE, TRUE, FALSE, FALSE),
+         c(FALSE, TRUE, FALSE))
+  if(history_proposals && stage != "preburn") local <- append(local, FALSE, after = 3)
   local
 }
 
@@ -170,26 +169,23 @@ set_p_accept <- function(stage, search_width){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
-  # adapt/sample: the local component targets ~3% of particles beating the
+  # After preburn, the local component targets ~3% of particles beating the
   # current value (where the ensemble move's ESS per iteration peaks);
   # independent components are not scaled.
   if(stage == "preburn") return(0.02 * (1/search_width))
-  if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
-  if(stage == "adapt") return(c(0.03, 0.25)* (1/search_width))
   if(stage == "sample") return(c(0.03, 0.3, 0.3)* (1/search_width))
+  c(0.03, 0.25) * (1/search_width)
 }
 
 get_default_mix <- function(stage, history_proposals = FALSE){
-  if (stage == "burn") {
-    default_mix <- c(0.15, 0.35, 0.5)
-  } else if(stage == "adapt"){
-    default_mix <- c(0.1, 0.4, 0.4)
-  } else if(stage == "sample"){
+  if(stage == "sample"){
     default_mix <- c(0.05, 0.3, 0.3, 0.35)
-  }  else{
+  } else if(stage == "preburn"){
     default_mix <- c(0.5, 0.5)
+  } else{
+    default_mix <- c(0.1, 0.4, 0.4)
   }
-  if(history_proposals && stage %in% c("adapt", "sample")){
+  if(history_proposals && stage != "preburn"){
     default_mix[3] <- default_mix[3] / 2
     default_mix <- append(default_mix, default_mix[3], after = 3)
   }
@@ -234,7 +230,7 @@ check_epsilon <- function(epsilon, n_pars, mix) {
 
 check_prop_performance <- function(prop_performance, stage, history_proposals = FALSE){
   default_mix <- get_default_mix(stage, history_proposals)
-  if(is.null(prop_performance) || stage == "adapt") prop_performance <- rep(0, length(default_mix))
+  if(is.null(prop_performance) || stage %in% c("burn", "adapt")) prop_performance <- rep(0, length(default_mix))
   if(length(prop_performance) < length(default_mix)){
     if(length(default_mix) - length(prop_performance) == 1){
       n_total <- sum(prop_performance)
