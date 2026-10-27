@@ -79,6 +79,8 @@ struct SSSpec {
   mutable std::unordered_map<std::uint64_t, MemoEntry> memo;
   mutable std::vector<double> memo_keys;
 
+  mutable std::vector<ExGaussian> go_exg, stop_exg;
+
   const ParamTable* pt = nullptr;
   void rebind(const ParamTable& p) { pt = &p; }
 };
@@ -91,51 +93,43 @@ namespace ssf {
 inline double par(const ParamTable& pt, int row, int col) { return pt.base(row, col); }
 
 inline double normal_ratio(const SSSpec& s, const ParamTable& pt, int row) {
-  return s.col_normal_ratio < 0 ? 0.0 : par(pt, row, s.col_normal_ratio);
+  return s.col_normal_ratio < 0 ? 0.0 : par(pt,row,s.col_normal_ratio);
 }
-
 inline double shifted_exp_sigma(const SSSpec& s, const ParamTable& pt, int row) {
-  return s.col_shifted_exp_sigma < 0 ? 0.0 : par(pt, row, s.col_shifted_exp_sigma);
+  return s.col_shifted_exp_sigma < 0 ? 0.0 : par(pt,row,s.col_shifted_exp_sigma);
 }
 
 // log density of a go accumulator (row r) finishing at time t
 inline double go_lpdf(const SSSpec& s, const ParamTable& pt, int r, double t) {
   if (s.is_exg) {
-    double v = dtexg(t, par(pt, r, s.col_mu), par(pt, r, s.col_sigma), par(pt, r, s.col_tau),
-                     par(pt, r, s.col_lb), pos_inf(), true,
-                     normal_ratio(s, pt, r), shifted_exp_sigma(s, pt, r));
+    double v = s.go_exg[r].pdf(t, true);
     return is_finite(v) ? v : neg_inf();
   }
   const double sc = par(pt, r, s.col_s);
   const double dt = t - par(pt, r, s.col_t0);
   if (!(dt > 0.0)) return neg_inf();
   const double A = par(pt, r, s.col_A) / sc;
-  double d = digt(dt, par(pt, r, s.col_B) / sc + 0.5 * A, par(pt, r, s.col_v) / sc, 0.5 * A);
-  double v = std::log(d);
+  double v = digt(dt, par(pt, r, s.col_B) / sc + 0.5 * A, par(pt, r, s.col_v) / sc, 0.5 * A, true);
   return is_finite(v) ? v : neg_inf();
 }
 
 // log survivor of a go accumulator (row r) at time t
 inline double go_lsurv(const SSSpec& s, const ParamTable& pt, int r, double t) {
   if (s.is_exg) {
-    double v = ptexg(t, par(pt, r, s.col_mu), par(pt, r, s.col_sigma), par(pt, r, s.col_tau),
-                     par(pt, r, s.col_lb), pos_inf(), false, true,
-                     normal_ratio(s, pt, r), shifted_exp_sigma(s, pt, r));
+    double v = s.go_exg[r].prob(t, false, true);
     return is_finite(v) ? v : neg_inf();
   }
   const double sc = par(pt, r, s.col_s);
   const double dt = t - par(pt, r, s.col_t0);
   if (!(dt > 0.0)) return 0.0;
   const double A = par(pt, r, s.col_A) / sc;
-  double v = log1m(pigt(dt, par(pt, r, s.col_B) / sc + 0.5 * A, par(pt, r, s.col_v) / sc, 0.5 * A));
+  double v = pigt(dt, par(pt, r, s.col_B) / sc + 0.5 * A, par(pt, r, s.col_v) / sc, 0.5 * A, false, true);
   return is_finite(v) ? v : neg_inf();
 }
 
 // log survivor of the stop process (parameters on row r0) at stop-relative time q
 inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q) {
-  double v = ptexg(q, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS), par(pt, r0, s.col_tauS),
-                   par(pt, r0, s.col_lbS), pos_inf(), false, true,
-                   normal_ratio(s, pt, r0), shifted_exp_sigma(s, pt, r0));
+  double v = s.stop_exg[r0 / s.n_acc].prob(q, false, true);
   return is_finite(v) ? v : neg_inf();
 }
 
@@ -145,15 +139,15 @@ inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q
 // ---------------------------------------------------------------------------
 struct StopIntegrand {
   const SSSpec* s; const ParamTable* pt;
-  double ssd, muS, sigS, tauS, lbS, normal_ratio, shifted_exp_sigma;
+  double ssd, muS, sigS, tauS, lbS;
   const int* go_rows; int n_go;
+  const ExGaussian* stop;
 };
 
 inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, double* out) {
   const StopIntegrand* w = static_cast<const StopIntegrand*>(p);
   const double xx = x[0];
-  double lf = dtexg(xx, w->muS, w->sigS, w->tauS, w->lbS, pos_inf(), true,
-                    w->normal_ratio, w->shifted_exp_sigma);
+  double lf = w->stop->pdf(xx, true);
   if (!is_finite(lf)) { out[0] = 0.0; return 0; }
   double ls = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
@@ -170,8 +164,8 @@ inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, 
 inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
                                   const int* go_rows, int n_go, double ssd, double upper) {
   StopIntegrand w{&s, &pt, ssd, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS),
-                  par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS),
-                  normal_ratio(s, pt, r0), shifted_exp_sigma(s, pt, r0), go_rows, n_go};
+                  par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS), go_rows, n_go,
+                  &s.stop_exg[r0 / s.n_acc]};
   const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS);
   double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS);
   if (!(hi > lo)) return neg_inf();
@@ -225,13 +219,13 @@ inline double stop_success_lp(const SSSpec& s, const ParamTable& pt, int trial, 
   keys.push_back(s.ssd[trial]); keys.push_back(upper);
   keys.push_back(par(pt, r0, s.col_muS)); keys.push_back(par(pt, r0, s.col_sigmaS));
   keys.push_back(par(pt, r0, s.col_tauS)); keys.push_back(par(pt, r0, s.col_lbS));
-  keys.push_back(normal_ratio(s, pt, r0)); keys.push_back(shifted_exp_sigma(s, pt, r0));
+  keys.push_back(normal_ratio(s,pt,r0)); keys.push_back(shifted_exp_sigma(s,pt,r0));
   for (int i = 0; i < n_go; ++i) {
     const int r = go_rows[i];
     if (s.is_exg) {
       keys.push_back(par(pt, r, s.col_mu)); keys.push_back(par(pt, r, s.col_sigma));
       keys.push_back(par(pt, r, s.col_tau)); keys.push_back(par(pt, r, s.col_lb));
-      keys.push_back(normal_ratio(s, pt, r)); keys.push_back(shifted_exp_sigma(s, pt, r));
+      keys.push_back(normal_ratio(s,pt,r)); keys.push_back(shifted_exp_sigma(s,pt,r));
     } else {
       keys.push_back(par(pt, r, s.col_v)); keys.push_back(par(pt, r, s.col_B));
       keys.push_back(par(pt, r, s.col_A)); keys.push_back(par(pt, r, s.col_t0));
@@ -408,16 +402,36 @@ inline double observed_st_lp(const SSSpec& s, const ParamTable& pt, int trial) {
 } // namespace ssf
 
 // ---------------------------------------------------------------------------
-// Per-particle likelihood: fills ll_buf[trial] (compressed trials). Bounds,
-// clamping, expansion and summation are done by the caller (apply_bounds +
-// expand_clamp_sum), as for the race models. Thread-safe given a per-thread
+// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
+// checks bounds first and applies penalties, clamping, expansion and summation
+// afterwards, as for the race models. Thread-safe given a per-thread
 // SSSpec (rebind) and ParamTable.
 // ---------------------------------------------------------------------------
-inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf) {
+inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
+                              const std::vector<int>& is_ok) {
   const ParamTable& pt = *s.pt;
   s.memo.clear();
   s.memo_keys.clear();
+  // Parameter-dependent preparation lives in the worker's SSSpec and is
+  // refreshed on every likelihood evaluation, including after rebind().
+  s.go_exg.clear();
+  if (s.is_exg) {
+    s.go_exg.reserve(s.n_rows);
+    for (int r=0; r<s.n_rows; ++r)
+      s.go_exg.emplace_back(ssf::par(pt,r,s.col_mu), ssf::par(pt,r,s.col_sigma),
+                           ssf::par(pt,r,s.col_tau), ssf::par(pt,r,s.col_lb), pos_inf(),
+                           ssf::normal_ratio(s,pt,r), ssf::shifted_exp_sigma(s,pt,r));
+  }
+  s.stop_exg.clear();
+  s.stop_exg.reserve(s.n_trials);
+  for (int t=0; t<s.n_trials; ++t) {
+    const int r=s.base_row[t];
+    s.stop_exg.emplace_back(ssf::par(pt,r,s.col_muS), ssf::par(pt,r,s.col_sigmaS),
+                           ssf::par(pt,r,s.col_tauS), ssf::par(pt,r,s.col_lbS), pos_inf(),
+                           ssf::normal_ratio(s,pt,r), ssf::shifted_exp_sigma(s,pt,r));
+  }
   for (int t = 0; t < s.n_trials; ++t) {
+    if (!is_ok[s.base_row[t]]) continue;
     double v;
     switch (s.kind[t]) {
       case SSKind::ObsGo:

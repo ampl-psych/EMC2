@@ -67,7 +67,7 @@
 #' }
 #' In all outputs, quantile columns are named by their percentages, for example
 #' `2.5%`, `50%`, and `97.5%`.
-#' @export
+#' @noRd
 ssrt_summary <- function(emc,
                          level = c("population", "individual", "condition"),
                          probs = c(0.025, 0.5, 0.975),

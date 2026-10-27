@@ -1,18 +1,24 @@
-# RACE
+# RACE likelihood
 
     Code
-      init_chains(emc, particles = 10, cores_for_chains = 1)
+      round(model_likelihood(emc, parameters), 6)
     Output
-      Iterations: 
-           preburn burn adapt sample
-      [1,]       0    0     0      0
-      [2,]       0    0     0      0
-      [3,]       0    0     0      0
-      
-      Subjects: 
-      [1] "1"
-      
-      Parameters: 
-      [1] "v"              "v_lMTRUE"       "v_RACE3:lMTRUE" "B"             
-      [5] "t0"             "A"             
+                     1
+       [1,] -18.284638
+       [2,] -25.754627
+       [3,] -22.968629
+       [4,] -18.401204
+       [5,] -19.141608
+       [6,] -25.598410
+       [7,] -80.139441
+       [8,] -14.396143
+       [9,] -42.024018
+      [10,] -10.213108
+      [11,] -29.243368
+      [12,] -13.147072
+      [13,] -29.365028
+      [14,] -22.454379
+      [15,]  -8.031588
+      [16,] -17.739091
+      [17,]  -5.311150
 

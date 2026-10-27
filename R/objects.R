@@ -1,20 +1,9 @@
 filter_obj <- function(obj, idx){
   dims <- dim(obj)
-  dim_names <- dimnames(obj)
   if(is.null(dims)) return(obj)
-  if(length(dims) == 2){
-    if(nrow(obj) == ncol(obj)){
-      if(nrow(obj) == 1) return(obj)
-      if(nrow(obj) > 1){
-        if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj))))) < .01) return(obj)
-      }
-    }
-  }
-  obj <- obj[slice.index(obj, length(dims)) %in% idx]
-  dims[length(dims)] <- length(idx)
-  dim(obj) <- dims
-  dimnames(obj) <- dim_names # Give back to the community
-  return(obj)
+  index <- lapply(dims, seq_len)
+  index[[length(dims)]] <- idx
+  do.call("[", c(list(obj), index, list(drop = FALSE)))
 }
 
 remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
@@ -40,12 +29,12 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
   }
   if(keep_stages) filter_idx <- c(which(!(samples$samples$stage %in% stage)), filter_idx)
 
-  if(any(samples$nuisance)) {
-    samples$sampler_nuis$samples <- base::rapply(samples$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
-    samples$sampler_nuis$samples$idx <- length(filter_idx)
-  }
   stage <- samples$samples$stage
+  last_theta_var_inv <- samples$samples$last_theta_var_inv
+  samples$samples$last_theta_var_inv <- NULL
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
+  if(tail(filter_idx, 1) == samples$samples$idx)
+    samples$samples$last_theta_var_inv <- last_theta_var_inv
   samples$samples$stage <- stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
   return(samples)
@@ -72,12 +61,6 @@ merge_chains <- function(emc){
   sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
   sampled_objects$idx <- sum(sampled_objects$idx)
   out_samples$samples <- sampled_objects
-  if(any(out_samples$nuisance)){
-    sampled_objects <- lapply(emc, FUN = function(x) return(x$sampler_nuis$samples))
-    keys <- unique(unlist(lapply(sampled_objects, names)))
-    sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
-    out_samples$sampler_nuis$samples <- sampled_objects
-  }
   return(out_samples)
 }
 
@@ -106,7 +89,6 @@ chain_n <- function(emc)
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains, full_filter = NULL) {
   type <- sampler$type
   samples <- sampler$samples
-  nuis_type <- sampler$sampler_nuis$type
   if(is.null(full_filter) && "sample" %in% stage && !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
@@ -123,15 +105,7 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
   } else if(is.null(full_filter)){
     full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }
-  if(any(sampler$nuisance)){
-    nuisance <- sampler$nuisance
-    suppressWarnings(sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F])
-    sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
-    out <- filtered_samples(sampler, full_filter, type = type)
-    out$nuisance <- filtered_samples(sampler$sampler_nuis, full_filter, type = nuis_type)
-  } else{
-    out <-  filtered_samples(sampler, full_filter, type = type)
-  }
+  out <- filtered_samples(sampler, full_filter, type = type)
   return(out)
 }
 
@@ -495,20 +469,9 @@ concat_emc <- function(emc1, emc2, step_size, stage){
     sampled_objects$idx <- sum(sampled_objects$idx)
     attr(sampled_objects, "pm_settings") <- attr(emc2[[i]]$samples, "pm_settings")
     attr(sampled_objects, "scale_move") <- attr(emc2[[i]]$samples, "scale_move")
+    attr(sampled_objects, "rng") <- attr(emc2[[i]]$samples, "rng")
     out_samples[[i]]$samples <- sampled_objects
     out_samples[[i]]$samples$last_theta_var_inv <- emc2[[i]]$samples$last_theta_var_inv
-    if(any(out_samples[[1]]$nuisance)){
-      sampled_objects <- list(emc1[[i]]$sampler_nuis$samples, emc2[[i]]$sampler_nuis$samples)
-      keys <- unique(unlist(lapply(sampled_objects, names)))
-      sampled_objects <- do.call(mapply, c(abind, lapply(sampled_objects, '[', keys)))
-      if(!is.list(sampled_objects)){ # deals with niche case where there's only item and this drops list making
-        sampled_objects <- list(idx= sum(sampled_objects))
-      } else{
-        sampled_objects$idx <- sum(sampled_objects$idx)
-      }
-      out_samples[[i]]$sampler_nuis$samples <- sampled_objects
-      out_samples[[i]]$sampler_nuis$samples$last_theta_var_inv <- emc2[[i]]$sampler_nuis$samples$last_theta_var_inv
-    }
   }
   rm(emc1); rm(emc2)
   return(out_samples)

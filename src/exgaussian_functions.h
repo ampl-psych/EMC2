@@ -1,269 +1,184 @@
 #ifndef exgaussian_functions_h
 #define exgaussian_functions_h
 
-#include <Rcpp.h>
 #include <cmath>
+#include <algorithm>
 #include "composite_functions.h"
 #include "pnorm_utils.h"
-#include "r_constants.h"
-#include "nan_check.h"
-using namespace Rcpp;
 
-#ifndef M_PI
-#define M_PI 3.141592653589793238462643383279502884
-#endif
-
+// Keep the existing lower scale bound. All routes use the same distribution,
+// including the parameter-only preparation used by stop-signal quadrature.
 static constexpr double SIG_TAU_EPS = 1e-12;
 
-// probability density function of ex-Gaussian distribution
-inline double dexg(
-    const double x,
-    const double mu = 5.,
-    const double sigma = 1.,
-    const double tau = 1.,
-    const bool log_d = false,
-    const double normal_ratio = 0.,
-    const double shifted_exp_sigma = 0.
-) {
+struct ExGaussian {
+  double mu, sigma, tau, inv_sigma, ratio, log_tau;
+  double lower, upper, log_normalizer;
+  enum Approximation { Exact, Normal, ShiftedExponential };
+  Approximation approximation;
 
-  // minimal parameter validation - assuming all inputs are finite
-  if (sigma <= 0. || tau <= 0.) return na_real();
-
-  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
-    return R::dexp(x - mu, tau, log_d);
-  }
-
-  if (normal_ratio > 0. && tau < normal_ratio * sigma) {
-    return R::dnorm(x, mu, sigma, log_d);
-  }
-
-  // protect against numerical issues due to extremely small sigma or tau values
-  double tau_p = std::max(tau, SIG_TAU_EPS);
-  double sig_p = std::max(sigma, SIG_TAU_EPS);
-
-  // Numerically stable branch for extreme tails where z = (x-mu)/sigma - sigma/tau is very negative.
-  // In this regime, naive log formulation suffers catastrophic cancellation between
-  // +sigma^2/(2 tau^2) and log Phi(z) ≈ -(sigma/tau)^2/2 + ...
-  // Using Mills ratio, one can simplify to a stable expression. For a = -z:
-  // Phi(z) ≈ phi(z) * (1/a - 1/a^3 + 3/a^5 - 15/a^7 + 105/a^9).
-  // The leading 1/a term gives the original first-order approximation; the
-  // remaining terms substantially improve accuracy near the z < -8 cutoff.
-  {
-    double y = (x - mu) / sig_p;
-    double a = sig_p / tau_p;
-    double z = y - a;
-    if (z < -8.0) {
-      double mills_a = -z;
-      double inv_a2 = 1.0 / (mills_a * mills_a);
-      double mills_correction = 1.0 - inv_a2 + 3.0 * inv_a2 * inv_a2
-                                - 15.0 * inv_a2 * inv_a2 * inv_a2
-                                + 105.0 * inv_a2 * inv_a2 * inv_a2 * inv_a2;
-      double log_out_stable = -std::log(tau_p) - 0.5*std::log(2.0 * M_PI)
-                              - 0.5 * y * y - std::log(mills_a)
-                              + std::log(mills_correction);
-      return log_d ? log_out_stable : std::exp(log_out_stable);
+  ExGaussian(double m, double s, double t,
+             double lo=neg_inf(), double hi=pos_inf(),
+             double normal_ratio=0.0, double shifted_exp_sigma=0.0)
+    : mu(m), sigma(std::max(s,SIG_TAU_EPS)), tau(std::max(t,SIG_TAU_EPS)),
+      inv_sigma(1.0/sigma), ratio(sigma/tau), log_tau(std::log(tau)),
+      lower(lo), upper(hi), log_normalizer(0.0),
+      approximation(shifted_exp_sigma>0 && s<shifted_exp_sigma ? ShiftedExponential :
+                    normal_ratio>0 && t<normal_ratio*s ? Normal : Exact) {
+    // Approximation thresholds apply to the original, unclamped scales.
+    if (approximation!=Exact) {
+      sigma=s; tau=t; inv_sigma=1.0/s; log_tau=std::log(t);
     }
+    if (!is_neg_inf(lo) || !is_pos_inf(hi))
+      log_normalizer=raw_log_interval(lo,hi);
   }
 
-  // compute Phi term
-  double z = (x - mu) / sig_p - sig_p / tau_p;
-  double log_phi = PNORM_STD(z, true, true);
-  if (is_nan(log_phi)) {
-    return na_real();
+  // exp(a*a/2-a*z)*Phi(z-a), sharing the Gaussian with the density.
+  double weighted_tail(double z, bool log_p) const {
+    const double w=ratio-z;
+    if (w >= 0.0) {
+      const double h=pnorm_detail::normal_tail_factor(w);
+      return log_p ? (-0.5*z)*z+std::log(h)
+                   : pnorm_detail::gaussian_exponential(z)*h;
+    }
+    const double exponent=ratio*(0.5*ratio-z);
+    return log_p ? exponent+PNORM_STD(-w,true,true)
+                 : std::exp(exponent)*PNORM_STD(-w,true,false);
   }
-  if (is_inf(log_phi)) {
-    return log_d ? log_phi : std::exp(log_phi);
+
+  double raw_pdf(double x, bool log_p) const {
+    if (is_inf(x)) return log_p ? neg_inf() : 0.0;
+    const double z=(x-mu)*inv_sigma;
+    if (approximation==Normal) {
+      const double lp=(-0.5*z)*z-pnorm_detail::LOG_SQRT_2PI-std::log(sigma);
+      return log_p ? lp : std::exp(lp);
+    }
+    if (approximation==ShiftedExponential) {
+      if (x<mu) return log_p ? neg_inf() : 0.0;
+      const double lp=-(x-mu)/tau-log_tau;
+      return log_p ? lp : std::exp(lp);
+    }
+    if (log_p) return weighted_tail(z,true)-log_tau;
+    // Divide before the final exponential can underflow when tau is tiny.
+    if (std::fabs(z)>37.0) return std::exp(weighted_tail(z,true)-log_tau);
+    return weighted_tail(z,false)/tau;
   }
 
-  // compute exp term
-  double log_exp = (mu - x) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
+  double raw_prob(double x, bool lower_tail, bool log_p) const {
+    if (is_nan(x)) return x;
+    if (is_inf(x)) {
+      const bool one=(x>0)==lower_tail;
+      return log_p ? (one ? 0.0 : neg_inf()) : double(one);
+    }
+    const double z=(x-mu)*inv_sigma;
+    if (is_nan(z)) return z;
+    if (approximation==Normal) return PNORM_STD(z,lower_tail,log_p);
+    if (approximation==ShiftedExponential) {
+      const double ls=-std::max(0.0,x-mu)/tau;
+      return lower_tail ? (log_p ? log1m_exp(ls) : -std::expm1(ls))
+                        : (log_p ? ls : std::exp(ls));
+    }
+    if (!lower_tail) {
+      if (log_p) {
+        const double lp=log_sum_exp(PNORM_STD(-z,true,true),weighted_tail(z,true));
+        return lp > -composite_detail::LOG2 ? log1m_exp(raw_prob(x,true,true)) : lp;
+      }
+      return std::min(1.0,PNORM_STD(-z,true,false)+weighted_tail(z,false));
+    }
+    if (z<=0.0) {
+      const double h=pnorm_detail::normal_tail_difference(-z,ratio);
+      return log_p ? (-0.5*z)*z+std::log(h)
+                   : pnorm_detail::gaussian_exponential(z)*h;
+    }
+    const double phi=PNORM_STD(z,true,false);
+    double cdf=phi-weighted_tail(z,false);
+    if (cdf < 0.05*phi) {
+      if (ratio<z) {
+        const double exponent=ratio*(0.5*ratio-z);
+        cdf=pnorm_detail::normal_interval_width(z-ratio,ratio)
+            -std::expm1(exponent)*PNORM_STD(z-ratio,true,false);
+      } else {
+        cdf=pnorm_detail::gaussian_exponential(z)*
+            pnorm_detail::normal_tail_difference(-z,ratio);
+      }
+    }
+    if (log_p && cdf>0.5)
+      return log1m_exp(raw_prob(x,false,true));
+    return log_p ? std::log(cdf) : cdf;
+  }
 
-  // final output: log density of ex-Gaussian
-  double log_out = -std::log(tau_p) + log_exp + log_phi;
+  double raw_log_interval(double lo,double hi) const {
+    if (is_nan(lo) || is_nan(hi) || lo>hi) return na_real();
+    if (lo==hi) return neg_inf();
+    if (approximation==Normal)
+      return pnorm_detail::normal_interval((lo-mu)*inv_sigma,(hi-mu)*inv_sigma,true);
+    if (approximation==ShiftedExponential) {
+      lo=std::max(lo,mu);
+      if (hi<=lo) return neg_inf();
+      return -(lo-mu)/tau+log1m_exp(-(hi-lo)/tau);
+    }
+    if (is_neg_inf(lo)) return raw_prob(hi,true,true);
+    if (is_pos_inf(hi)) return raw_prob(lo,false,true);
+    const double width=hi-lo, centre=lo+0.5*width;
+    const double z=(centre-mu)*inv_sigma;
+    if (width*inv_sigma*(1.0+std::fabs(z))<0.1) {
+      const double ld=raw_pdf(centre,true);
+      const double mass=pnorm_detail::integrate_unit([&](double u) {
+        return std::exp(raw_pdf(lo+width*u,true)-ld);
+      });
+      return std::log(width)+ld+std::log(mass);
+    }
+    const bool use_lower=raw_prob(lo,true,false)<0.5;
+    return log_diff_exp(raw_prob(use_lower ? hi : lo,use_lower,true),
+                        raw_prob(use_lower ? lo : hi,use_lower,true));
+  }
 
-  return log_d ? log_out : std::exp(log_out);
+  double pdf(double x,bool log_p) const {
+    if (x<=lower || x>=upper) return log_p ? neg_inf() : 0.0;
+    if (is_neg_inf(lower) && is_pos_inf(upper)) return raw_pdf(x,log_p);
+    const double lp=raw_pdf(x,true)-log_normalizer;
+    return log_p ? lp : std::exp(lp);
+  }
+
+  double prob(double x,bool lower_tail,bool log_p) const {
+    if (is_nan(x)) return x;
+    if (is_neg_inf(lower) && is_pos_inf(upper)) return raw_prob(x,lower_tail,log_p);
+    if (x<=lower || x>=upper) {
+      const bool one=(x>=upper)==lower_tail;
+      return log_p ? (one ? 0.0 : neg_inf()) : double(one);
+    }
+    const double lp=std::min((lower_tail ? raw_log_interval(lower,x)
+                                      : raw_log_interval(x,upper))-log_normalizer,0.0);
+    return log_p ? lp : std::exp(lp);
+  }
+};
+
+inline double dexg(double x,double mu=5.,double sigma=1.,double tau=1.,bool log_d=false,
+                   double normal_ratio=0.,double shifted_exp_sigma=0.) {
+  if (sigma<=0. || tau<=0.) return na_real();
+  return ExGaussian(mu,sigma,tau,neg_inf(),pos_inf(),normal_ratio,shifted_exp_sigma).raw_pdf(x,log_d);
 }
-
-// cumulative distribution function of ex-Gaussian distribution
-inline double pexg(
-    const double q,
-    const double mu = 5.,
-    const double sigma = 1.,
-    const double tau = 1.,
-    const bool lower_tail = true,
-    const bool log_p = false,
-    const double normal_ratio = 0.,
-    const double shifted_exp_sigma = 0.
-) {
-
-  if (is_nan(q) || is_nan(mu) || is_nan(sigma) || is_nan(tau)) return na_real();
-  if (sigma <= 0. || tau <= 0.) return na_real();
-
-  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
-    return R::pexp(q - mu, tau, lower_tail, log_p);
-  }
-
-  if (normal_ratio > 0. && tau < normal_ratio * sigma) {
-    return PNORM_STD((q - mu) / sigma, lower_tail, log_p);
-  }
-
-  // handle infinite q
-  if (is_inf(q)) {
-    double out = (q < 0.) ? 0. : 1.;
-    if (!lower_tail) out = 1. - out;
-    return log_p ? std::log(out) : out;
-  }
-
-  // protect against numerical issues due to extremely small sigma or tau values
-  double tau_p = std::max(tau, SIG_TAU_EPS);
-  double sig_p = std::max(sigma, SIG_TAU_EPS);
-
-  const double z = (q - mu) / sig_p;
-  const double a = sig_p / tau_p;
-  const double w = z - a;
-  double log_second_term;
-  if (w < -40.0) {
-    // Scale Phi(w) analytically before combining with its large exponential.
-    // This CDF-only continued fraction does not change dexg's Mills polynomial.
-    const double v = -w;
-    double denom = v;
-    for (int k = 12; k >= 1; --k) denom = v + k / denom;
-    log_second_term = -(0.5 * z) * z - 0.5 * std::log(2.0 * M_PI) - std::log(denom);
-  } else {
-    log_second_term = a * (0.5 * a - z) + PNORM_STD(w, true, true);
-  }
-  if (lower_tail) {
-    const double log_phi = PNORM_STD(z, true, true);
-    const double out = log_phi > log_second_term ? log_diff_exp(log_phi, log_second_term) : neg_inf();
-    return log_p ? out : std::exp(out);
-  }
-  // S(q) = Phi(-z) + exp(-a*z + a*a/2) * Phi(z-a), without 1-F(q).
-  const double log_normal_survivor = PNORM_STD(z, false, true);
-  double out;
-  if (is_neg_inf(log_normal_survivor)) out = log_second_term;
-  else if (is_neg_inf(log_second_term)) out = log_normal_survivor;
-  else {
-    const double hi = std::max(log_normal_survivor, log_second_term);
-    const double lo = std::min(log_normal_survivor, log_second_term);
-    out = hi + std::log1p(std::exp(lo - hi));
-  }
-  if (is_nan(out)) return na_real();
-  out = std::min(0.0, out);
-  return log_p ? out : std::exp(out);
+inline double pexg(double q,double mu=5.,double sigma=1.,double tau=1.,
+                   bool lower_tail=true,bool log_p=false,
+                   double normal_ratio=0.,double shifted_exp_sigma=0.) {
+  if (sigma<=0. || tau<=0.) return na_real();
+  return ExGaussian(mu,sigma,tau,neg_inf(),pos_inf(),normal_ratio,shifted_exp_sigma).raw_prob(q,lower_tail,log_p);
 }
-
-// Shared interval mass for truncated densities, CDFs and survivors.
-inline double exg_log_interval(double lower, double upper, double mu, double sigma,
-                               double tau, double normal_ratio, double shifted_exp_sigma) {
-  if (is_nan(lower) || is_nan(upper) || is_nan(mu) || is_nan(sigma) || is_nan(tau)) return na_real();
-  if (sigma <= 0. || tau <= 0. || lower > upper) return na_real();
-  if (lower == upper) return neg_inf();
-  if (shifted_exp_sigma > 0. && sigma < shifted_exp_sigma) {
-    const double lo = std::max(lower, mu);
-    if (upper <= lo) return neg_inf();
-    return -(lo - mu) / tau + R::pexp(upper - lo, tau, true, true);
-  }
-  if (is_neg_inf(lower)) return pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
-  if (is_pos_inf(upper)) return pexg(lower, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma);
-
-  const double width = upper - lower;
-  const double mid = lower + 0.5 * width;
-  const bool normal = normal_ratio > 0. && tau < normal_ratio * sigma;
-  const double sig = normal ? sigma : std::max(sigma, SIG_TAU_EPS);
-  if (width / sig * std::max(1.0, std::fabs((mid - mu) / sig)) < 1e-2) {
-    // Simpson's rule in log space avoids cancellation at nearly equal endpoints.
-    const double l = dexg(lower, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
-    const double m = dexg(mid, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
-    const double u = dexg(upper, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
-    if (is_nan(l) || is_nan(m) || is_nan(u)) return na_real();
-    const double peak = std::max(l, std::max(m, u));
-    if (is_neg_inf(peak)) return neg_inf();
-    return std::log(width) + peak + std::log((std::exp(l-peak)+4.0*std::exp(m-peak)+std::exp(u-peak))/6.0);
-  }
-  const double uf = pexg(upper, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma);
-  if (uf <= -composite_detail::LOG2) {
-    return log_diff_exp(uf, pexg(lower, mu, sigma, tau, true, true, normal_ratio, shifted_exp_sigma));
-  }
-  return log_diff_exp(pexg(lower, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma),
-                      pexg(upper, mu, sigma, tau, false, true, normal_ratio, shifted_exp_sigma));
+inline double exg_log_interval(double lower,double upper,double mu,double sigma,double tau,
+                               double normal_ratio=0.,double shifted_exp_sigma=0.) {
+  if (sigma<=0. || tau<=0.) return na_real();
+  return ExGaussian(mu,sigma,tau,neg_inf(),pos_inf(),normal_ratio,shifted_exp_sigma).raw_log_interval(lower,upper);
 }
-
-// probability density function of truncated ex-Gaussian distribution
-inline double dtexg(
-    const double x,
-    const double mu = 5.,
-    const double sigma = 1.,
-    const double tau = 1.,
-    const double lower = neg_inf(),
-    const double upper = pos_inf(),
-    const bool log_d = false,
-    const double normal_ratio = 0.,
-    const double shifted_exp_sigma = 0.
-) {
-
-  if (is_neg_inf(lower) && is_pos_inf(upper)) {
-    return dexg(x, mu, sigma, tau, log_d, normal_ratio, shifted_exp_sigma);
-  }
-  if (is_nan(x) || is_nan(lower) || is_nan(upper)) return na_real();
-  if (sigma <= 0. || tau <= 0.) return na_real();
-  if (lower >= upper) return na_real();
-  if (x <= lower || x >= upper) return log_d ? neg_inf() : 0.;
-
-  double x_ld = dexg(x, mu, sigma, tau, true, normal_ratio, shifted_exp_sigma);
-  if (is_neg_inf(x_ld)) return log_d ? neg_inf() : 0.;
-
-  const double log_normaliser = exg_log_interval(lower, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
-  if (is_neg_inf(log_normaliser)) return log_d ? neg_inf() : 0.;
-
-  double log_out = x_ld - log_normaliser;
-  return log_d ? log_out : std::exp(log_out);
+inline double dtexg(double x,double mu=5.,double sigma=1.,double tau=1.,
+                    double lower=neg_inf(),double upper=pos_inf(),bool log_d=false,
+                    double normal_ratio=0.,double shifted_exp_sigma=0.) {
+  if (sigma<=0. || tau<=0. || lower>=upper) return na_real();
+  return ExGaussian(mu,sigma,tau,lower,upper,normal_ratio,shifted_exp_sigma).pdf(x,log_d);
 }
-
-// cumulative distribution function of truncated ex-Gaussian distribution
-inline double ptexg(
-    const double q,
-    const double mu = 5.,
-    const double sigma = 1.,
-    const double tau = 1.,
-    const double lower = neg_inf(),
-    const double upper = pos_inf(),
-    const bool lower_tail = true,
-    const bool log_p = false,
-    const double normal_ratio = 0.,
-    const double shifted_exp_sigma = 0.
-) {
-
-  if (is_neg_inf(lower) && is_pos_inf(upper)) {
-    return pexg(q, mu, sigma, tau, lower_tail, log_p, normal_ratio, shifted_exp_sigma);
-  }
-  if (is_nan(q) || is_nan(lower) || is_nan(upper)) return na_real();
-  if (sigma <= 0. || tau <= 0.) return na_real();
-  if (lower >= upper) return na_real();
-  if (q <= lower) {
-    double out = lower_tail ? 0. : 1.;
-    return log_p ? (out == 0. ? neg_inf() : 0.) : out;
-  }
-  if (q >= upper) {
-    double out = lower_tail ? 1. : 0.;
-    return log_p ? (out == 0. ? neg_inf() : 0.) : out;
-  }
-
-  const double norm = exg_log_interval(lower, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
-  if (is_nan(norm) || is_neg_inf(norm)) return na_real();
-  const double numerator = lower_tail ? exg_log_interval(lower, q, mu, sigma, tau, normal_ratio, shifted_exp_sigma)
-                                     : exg_log_interval(q, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma);
-  double out = numerator - norm;
-  if (is_nan(out)) return na_real();
-  // Derive the larger tail from the smaller interval to keep complements consistent.
-  if (out > -composite_detail::LOG2) {
-    const double other = lower_tail ? exg_log_interval(q, upper, mu, sigma, tau, normal_ratio, shifted_exp_sigma) - norm
-                                   : exg_log_interval(lower, q, mu, sigma, tau, normal_ratio, shifted_exp_sigma) - norm;
-    if (is_nan(other)) return na_real();
-    out = log1m_exp(std::min(0.0, other));
-  }
-  out = std::min(0.0, out);
-  return log_p ? out : std::exp(out);
+inline double ptexg(double q,double mu=5.,double sigma=1.,double tau=1.,
+                    double lower=neg_inf(),double upper=pos_inf(),
+                    bool lower_tail=true,bool log_p=false,
+                    double normal_ratio=0.,double shifted_exp_sigma=0.) {
+  if (sigma<=0. || tau<=0. || lower>=upper) return na_real();
+  return ExGaussian(mu,sigma,tau,lower,upper,normal_ratio,shifted_exp_sigma).prob(q,lower_tail,log_p);
 }
-
-
 #endif

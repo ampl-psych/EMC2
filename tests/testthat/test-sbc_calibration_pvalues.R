@@ -44,12 +44,28 @@ test_that("plot_sbc_ecdf keeps the corner stats (warns without recovery stats)",
                                               precision = FALSE)), NA)
 })
 
-test_that("plot_sbc_hist shows only p(chisq) and never warns about recovery stats", {
+test_that("plot_sbc_hist titles show the chi-square p-values for the histogram bins", {
   set.seed(1)
   ranks <- list(alpha = data.frame(v = runif(200), a = runif(200)))
   pdf(NULL)
   on.exit(dev.off())
-  # no recovery-stat machinery anymore: silent, p(chisq) goes in the title
+  # Record the titles while still drawing the plots.
+  titles <- character()
+  local_mocked_bindings(title = function(main, ...) {
+    titles <<- c(titles, main)
+    graphics::title(main = main, ...)
+  }, .package = "EMC2")
+
+  p_values <- vapply(ranks$alpha, function(x) {
+    counts <- hist(x, breaks = 10, plot = FALSE)$counts
+    chisq.test(counts)$p.value
+  }, numeric(1))
+  labels <- paste0("alpha - ", names(ranks$alpha))
   expect_silent(plot_sbc_hist(ranks, layout = NULL))
+  expect_equal(titles, paste0(labels, "\np(chisq) : ",
+                              vapply(p_values, EMC2:::.sbc_fmt_p, character(1))))
+
+  titles <- character()
   expect_silent(plot_sbc_hist(ranks, layout = NULL, add_stats = FALSE))
+  expect_equal(titles, labels)
 })

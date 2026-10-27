@@ -1,5 +1,3 @@
-RNGkind("L'Ecuyer-CMRG")
-set.seed(123)
 matchfun <- function(d) d$S == d$lR
 
 d_ord_probit <- design(Rlevels = c("low", "mid", "high"),
@@ -23,44 +21,71 @@ p_ord_logit <- c(location_Sleft = -1, location_Sright = 1, cut = 0)
 
 d_mnl <- design(Rlevels = c("left", "right", "up"),
                 factors = list(subjects = 1, S = c("left", "right", "up")),
-                formula = list(utility ~ 0 + S),
+                formula = list(utility ~ 0 + lR + lM),
                 matchfun = matchfun,
                 model = multinomial_logit, report_p_vector = FALSE)
 
-p_mnl <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
+p_mnl <- c(utility_lRleft = .5, utility_lRright = 0, utility_lRup = -.5, utility_lMTRUE = 1)
 
 d_mnp <- design(Rlevels = c("left", "right", "up"),
                 factors = list(subjects = 1, S = c("left", "right", "up")),
-                formula = list(utility ~ 0 + S),
+                formula = list(utility ~ 0 + lR + lM),
                 matchfun = matchfun,
                 model = multinomial_probit, report_p_vector = FALSE)
 
-p_mnp <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
+p_mnp <- c(utility_lRleft = .5, utility_lRright = 0, utility_lRup = -.5, utility_lMTRUE = 1)
 
-test_that("ordered_probit", {
-  sdat <- make_data(p_ord_probit, d_ord_probit, n_trials = 10)
-  ord_probit_s <- make_emc(sdat, d_ord_probit, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(ord_probit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_ord_probit, d_ord_probit, n_trials = 10))
+# Every stimulus-response combination, independent of the model's simulator.
+choice_data <- function(levels) {
+  dat <- expand.grid(S = factor(levels, levels = levels),
+                     R = factor(levels, levels = levels))
+  dat$subjects <- factor(1)
+  dat
+}
+
+test_that("ordered_probit likelihood", {
+  emc <- make_emc(choice_data(c("low", "mid", "high")), d_ord_probit,
+                  type = "single", compress = FALSE, n_chains = 1)
+  parameters <- likelihood_parameters(p_ord_probit)
+  expected <- apply(parameters, 1, function(p) {
+    cuts <- c(-Inf, p[["cut_lRlow"]], p[["cut_lRlow"]] + exp(p[["cut_lRmid"]]), Inf)
+    sum(vapply(p[1:3], function(location) sum(log(diff(pnorm(cuts - location)))), numeric(1)))
+  })
+  expect_equal(c(model_likelihood(emc, parameters)), expected, tolerance = 1e-8)
 })
 
-test_that("ordered_logit", {
-  sdat <- make_data(p_ord_logit, d_ord_logit, n_trials = 10)
-  ord_logit_s <- make_emc(sdat, d_ord_logit, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(ord_logit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_ord_logit, d_ord_logit, n_trials = 10))
+test_that("ordered_logit likelihood", {
+  emc <- make_emc(choice_data(c("left", "right")), d_ord_logit,
+                  type = "single", compress = FALSE, n_chains = 1)
+  parameters <- likelihood_parameters(p_ord_logit)
+  expected <- apply(parameters, 1, function(p) {
+    sum(plogis(p[["cut"]] - p[1:2], log.p = TRUE) +
+          plogis(p[["cut"]] - p[1:2], lower.tail = FALSE, log.p = TRUE))
+  })
+  expect_equal(c(model_likelihood(emc, parameters)), expected, tolerance = 1e-8)
 })
 
-test_that("multinomial_logit", {
-  sdat <- make_data(p_mnl, d_mnl, n_trials = 10)
-  mnl_s <- make_emc(sdat, d_mnl, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(mnl_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_mnl, d_mnl, n_trials = 10))
+test_that("multinomial_logit likelihood", {
+  emc <- make_emc(choice_data(c("left", "right", "up")), d_mnl,
+                  type = "single", compress = FALSE, n_chains = 1)
+  parameters <- likelihood_parameters(p_mnl)
+  # A large common offset must cancel before exponentiation.
+  shifted <- parameters
+  shifted[, 1:3] <- shifted[, 1:3] + 1000
+  parameters <- rbind(parameters, shifted)
+  expected <- apply(parameters, 1, function(p) {
+    sum(vapply(1:3, function(stimulus) {
+      utility <- p[1:3] + (1:3 == stimulus) * p[["utility_lMTRUE"]]
+      utility <- utility - max(utility)
+      sum(utility - log(sum(exp(utility))))
+    }, numeric(1)))
+  })
+  expect_equal(c(model_likelihood(emc, parameters)), expected, tolerance = 1e-8)
 })
 
-test_that("multinomial_probit", {
-  sdat <- make_data(p_mnp, d_mnp, n_trials = 10)
-  mnp_s <- make_emc(sdat, d_mnp, type = "single", compress = FALSE, n_chains = 1)
-  expect_snapshot(init_chains(mnp_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  expect_snapshot(make_data(p_mnp, d_mnp, n_trials = 10))
+test_that("multinomial_probit likelihood", {
+  emc <- make_emc(choice_data(c("left", "right", "up")), d_mnp,
+                  type = "single", compress = FALSE, n_chains = 1)
+  parameters <- likelihood_parameters(p_mnp)
+  expect_snapshot(round(model_likelihood(emc, parameters), 6))
 })

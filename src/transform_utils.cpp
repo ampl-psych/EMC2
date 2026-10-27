@@ -162,7 +162,7 @@ NumericMatrix c_do_transform(NumericMatrix pars, const std::vector<TransformSpec
       double range = up - lw;
       for (int i = 0; i < nrow; i++) {
         pars(i, col_idx) = lw +
-          range * R::pnorm(pars(i, col_idx), 0.0, 1.0, 1, 0);
+          range * PNORM_STD(pars(i, col_idx), true, false);
       }
       break;
     }
@@ -180,7 +180,7 @@ void c_do_bound(const ParamTable& pt,
                 const std::vector<BoundSpec>& specs,
                 std::vector<int>& result)
 {
-  const Mat base = pt.base;
+  const Mat& base = pt.base;
   const int nrows = base.nrow;
 
   std::fill(result.begin(), result.begin() + nrows, 1);
@@ -254,7 +254,6 @@ void c_do_transform(ParamTable& pt,
       const double range = up - lw;
       for (int i = 0; i < nrow; ++i) {
         col[i] = lw + range * PNORM_STD(col[i], true, false);
-        // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
       }
       break;
       }

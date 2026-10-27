@@ -15,3 +15,6 @@
 
 ^\.positai$
 ^\.claude$
+^benchmarks$
+^validation$
+^\.git$

@@ -125,6 +125,10 @@ stopfn_rdex <- function(t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD) {
     .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD)
 }
 
+c_multinomial_probit_probs <- function(utility) {
+    .Call(`_EMC2_c_multinomial_probit_probs`, utility)
+}
+
 fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {
     .Call(`_EMC2_fft_convolve_equiv_cpp`, x, y, conj_flag)
 }
@@ -187,6 +191,46 @@ rPHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
 
 rHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
     .Call(`_EMC2_rHSDM`, pars, ok, dt, max_steps)
+}
+
+native_run_hyper <- function(sampler, alpha, iter) {
+    .Call(`_EMC2_native_run_hyper`, sampler, alpha, iter)
+}
+
+native_chain_proposals <- function(emc, alpha, likelihood, do_block, stage) {
+    .Call(`_EMC2_native_chain_proposals`, emc, alpha, likelihood, do_block, stage)
+}
+
+native_eff_proposals <- function(emc, samples) {
+    .Call(`_EMC2_native_eff_proposals`, emc, samples)
+}
+
+native_sub_blocking <- function(emc, n_blocks) {
+    .Call(`_EMC2_native_sub_blocking`, emc, n_blocks)
+}
+
+native_conditionals <- function(samples, type, subject, iteration, indices) {
+    .Call(`_EMC2_native_conditionals`, samples, type, subject, iteration, indices)
+}
+
+native_group_means <- function(sampler, means, random = NULL) {
+    .Call(`_EMC2_native_group_means`, sampler, means, random)
+}
+
+native_lik_prec <- function(emc, history_idx, ll_inputs, n_cores) {
+    .Call(`_EMC2_native_lik_prec`, emc, history_idx, ll_inputs, n_cores)
+}
+
+native_sampler_contexts <- function(inputs, n_chains, n_cores) {
+    .Call(`_EMC2_native_sampler_contexts`, inputs, n_chains, n_cores)
+}
+
+native_run_chains <- function(args, cache, stage, iter, cores_for_chains, verboseProgress) {
+    .Call(`_EMC2_native_run_chains`, args, cache, stage, iter, cores_for_chains, verboseProgress)
+}
+
+native_init_chains <- function(emc, cache, start_mu, start_var, particles, force) {
+    .Call(`_EMC2_native_init_chains`, emc, cache, start_mu, start_var, particles, force)
 }
 
 c_add_charvectors <- function(x, y) {

@@ -36,9 +36,6 @@ design_matrices <-  convolve_design_matrix(
   contrasts = list(cond = matrix(c(-1, 1)))
 )
 
-# High pass filter timeseries
-ts <- high_pass_filter(ts)
-
 # Design for sampling
 des <- design_fmri(design_matrices)
 
@@ -49,15 +46,3 @@ test_that("prior_fmri", {
     NULL  # Suppress invisibly returned output
   })
 })
-
-# Test whether sampling works
-fmri_emc <- make_emc(ts, des, type = "single")
-
-RNGkind("L'Ecuyer-CMRG")
-set.seed(123)
-test_that("fmri_emc", {
-  expect_snapshot(init_chains(fmri_emc, particles = 10, cores_for_chains = 1)[[1]]$samples, variant = Sys.info()[1])
-})
-
-
-

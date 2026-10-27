@@ -11,7 +11,7 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
-#' @export
+#' @noRd
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -956,9 +956,9 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' @details
 #'
 #' The default model is `stop_signal(go = "exgaussian", stop = "exgaussian")`,
-#' which is equivalent to [SSEXG()]. The hybrid racing-diffusion /
+#' which is equivalent to `SSEXG()`. The hybrid racing-diffusion /
 #' ex-Gaussian model `stop_signal(go = "racing_diffusion",
-#' stop = "exgaussian")` is equivalent to [SSRDEX()].
+#' stop = "exgaussian")` is equivalent to `SSRDEX()`.
 #'
 #' A stop-signal model is represented as a race between stochastic finishing
 #' times. On go trials, only the go runner is triggered. On stop trials, the go
@@ -973,14 +973,14 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #'
 #' | **Family** | **Parameters** | **Interpretation** |
 #' |-----------|----------------|--------------------|
-#' | `"exgaussian"` | `mu`, `sigma`, `tau`, `exg_lb` | Descriptive ex-Gaussian go finish-time distribution. `mu` is the mean of the Gaussian component, `sigma` is the standard deviation of the Gaussian component, `tau` is the mean of the exponential component, and `exg_lb` is the lower bound used for truncation. See [SSEXG()] for the full parameter description. |
-#' | `"racing_diffusion"` | `v`, `B`, `A`, `t0`, `s` | Racing-diffusion go process. `v` is the evidence-accumulation rate, `A` is between-trial variation in start point, `B` is the distance from `A` to the response threshold, `t0` is non-decision time, and `s` is within-trial drift-rate standard deviation. See [SSRDEX()] for the full parameter description. |
+#' | `"exgaussian"` | `mu`, `sigma`, `tau`, `exg_lb` | Descriptive ex-Gaussian go finish-time distribution. `mu` is the mean of the Gaussian component, `sigma` is the standard deviation of the Gaussian component, `tau` is the mean of the exponential component, and `exg_lb` is the lower bound used for truncation. See `SSEXG()` for the full parameter description. |
+#' | `"racing_diffusion"` | `v`, `B`, `A`, `t0`, `s` | Racing-diffusion go process. `v` is the evidence-accumulation rate, `A` is between-trial variation in start point, `B` is the distance from `A` to the response threshold, `t0` is non-decision time, and `s` is within-trial drift-rate standard deviation. See `SSRDEX()` for the full parameter description. |
 #'
 #' The stop runner can be:
 #'
 #' | **Family** | **Parameters** | **Interpretation** |
 #' |-----------|----------------|--------------------|
-#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See [SSEXG()] and [SSRDEX()] for the ex-Gaussian stop-parameter description. |
+#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See `SSEXG()` and `SSRDEX()` for the ex-Gaussian stop-parameter description. |
 #' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
 #' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and transformed with `exp(shapeS)` and `exp(scaleS)`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `exp(scaleS) * gamma(1 + 1 / exp(shapeS))`. |
 #' | `"normal"` | `muS`, `sigmaS`, `normS_lb` | Lower-truncated normal stop finish-time distribution. `muS` and `sigmaS` are estimated on the log scale and transformed with `exp(muS)` and `exp(sigmaS)`. `muS` is the location of the underlying normal distribution, `sigmaS` is its standard deviation, and `normS_lb` is the lower truncation point. The default lower bound is `0`, so generated stop finishing times are non-negative. |
@@ -996,7 +996,7 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' `stop_signal(go = "racing_diffusion", stop = "weibull")$p_types`.
 #'
 #' @return A model list with all the necessary functions to sample.
-#' @export
+#' @noRd
 stop_signal <- function(
     go = c("exgaussian", "racing_diffusion"),
     stop = c("exgaussian", "lognormal", "weibull", "normal"),
@@ -1635,7 +1635,7 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Verbruggen, F., Aron, A. R., Band, G. P., Beste, C., Bissett, P. G., Brockett, A. T., ... & Boehler, C. N. (2019). A consensus guide to capturing the ability to inhibit actions and impulsive behaviors in the stop-signal task. *elife*, *8*, e46323. \doi{10.7554/eLife.46323}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @export
+#' @noRd
 SSEXG <- function(exgaussian_approximation = NULL) {
   stop_signal(
     go = "exgaussian",
@@ -2101,7 +2101,7 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @export
+#' @noRd
 SSRDEX <- function(exgaussian_approximation = NULL) {
   stop_signal(
     go = "racing_diffusion",
@@ -2429,4 +2429,3 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
     sum(allLL[attr(dadm,"expand")])
 }
-

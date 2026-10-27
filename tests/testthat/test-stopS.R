@@ -52,23 +52,20 @@ p_vector[1:length(p_vector)] <- c(
   qnorm(.1), qnorm(.1)
 )
 
-dat <- make_data(
-  p_vector,
-  designSSexG,
-  n_trials = 10,
-  functions = list(SSD = mySSD_function)
+
+dat <- data.frame(
+  subjects = factor(1),
+  S = factor(rep(c("left", "right"), each = 4)),
+  R = factor(c("left", "right", NA, "left", "right", "left", NA, "right"),
+             levels = c("left", "right")),
+  rt = c(.65, .9, NA, .75, .7, 1.1, NA, .85),
+  SSD = c(Inf, Inf, .2, .3, Inf, Inf, .25, .35)
 )
-emc <- make_emc(dat, designSSexG, type = "single")
+emc <- make_emc(dat, designSSexG, type = "single", compress = FALSE, n_chains = 1)
 
-
-test_that("exG", {
-  # Smoke-test that SSEXG can initialize and returns structurally valid samples.
-  samples <- init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples
-  expect_equal(dim(samples$alpha), c(length(p_vector), 1, 1))
-  expect_named(samples$alpha[, 1, 1], names(p_vector))
-  expect_equal(as.character(samples$stage), "init")
-  expect_equal(samples$idx, 1)
-  expect_true(is.finite(samples$subj_ll[1, 1]))
+test_that("exG likelihood", {
+  parameters <- likelihood_parameters(p_vector)
+  expect_snapshot(round(model_likelihood(emc, parameters), 6))
 })
 
 test_that("SSEXG mapped_pars supplies internal SSD and hides bookkeeping columns", {
@@ -177,12 +174,10 @@ test_that("staircase resets per subject", {
   dat_multi <- make_data(p_multi, design_multi, n_trials = 400,
                          functions = list(SSD = make_ssd(p_stop = 1)))
 
-  staircase <- attr(dat_multi, "staircase")
-  expect_false(is.null(staircase))
-  expect_equal(
-    unname(vapply(staircase$specs, `[[`, numeric(1), "SSD0")),
-    rep(0.25, length(staircase$specs))
-  )
+  # Go trials have SSD = Inf; inspect the first actual stop trial per subject.
+  first_ssd <- vapply(split(dat_multi$SSD, dat_multi$subjects),
+                      function(x) x[is.finite(x)][1], numeric(1))
+  expect_equal(unname(first_ssd), rep(0.25, 3))
 })
 
 test_that("posterior-only stop-signal plot summaries are stable", {

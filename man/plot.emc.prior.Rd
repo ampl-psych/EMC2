@@ -28,7 +28,7 @@
 \item{N}{Integer. How many prior samples to draw}
 
 \item{...}{Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
-or arguments required for the types of models e.g. n_factors for type = "factor"}
+or arguments required for the types of models e.g. n_factors for type = "infnt_factor"}
 }
 \value{
 An invisible mcmc.list object with prior samples of the selected type

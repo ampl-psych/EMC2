@@ -8,7 +8,7 @@
 #' @param design_in An emc design list. The design of the model to be used in SBC
 #' @param prior_in An emc prior list. The prior for the design to be used in SBC
 #' @param replicates Integer. The number of samples to draw from the prior
-#' @param trials Integer. The number of trials of the simulated data (per subject)
+#' @param trials Integer. The number of simulated trials per subject per design cell
 #' @param n_subjects Integer. Only used for hierarchical models. The number of subjects to be used in data generation of each replicate
 #' @param plot_data Boolean. Whether to plot the data simulated (aggregated across subjects)
 #' @param verbose Verbose. Whether to print progress related messages
@@ -340,7 +340,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     mu_rec <- get_pars(emc, selection = "mu", return_mcmc = F, merge_chains = T,flatten = T)
     rank_mu <- rbind(rank_mu, mapply(get_ranks_ESS, split(mu_rec, row(mu_rec)), t(ESS_mu), prior_mu[,i]))
 
-    ESS_var <- round(pmin(unlist(ess_summary(emc, selection = "Sigma", stat = NULL)), chain_n(emc)[1,"sample"]))
+    ESS_var <- round(pmin(unlist(ess_summary(emc, selection = "Sigma", stat = NULL, flatten = TRUE)), chain_n(emc)[1,"sample"]))
     var_rec <- get_pars(emc, selection = "Sigma", return_mcmc = F, merge_chains = T, flatten = T)
     prior_var_input <- get_pars(emc, selection = "Sigma", flatten = T, true_pars = prior_var[,,i])[[1]][[1]]
     rank_var <- rbind(rank_var, mapply(get_ranks_ESS, split(var_rec, row(var_rec)), t(ESS_var), prior_var_input))
@@ -388,7 +388,7 @@ run_SBC_hierarchical_rep <- function(i, design_in, prior_mu, prior_var, trials, 
   mu_rec  <- get_pars(emc, selection = "mu",    return_mcmc = FALSE, merge_chains = TRUE, flatten = TRUE)
   rank_mu_row <- unname(mapply(get_ranks_ESS, split(mu_rec, row(mu_rec)), t(ESS_mu), prior_mu[, i]))
 
-  ESS_var         <- round(pmin(unlist(ess_summary(emc, selection = "Sigma", stat = NULL)), chain_n(emc)[1, "sample"]))
+  ESS_var         <- round(pmin(unlist(ess_summary(emc, selection = "Sigma", stat = NULL, flatten = TRUE)), chain_n(emc)[1, "sample"]))
   var_rec         <- get_pars(emc, selection = "Sigma", return_mcmc = FALSE, merge_chains = TRUE, flatten = TRUE)
   prior_var_input <- get_pars(emc, selection = "Sigma", flatten = TRUE, true_pars = prior_var[,, i])[[1]][[1]]
   rank_var_row    <- unname(mapply(get_ranks_ESS, split(var_rec, row(var_rec)), t(ESS_var), prior_var_input))
@@ -415,10 +415,6 @@ SBC_hierarchical_parallel <- function(design_in, prior_in, replicates = 250, tri
                        cores_per_chain = 1)
   dots$verbose <- verbose
   type <- attr(prior_in, "type")
-  if (type != "diagonal-gamma")
-    warning("SBC in EMC2 is frequently biased for prior structures with heavy variance mass around 0 \n
-             please consider using 'type = diagonal-gamma' to test your model. See also vignettes")
-
   temp_dir <- if (!is.null(fileName))
     paste0(tools::file_path_sans_ext(fileName), "_temp")
   else NULL
@@ -515,7 +511,7 @@ SBC_hierarchical_parallel <- function(design_in, prior_in, replicates = 250, tri
       } else {
         # Fresh run — draw prior samples and set up temp_dir
         prior_mu  <- plot(prior_in, design_in, do_plot = FALSE, N = replicates, selection = "mu",
-                          return_mcmc = FALSE, map = FALSE)[[1]]
+                          return_mcmc = FALSE, remove_constants = FALSE, map = FALSE)[[1]]
         prior_var <- plot(prior_in, design_in, do_plot = FALSE, N = replicates, selection = "Sigma",
                           return_mcmc = FALSE, remove_constants = FALSE, map = FALSE)[[1]]
         if (!is.null(temp_dir)) {
@@ -553,10 +549,15 @@ SBC_hierarchical_parallel <- function(design_in, prior_in, replicates = 250, tri
         else if (!is.null(f_pers) && file.exists(f_pers))
           res_new[[idx]] <- readRDS(f_pers)
       }
-      if (!is.null(res_new[[idx]]))
+      if (is.list(res_new[[idx]]) && !is.null(res_new[[idx]]$rank_mu_row))
         completed_results[[as.character(i)]] <- res_new[[idx]]
     }
   }
+
+  missing_reps <- setdiff(seq_len(replicates), as.integer(names(completed_results)))
+  if (length(missing_reps))
+    stop("SBC replicates incomplete: ", paste(missing_reps, collapse = ", "),
+         ". Completed replicates and prior draws have been kept for restart.")
 
   # Assemble in replicate order (shared with recover_sbc)
   out <- .sbc_assemble_hierarchical(completed_results, prior_mu, prior_var, par_names)
@@ -1233,5 +1234,6 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL,
 
 get_ranks_ESS <- function(posterior, ESS, prior){
   posterior <- posterior[seq(1, length(posterior), length.out = ESS)]
-  return(pmin(rank(c(prior, posterior))[1]/(ESS+1),1))
+  (sum(posterior < prior) + runif(1, 0, sum(posterior == prior) + 1)) /
+    (length(posterior) + 1)
 }

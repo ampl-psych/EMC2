@@ -1,0 +1,5 @@
+inst/include/build_info.h.in text eol=lf
+configure* text eol=lf
+cleanup* text eol=lf
+tools/*.sh text eol=lf
+src/Makevars* text eol=lf

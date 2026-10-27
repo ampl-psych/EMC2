@@ -11,12 +11,13 @@
 #
 # Run ./configure --help for available options.
 
+set -e
+
 # --------------------------------------------------------------------------- #
 #  Defaults                                                                    #
 # --------------------------------------------------------------------------- #
-PNORM_MODE=1        # 1 = Hart (near-double precision, thread-safe)
-FAST_MATH=no        # fast-math disabled by default
 ENABLE_NATIVE=no    # native optimizations disabled by default
+ENABLE_OPENMP=yes
 
 # --------------------------------------------------------------------------- #
 #  Argument parsing                                                            #
@@ -28,76 +29,50 @@ for arg in "$@"; do
 
 configure options for EMC2:
 
-  --with-pnorm-mode=N     Select pnorm implementation (default: 1):
-                            0  R::pnorm        exact, not thread-safe and slow
-                            1  Hart (1968)     near-double precision (~1.2e-15),
-                                               thread-safe  [default]
-                            2  A&S 7.1.26      single-precision quality (~1.5e-7),
-                                               thread-safe, best vectorisability
-
-  --enable-fast-math      Add -ffast-math -fno-math-errno (default: disabled).
-                          Improves speed but may affect floating-point semantics.
-                          Recommended only with --with-pnorm-mode=1 or =2.
+  Normal probabilities use the thread-safe Cody implementation.
 
   --native                Add -march=native (default: disabled).
                           Improves speed via architecture-specific optimizations.
                           Disabled by default for CRAN compatibility.
 
+  --disable-openmp        Build the serial sampler without OpenMP.
+
   --help, -h              Show this help message and exit.
 
 Examples:
   R CMD INSTALL .
-  R CMD INSTALL --configure-args="--with-pnorm-mode=1 --enable-fast-math --native" .
+  R CMD INSTALL --configure-args="--native" .
 
 EOF
       exit 0
       ;;
-    --with-pnorm-mode=*)
-      PNORM_MODE="${arg#*=}"
-      case "$PNORM_MODE" in
-        0|1|2) ;;
-        *)
-          echo "configure: error: --with-pnorm-mode must be 0, 1, or 2 (got '$PNORM_MODE')" >&2
-          exit 1
-          ;;
-      esac
-      ;;
-    --enable-fast-math)
-      FAST_MATH=yes
-      ;;
-    --disable-fast-math)
-      FAST_MATH=no
-      ;;
     --native)
       ENABLE_NATIVE=yes
       ;;
+    --disable-openmp)
+      ENABLE_OPENMP=no
+      ;;
     *)
-      echo "configure: warning: unrecognised option '$arg' (ignored)" >&2
+      echo "configure: error: unrecognised option '$arg'" >&2
+      exit 1
       ;;
   esac
 done
 
 # --------------------------------------------------------------------------- #
-#  R's compiler — split binary from embedded flags (e.g. "g++ -std=gnu++17") #
+#  R's build configuration                                                    #
 # --------------------------------------------------------------------------- #
-CXX_FULL="$(R CMD config CXX)"
-CXX_BIN="$(echo "$CXX_FULL"  | awk '{print $1}')"
-CXX_STD="$(echo "$CXX_FULL"  | cut -s -d' ' -f2-)"
-R_CXXFLAGS="$(R CMD config CXXFLAGS)"
+R_BIN=${R_BIN:-"${R_HOME:+${R_HOME}/bin/}R"}
+makevars=${EMC2_MAKEVARS:-src/Makevars}
+: > config.log
+FORTRAN_LIBS=$(sh tools/check-linalg.sh "$R_BIN") || exit 1
 
 # --------------------------------------------------------------------------- #
 #  Extra user-requested flags                                                  #
 # --------------------------------------------------------------------------- #
 EXTRA_CXXFLAGS=""
-if [ "$FAST_MATH" = "yes" ]; then
-  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -ffast-math -fno-math-errno"
-fi
 if [ "$ENABLE_NATIVE" = "yes" ]; then
-  # Only add -march=native if R's own CXXFLAGS don't already contain it
-  case "$R_CXXFLAGS" in
-    *-march=native*) ;;
-    *) EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native" ;;
-  esac
+  EXTRA_CXXFLAGS="$EXTRA_CXXFLAGS -march=native"
 fi
 
 # --------------------------------------------------------------------------- #
@@ -111,83 +86,43 @@ esac
 # --------------------------------------------------------------------------- #
 #  OpenMP detection — compile test using R's own compiler                     #
 # --------------------------------------------------------------------------- #
-OMP_CXXFLAGS=""
-OMP_LIBS=""
-
-cat > /tmp/omp_test.cpp <<'OMPEOF'
-#include <omp.h>
-int main() { return omp_get_max_threads(); }
-OMPEOF
-
-case "$(uname)" in
-  Darwin)
-    for prefix in /opt/homebrew /usr/local; do
-      if $CXX_BIN $CXX_STD $R_CXXFLAGS \
-            -Xclang -fopenmp \
-            -I"${prefix}/opt/libomp/include" \
-            -L"${prefix}/opt/libomp/lib" -lomp \
-            /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
-        OMP_CXXFLAGS="-Xclang -fopenmp -I${prefix}/opt/libomp/include"
-        OMP_LIBS="-L${prefix}/opt/libomp/lib -lomp"
-        echo "configure: OpenMP enabled via ${prefix}/opt/libomp"
-        break
-      fi
-    done
-    ;;
-  *)
-    if $CXX_BIN $CXX_STD $R_CXXFLAGS \
-          -fopenmp \
-          /tmp/omp_test.cpp -o /tmp/omp_test 2>/dev/null; then
-      OMP_CXXFLAGS="-fopenmp"
-      OMP_LIBS="-fopenmp"
-      echo "configure: OpenMP enabled via -fopenmp"
-    fi
-    ;;
-esac
-
-rm -f /tmp/omp_test.cpp /tmp/omp_test
-
-if [ -z "$OMP_LIBS" ]; then
-  echo "configure: OpenMP not available, building without it (single-threaded fallback)"
-fi
+. ./tools/check-openmp.sh
 
 # --------------------------------------------------------------------------- #
 #  Summary                                                                     #
 # --------------------------------------------------------------------------- #
 echo "configure: EMC2 build configuration"
-echo "  PNORM_MODE    : $PNORM_MODE"
-echo "  fast-math     : $FAST_MATH"
+echo "  pnorm         : Cody (direct tails)"
 echo "  native        : $ENABLE_NATIVE"
 echo "  Accelerate    : ${ACCELERATE_LIBS:-no}"
 echo "  OpenMP CXX    : ${OMP_CXXFLAGS:-disabled}"
 echo "  OpenMP libs   : ${OMP_LIBS:-disabled}"
-echo "  Compiler      : $CXX_BIN $CXX_STD"
-echo "  R CXXFLAGS    : $R_CXXFLAGS"
+echo "  OpenMP pause  : $OMP_PAUSE"
 
 # --------------------------------------------------------------------------- #
 #  Write src/Makevars from src/Makevars.in                                    #
 # --------------------------------------------------------------------------- #
 sed \
-  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
   -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
-  src/Makevars.in > src/Makevars
-
-echo "configure: src/Makevars written"
+  -e "s|@FORTRAN_LIBS@|${FORTRAN_LIBS}|g" \
+  src/Makevars.in > "$makevars"
 
 # --------------------------------------------------------------------------- #
 #  Write inst/include/build_info.h from inst/include/build_info.h.in          #
 # --------------------------------------------------------------------------- #
+OMP_LIBS_HEADER=$(printf '%s\n' "$OMP_LIBS" | sed 's/"/\\\\"/g')
 sed \
-  -e "s|@PNORM_MODE@|${PNORM_MODE}|g" \
-  -e "s|@FAST_MATH@|${FAST_MATH}|g" \
   -e "s|@ENABLE_NATIVE@|${ENABLE_NATIVE}|g" \
   -e "s|@OMP_CXXFLAGS@|${OMP_CXXFLAGS}|g" \
-  -e "s|@OMP_LIBS@|${OMP_LIBS}|g" \
+  -e "s|@OMP_LIBS@|${OMP_LIBS_HEADER}|g" \
+  -e "s|@OMP_PAUSE@|${OMP_PAUSE}|g" \
   -e "s|@EXTRA_CXXFLAGS@|${EXTRA_CXXFLAGS}|g" \
   -e "s|@ACCELERATE_LIBS@|${ACCELERATE_LIBS}|g" \
   inst/include/build_info.h.in > inst/include/build_info.h
 
 echo "configure: inst/include/build_info.h written"
+sh tools/header-dependencies.sh >> "$makevars"
+echo "configure: $makevars written"

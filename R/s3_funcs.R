@@ -437,11 +437,11 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     search_width = 1, step_size = 100, verbose = TRUE, fileName = NULL,
                     particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
-                    thin = FALSE, on_singular = NULL,
+                    thin = FALSE, on_singular = NULL, history_proposals = FALSE,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
-                       trim = TRUE, r_cores = 1)
+                       trim = TRUE)
   t_start <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
@@ -469,14 +469,30 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
   } else{
     last_stage <- stage
   }
+  previous_history <- isTRUE(emc[[1]]$history_proposals)
+  if(missing(history_proposals)) history_proposals <- previous_history
+  if(!is.logical(history_proposals) || length(history_proposals) != 1 || is.na(history_proposals))
+    stop("history_proposals must be TRUE or FALSE")
+  if(history_proposals != previous_history){
+    emc[[1]]$sample_kernel <- NULL
+    for(i in seq_along(emc)) attr(emc[[i]]$samples, "pm_settings") <- NULL
+    # Use the latest draws as warmup history for the changed mixture.
+    if(get_last_stage(emc) %in% c("adapt", "sample")){
+      emc <- subset(emc, stage = get_last_stage(emc))
+      for(i in seq_along(emc)) emc[[i]]$samples$stage[] <- "burn"
+      last_stage <- "adapt"
+    }
+  }
+  emc[[1]]$history_proposals <- history_proposals
   stages <- c('preburn', 'burn', 'adapt', 'sample')
   to_run <- stages[which(stages == last_stage):length(stages)]
+  context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)
   for(stage in to_run){
     emc <- run_emc(emc, stage = stage, stop_criteria[[stage]], cores_for_chains = cores_for_chains, search_width = search_width,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
-                   on_singular = on_singular, r_cores = dots$r_cores)
+                   on_singular = on_singular, .context = context)
   }
   if (verbose) {
     # Re-use check_progress to get final Rhat and ESS for the sample stage,
@@ -489,14 +505,13 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
       step_size  = step_size,
       n_cores    = cores_per_chain * cores_for_chains,
       verbose    = FALSE,
-      progress   = NULL,
-      n_blocks   = dots$n_blocks
+      progress   = NULL
     )
 
     gd      <- final_progress$gd$gd
     gd_final <- NULL
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- rhat_message(final_progress$gd$rule, gd)
 
     ess_message <- if (!is.null(final_progress$curr_min_es) &&
                        is.finite(final_progress$curr_min_es)) {
@@ -538,7 +553,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
 #' every ``step_size`` iterations. After a failed check, the first third of the stage's
-#' draws is dropped if this lowers the stopping diagnostic.
+#' draws is dropped only if all stopping criteria pass on the remaining draws.
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
@@ -552,6 +567,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
+#'
+#' Chains share fixed likelihood inputs in one process. Each chain has its own
+#' native RNG, seeded from R, with its state saved in the samples for resuming fits.
+#' Resuming with a different C++ library seeds fresh chain RNGs from R.
 #'
 #' The estimation is performed using particle-metropolis within-Gibbs sampling.
 #' For sampling details see:
@@ -579,34 +598,27 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param particle_factor An integer. ``particle_factor`` multiplied by the square
 #' root of the number of sampled parameters determines the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across
-#' participant calculations. Only available on Linux or Mac OS. For Windows, only
-#' parallelization across chains (``cores_for_chains``) is available.
+#' participant calculations using native threads.
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
-#' conditions as specified by ``stop_criteria``? Defaults to 20. ``max_tries`` is
-#' ignored if the required number of iterations has not been reached yet.
+#' conditions as specified by ``stop_criteria``? Defaults to 20. In ``sample``, this
+#' limit applies even if the requested number of draws has not been reached. In
+#' earlier stages, the requested number of iterations must be reached first.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types
 #' of parameters these should hold. See the details and examples section.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
-#' @param on_singular A list or `NULL` (the default). Controls recovery when the
-#' group-level covariance becomes computationally singular during sampling (which
-#' otherwise aborts the run, typically from an unidentified parameter). `NULL`
-#' keeps the defaults below: up to 3 re-draws of the group step, then an error
-#' naming the diverging parameters.
-#' A list may set any of:
-#' \itemize{
-#'   \item `max_retries` — integer; on a singular covariance, re-draw the group
-#'     (Gibbs) step this many times before giving up on that iteration. Rescues
-#'     transient singularities. Default 3.
-#'   \item `on_exhausted` — `"error"` (default) or `"carry_forward"`. When retries
-#'     are exhausted, `"carry_forward"` reuses the previous iteration's group
-#'     parameters and continues instead of aborting.
-#'   \item `max_carry_forward` — integer; consecutive carried-forward iterations
-#'     allowed before giving up with a diagnosis of the diverging parameters. Default 10.
-#' }
-#' Retry is attempted before carry-forward when both are enabled.
+#' @param on_singular A list or `NULL` (default). Controls recovery when the group-level
+#' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
+#' group step, then an error.
+#' A list may set `max_retries` (integer, re-draw the group step on failure).
+#' @param history_proposals Logical. Add a mixture of per-chain history proposals
+#' during burn, adaptation and sampling. Defaults to `FALSE` for new fits;
+#' omitted on continuation, retains the saved choice. Changing it after adaptation
+#' uses the previous draws as warmup history and restarts adaptation. Mixture weights
+#' are learned during warmup. History is refreshed after the final warmup block,
+#' then proposals and tuning are fixed during sampling.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{
@@ -630,7 +642,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' #   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 #'
 #' # For a transient singular group covariance during burn, retry the group step:
-#' # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3, on_exhausted = "carry_forward"))
+#' # LNR_s <- fit(LNR_s, on_singular = list(max_retries = 3))
 #'}
 #' @export
 fit <- function(emc, ...){

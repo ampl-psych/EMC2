@@ -1,6 +1,7 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 #include "model_DDM.h"
+#include "composite_functions.h"
 
 // =============================================================================
 // Constants
@@ -8,11 +9,8 @@ using namespace Rcpp;
 static constexpr int    DDM_NEVAL   = 6000;
 static constexpr double DDM_EPS     = 5e-3;
 static constexpr double DDM_LOG_EPS = -5.298317366548036311258; //std::log(DDM_EPS);
-
-// lnnorm helpers
-static constexpr double LNNORM_MAX_X = 38.0;
-static constexpr double LNNORM_MIN_X = -1.00e9;
-static constexpr double SQR2PI       = 2.506628274631000502415765e0;
+static constexpr double DDM_CDF_LOG_EPS = -27.631021115928547651; // log(1e-12)
+static constexpr double DDM_LOG_INNER_EPS = -7.600902459542082361471; //std::log(DDM_EPS * 0.1);
 
 // Mathematical constants (only defined if not already provided by <cmath> / Rmath.h)
 #ifndef M_LNPI
@@ -28,119 +26,12 @@ static constexpr double M_LN2        = 0.693147180559945309417232121458;
 static constexpr double M_LN_SQRT_PI = 0.572364942924700087071713675677;
 #endif
 
-
-// general helpers
-static double logsum(double xa, double xb) {
-  double temp;
-  if (xa <= R_NegInf) return xb;
-  if (xb <= R_NegInf) return xa;
-  if (xa > xb) temp = xa + log1p(exp(xb - xa));
-  else temp = xb + log1p(exp(xa - xb));
-  return temp;
+// The diffusion series contains signed terms; retain their absolute difference.
+static double log_absdiff_exp(double a,double b) {
+  return log_diff_exp(std::max(a,b),std::min(a,b));
 }
 
-static double logdiff(double xa, double xb) {
-  double result;
-  if (xb <= R_NegInf) return(xa);
-  if (xa <= R_NegInf) return(xb);
-  if (xa > xb) result = (xa + log1p(-exp(xb - xa)));
-  else
-    if (xb > xa) result = (xb + log1p(-exp(xa - xb)));
-  else result = R_NegInf;
-  return result;
-}
-
-// static double lognormal(double x) {
-//   return	-0.5*x*x - M_LN_SQRT_PI - 0.5*M_LN2;
-// }
-//
-/*
- The original function lnnorm was written by
- Jean Marie Linhart
- StataCorp LP
- jlinhart@stata.com
- January 4, 2008
- and later modified
- */
-static double lnnorm(double z)
-{
-  int lower ;
-
-  double z2, y, s, p1, q1, p2, q2, t, a1, a2 ;
-  double n, m ;
-
-  if (z==0.0e0) return(std::log(0.50e0)) ;
-
-  if (z > LNNORM_MAX_X) return(0.0e0);
-  if (z <= LNNORM_MIN_X) return(-0.5e0*z*z);
-
-  if (z<0.0e0) {
-    z= -z ;
-    lower=1 ;
-  }
-  else    lower=0 ;
-  //upper = !lower ;
-
-  z2 = z*z ;
-
-  y = exp(-0.5*z2) / SQR2PI ;
-  n = y/z ;
-
-  if (!( ( z>2.00e0))) {
-    z *= y ;
-    s=z ;
-    t=0.0e0 ;
-
-    for (n=3.0e0;s!=t;n+=2.0e0) {
-      t=s ;
-      z *= ((z2)/ (n)) ;
-      s+=z ;
-    }
-    if (lower) return(std::log(0.50e0-s)) ;
-    return(std::log(0.50e0+s)) ;
-  }
-
-  a1=2.0e0 ;
-  a2=0.0e0 ;
-  n=z2+3.0e0 ;
-  p1=1.0e0 ;
-  q1=z ;
-  p2=(n-1.0e0) ;
-  q2=n*z ;
-  m = p1/q1 ;
-  t = p2/q2 ;
-  s = m ;
-
-  for (n+=4.0e0; m!=t && s!=t; n+=4.0e0) {
-    a1 -= 8.0 ;
-    a2 += a1 ;
-    s = a2*p1 + n*p2 ;
-    p1=p2 ;
-    p2=s ;
-    s = a2*q1 + n*q2 ;
-    q1=q2 ;
-    q2=s ;
-    s=m ;
-    m=t ;
-    if (q2>1.0e30) {
-      p1 /= 1.0e30 ;
-      p2 /= 1.0e30 ;
-      q1 /= 1.0e30 ;
-      q2 /= 1.0e30 ;
-    }
-    t = p2/q2;
-  }
-  t = lower ? std::log(t) - 0.5*z2 - std::log(SQR2PI) : log1p(-y*t);
-  return(t) ;
-}
-
-// static double logMill(double x) {
-//   double m;
-//   if (x > 1.0e5) return -std::log(x);
-//   m = lnnorm(-x) - lognormal(x);
-//   return m;
-// }
-
+static double lnnorm(double z) { return PNORM_STD(z,true,true); }
 
 // =============================================================================
 // PDF series helpers
@@ -167,20 +58,20 @@ static double logfs_linear(double t, double w, int K) {
   if (K < 0)    K = 0;
 
   const double inv_twot = 1.0 / (2.0 * t);
-  double sum_plus  = w * std::exp(-w * w * inv_twot);
+  double sum_plus  = w;
   double sum_minus = 0.0;
 
 #pragma omp simd reduction(+:sum_plus,sum_minus)
   for (int k = 1; k <= K; ++k) {
     const double t1 = w + 2.0 * k;
     const double t2 = w - 2.0 * k;
-    sum_plus  += t1    * std::exp(-t1 * t1 * inv_twot);
-    sum_minus += (-t2) * std::exp(-t2 * t2 * inv_twot);
+    sum_plus  += t1    * std::exp(-(t1*t1-w*w)*inv_twot);
+    sum_minus += (-t2) * std::exp(-(t2*t2-w*w)*inv_twot);
   }
 
   const double S = sum_plus - sum_minus;
   if (!(S > 0.0)) return R_NegInf;
-  return -0.5 * M_LN2 - M_LN_SQRT_PI - 1.5 * std::log(t) + std::log(S);
+  return -0.5 * M_LN2 - M_LN_SQRT_PI - 1.5 * std::log(t) + std::log(S) - w*w*inv_twot;
 }
 
 // Large-t series: linear-domain accumulation, log returned
@@ -193,18 +84,19 @@ static double logfl_linear(double q, double w, int K) {
 #pragma omp simd reduction(+:sum_plus,sum_minus)
   for (int k = 1; k <= K; ++k) {
     const double kpi  = k * M_PI;
-    const double base = k * std::sin(kpi * w) * std::exp(-kpi * kpi * halfq);
+    const double base = k * std::sin(kpi * w) * std::exp(-(kpi*kpi-M_PI*M_PI)*halfq);
     sum_plus  += (base > 0.0) ?  base : 0.0;
     sum_minus += (base < 0.0) ? -base : 0.0;
   }
 
   const double S = sum_plus - sum_minus;
   if (!(S > 0.0)) return R_NegInf;
-  return std::log(S) + M_LNPI;
+  return std::log(S) + M_LNPI - M_PI*M_PI*halfq;
 }
 
 // log-density of the Wiener first-passage time
-static double dwiener(double q, double a, double vn, double wn, double sv)
+static double dwiener(double q, double a, double vn, double wn, double sv,
+                      double log_eps = DDM_LOG_EPS)
 {
   if (q == 0.0) return R_NegInf;
 
@@ -219,7 +111,7 @@ static double dwiener(double q, double a, double vn, double wn, double sv)
     / (2.0 * denom)
     - 2.0 * std::log(a) - 0.5 * std::log(denom);
 
-    const double es  = DDM_LOG_EPS - lg1;
+    const double es  = log_eps - lg1;
     const double kss = ks(q_asq, w, es);
     const double kll = kl(q_asq, w, es);
 
@@ -235,21 +127,10 @@ static double dwiener(double q, double a, double vn, double wn, double sv)
 
 // Asymptotic log-probability of hitting lower boundary (t -> inf)
 static double logP(double a, double v, double w) {
-  constexpr double em1 = 1.0 - 1.0e-6;
-  if (std::fabs(v) == 0.0) return std::log1p(-w);
-
-  const double e = -2.0 * v * a * (1.0 - w);
-  double tt;
-  if (e < 0.0) {
-    tt = std::exp(e);
-    if (tt >= em1) return std::log1p(-w);
-    tt = std::log1p(-tt) - logdiff(2.0 * v * a * w, e);
-  } else {
-    tt = std::exp(-e);
-    if (tt >= em1) return std::log1p(-w);
-    tt = std::log1p(-tt) - std::log1p(-std::exp(2.0 * v * a));
-  }
-  return tt;
+  const double z=2*v*a;
+  if (z==0.0) return std::log1p(-w);
+  return log1m_exp(-std::fabs(z)*(1-w))-log1m_exp(-std::fabs(z))
+         -std::max(z,0.0)*w;
 }
 
 static double Ks(double t, double v, double a, double w, double eps) {
@@ -272,53 +153,10 @@ static double Kl(double t, double v, double a, double w, double err) {
   return std::ceil(std::fmax(L1, L2));
 }
 
-// Short-t CDF series: linear-domain accumulation, log returned
+// Log CDF from the short-time series.
 static double logFs(double t, double v, double a, double w, int K)
 {
-  // double fplus = -INFINITY, fminus = -INFINITY;
-  // double sqt = std::sqrt(t), temp = -v * a*w - (v * v)*t / 2;
-  // double vt = v * t;
-  //
-  // for (int k = K; k >= 0; k--)
-  // {
-  //   double rj = a*(2 * k + w);
-  //   double dj = lognormal(rj / sqt);
-  //   double pos1 = dj + logMill((rj - vt) / sqt);
-  //   double pos2 = dj + logMill((rj + vt) / sqt);
-  //   fplus = logsum(logsum(pos1, pos2), fplus);
-  //   rj = a*(2.0 * k + 2.0 - w);
-  //   dj =  lognormal(rj / sqt);
-  //   double neg1 = dj + logMill((rj - vt) / sqt);
-  //   double neg2 = dj + logMill((rj + vt) / sqt);
-  //   fminus = logsum(logsum(neg1, neg2), fminus);
-  // }
-
-  // SM: alternative implementation that skips the lognormal calls in logMill --
-  // Each term involves phi(r/sqrt(t)) * R((r ± vt)/sqrt(t)) where phi is the
-  // standard normal density and R(x) = P(Z > x) is the Mills ratio.
-  // logMill(x) = lnnorm(-x) - lognormal(x), so in log space:
-  //
-  //   lognormal(r/sqrt(t)) + logMill((r ± vt)/sqrt(t))
-  //     = lognormal(r/sqrt(t)) + lnnorm(-(r ± vt)/sqrt(t)) - lognormal((r ± vt)/sqrt(t))
-  //
-  // The two lognormal terms cancel analytically. For the (r - vt) case:
-  //   lognormal(r/sqrt(t)) - lognormal((r-vt)/sqrt(t))
-  //     = -r^2/(2t) + (r-vt)^2/(2t)
-  //     = (-r^2 + r^2 - 2rvt + v^2*t^2) / (2t)
-  //     = -rv + v^2*t/2
-  //
-  // For the (r + vt) case:
-  //   lognormal(r/sqrt(t)) - lognormal((r+vt)/sqrt(t))
-  //     = -r^2/(2t) + (r+vt)^2/(2t)
-  //     = (-r^2 + r^2 + 2rvt + v^2*t^2) / (2t)
-  //     = +rv + v^2*t/2
-  //
-  // So the two terms per k become:
-  //   pos1: -r*v + c + lnnorm(-(r - vt)/sqrt(t))   where c = v^2*t/2
-  //   pos2: +r*v + c + lnnorm(-(r + vt)/sqrt(t))
-  //
-  // This avoids 4 logMill calls (each of which calls lnnorm + lognormal) per k,
-  // replacing them with 4 direct lnnorm calls.
+  // Cancel the Gaussian exponents analytically before evaluating normal tails.
   double fplus = -INFINITY, fminus = -INFINITY;
   const double sqt  = std::sqrt(t);
   const double vt   = v * t;
@@ -330,20 +168,19 @@ static double logFs(double t, double v, double a, double w, int K)
     const double rp   = a * (2.0 * k + w);
     const double pos1 = (-rp * v + c) + lnnorm(-(rp - vt) / sqt);
     const double pos2 = (+rp * v + c) + lnnorm(-(rp + vt) / sqt);
-    fplus = logsum(logsum(pos1, pos2), fplus);
+    fplus = log_sum_exp(log_sum_exp(pos1, pos2), fplus);
 
     // Negative terms: r = a*(2k + 2 - w)
     const double rm   = a * (2.0 * k + 2.0 - w);
     const double neg1 = (-rm * v + c) + lnnorm(-(rm - vt) / sqt);
     const double neg2 = (+rm * v + c) + lnnorm(-(rm + vt) / sqt);
-    fminus = logsum(logsum(neg1, neg2), fminus);
+    fminus = log_sum_exp(log_sum_exp(neg1, neg2), fminus);
   }
 
-  return logdiff(fplus, fminus)+temp;
+  return log_absdiff_exp(fplus, fminus)+temp;
 }
 
-// Large-t CDF series: linear-domain accumulation, log returned
-// Rewritten by SM
+// Log remaining boundary mass from the large-time series.
 static double logFl(double q, double v, double a, double w, int K)
 {
   double fplus = -INFINITY, fminus = -INFINITY;
@@ -356,13 +193,13 @@ static double logFl(double q, double v, double a, double w, int K)
     const double check  = std::sin(kpi * w);
     if (check == 0.0) continue;
 
-    const double temp = temp0 - logsum(2.0 * lv, 2.0 * (temp0 + M_LNPI - la))
+    const double temp = temp0 - log_sum_exp(2.0 * lv, 2.0 * (temp0 + M_LNPI - la))
                               - (double)(k * k) * half_pia_sq_q
                               + std::log(std::fabs(check));
-    if (check > 0.0) fplus  = logsum(temp, fplus);
-    else             fminus = logsum(temp, fminus);
+    if (check > 0.0) fplus  = log_sum_exp(temp, fplus);
+    else             fminus = log_sum_exp(temp, fminus);
     }
-  return logdiff(fplus, fminus) - v * a * w - 0.5 * v * v * q;
+  return log_absdiff_exp(fplus, fminus) - v * a * w - 0.5 * v * v * q;
 }
 
 // log-CDF of the Wiener first-passage time (lower boundary)
@@ -370,75 +207,52 @@ static double pwiener(double q, double a, double v, double w)
 {
   if (std::isinf(q)) return logP(a, v, w);   // t -> inf: return total mass
 
-  const double Kss = Ks(q, v, a, w, DDM_LOG_EPS);
-  const double Kll = Kl(q, v, a, w, DDM_LOG_EPS);
+  const double Kss = Ks(q, v, a, w, DDM_CDF_LOG_EPS);
+  const double Kll = Kl(q, v, a, w, DDM_CDF_LOG_EPS);
 
   if (3.0 * Kss < Kll)
     return logFs(q, v, a, w, static_cast<int>(Kss));
   else {
     const double lg = M_LN2 + M_LNPI - 2.0 * std::log(a);
-    return logdiff(logP(a, v, w), lg + logFl(q, v, a, w, static_cast<int>(Kll)));
+    return log_absdiff_exp(logP(a, v, w), lg + logFl(q, v, a, w, static_cast<int>(Kll)));
   }
 }
 
-// Computes log-CDF for both boundaries simultaneously, sharing Ks/Kl computation.
-// log_upper: lower boundary w = 1-w, v_eff = -v  (R=1)
-// log_lower: lower boundary w = w,   v_eff =  v  (R=2)
-static void pwiener_both(double q, double a, double v, double w,
-                         double& log_upper, double& log_lower)
-{
-  if (std::isinf(q)) {
-    log_upper = logP(a, -v, 1.0 - w);
-    log_lower = logP(a,  v, w);
-    return;
+static double wiener_logremaining(double q,double a,double v,double w) {
+  if (q<=0.0) return logP(a,v,w);
+  if (is_pos_inf(q)) return neg_inf();
+  const double scaled_time=(q/a)/a;
+  if (scaled_time>=0.1) {
+    const int K=static_cast<int>(std::ceil(std::sqrt(1+80/(M_PI*M_PI*scaled_time))));
+    return M_LN2+M_LNPI-2*std::log(a)+logFl(q,v,a,w,K);
   }
-
-  // Ks/Kl for upper boundary (w_u = 1-w, v_u = -v)
-  const double Kss_u = Ks(q, -v, a, 1.0 - w, DDM_LOG_EPS);
-  const double Kll_u = Kl(q, -v, a, 1.0 - w, DDM_LOG_EPS);
-
-  // Ks/Kl for lower boundary (w_l = w, v_l = v)
-  // Take the max of both boundaries so one series choice covers both
-  const double Kss_l = Ks(q,  v, a, w, DDM_LOG_EPS);
-  const double Kll_l = Kl(q,  v, a, w, DDM_LOG_EPS);
-
-  const double Kss = std::fmax(Kss_u, Kss_l);
-  const double Kll = std::fmax(Kll_u, Kll_l);
-
-  if (3.0 * Kss < Kll) {
-    log_upper = logFs(q, -v, a, 1.0 - w, static_cast<int>(Kss));
-    log_lower = logFs(q,  v, a, w,       static_cast<int>(Kss));
-  } else {
-    const double lg = M_LN2 + M_LNPI - 2.0 * std::log(a);
-    log_upper = logdiff(logP(a, -v, 1.0 - w), lg + logFl(q, -v, a, 1.0 - w, static_cast<int>(Kll)));
-    log_lower = logdiff(logP(a,  v, w),        lg + logFl(q,  v, a, w,        static_cast<int>(Kll)));
-  }
+  return log_diff_exp(logP(a,v,w),pwiener(q,a,v,w));
 }
 
+// Positive interval mass for one boundary. Use CDFs at early times and
+// remaining mass at late times, before averaging over parameter variability.
+static double wiener_log_interval(double lower,double upper,double a,double v,double w) {
+  lower=std::max(0.0,lower);
+  if (!(upper>lower)) return neg_inf();
+  if (lower==0.0) return pwiener(upper,a,v,w);
+  if (is_pos_inf(upper)) return wiener_logremaining(lower,a,v,w);
+  const bool tail=(lower/a)/a>=0.1;
+  const double high=tail ? wiener_logremaining(lower,a,v,w) : pwiener(upper,a,v,w);
+  const double low=tail ? wiener_logremaining(upper,a,v,w) : pwiener(lower,a,v,w);
+  if (is_neg_inf(low)) return high;
+  if (high>low && !probability_roundoff_exceeds(-std::expm1(low-high),1.0))
+    return log_diff_exp(high,low);
+  // A narrow interval can lose accuracy in either difference. Integrate the
+  // existing density only in that case, using the same scaling helper.
+  const double width=upper-lower;
+  return std::log(width)+log_integral_unit([&](double u) {
+    return dwiener(-(lower+u*width),a,v,w,0.0,DDM_CDF_LOG_EPS);
+  },-1.0);
+}
 
 // =============================================================================
 // Integration helpers
 // =============================================================================
-
-static void run_hcubature(int (*integrand)(unsigned, const double*, void*, unsigned, double*),
-                          my_params& params,
-                          int dim, double t, double t0, double st,
-                          bool sv_first_dim,
-                          double* val, double* err)
-{
-  double xmin[3] = {}, xmax[3] = {1.0, 1.0, 1.0};
-
-  if (sv_first_dim) {
-    xmin[0] = -1.0; xmax[0] = 1.0;
-    for (int i = 1; i < dim; ++i) { xmin[i] = 0.0; xmax[i] = 1.0; }
-  } else {
-    for (int i = 0; i < dim; ++i) { xmin[i] = 0.0; xmax[i] = 1.0; }
-  }
-  if (st > 0.0) xmax[dim - 1] = std::fmin(1.0, (t - t0) / st);
-
-  hcubature(integrand, &params, dim, xmin, xmax, DDM_NEVAL,
-            DDM_EPS * 0.9, 0.0, val, err);
-}
 
 static int int_ddiff(unsigned /*dim*/, const double* x, void* p,
                      unsigned /*fdim*/, double* retval)
@@ -451,7 +265,7 @@ static int int_ddiff(unsigned /*dim*/, const double* x, void* p,
   if (params->t - tau <= 0.0) { retval[0] = 0.0; return 0; }
   // dwiener returns log-density; exponentiate for the integrand
   retval[0] = std::exp(dwiener(params->low_or_up * (params->t - tau),
-                               params->a, params->v, omega, params->sv));
+                               params->a, params->v, omega, params->sv, DDM_LOG_INNER_EPS));
   return 0;
 }
 
@@ -462,91 +276,37 @@ static void ddiff(double t, int low_or_up, double a, double v, double t0,
   my_params params = {t, low_or_up, a, v, t0, w, sw, sv, st};
   const int dim = (sw != 0.0) + (st != 0.0);
   double val, err;
-  run_hcubature(int_ddiff, params, dim, t, t0, st, false, &val, &err);
+  double lo[2]={0,0},hi[2]={1,1};
+  if (st>0.0) hi[dim-1]=std::min(1.0,(t-t0)/st);
+  hcubature(int_ddiff,&params,dim,lo,hi,DDM_NEVAL,DDM_EPS*0.9,0,&val,&err);
   *derivF = val;
-  if (*Rerr < err) *Rerr = err;
-}
-
-static int int_pdiff(unsigned /*dim*/, const double* x, void* p,
-                     unsigned /*fdim*/, double* retval)
-{
-  const auto* params = static_cast<const my_params*>(p);
-  const double x0sq  = params->sv ? x[0] * x[0] : 0.0;
-  const double y     = params->sv ? x[0] / (1.0 - x0sq) : 0.0;
-  const double nu    = params->sv ? params->v + params->sv * y : params->v;
-  const double omega = params->sv ? (params->sw ? params->w + params->sw * (x[1] - 0.5) : params->w)
-    : (params->sw ? params->w + params->sw * (x[0] - 0.5) : params->w);
-  const double tau   = params->sv
-  ? (params->sw ? (params->st ? params->t0 + params->st * x[2] : params->t0)
-       : (params->st ? params->t0 + params->st * x[1] : params->t0))
-    : (params->sw ? (params->st ? params->t0 + params->st * x[1] : params->t0)
-         : (params->st ? params->t0 + params->st * x[0] : params->t0));
-
-  if (params->t - tau <= 0.0) { retval[0] = 0.0; return 0; }
-
-  const double wn  = (params->low_or_up == 1) ? 1.0 - omega : omega;
-  const double lpW = pwiener(params->t - tau, params->a, -params->low_or_up * nu, wn);
-  const double jac = params->sv
-  ? -0.5 * y * y - M_LN_SQRT_PI - 0.5 * M_LN2
-  + std::log1p(x0sq) - 2.0 * std::log1p(-x0sq)
-    : 0.0;
-
-  retval[0] = std::exp(lpW + jac);
-  return 0;
-}
-
-static void pdiff(double t, int low_or_up, double a, double v, double t0,
-                  double w, double sw, double sv, double st,
-                  double* derivF, double* Rerr)
-{
-  my_params params = {t, low_or_up, a, v, t0, w, sw, sv, st};
-  const int dim = (sv != 0.0) + (sw != 0.0) + (st != 0.0);
-  double val, err;
-  run_hcubature(int_pdiff, params, dim, t, t0, st, sv != 0.0, &val, &err);
-  *derivF = val;
-  if (*Rerr < err) *Rerr = err;
+  *Rerr = err;
 }
 
 static inline double compute_sz(double Z, double SZ) {
   return (Z < 1.0 - Z) ? 2.0 * SZ * Z : 2.0 * SZ * (1.0 - Z);
 }
 
-// CDF
-static inline double ddm_logcdf_scalar(double rt, int R,
-                                       double v, double a, double sv,
-                                       double t0, double st0, double s,
-                                       double Z, double SZ)
-{
-  const double new_rt = rt - t0;
-  if (new_rt <= 0.0) return R_NegInf;   // semantic guard
-
-  if (sv == 0.0 && SZ == 0.0 && st0 == 0.0) {
-    double vv = v / s;
-    double w  = Z;
-    if (R != 1) { vv = -vv; w = 1.0 - w; }
-    return pwiener(new_rt, a / s, vv, w);
-  }
-
-  // Slow path: same NaN/Inf note as ddm_logpdf_scalar above.
-  const double pm = (R == 1) ? -1.0 : 1.0;
-  const double sz = compute_sz(Z, SZ);
-  double Rval = 0.0, Rerr = 0.0;
-  pdiff(rt, static_cast<int>(pm), a / s, v / s, t0,
-        Z, sz, sv / s, st0, &Rval, &Rerr);
-  return std::log(Rval);
+static inline double ddm_logpdf_scalar(double rt,int response,double v,double a,
+                                       double sv,double t0,double st0,double s,
+                                       double Z,double SZ) {
+  const double q=rt-t0;
+  if (q<=0.0) return neg_inf();
+  const int side=response==1 ? -1 : 1;
+  if (SZ==0.0 && st0==0.0) return dwiener(side*q,a/s,v/s,Z,sv/s);
+  double value=0.0,error=0.0;
+  ddiff(rt,side,a/s,v/s,t0,Z,compute_sz(Z,SZ),sv/s,st0,&value,&error);
+  return std::log(value);
 }
-
-
 
 void fill_ddm(const double* rt_ptr,
               const int* R_ptr,
               const ParamTable& pt,
               const RaceSpec& spec,
               const std::vector<int>& idx_all,
-              double* __restrict__ ll_row)
+              double* __restrict__ ll_row,
+              const std::vector<int>& is_ok)
 {
-  // const int*    __restrict__ R_ptr  = R.begin();
-
   const double* __restrict__ v   = &pt.base(0, spec.col_v);
   const double* __restrict__ a   = &pt.base(0, spec.col_a);
   const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
@@ -557,164 +317,102 @@ void fill_ddm(const double* rt_ptr,
   const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
   const int n = (int)idx_all.size();
 
-  // int    Epsflag = 1;
-  // double eps     = 5e-3;
-  // int    K       = 0;
-
-  for (int j = 0; j < n; ++j) {
-    const int i       = idx_all[j];
-    const double pm   = (R_ptr[i] == 1) ? -1.0 : 1.0;
-    const double teff = rt_ptr[i] - t0[i];
-
-    if (SZ[i] == 0.0 && st0[i] == 0.0) {
-      if (teff <= 0.0) { ll_row[i] = R_NegInf; continue; }
-
-      double val = dwiener(
-        teff * pm,
-        a[i]  / s[i],
-        v[i]  / s[i],
-        Z[i],
-        sv[i] / s[i]);
-      ll_row[i] = std::isfinite(val) ? val : R_NegInf;
-    } else {
-      // int    Neval = 6000;
-      // int    choice = 0;
-      double Rval, Rerr;
-
-      double sz_i = compute_sz(Z[i], SZ[i]);
-
-      ddiff(rt_ptr[i], pm,
-            a[i] / s[i],
-            v[i] / s[i],
-            t0[i], Z[i], sz_i,
-            sv[i] / s[i],
-            st0[i], &Rval, &Rerr);
-
-      ll_row[i] = (std::isfinite(Rval) && Rval > 0.0) ? std::log(Rval) : R_NegInf;
-    }
+  for (int j=0; j<n; ++j) {
+    const int i=idx_all[j];
+    if (!is_ok[i]) continue;
+    const double value=ddm_logpdf_scalar(rt_ptr[i],R_ptr[i],v[i],a[i],sv[i],
+                                         t0[i],st0[i],s[i],Z[i],SZ[i]);
+    ll_row[i]=is_finite(value) ? value : neg_inf();
   }
 }
 
-
-NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars){
-  // int Epsflag = 1;
-  // double eps = 5e-3;
-  // int K = 0;
-  // int Neval = 6000;
-  // int choice = 0; //the type of integration method to choose.
-  //0 = "v", 1 = "a", 2= "sv", 3 = "t0", 4 = "st0", 5 = "s", 6 = "Z", 7 = "SZ",
-  int N = rts.length();
-  NumericVector out(N);
-  for(int i = 0; i < N; i++){
-    // we divide v, a and sv by s to introduce the scaling parameter s
-    double pm = (Rs[i]==1) ? -1 : 1;
-    // if sz and st0 are zero we can use simple and fast dwiener function
-    if(pars(i,7) == 0 && pars(i, 4) == 0){
-      double new_rt = rts[i] - pars(i,3);
-      if(new_rt > 0){
-        out[i] = dwiener(new_rt*pm, pars(i, 1)/pars(i,5), pars(i, 0)/pars(i,5), pars(i, 6), pars(i, 2)/pars(i,5));
-      } else{
-        out[i] = 	R_NegInf;
-      }
-    } else{ // otherwise use ddiff function with integration
-      double Rval;
-      double Rerr;
-      double sz = (pars(i,6) < (1 - pars(i,6))) ? 2*pars(i,7)*pars(i,6) : 2*pars(i,7)*(1-pars(i,6));
-      ddiff(rts[i], pm, pars(i, 1)/pars(i,5), pars(i, 0)/pars(i,5), pars(i, 3), pars(i, 6), sz, pars(i, 2)/pars(i,5), pars(i,4), &Rval, &Rerr);
-      out[i] = log(Rval);
-    }
-  }
-  return(out);
+NumericVector d_DDM_Wien(NumericVector rts,IntegerVector Rs,NumericMatrix pars) {
+  NumericVector out(rts.size());
+  for (int i=0; i<rts.size(); ++i)
+    out[i]=ddm_logpdf_scalar(rts[i],Rs[i],pars(i,0),pars(i,1),pars(i,2),
+                             pars(i,3),pars(i,4),pars(i,5),pars(i,6),pars(i,7));
+  return out;
 }
 
-
-void ddm_survivor(const std::vector<int>&     idx,
-                  const std::vector<double>&  bound,
-                  const ParamTable&           pt,
-                  const RaceSpec&             spec,
-                  double* __restrict__        out,
-                  RaceScratch&                scratch)
-{
-  const double* __restrict__ bd  = bound.data();
-  const double* __restrict__ v   = &pt.base(0, spec.col_v);
-  const double* __restrict__ a   = &pt.base(0, spec.col_a);
-  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
-  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
-  const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
-  const double* __restrict__ s   = &pt.base(0, spec.col_s);
-  const double* __restrict__ Z   = &pt.base(0, spec.col_Z);
-  const double* __restrict__ SZ  = &pt.base(0, spec.col_SZ);
-
-  for (int j = 0; j < (int)idx.size(); ++j) {
-    const int i = idx[j];
-
-    if (bd[i] - t0[i] <= 0.0) continue;
-
-    double logcdf_upper, logcdf_lower;
-
-    if (sv[i] == 0.0 && SZ[i] == 0.0 && st0[i] == 0.0) {
-      // Fast path: fused pwiener call, Ks/Kl computed once
-      pwiener_both(bd[i] - t0[i], a[i] / s[i], v[i] / s[i], Z[i],
-                   logcdf_upper, logcdf_lower);
-    } else {
-      // Slow path: two independent integrations
-      logcdf_upper = ddm_logcdf_scalar(bd[i], 1, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
-      logcdf_lower = ddm_logcdf_scalar(bd[i], 2, v[i], a[i], sv[i], t0[i], st0[i], s[i], Z[i], SZ[i]);
+// response 0 integrates both boundaries; 1 and 2 select one. This is shared
+// by truncation, known-response censoring and unknown-response censoring.
+double ddm_log_response_interval(const ParamTable& pt,const RaceSpec& spec,int row,
+                                 int response,double lower,double upper) {
+  const double s=pt.base(row,spec.col_s),a=pt.base(row,spec.col_a)/s;
+  const double v=pt.base(row,spec.col_v)/s,sv=pt.base(row,spec.col_sv)/s;
+  const double t0=pt.base(row,spec.col_t0),st=pt.base(row,spec.col_st0);
+  const double z=pt.base(row,spec.col_Z),sz=compute_sz(z,pt.base(row,spec.col_SZ));
+  lower=std::max(lower,t0);
+  if (!(upper>lower)) return neg_inf();
+  if (response==0 && lower==t0 && is_pos_inf(upper)) return 0.0;
+  auto point=[&](double drift,double start,double onset) {
+    const double lo=lower-onset,hi=upper-onset;
+    if (response==1) return wiener_log_interval(lo,hi,a,drift,start);
+    if (response==2) return wiener_log_interval(lo,hi,a,-drift,1-start);
+    return log_sum_exp(wiener_log_interval(lo,hi,a,drift,start),
+                       wiener_log_interval(lo,hi,a,-drift,1-start));
+  };
+  if (sv==0.0 && sz==0.0 && st==0.0) return point(v,z,t0);
+  // The density averages normal drift analytically. Integrating decision
+  // time against the overlap with the uniform nondecision interval also
+  // removes that variability dimension exactly. Only start and time remain.
+  lower-=t0;
+  upper-=t0;
+  std::vector<double> breaks{std::max(0.0,lower-st),upper};
+  if (lower>breaks.front() && lower<upper) breaks.push_back(lower);
+  if (upper-st>breaks.front() && upper-st<upper) breaks.push_back(upper-st);
+  std::sort(breaks.begin(),breaks.end());
+  // Relative error is controlled in the requested mass, including tiny CDFs.
+  constexpr double tolerance=1e-7;
+  double result=neg_inf();
+  for (std::size_t k=1;k<breaks.size();++k) {
+    const double left=breaks[k-1],right=breaks[k];
+    const bool infinite=is_pos_inf(right);
+    // Diffusion tails decay on the a^2 time scale. A scale proportional to
+    // the absolute bound would hide the mass near a very late lower limit.
+    const bool transformed=infinite || right-left>a*a;
+    const double width=transformed ? a*a : right-left;
+    const double end=infinite || !transformed ? 1.0 : (right-left)/(width+right-left);
+    double scale=0.0,largest=neg_inf();
+    auto probability=[&](const double* x) {
+      const double den=transformed ? 1-end*x[0] : 1.0;
+      if (den==0.0) return 0.0;
+      const double time=left+width*end*x[0]/den;
+      const double overlap=st>0.0
+        ? std::max(0.0,std::min(st,upper-time)-std::max(0.0,lower-time))/st : 1.0;
+      if (overlap==0.0) return 0.0;
+      const double log_weight=std::log(overlap*width*end)-2*std::log(den);
+      auto density=[&](const double* u) {
+        const double start=sz>0.0 ? z+sz*(u[0]-0.5) : z;
+        double lp=neg_inf();
+        if (response!=2) lp=dwiener(-time,a,v,start,sv,DDM_CDF_LOG_EPS);
+        if (response!=1) lp=log_sum_exp(lp,dwiener(time,a,v,start,sv,DDM_CDF_LOG_EPS));
+        lp+=log_weight;
+        largest=std::max(largest,lp);
+        return std::exp(lp-scale);
+      };
+      if (sz==0.0) return density(x);
+      using Density=decltype(density);
+      auto average=[](unsigned,const double* u,void* p,unsigned,double* out) -> int {
+        out[0]=(*static_cast<Density*>(p))(u);return 0;
+      };
+      double a0=0,b0=1,value=0,error=0;
+      hcubature(average,&density,1,&a0,&b0,6000,0,tolerance/10,&value,&error);
+      return value;
+    };
+    using Function=decltype(probability);
+    auto integrand=[](unsigned,const double* x,void* p,unsigned,double* out) -> int {
+      out[0]=(*static_cast<Function*>(p))(x);return 0;
+    };
+    double lo=0,hi=1,value=0.0,error=0.0;
+    hcubature(integrand,&probability,1,&lo,&hi,6000,0,tolerance,&value,&error);
+    if (value<1e-280 && is_finite(largest)) {
+      scale=largest;
+      hcubature(integrand,&probability,1,&lo,&hi,6000,0,tolerance,&value,&error);
     }
-
-    double S = 1.0 - (std::exp(logcdf_upper) + std::exp(logcdf_lower));
-    if (!std::isfinite(S) || S < 0.0) S = 0.0;
-    else if (S > 1.0)                  S = 1.0;
-    out[i] = S;
+    if (error>tolerance*value)
+      hcubature(integrand,&probability,1,&lo,&hi,100000,0,tolerance,&value,&error);
+    result=log_sum_exp(result,scale+std::log(value));
   }
-}
-
-
-void ddm_survivor_with_response(const std::vector<int>&    idx,
-                                const std::vector<int>&    winner,
-                                const std::vector<double>& lower,
-                                const std::vector<double>& upper,
-                                int                        n_acc,
-                                const ParamTable&          pt,
-                                const RaceSpec&            spec,
-                                double* __restrict__       out)
-{
-  // DDM has exactly 2 boundaries: winner=0 → upper (R=1), winner=1 → lower (R=2).
-  // P(winner hits first in [lo, hi]) = CDF_winner(hi) - CDF_winner(lo).
-  // No race integral needed — the two accumulators are the two boundaries of a
-  // single diffusion process, so the winning boundary is determined by R directly.
-
-  const double* __restrict__ v   = &pt.base(0, spec.col_v);
-  const double* __restrict__ a   = &pt.base(0, spec.col_a);
-  const double* __restrict__ sv  = &pt.base(0, spec.col_sv);
-  const double* __restrict__ t0  = &pt.base(0, spec.col_t0);
-  const double* __restrict__ st0 = &pt.base(0, spec.col_st0);
-  const double* __restrict__ s   = &pt.base(0, spec.col_s);
-  const double* __restrict__ Z   = &pt.base(0, spec.col_Z);
-  const double* __restrict__ SZ  = &pt.base(0, spec.col_SZ);
-
-  const int n = (int)idx.size();
-  for (int j = 0; j < n; ++j) {
-    const int    i  = idx[j];           // base row = trial * n_acc, n_acc is always 1 for DDM
-    const int    R  = winner[j] + 1;    // 0-based winner → 1-based R (1=upper, 2=lower)
-    const double lo = lower[j];
-    const double hi = upper[j];
-
-    // CDF at upper bound
-    double cdf_hi = 0.0;
-    if (hi - t0[i] > 0.0)
-      cdf_hi = std::exp(ddm_logcdf_scalar(hi, R, v[i], a[i], sv[i],
-                                          t0[i], st0[i], s[i], Z[i], SZ[i]));
-
-    // CDF at lower bound
-    double cdf_lo = 0.0;
-    if (lo - t0[i] > 0.0)
-      cdf_lo = std::exp(ddm_logcdf_scalar(lo, R, v[i], a[i], sv[i],
-                                          t0[i], st0[i], s[i], Z[i], SZ[i]));
-
-    double p = cdf_hi - cdf_lo;
-    if (!std::isfinite(p) || p < 0.0) p = 0.0;
-    else if (p > 1.0)                  p = 1.0;
-    out[j] = p;
-  }
+  return result;
 }

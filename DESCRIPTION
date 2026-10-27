@@ -41,6 +41,7 @@ VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),
     vdiffr,
+    withr,
     knitr,
     rmarkdown,
     DiagrammeR
@@ -52,7 +53,6 @@ Imports:
     grDevices,
     magic,
     MASS,
-    matrixcalc,
     methods,
     msm,
     mvtnorm,
@@ -66,10 +66,10 @@ Imports:
     psych,
     utils,
     loo,
-    lpSolve,
     WienR (>= 0.3-17),
 LinkingTo: 
     Rcpp, RcppArmadillo
+SystemRequirements: C++17
 Depends: 
     R (>= 3.5.0)
 LazyData: true
