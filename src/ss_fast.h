@@ -462,6 +462,10 @@ inline void ss_set_parameter_columns(SSSpec& s, const std::string& type, const P
   if (type=="SSLNORM" || type=="SSRDLNORM") s.stop_family=SSStopFamily::Lognormal;
   else if (type=="SSNORM" || type=="SSRDNORM") s.stop_family=SSStopFamily::Normal;
   else if (type=="SSWEIBULL" || type=="SSRDWEIBULL") s.stop_family=SSStopFamily::Weibull;
+  if (pt.name_to_base_idx.count("exg_normal_ratio"))
+    s.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
+  if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))
+    s.col_shifted_exp_sigma=pt.base_index_for("exg_shifted_exp_sigma");
   if (s.is_exg) {
     s.col_mu = pt.base_index_for("mu"); s.col_sigma = pt.base_index_for("sigma");
     s.col_tau = pt.base_index_for("tau"); s.col_lb = pt.base_index_for("exg_lb");
@@ -474,11 +478,6 @@ inline void ss_set_parameter_columns(SSSpec& s, const std::string& type, const P
     case SSStopFamily::ExGaussian:
       s.col_tauS=pt.base_index_for("tauS");
       s.col_lbS=pt.base_index_for("exgS_lb");
-      // Preserve approximation support for the existing EXG-stop models only.
-      if (pt.name_to_base_idx.count("exg_normal_ratio"))
-        s.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
-      if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))
-        s.col_shifted_exp_sigma=pt.base_index_for("exg_shifted_exp_sigma");
       [[fallthrough]];
     case SSStopFamily::Normal:
       s.col_stop1=pt.base_index_for("muS"); s.col_stop2=pt.base_index_for("sigmaS");

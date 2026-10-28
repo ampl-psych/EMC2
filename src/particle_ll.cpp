@@ -563,11 +563,6 @@ NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string typ
     spec.base_row[t]=spec.go_offsets[t]=t*n_acc;
     spec.ssd[t]=pt.base(t*n_acc,col_ssd);
   }
-  // R callbacks use their supplied exGaussian approximation settings.
-  if (pt.name_to_base_idx.count("exg_normal_ratio"))
-    spec.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
-  if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))
-    spec.col_shifted_exp_sigma=pt.base_index_for("exg_shifted_exp_sigma");
   ss_prepare_distributions(spec);
   NumericVector out(n_trials);
   for (int t=0;t<n_trials;++t)
