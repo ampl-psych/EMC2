@@ -15,17 +15,19 @@ class Random {
   std::mt19937_64 engine;
   static std::string format() {
 #if defined(_LIBCPP_VERSION)
-    return "libc++ " + std::to_string(_LIBCPP_VERSION);
+    return "libc++";
 #elif defined(__GLIBCXX__)
-    return "libstdc++ " + std::to_string(__GLIBCXX__);
+    return "libstdc++";
 #else
-    return "MSVC " + std::to_string(_MSC_VER);
+    return "MSVC";
 #endif
   }
   double spare = 0;
   bool has_spare = false;
  public:
   explicit Random(SEXP saved = R_NilValue) {
+    // Restore the stream rather than reseeding each batch; batch size then has
+    // no effect on the sequence. Distribution formats depend on the C++ library.
     if (!Rf_isNull(saved)) {
       Rcpp::List state(saved);
       if (state.containsElementNamed("format") && Rcpp::as<std::string>(state["format"]) == format()) {
@@ -70,6 +72,7 @@ class Random {
   }
   double rchisq(double df) { return rgamma(df / 2, 2); }
   void rmultinom(int n, const double* p, int k, int* counts) {
+    // Sequential conditional binomials; the last component gets the remainder.
     double remaining = 1;
     for (int j = 0; j + 1 < k; ++j) {
       counts[j] = n ? std::binomial_distribution<int>(n, std::min(1., p[j] / remaining))(engine) : 0;

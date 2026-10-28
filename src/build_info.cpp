@@ -6,8 +6,7 @@
 void emc2_build_info() {
   Rcpp::Rcout
   << "EMC2 build configuration\n"
-  << "  PNORM_MODE  : " << EMC2_PNORM_MODE     << "\n"
-  << "  fast-math   : " << EMC2_FAST_MATH      << "\n"
+  << "  pnorm       : " << EMC2_PNORM     << "\n"
   << "  native      : " << EMC2_ENABLE_NATIVE  << "\n"
   << "  CXXFLAGS    : " << EMC2_EXTRA_CXXFLAGS << "\n"
   << "  Accelerate  : " << EMC2_ACCELERATE     << "\n"

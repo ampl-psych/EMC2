@@ -11,23 +11,6 @@
 
 using namespace Rcpp;
 
-NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok);
-
-NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok);
-
-// void dlnr_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const LogicalVector& winner,
-//                double* ll_row);
-
-// void plnr_fast(const NumericVector& rts,
-//                const ParamTable& pt,
-//                const RaceSpec& spec,
-//                const LogicalVector& winner,
-//                double* ll_row);
-
-
 // Hot path: gather → compute → scatter
 // Uses scratch.v for m, scratch.s for s — B, A, sv left unused.
 void dlnr_plnr_fast(const double*           rt,
@@ -36,29 +19,15 @@ void dlnr_plnr_fast(const double*           rt,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
                     double* __restrict__    ll_row,
-                    RaceScratch&            scratch);
-
-void plnr_fast(const NumericVector&    rts,
-               const ParamTable&       pt,
-               const RaceSpec&         spec,
-               const std::vector<int>& idx,
-               double* __restrict__    ll_row,
-               RaceScratch&            scratch);
+                    RaceScratch&            scratch,
+                    const std::vector<int>& is_ok, bool log_p = false);
 
 void lnr_survivor(const std::vector<int>&     idx,
                   const std::vector<double>&  bound,
                   const ParamTable&           pt,
                   const RaceSpec&             spec,
                   double* __restrict__        out,
-                  RaceScratch&                scratch);
-
-void lnr_survivor_with_response(const std::vector<int>&    idx,
-                                const std::vector<int>&    winner,
-                                const std::vector<double>& lower,
-                                const std::vector<double>& upper,
-                                int                        n_acc,
-                                const ParamTable&          pt,
-                                const RaceSpec&            spec,
-                                double* __restrict__       out);
+                  RaceScratch&                scratch,
+                  const std::vector<int>& is_ok, bool log_p = false);
 
 #endif

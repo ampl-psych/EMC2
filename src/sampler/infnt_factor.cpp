@@ -18,7 +18,22 @@ arma::mat precision_root(const arma::mat& precision) {
   return root;
 }
 
+// Draw from N(P^-1 b, P^-1), where P = root' root.
+arma::mat triangular_draw(const arma::mat& root, const arma::mat& linear, const arma::mat& z) {
+  arma::mat mean, out;
+  if (!arma::solve(mean, arma::trimatl(root.t()), linear))
+    throw std::runtime_error("singular factor precision");
+  const arma::mat shifted = mean + z;
+  if (!arma::solve(out, arma::trimatu(root), shifted))
+    throw std::runtime_error("singular factor precision");
+  return out;
+}
+
 }  // namespace
+
+// =============================================================================
+// Infinite-factor setup — Lambda with local and multiplicative gamma shrinkage
+// =============================================================================
 
 InfiniteFactorSampler::InfiniteFactorSampler(const Rcpp::List& sampler)
   : p_(Rcpp::as<int>(sampler["n_pars"])),
@@ -80,6 +95,10 @@ GroupState InfiniteFactorSampler::read_state(const Rcpp::List& last) const {
   return state;
 }
 
+// =============================================================================
+// Group update — factors are integrated out in the participant particle step
+// =============================================================================
+
 void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState& state) const {
   GroupState next = state;
   arma::vec tau = arma::cumprod(state.delta);
@@ -92,8 +111,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
   const arma::mat eta_root = precision_root(eta_precision);
   arma::mat noise(n_, factors_);
   for (double& value : noise) value = rng.rnorm(0, 1);
-  next.eta = arma::solve(arma::trimatu(eta_root),
-    arma::solve(arma::trimatl(eta_root.t()), weighted_loadings.t() * centered) + noise.t()).t();
+  next.eta = triangular_draw(eta_root, weighted_loadings.t() * centered, noise.t()).t();
 
   const arma::vec mu_variance = 1 / (n_ * state.epsilon_inv + precision_);
   const arma::vec mu_mean = mu_variance % (state.epsilon_inv %
@@ -102,6 +120,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
     next.tmu[j] = rng.rnorm(mu_mean[j], std::sqrt(mu_variance[j]));
   centered = alpha.each_col() - next.tmu;
 
+  // Loading rows share the score crossproduct; prior precision is psi_jh * tau_h.
   const arma::mat eta_cross = next.eta.t() * next.eta;
   for (arma::uword j = 0; j < p_; ++j) {
     arma::mat precision = state.epsilon_inv[j] * eta_cross;
@@ -110,10 +129,10 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
     const arma::mat root = precision_root(precision);
     arma::vec z(factors_);
     for (double& value : z) value = rng.rnorm(0, 1);
-    next.lambda.row(j) = arma::solve(arma::trimatu(root),
-      arma::solve(arma::trimatl(root.t()), linear) + z).t();
+    next.lambda.row(j) = triangular_draw(root, linear, z).t();
   }
 
+  // Local shrinkage, followed by multiplicative shrinkage across factor columns.
   for (arma::uword h = 0; h < factors_; ++h)
     for (arma::uword j = 0; j < p_; ++j)
       next.psi(j, h) = rng.rgamma((df_ + 1) / 2,
@@ -125,6 +144,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
     const double rate = (h == 0 ? bd1_ : bd2_) + .5 *
       arma::dot(tau.tail(factors_ - h), loading_squares.tail(factors_ - h)) / next.delta[h];
     const double delta = rng.rgamma(shape, 1 / rate);
+    // Changing delta_h changes every tau from h onward.
     tau.tail(factors_ - h) *= delta / next.delta[h];
     next.delta[h] = delta;
   }
@@ -133,6 +153,7 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
   for (arma::uword j = 0; j < p_; ++j)
     next.epsilon_inv[j] = rng.rgamma(shape_[j] + .5 * n_,
                                   1 / (rate_[j] + .5 * residual_squares[j]));
+  // Marginal covariance for the next participant step, integrating out eta.
   next.tvar = next.lambda * next.lambda.t();
   next.tvar.diag() += 1 / next.epsilon_inv;
   next.tvinv = group_inverse(next.tvar);
@@ -140,6 +161,8 @@ void InfiniteFactorSampler::draw(Random& rng, const arma::mat& alpha, GroupState
   state = std::move(next);
 }
 
+// Scale a loading row and its residual SD together, so the marginal covariance
+// transforms as D Sigma D. Return the remaining prior/Jacobian contribution.
 double InfiniteFactorSampler::affine(GroupState& state, arma::uword j,
                                      double log_scale, double shift) const {
   double ratio = -precision_[j] * shift * (state.tmu[j] - mean_[j] + .5 * shift);

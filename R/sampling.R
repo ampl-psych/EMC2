@@ -75,6 +75,8 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   # Acceptance ratio tuning
   tune$alphaStar <- ifelse(stage == "sample", 2, 3)
   tune$p_accept <- set_p_accept(stage, tune$search_width)
+  if(isTRUE(tune$history_proposals))
+    tune$p_accept <- append(tune$p_accept, tune$p_accept[2], after = 2)
   # Potential blocking settings
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
@@ -89,17 +91,17 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   return(tune)
 }
 
-check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
+check_sampling_settings <- function(pm_settings, stage, n_pars, particles, history_proposals = FALSE){
   for(i in 1:length(pm_settings)){
     # Mix settings
-    pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage)
+    pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage, history_proposals)
     # For p_accept
     pm_settings[[i]]$epsilon <- check_epsilon(pm_settings[[i]]$epsilon, n_pars, pm_settings[[i]]$mix)
     # Only local components have an adapted epsilon.
-    pm_settings[[i]]$epsilon[!local_components(stage)[-1]] <- 1
+    pm_settings[[i]]$epsilon[!local_components(stage, history_proposals)[-1]] <- 1
     # For mix and p_accept tuning
-    pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage)
-    pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage)
+    pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage, history_proposals)
+    pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage, history_proposals)
     # Setting particles
     if(is.null(pm_settings[[i]]$n_particles)) pm_settings[[i]]$n_particles <- particles
     if(is.null(pm_settings[[i]]$iter)) pm_settings[[i]]$iter <- 1
@@ -119,12 +121,13 @@ resolve_on_singular <- function(on_singular) {
 }
 
 # Components centred on the current value.
-local_components <- function(stage){
-  switch(stage,
+local_components <- function(stage, history_proposals = FALSE){
+  local <- switch(stage,
          preburn = c(FALSE, TRUE),
-         burn = c(FALSE, TRUE, TRUE),
-         adapt = c(FALSE, TRUE, FALSE),
-         c(FALSE, TRUE, FALSE, FALSE))
+         sample = c(FALSE, TRUE, FALSE, FALSE),
+         c(FALSE, TRUE, FALSE))
+  if(history_proposals && stage != "preburn") local <- append(local, FALSE, after = 3)
+  local
 }
 
 extend_sampler <- function(sampler, n_samples, stage) {
@@ -166,30 +169,31 @@ set_p_accept <- function(stage, search_width){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
-  # adapt/sample: the local component targets ~3% of particles beating the
+  # After preburn, the local component targets ~3% of particles beating the
   # current value (where the ensemble move's ESS per iteration peaks);
   # independent components are not scaled.
   if(stage == "preburn") return(0.02 * (1/search_width))
-  if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
-  if(stage == "adapt") return(c(0.03, 0.25)* (1/search_width))
   if(stage == "sample") return(c(0.03, 0.3, 0.3)* (1/search_width))
+  c(0.03, 0.25) * (1/search_width)
 }
 
-get_default_mix <- function(stage){
-  if (stage == "burn") {
-    default_mix <- c(0.15, 0.35, 0.5)
-  } else if(stage == "adapt"){
-    default_mix <- c(0.1, 0.4, 0.4)
-  } else if(stage == "sample"){
+get_default_mix <- function(stage, history_proposals = FALSE){
+  if(stage == "sample"){
     default_mix <- c(0.05, 0.3, 0.3, 0.35)
-  }  else{
+  } else if(stage == "preburn"){
     default_mix <- c(0.5, 0.5)
+  } else{
+    default_mix <- c(0.1, 0.4, 0.4)
+  }
+  if(history_proposals && stage != "preburn"){
+    default_mix[3] <- default_mix[3] / 2
+    default_mix <- append(default_mix, default_mix[3], after = 3)
   }
   return(default_mix)
 }
 
-check_mix <- function(mix = NULL, stage) {
-  default_mix <- get_default_mix(stage)
+check_mix <- function(mix = NULL, stage, history_proposals = FALSE) {
+  default_mix <- get_default_mix(stage, history_proposals)
   if(is.null(mix)) mix <- default_mix
   if(length(mix) < length(default_mix)){
     if(length(default_mix) - length(mix) == 1){
@@ -198,6 +202,9 @@ check_mix <- function(mix = NULL, stage) {
     } else{
       stop("mix settings are not compatible with stage")
     }
+  } else if(length(mix) > length(default_mix)){
+    mix <- mix[seq_along(default_mix)]
+    mix <- mix/sum(mix)
   }
   return(mix)
 }
@@ -212,16 +219,18 @@ check_epsilon <- function(epsilon, n_pars, mix) {
       epsilon <- .7
     }
     # The first proposal is always unscaled
-    # Every subsequent phase at most adds one epsilon
+    # Later stages may add proposal components.
   } else if(length(epsilon) < (length(mix) -1)){
-    epsilon <- c(epsilon, epsilon[length(epsilon)])
+    epsilon <- c(epsilon, rep(tail(epsilon, 1), length(mix) - 1 - length(epsilon)))
+  } else if(length(epsilon) > (length(mix) - 1)){
+    epsilon <- epsilon[seq_len(length(mix) - 1)]
   }
   return(epsilon)
 }
 
-check_prop_performance <- function(prop_performance, stage){
-  default_mix <- get_default_mix(stage)
-  if(is.null(prop_performance) || stage == "adapt") prop_performance <- rep(0, length(default_mix))
+check_prop_performance <- function(prop_performance, stage, history_proposals = FALSE){
+  default_mix <- get_default_mix(stage, history_proposals)
+  if(is.null(prop_performance) || stage %in% c("burn", "adapt")) prop_performance <- rep(0, length(default_mix))
   if(length(prop_performance) < length(default_mix)){
     if(length(default_mix) - length(prop_performance) == 1){
       n_total <- sum(prop_performance)
@@ -230,6 +239,8 @@ check_prop_performance <- function(prop_performance, stage){
     } else{
       stop("prop_performance settings are not compatible with stage")
     }
+  } else if(length(prop_performance) > length(default_mix)){
+    prop_performance <- prop_performance[seq_along(default_mix)]
   }
   return(round(prop_performance))
 }
@@ -277,6 +288,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
 #'
 #' @param prior an emc.prior object.
 #' @param iter Number of MCMC samples to collect.
+#' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @inheritParams make_emc
 #'
 #' @returns an emc object with only group-level samples

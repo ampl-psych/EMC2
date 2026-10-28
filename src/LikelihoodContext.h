@@ -24,6 +24,9 @@ public:
 
   // Column-major coefficients. Output has one row, or trial_count() rows.
   // Parameter order is fixed by the constructor; n_particles may vary.
+  // Bounds are checked after mapping, before any density/CDF/integral. Invalid
+  // participating rows invalidate their trial, which receives min_ll. Ignored
+  // rows do not invalidate a trial; expansion and summation happen last.
   void evaluate(const double* particles, int n_particles, double* result,
                 bool trialwise = false);
   int trial_count() const;

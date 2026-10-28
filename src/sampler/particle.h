@@ -19,6 +19,17 @@ class Gaussian {
   double log_constant_ = 0;
 };
 
+class GaussianMixture {
+ public:
+  GaussianMixture(arma::mat means, const std::vector<arma::mat>& covariances);
+  arma::mat draw(Random& rng, int n, double scale) const;
+  arma::vec log_density(const arma::mat& x, double scale) const;
+ private:
+  arma::mat means_;
+  arma::vec weights_;
+  std::vector<Gaussian> kernels_;
+};
+
 class ParticleSampler {
  public:
   ParticleSampler(Random& rng, const Rcpp::List& sampler, const Rcpp::List& tune,
@@ -43,22 +54,25 @@ class ParticleSampler {
     arma::vec chain_mean, efficient_mean, likelihood_linear;
     arma::mat likelihood_precision;
     std::vector<Gaussian> chain, efficient;
+    std::vector<GaussianMixture> history;
     std::vector<Gaussian> conditional, local;
     std::vector<bool> has_local;
     arma::mat conditional_covariance;
     unsigned int covariance_version = 0;
     std::vector<Settings> settings;
-    arma::mat candidates;
+    arma::mat candidates;  // particles x parameters; row 0 is the retained draw
     arma::vec log_weights;
     arma::ivec counts;
   };
   Random& rng;
   std::string kernel_;
-  bool exact_, frozen_;
+  bool exact_, frozen_, history_;
   int proposals_, multiplier_, n0_;
   double min_local_, target_ess_, ess_scale_, max_particles_, mix_adapt_, alpha_star_;
   arma::vec target_accept_;
   std::vector<bool> local_;
+  // R's components identifies parameter blocks; shared_ll_idx identifies the
+  // likelihood to evaluate. Several blocks can belong to the same likelihood.
   std::vector<int> shared_, labels_;
   std::vector<arma::uvec> indices_;
   std::vector<Subject> subjects_;

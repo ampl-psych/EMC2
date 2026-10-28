@@ -41,7 +41,7 @@ struct ParamTable {
 
   std::vector<int>  active_cols;
   std::vector<char> is_active;
-  std::vector<double> map_scratch;
+  std::vector<double> map_scratch;  // self_copy in map_from_designs, reused per particle
   std::vector<bool> col_is_constant;   // true if all rows of this column are identical
 
   std::unordered_map<std::string, int> name_to_base_idx;
@@ -193,7 +193,7 @@ struct ParamTable {
 
     // Lazy init of design_plan is not safe inside a parallel region —
     // caller must ensure init_design_plan() was called before entering parallel.
-    // (calc_ll_multithreaded calls ctx.param_table.init_design_plan(designs) before the loop)
+    // (make_pipeline_context builds the plan before thread-local copies are made)
 
     const int T = n_trials;
     std::vector<double>& self_copy = map_scratch;

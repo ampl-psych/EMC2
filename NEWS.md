@@ -1,8 +1,15 @@
 # EMC2 (development)
 
+## Numerical accuracy
+
+-   Improved tail accuracy and fixed truncation and censoring calculations.
+-   Removed pnorm precision modes and fast-math build options.
+
 ## Sampler
 
--   `adapt` and `sample` now use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. `preburn` and `burn` retain the search kernel. `options(emc.sampler = "legacy")` restores the previous sampler for comparison.
+-   `burn`, `adapt` and `sample` use exact ensemble and importance-resampling kernels, fixing biased posterior spreads and stuck chains. Burn and adaptation share proposal machinery; `preburn` retains the search kernel.
+-   Curvature is estimated within each chain. Joint updates automatically learn multiple weak directions and include a broad prior-scale translation, without additional sampler arguments.
+-   `history_proposals = TRUE` adds a mixture of per-chain histories. History is refreshed after the final warmup block and then frozen. History remains off by default.
 -   Independent particle draws now follow their mixture probabilities without forcing a draw from every component. Parameter blocks update sequentially, and shared likelihoods are counted once.
 -   Forked sampling now advances L'Ecuyer-CMRG streams between batches and uses separate participant substreams.
 -   Sample proposals are built from `adapt`, tuned for 100 more adapt iterations, then fixed. Hierarchical adaptation checks subject-level Rhat over the last 250 draws (target 1.2; stops after three checks without improvement or 1000 iterations). Disable this check with `options(emc.adapt_converge = FALSE)`.

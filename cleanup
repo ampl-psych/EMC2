@@ -1,15 +1,7 @@
 #!/bin/sh
 
-echo "Running cleanup..."
-
-# Remove configure-generated files
-rm -f src/Makevars
-rm -f src/Makevars.tmp
+# Remove generated build files and objects in subdirectories.
+rm -f src/Makevars src/Makevars.win
 rm -f inst/include/build_info.h
-rm -f config.status config.log config.cache
+rm -f config.log
 rm -f src/sampler/*.o
-
-# Autoconf leftovers
-rm -rf autom4te.cache
-
-echo "Cleanup complete."

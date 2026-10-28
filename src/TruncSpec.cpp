@@ -2,65 +2,46 @@
 #include <algorithm>
 #include <cmath>
 #include "TruncSpec.h"
-#include "math_utils.h"
+#include "composite_functions.h"
 
 using namespace Rcpp;
 
-// -----------------------------------------------------------------------------
-// calculate_normalization_constant()
-//
-// 1. Calls setup->fill_survivor for LT and UT bounds into p_lower / p_upper
-//    (raw survivors per accumulator row, length n_rows)
-// 2. Reduces across n_acc accumulators per trial:
-//      prod_LT = prod_k p_lower[base + k]
-//      prod_UT = prod_k p_upper[base + k]
-// 3. Stores S_RACE(LT) and S_RACE(UT) per trial in S_lower / S_upper
-//    (used by CensorSpec::fill_censored_rows)
-// 4. Writes log(prod_LT - prod_UT) per trial into pre-allocated log_Z member
-// -----------------------------------------------------------------------------
-void TruncSpec::calculate_normalization_constant() const
+// Retain interval mass on the log scale through likelihood normalization.
+void TruncSpec::calculate_normalization_constant(const std::vector<int>& is_ok) const
 {
-  // Fill p_lower: S_k(LT - t0) for active LT rows, 1.0 elsewhere (default)
-  std::fill(p_lower.begin(), p_lower.end(), 1.0);
-  std::fill(S_lower.begin(), S_lower.end(), 1.0);
-  setup->fill_survivor(idx_LT, LT, *pt, setup->spec, p_lower.data(), *scratch);
-
-  // Fill p_upper: S_k(UT - t0) for active UT rows, 0.0 elsewhere (default)
-  // Default 0.0 because S(Inf) = 0 — contributes nothing to the product difference
-  std::fill(p_upper.begin(), p_upper.end(), 0.0);
-  std::fill(S_upper.begin(), S_upper.end(), 0.0);
-  setup->fill_survivor(idx_UT, UT, *pt, setup->spec, p_upper.data(), *scratch);
-
-  for (int t = 0; t < n_trials; ++t) {
-    const int base = t * n_acc;
-    double prod_LT = 1.0, prod_UT = 1.0;
-    bool any_participating = false;
-    for (int k = 0; k < n_acc; ++k) {
-      const int row = base + k;
-      if (!participating[row]) continue;
-      any_participating = true;
-      prod_LT *= p_lower[row];
-      prod_UT *= p_upper[row];
+  if (setup->log_response_interval) {
+    for (int trial=0;trial<n_trials;++trial) {
+      const int base=trial*n_acc;
+      log_Z[trial]=0.0;
+      if (is_ok[base] && participating[base])
+        log_Z[trial]=setup->log_response_interval(*pt,setup->spec,base,0,LT[base],UT[base]);
     }
-
-    if (!any_participating) {
-      log_Z[t] = 1.0;
-      continue;
-    }
-
-    S_lower[t] = prod_LT;
-    S_upper[t] = prod_UT;
-
-    const double Z = prod_LT - prod_UT;
-    // Clamp: require at least some probability mass in the truncation window.
-    // Z ~ 0 means the window [LT, UT] captures almost no mass under current
-    // parameters — log(1) = 0 means no truncation correction, which is the
-    // least harmful fallback.
-    log_Z[t] = (Z > 1e-2) ? Z : 1.0;
+    return;
   }
-
-  // Fast vectorised log in-place
-  vec_log(log_Z.data(), n_trials);
+  std::fill(log_p_lower.begin(), log_p_lower.end(), 0.0);
+  std::fill(log_p_upper.begin(), log_p_upper.end(), neg_inf());
+  std::fill(log_S_lower.begin(), log_S_lower.end(), 0.0);
+  std::fill(log_S_upper.begin(), log_S_upper.end(), neg_inf());
+  setup->fill_survivor(idx_LT, LT, *pt, setup->spec, log_p_lower.data(), *scratch, is_ok, true);
+  setup->fill_survivor(idx_UT, UT, *pt, setup->spec, log_p_upper.data(), *scratch, is_ok, true);
+  for (int t = 0; t < n_trials; ++t) {
+    const int base=t*n_acc;
+    log_Z[t]=0.0;
+    if (!is_ok[base]) continue;
+    double lower=0.0, upper=0.0;
+    bool any_participating=false;
+    for (int k=0; k<n_acc; ++k) {
+      const int row=base+k;
+      if (!participating[row]) continue;
+      any_participating=true;
+      lower+=log_p_lower[row];
+      upper+=log_p_upper[row];
+    }
+    if (!any_participating) continue;
+    log_S_lower[t]=lower;
+    log_S_upper[t]=upper;
+    log_Z[t]=log_diff_exp(lower,upper);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -87,12 +68,12 @@ TruncSpec make_trunc_spec(const DataFrame& data,
   const bool has_LT = std::find(names.begin(), names.end(), "LT") != names.end();
   const bool has_UT = std::find(names.begin(), names.end(), "UT") != names.end();
 
-  // Always allocate all buffers — CensorSpec may read S_lower/S_upper even
-  // when there is no truncation (defaults: S_lower=1, S_upper=0)
-  trunc.p_lower.resize(trunc.n_rows);
-  trunc.p_upper.resize(trunc.n_rows);
-  trunc.S_lower.resize(trunc.n_trials, 1.0);
-  trunc.S_upper.resize(trunc.n_trials, 0.0);
+  // Always allocate all buffers — CensorSpec may read log_S_lower/log_S_upper even
+  // when there is no truncation (defaults: log_S_lower=0, log_S_upper=-Inf)
+  trunc.log_p_lower.resize(trunc.n_rows);
+  trunc.log_p_upper.resize(trunc.n_rows);
+  trunc.log_S_lower.resize(trunc.n_trials, 0.0);
+  trunc.log_S_upper.resize(trunc.n_trials, neg_inf());
   trunc.log_Z.resize(trunc.n_trials);
 
   if (!has_LT && !has_UT) return trunc;
@@ -123,11 +104,11 @@ TruncSpec make_trunc_spec(const DataFrame& data,
       const int row = t * n_acc + k;
       if (active_LT) {
         trunc.LT[row] = lt;
-        trunc.idx_LT.push_back(row);
+        if (participating[row]) trunc.idx_LT.push_back(row);
       }
       if (active_UT) {
         trunc.UT[row] = ut;
-        trunc.idx_UT.push_back(row);
+        if (participating[row]) trunc.idx_UT.push_back(row);
       }
     }
   }

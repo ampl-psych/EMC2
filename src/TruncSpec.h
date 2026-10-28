@@ -22,11 +22,11 @@ struct TruncSpec {
   std::vector<bool> participating;  // length n_rows, false if missingness==0
 
   // Working buffers — length n_rows, filled by fill_truncate calls
-  mutable std::vector<double> p_lower;   // S_k(LT - t0) per accumulator row
-  mutable std::vector<double> p_upper;   // S_k(UT - t0) per accumulator row
+  mutable std::vector<double> log_p_lower;   // log S_k(LT - t0) per accumulator row
+  mutable std::vector<double> log_p_upper;   // log S_k(UT - t0) per accumulator row
 
-  mutable std::vector<double> S_lower;   // S_RACE(LT - t0) per trial
-  mutable std::vector<double> S_upper;   // S_RACE(UT - t0) per trial
+  mutable std::vector<double> log_S_lower;   // log S_RACE(LT - t0) per trial
+  mutable std::vector<double> log_S_upper;   // log S_RACE(UT - t0) per trial
 
 
   // Pre-allocated output buffer — filled by calculate_normalization_constant(),
@@ -42,9 +42,9 @@ struct TruncSpec {
 
   bool any() const { return !idx_LT.empty() || !idx_UT.empty(); }
 
-  // Fills p_lower / p_upper, reduces across accumulators, returns log Z per trial
+  // Fills log_p_lower / log_p_upper, reduces across accumulators, returns log Z per trial
   // (length n_trials, ready to subtract from ll_trial)
-  void calculate_normalization_constant() const;
+  void calculate_normalization_constant(const std::vector<int>& is_ok) const;
 
   // Update paramtable for multithreading
   void rebind(ParamTable& pt, RaceScratch& scratch) {

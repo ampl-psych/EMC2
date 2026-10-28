@@ -1,20 +1,9 @@
 filter_obj <- function(obj, idx){
   dims <- dim(obj)
-  dim_names <- dimnames(obj)
   if(is.null(dims)) return(obj)
-  if(length(dims) == 2){
-    if(nrow(obj) == ncol(obj)){
-      if(nrow(obj) == 1) return(obj)
-      if(nrow(obj) > 1){
-        if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj))))) < .01) return(obj)
-      }
-    }
-  }
-  obj <- obj[slice.index(obj, length(dims)) %in% idx]
-  dims[length(dims)] <- length(idx)
-  dim(obj) <- dims
-  dimnames(obj) <- dim_names # Give back to the community
-  return(obj)
+  index <- lapply(dims, seq_len)
+  index[[length(dims)]] <- idx
+  do.call("[", c(list(obj), index, list(drop = FALSE)))
 }
 
 remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
@@ -41,7 +30,11 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
   if(keep_stages) filter_idx <- c(which(!(samples$samples$stage %in% stage)), filter_idx)
 
   stage <- samples$samples$stage
+  last_theta_var_inv <- samples$samples$last_theta_var_inv
+  samples$samples$last_theta_var_inv <- NULL
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
+  if(tail(filter_idx, 1) == samples$samples$idx)
+    samples$samples$last_theta_var_inv <- last_theta_var_inv
   samples$samples$stage <- stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
   return(samples)

@@ -14,7 +14,11 @@ namespace {
 bool present(const Rcpp::List& x, const char* key) {
   return x.containsElementNamed(key) && !Rf_isNull(x[key]);
 }
-// R arrays are allocated once at the boundary, then filled without R calls.
+
+// =============================================================================
+// SampleStore — R arrays allocated at the boundary, filled without R calls
+// =============================================================================
+
 class SampleStore {
  public:
   Rcpp::List data;
@@ -35,6 +39,7 @@ class SampleStore {
     return arma::vec(values.begin() + static_cast<size_t>(index()) * n, n);
   }
   Rcpp::List last() const {
+    // Stored names -> GroupState names. The last dimension is always iteration.
     Rcpp::List out;
     const int j = index();
     const char* names[] = {"tmu", "tvar", "a_half", "u", "s", "a_half_s", "alpha", "subj_ll",
@@ -92,15 +97,26 @@ struct Population {
   explicit Population(const Rcpp::List& sampler) : main(sampler) {}
 };
 
+// =============================================================================
+// Joint moves — scale subject deviations, or translate subjects and means together
+// =============================================================================
+
 class JointMoves {
   Rcpp::List settings;
-  arma::vec step, loc, shear, sum_step, sum_loc, sum_shear, mean, curvature, shift, information_total;
-  arma::mat directions, prior_directions, mean_precision, information;
-  std::vector<std::vector<arma::uword>> partners;
+  arma::vec step, loc, sum_step, sum_loc, mean, curvature, shift;
+  arma::mat directions, prior_directions, prior_root;
   std::vector<arma::mat> proposals;
   std::vector<arma::vec> values;
   int uses;
   bool do_location;
+  struct Flow {
+    arma::mat affine, spread;
+    arma::vec coordinate;
+  };
+  std::vector<Flow> flows;
+  arma::mat mean_precision;
+  double spread_step = 0;
+  double affine_step = .2, group_v = 2;
  public:
   JointMoves(const GroupSampler& group, const Rcpp::List& init,
              const Rcpp::List& sampler, const Rcpp::List& tune, int n)
@@ -109,11 +125,6 @@ class JointMoves {
       sum_step(Rcpp::as<arma::vec>(init["log_step_sum"])),
       sum_loc(Rcpp::as<arma::vec>(init["log_loc_sum"])), proposals(n), values(n),
       uses(Rcpp::as<int>(init["uses"])) {
-    shear = Rcpp::as<arma::vec>(init["shear"]);
-    sum_shear = Rcpp::as<arma::vec>(init["log_shear_sum"]);
-    partners.resize(step.n_elem);
-    for (const auto& block : group.covariance_blocks())
-      for (auto j : block) for (auto k : block) if (j != k) partners[j].push_back(k);
     do_location = group.location_move();
     if (!do_location) return;
     const int p = loc.n_elem;
@@ -125,19 +136,18 @@ class JointMoves {
     arma::mat covariance(p, p, arma::fill::zeros);
     if (variance.hasAttribute("dim")) covariance = Rcpp::as<arma::mat>(variance);
     else for (int j = 0; j < p; ++j) covariance(j, j) = variance[j % variance.size()];
-    arma::mat precision(p, p, arma::fill::zeros);
-    information.zeros(p, n);
-    if (present(tune, "lik_prec")) {
-      Rcpp::List likelihood = tune["lik_prec"];
-      for (int s = 0; s < n; ++s) if (!Rf_isNull(likelihood[s])) {
-        const arma::mat h = Rcpp::as<arma::mat>(Rcpp::List(likelihood[s])["prec"]);
-        precision += h;
-        information.col(s) = h.diag();
-      }
-    }
+    prior_root = arma::chol(covariance, "lower");
+    // Use the saved directions throughout a sampling stage. Otherwise estimate
+    // curvature in prior-standardised coordinates and shrink the stiff directions.
     if (present(init, "directions")) directions = Rcpp::as<arma::mat>(init["directions"]);
     else {
-      const arma::mat root = arma::chol(covariance, "lower");
+      const arma::mat& root = prior_root;
+      arma::mat precision(p, p, arma::fill::zeros);
+      if (present(tune, "lik_prec")) {
+        Rcpp::List likelihood = tune["lik_prec"];
+        for (SEXP x : likelihood) if (!Rf_isNull(x))
+          precision += Rcpp::as<arma::mat>(Rcpp::List(x)["prec"]);
+      }
       precision = root.t() * precision * root;
       precision.diag() += 1;
       arma::vec eigenvalues;
@@ -147,6 +157,7 @@ class JointMoves {
         arma::diagmat(1 / arma::sqrt(arma::clamp(eigenvalues, 1, arma::datum::inf)));
       loc.ones();
     }
+    arma::mat precision;
     if (present(prior, "theta_mu_invar")) {
       Rcpp::NumericVector inverse = prior["theta_mu_invar"];
       if (inverse.hasAttribute("dim")) precision = Rcpp::as<arma::mat>(inverse);
@@ -156,26 +167,54 @@ class JointMoves {
       }
     } else precision = group_inverse(covariance);
     mean_precision = precision;
-    information_total.set_size(p);
-    for (int j = 0; j < p; ++j)
-      information_total[j] = arma::accu(information.row(j)) + mean_precision(j, j);
+    // Cache the linear/quadratic terms of the normal mean-prior ratio.
     prior_directions = precision * directions;
     curvature = arma::sum(directions % prior_directions, 0).t();
+    const Rcpp::List likelihood = present(tune, "lik_prec") ? Rcpp::as<Rcpp::List>(tune["lik_prec"]) : Rcpp::List();
+    SEXP fields = likelihood.attr("affine_generators");
+    Rcpp::List generators = Rf_isNull(fields) ? Rcpp::List() : Rcpp::List(fields);
+    if (generators.size()) {
+      if (present(init, "affine_step")) affine_step = Rcpp::as<double>(init["affine_step"]);
+      group_v = Rcpp::as<double>(prior["v"]);
+      for (SEXP field : generators) {
+        Flow flow;
+        flow.affine = Rcpp::as<arma::mat>(field);
+        const arma::vec b = flow.affine.submat(0, p, p - 1, p);
+        if (arma::dot(b, b) > 0) {
+          spread_step = present(init, "spread_step") ? Rcpp::as<double>(init["spread_step"]) : .2;
+          flow.spread = flow.affine;
+          flow.coordinate = b / arma::dot(b, b);
+          // Enforce c' G=0, c' b=1: the learned flow then advances c' alpha by t.
+          flow.spread.submat(0, 0, p - 1, p - 1) -= b *
+            (flow.coordinate.t() * flow.affine.submat(0, 0, p - 1, p - 1));
+        }
+        flows.push_back(std::move(flow));
+      }
+    }
   }
   void draw(Random& rng, Population& pop, arma::mat& alpha, arma::vec& ll, Likelihoods& likelihood, bool frozen) {
     const int p = pop.state.tvar.n_rows, n = alpha.n_cols;
     arma::vec accepted(p, arma::fill::zeros), accepted_loc(p, arma::fill::zeros);
-    for (int k = 0; k < (do_location ? 2 * p : p); ++k) {
+    for (int k = 0; k < (do_location ? 2 * p + 1 : p); ++k) {
       const bool scale = k < p;
-      const int j = k % p;
-      const double delta = rng.rnorm(0, scale ? step[j] : loc[j]);
+      const bool coordinate = k == 2 * p;
+      const int j = coordinate ? std::min(p - 1, static_cast<int>(rng.runif(0, p))) : k % p;
+      const double delta = rng.rnorm(0, coordinate ? 1 : scale ? step[j] : loc[j]);
       const double factor = scale ? std::exp(delta) : 1;
       GroupState proposed;
       double lp = 0;
       if (scale) {
         proposed = pop.state;
         lp = pop.main.affine(proposed, j, delta, 0);
+      } else if (coordinate) {
+        // A prior-scale coordinate can cross flat tails missed by local curvature.
+        // Translating alpha and mu together leaves their group density unchanged.
+        shift = delta * prior_root.col(j);
+        lp = -arma::dot(shift, mean_precision * (pop.state.tmu - mean)) -
+          .5 * arma::dot(shift, mean_precision * shift);
       } else {
+        // Translating alpha and mu equally leaves the conditional group density
+        // unchanged. Only the mean prior and subject likelihoods enter the ratio.
         shift = delta * directions.col(j);
         lp = -delta * arma::dot(prior_directions.col(j), pop.state.tmu - mean) -
           .5 * delta * delta * curvature[j];
@@ -186,6 +225,7 @@ class JointMoves {
           factor * (alpha(j, s) - pop.state.subj_mu(j, s));
         else proposals[s].row(0) += shift.t();
       }
+      // Exact likelihood check for all subjects; curvature only sets the proposal.
       likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
       double lr = lp;
       for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
@@ -199,53 +239,101 @@ class JointMoves {
           alpha.each_col() += shift;
           pop.state.tmu += shift;
           pop.state.subj_mu.each_col() += shift;
-          accepted_loc[j] = 1;
+          if (!coordinate) accepted_loc[j] = 1;
         }
       }
     }
-    for (int j = 0; j < p; ++j) if (!partners[j].empty()) {
-      const auto k = partners[j][static_cast<size_t>(rng.runif(0, partners[j].size()))];
-      // Pivot near the participants that identify coefficient j. The source
-      // coordinate k stays fixed, so this pivot is identical on the reverse move.
-      double offset = 0;
-      double precision = pop.main.shear_precision(pop.state, j, k);
-      if (do_location) {
-        offset = arma::dot(information.row(j), pop.state.tmu[k] - alpha.row(k)) /
-          information_total[j];
-        precision += offset * offset * mean_precision(j, j);
+    // Choose from the cached weak fields independently of the current state.
+    // Each field keeps the same exact joint updates and likelihood cost.
+    if (!flows.empty()) {
+      const Flow& selected = flows[flows.size() == 1 ? 0 : static_cast<size_t>(rng.runif(0, flows.size()))];
+      const arma::mat& affine_generator = selected.affine;
+      const arma::mat& spread_generator = selected.spread;
+      const arma::vec& ridge_coordinate = selected.coordinate;
+      // Follow the learned affine flow, moving subjects and group parameters together.
+      {
+        const double delta = rng.rnorm(0, affine_step);
+        arma::mat flow;
+        bool accept = false;
+        if (arma::expmat(flow, delta * affine_generator)) {
+          const arma::mat A = flow.submat(0, 0, p - 1, p - 1);
+          const arma::vec b = flow.submat(0, p, p - 1, p);
+          const double logdet = delta * arma::trace(affine_generator);
+          GroupState proposed = pop.state;
+          proposed.tmu = A * pop.state.tmu + b;
+          proposed.subj_mu = A * pop.state.subj_mu;
+          proposed.subj_mu.each_col() += b;
+          proposed.tvar = A * pop.state.tvar * A.t();
+          const bool valid = arma::inv_sympd(proposed.tvinv, proposed.tvar);
+          const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
+          // Subject normal densities cancel the subject Jacobian. The remaining
+          // Jacobian for (mu, Sigma) is |A|^(p+2). Half-t auxiliaries stay fixed.
+          double lr = valid ? (2 - group_v - p) * logdet - group_v *
+            arma::dot(1 / pop.state.a_half, proposed.tvinv.diag() - pop.state.tvinv.diag()) -
+            .5 * (arma::dot(new_mean, mean_precision * new_mean) -
+                  arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
+          for (int s = 0; s < n; ++s) proposals[s] = (A * alpha.col(s) + b).t();
+          likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
+          for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
+          accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
+          if (accept) {
+            for (int s = 0; s < n; ++s) { alpha.col(s) = proposals[s].row(0).t(); ll[s] = values[s][0]; }
+            pop.state = std::move(proposed);
+          }
+        }
+        if (!frozen) affine_step *= std::exp(.1 * (accept - .3));
       }
-      const double delta = rng.rnorm(0, shear[j] / std::sqrt(precision));
-      const double change = delta * offset;
-      GroupState proposed = pop.state;
-      double lr = pop.main.shear(proposed, j, k, delta);
-      if (do_location) {
-        lr -= change * arma::dot(mean_precision.row(j), pop.state.tmu - mean) +
-          .5 * change * change * mean_precision(j, j);
-        proposed.tmu[j] += change;
-        proposed.subj_mu.row(j) += change;
-      }
-      for (int s = 0; s < n; ++s) {
-        proposals[s] = alpha.col(s).t();
-        proposals[s](0, j) += delta * (alpha(k, s) - pop.state.subj_mu(k, s)) + change;
-      }
-      likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
-      for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
-      const bool accepted = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
-      if (accepted) {
+      // Stretch participant positions along the learned flow about their centroid.
+      // Integrate Sigma out of the acceptance ratio, then redraw it on acceptance.
+      if (spread_step > 0 && !spread_generator.is_empty()) {
+        const double delta = rng.rnorm(0, spread_step), stretch = std::expm1(delta);
+        const arma::vec centre = arma::mean(alpha, 1);
+        arma::mat next_alpha(p, n);
+        bool valid = true, accept = false;
         for (int s = 0; s < n; ++s) {
-          alpha(j, s) = proposals[s](0, j);
-          ll[s] = values[s][0];
+          const double t = stretch * arma::dot(ridge_coordinate, alpha.col(s) - centre);
+          arma::vec point(p + 1); point.head(p) = alpha.col(s); point[p] = 1;
+          arma::mat flow;
+          if (!arma::expmat(flow, t * spread_generator)) { valid = false; break; }
+          point = flow * point;
+          next_alpha.col(s) = point.head(p);
+          proposals[s] = next_alpha.col(s).t();
         }
-        pop.state = std::move(proposed);
+        if (valid) {
+          GroupState proposed = pop.state;
+          const arma::vec change = arma::mean(next_alpha, 1) - centre;
+          proposed.tmu += change; proposed.subj_mu.each_col() += change;
+          const arma::mat residual = alpha - pop.state.subj_mu;
+          const arma::mat next_residual = next_alpha - proposed.subj_mu;
+          arma::mat old_scatter = residual * residual.t(), new_scatter = next_residual * next_residual.t();
+          old_scatter.diag() += 2 * group_v / pop.state.a_half;
+          new_scatter.diag() += 2 * group_v / pop.state.a_half;
+          double old_det, new_det;
+          arma::log_det_sympd(old_det, old_scatter);
+          valid = arma::log_det_sympd(new_det, new_scatter);
+          const arma::vec old_mean = pop.state.tmu - mean, new_mean = proposed.tmu - mean;
+          // The centroid is fixed in the flow coordinate: n-1 coordinates stretch.
+          double lr = valid ? (n - 1) * delta - .5 * (group_v + p - 1 + n) * (new_det - old_det) -
+            .5 * (arma::dot(new_mean, mean_precision * new_mean) -
+                  arma::dot(old_mean, mean_precision * old_mean)) : -arma::datum::inf;
+          likelihood.evaluate([&](int s) -> const arma::mat& { return proposals[s]; }, values);
+          for (int s = 0; s < n; ++s) lr += values[s][0] - ll[s];
+          accept = std::isfinite(lr) && std::log(rng.runif(0, 1)) < lr;
+          if (accept) {
+            proposed.tvar = group_inverse_wishart(rng, group_v + p - 1 + n, new_scatter);
+            proposed.tvinv = group_inverse(proposed.tvar);
+            for (int s = 0; s < n; ++s) ll[s] = values[s][0];
+            alpha = std::move(next_alpha); pop.state = std::move(proposed);
+          }
+        }
+        if (!frozen) spread_step *= std::exp(.1 * (accept - .3));
       }
-      if (!frozen) shear[j] *= std::exp(.1 * (accepted - .3));
     }
+    // Warmup tuning; R freezes the geometric average of the adaptation tail.
     if (!frozen) {
       step %= arma::exp(.1 * (accepted - .3));
       if (do_location) loc %= arma::exp(.1 * (accepted_loc - .3));
-      if (++uses > 20) {
-        sum_step += arma::log(step); sum_loc += arma::log(loc); sum_shear += arma::log(shear);
-      }
+      if (++uses > 20) { sum_step += arma::log(step); sum_loc += arma::log(loc); }
     }
   }
   Rcpp::List finish() {
@@ -254,8 +342,9 @@ class JointMoves {
       std::copy(x.begin(), x.end(), target.begin());
     };
     save("step", step); save("loc", loc); save("log_step_sum", sum_step); save("log_loc_sum", sum_loc);
-    save("shear", shear); save("log_shear_sum", sum_shear);
     settings["uses"] = uses;
+    if (!flows.empty()) settings["affine_step"] = affine_step;
+    if (spread_step > 0) settings["spread_step"] = spread_step;
     if (do_location) settings["directions"] = Rcpp::wrap(directions);
     return settings;
   }
@@ -265,11 +354,16 @@ void attach_samples(Rcpp::List& sampler, SampleStore& store, Population& pop, in
   store.finish(pop.state, j); sampler["samples"] = store.data;
 }
 } // namespace
+
+// =============================================================================
+// Initial particles — draw from the group distribution and weight by likelihood
+// =============================================================================
+
 Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
                       int particles, Likelihoods& likelihood) {
   sampler = Rcpp::List(Rf_shallow_duplicate(sampler));
   Population pop(sampler);
-  SampleStore store(sampler["samples"]);
+  SampleStore store(static_cast<SEXP>(sampler["samples"]));
   Random rng;
   pop.state = pop.main.initialize(rng, start_mu, start_var);
 
@@ -296,7 +390,9 @@ Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
     if (!std::isfinite(total) || total <= 0) Rcpp::stop("initial particle weights are not finite");
     double threshold = rng.runif(0, total);
     arma::uword selected = 0;
-    while (selected + 1 < weights.n_elem && (threshold -= weights[selected]) > 0) ++selected;
+    while (selected + 1 < weights.n_elem && threshold >= weights[selected])
+      threshold -= weights[selected++];
+    while (weights[selected] == 0) --selected;
     alpha.col(s) = candidates[s].row(selected).t(); ll[s] = values[s][selected];
   }
   store.group(pop.state, 0); store.particles(alpha, ll, 0);
@@ -307,6 +403,12 @@ Rcpp::List initialize_sampler(Rcpp::List sampler, SEXP start_mu, SEXP start_var,
 }
 
 namespace {
+
+// =============================================================================
+// Chain — one batch of group, joint and particle updates
+// Construction/finish handle R storage; advance() performs the sampling updates.
+// =============================================================================
+
 class Chain {
   Rcpp::List sampler;
   SampleStore store;
@@ -323,8 +425,8 @@ class Chain {
  public:
   int iteration = 0;
   Chain(const Rcpp::List& args, Likelihoods& context)
-    : sampler(Rf_shallow_duplicate(args["sampler"])), store(sampler["samples"]),
-      rng(store.data.attr("rng")), pop(sampler), likelihood(context),
+    : sampler(Rf_shallow_duplicate(args["sampler"])), store(static_cast<SEXP>(sampler["samples"])),
+      rng(static_cast<SEXP>(store.data.attr("rng"))), pop(sampler), likelihood(context),
       particle(rng, sampler, args["tune"], args["pm_settings"],
         Rcpp::as<std::string>(Rcpp::as<Rcpp::List>(args["tune"])["kernel"])) {
     pop.state = pop.main.single() ? pop.main.initialize(rng) : pop.main.read_state(store.last());
@@ -351,8 +453,10 @@ class Chain {
         }
       }
       if (joint) joint->draw(rng, pop, alpha, ll, likelihood, frozen);
+
       particle.begin_iteration(pop.state.tvar);
       component_ll.zeros();
+      // Blocks are sequential: prepare() sees alpha after all earlier updates.
       for (int b = 0; b < particle.block_count(); ++b) {
         for (arma::uword s = 0; s < alpha.n_cols; ++s)
           particle.prepare(s, b, alpha.col(s), pop.state.subj_mu.col(s), pop.state.tvinv);
@@ -361,6 +465,7 @@ class Chain {
         for (arma::uword s = 0; s < alpha.n_cols; ++s) {
           const int selected = particle.select(s, b, values[s]);
           alpha.col(s) = particle.candidate(s).row(selected).t();
+          // Shared likelihoods are overwritten by their last block, not added twice.
           component_ll(s, component - 1) = values[s][selected];
         }
       }
@@ -378,6 +483,10 @@ class Chain {
   }
 };
 } // namespace
+
+// =============================================================================
+// Chain scheduling — shared fixed likelihood inputs, separate mutable workspaces
+// =============================================================================
 
 SamplerContexts::SamplerContexts(const Rcpp::List& inputs, int n_chains, int cores)
   : cores_per_chain(std::max(1, cores)) {
@@ -398,9 +507,12 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
     contexts.warned_openmp = true;
   }
 #endif
+  // Allocate R storage and restore RNGs before entering the parallel region.
   std::vector<std::unique_ptr<Chain>> chains;
   for (int c = 0; c < n; ++c) chains.emplace_back(new Chain(args[c], *contexts.chains[c]));
   std::vector<std::exception_ptr> errors(n);
+
+  // Return to the R thread every ten iterations for interrupts and progress.
   for (int end = 0; end < iter;) {
     end = std::min(iter, end + 10);
     Rcpp::checkUserInterrupt();
@@ -409,6 +521,7 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
 #pragma omp master
 #endif
     {
+      // Chain and subject tasks share one OpenMP team, avoiding nested teams.
       for (int first = 0; first < n; first += concurrent) {
 #ifdef _OPENMP
 #pragma omp taskgroup
@@ -438,12 +551,13 @@ Rcpp::List sample_chains(Rcpp::List args, SamplerContexts& contexts,
   return out;
 }
 
+// Group-only sampling conditional on supplied subject coefficients (run_hyper).
 Rcpp::List sample_group(Rcpp::List sampler, Rcpp::NumericVector alpha, int iter) {
   sampler = Rcpp::List(Rf_shallow_duplicate(sampler));
   GroupSampler group(sampler);
   Random rng;
   GroupState state = group.initialize(rng);
-  SampleStore store(sampler["samples"]);
+  SampleStore store(static_cast<SEXP>(sampler["samples"]));
   Rcpp::IntegerVector dims = alpha.attr("dim");
   const int p = dims[0], n = dims[1], draws = dims[2];
   store.group(state, 0);

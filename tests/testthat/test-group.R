@@ -31,5 +31,7 @@ test_that("groups", {
   expect_snapshot(summary(group_des))
   expect_snapshot(credint(pri, map = TRUE))
   expect_snapshot(credint(pri, selection = "beta"))
-  expect_snapshot(init_chains(emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  parameters <- likelihood_parameters(c(v = 0, v_S1 = 2, a = log(1.5),
+                                        a_Eneutral = .1, a_Eaccuracy = .2, t0 = log(.2)), n = 0)
+  expect_snapshot(round(cbind(model_likelihood(emc, parameters)), 6))
 })

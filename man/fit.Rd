@@ -20,6 +20,7 @@
   max_tries = 20,
   thin = FALSE,
   on_singular = NULL,
+  history_proposals = FALSE,
   ...
 )
 
@@ -58,8 +59,9 @@ participant calculations using native threads.}
 Defaults to the number of chains. The total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
 
 \item{max_tries}{An integer. How many times should it try to meet the finish
-conditions as specified by \code{stop_criteria}? Defaults to 20. \code{max_tries} is
-ignored if the required number of iterations has not been reached yet.}
+conditions as specified by \code{stop_criteria}? Defaults to 20. In \code{sample}, this
+limit applies even if the requested number of draws has not been reached. In
+earlier stages, the requested number of iterations must be reached first.}
 
 \item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
@@ -68,6 +70,13 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 covariance becomes computationally singular during sampling. \code{NULL}: up to 3 re-draws of the
 group step, then an error.
 A list may set \code{max_retries} (integer, re-draw the group step on failure).}
+
+\item{history_proposals}{Logical. Add a mixture of per-chain history proposals
+during burn, adaptation and sampling. Defaults to \code{FALSE} for new fits;
+omitted on continuation, retains the saved choice. Changing it after adaptation
+uses the previous draws as warmup history and restarts adaptation. Mixture weights
+are learned during warmup. History is refreshed after the final warmup block,
+then proposals and tuning are fixed during sampling.}
 
 \item{...}{Additional optional arguments}
 }
@@ -94,7 +103,7 @@ pass \code{max_gd}. Default \code{NULL} uses the maximum throughout.
 
 \code{mean_gd} and \code{max_gd} use the split-Rhat reported by \code{\link[=gd_summary]{gd_summary()}}, checked
 every \code{step_size} iterations. After a failed check, the first third of the stage's
-draws is dropped if this lowers the stopping diagnostic.
+draws is dropped only if all stopping criteria pass on the remaining draws.
 
 \code{min_unique} (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 

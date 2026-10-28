@@ -437,7 +437,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     search_width = 1, step_size = 100, verbose = TRUE, fileName = NULL,
                     particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
-                    thin = FALSE, on_singular = NULL,
+                    thin = FALSE, on_singular = NULL, history_proposals = FALSE,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
@@ -469,6 +469,21 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
   } else{
     last_stage <- stage
   }
+  previous_history <- isTRUE(emc[[1]]$history_proposals)
+  if(missing(history_proposals)) history_proposals <- previous_history
+  if(!is.logical(history_proposals) || length(history_proposals) != 1 || is.na(history_proposals))
+    stop("history_proposals must be TRUE or FALSE")
+  if(history_proposals != previous_history){
+    emc[[1]]$sample_kernel <- NULL
+    for(i in seq_along(emc)) attr(emc[[i]]$samples, "pm_settings") <- NULL
+    # Use the latest draws as warmup history for the changed mixture.
+    if(get_last_stage(emc) %in% c("adapt", "sample")){
+      emc <- subset(emc, stage = get_last_stage(emc))
+      for(i in seq_along(emc)) emc[[i]]$samples$stage[] <- "burn"
+      last_stage <- "adapt"
+    }
+  }
+  emc[[1]]$history_proposals <- history_proposals
   stages <- c('preburn', 'burn', 'adapt', 'sample')
   to_run <- stages[which(stages == last_stage):length(stages)]
   context <- sampler_contexts(restore_duplicates(emc), cores_per_chain)
@@ -496,7 +511,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     gd      <- final_progress$gd$gd
     gd_final <- NULL
     if (!is.null(stop_criteria[["sample"]]$mean_gd)) gd_final <- sprintf("Mean Rhat=%.3f", mean(gd))
-    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- sprintf("Max Rhat=%.3f",  max(gd))
+    if (!is.null(stop_criteria[["sample"]]$max_gd))  gd_final <- rhat_message(final_progress$gd$rule, gd)
 
     ess_message <- if (!is.null(final_progress$curr_min_es) &&
                        is.finite(final_progress$curr_min_es)) {
@@ -538,7 +553,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #'
 #' ``mean_gd`` and ``max_gd`` use the split-Rhat reported by [gd_summary()], checked
 #' every ``step_size`` iterations. After a failed check, the first third of the stage's
-#' draws is dropped if this lowers the stopping diagnostic.
+#' draws is dropped only if all stopping criteria pass on the remaining draws.
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
@@ -587,8 +602,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' @param cores_for_chains An integer. How many cores to use across chains.
 #' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
 #' @param max_tries An integer. How many times should it try to meet the finish
-#' conditions as specified by ``stop_criteria``? Defaults to 20. ``max_tries`` is
-#' ignored if the required number of iterations has not been reached yet.
+#' conditions as specified by ``stop_criteria``? Defaults to 20. In ``sample``, this
+#' limit applies even if the requested number of draws has not been reached. In
+#' earlier stages, the requested number of iterations must be reached first.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types
 #' of parameters these should hold. See the details and examples section.
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
@@ -597,6 +613,12 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
 #' covariance becomes computationally singular during sampling. `NULL`: up to 3 re-draws of the
 #' group step, then an error.
 #' A list may set `max_retries` (integer, re-draw the group step on failure).
+#' @param history_proposals Logical. Add a mixture of per-chain history proposals
+#' during burn, adaptation and sampling. Defaults to `FALSE` for new fits;
+#' omitted on continuation, retains the saved choice. Changing it after adaptation
+#' uses the previous draws as warmup history and restarts adaptation. Mixture weights
+#' are learned during warmup. History is refreshed after the final warmup block,
+#' then proposals and tuning are fixed during sampling.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \donttest{

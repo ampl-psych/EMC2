@@ -6,10 +6,11 @@
 #include <limits>
 #include "r_constants.h"
 #include "nan_check.h"
+#include "hcubature.h"
 
 /**
  * @file composite_funs.h
- * @brief Numerically stable, thread-safe, -ffast-math-safe convenience
+ * @brief Numerically stable, thread-safe convenience
  *        functions for statistical computing
  *
  * This header provides composite functions that are more efficient and
@@ -341,6 +342,63 @@ namespace composite_detail {
   const int n = x.size();
   if (n == 0) {return neg_inf();}
   return log_sum_exp(x) - std::log(static_cast<double>(n));
+}
+
+// Integral on [0,1] of a positive unimodal function supplied on the log scale.
+// Split outward from its mode so cubature cannot miss a narrow endpoint peak.
+// Used for ill-conditioned closed forms and underflowing race integrals.
+// The outer likelihood integrals target 1e-8 relative error. Reserve a
+// smaller error budget for distribution evaluations inside those integrals.
+constexpr double DISTRIBUTION_REL_TOL = 1e-10;
+inline bool probability_roundoff_exceeds(double value,double magnitude) {
+  return !(value>0.0) || 32*std::numeric_limits<double>::epsilon()*magnitude
+                         > DISTRIBUTION_REL_TOL*value;
+}
+
+template<class F> inline double log_integral_unit(F log_value,double mode,
+                                                 double rel_tol=DISTRIBUTION_REL_TOL) {
+  if (mode<0.0) {
+    // Only needed when an ordinary race integral underflows. The distribution
+    // fallbacks supply their analytical mode directly.
+    constexpr double ratio=0.3819660112501051518;
+    double a=0,b=1,c=ratio,d=1-ratio;
+    double fa=log_value(a),fb=log_value(b),fc=log_value(c),fd=log_value(d);
+    for (int i=0;i<80;++i) {
+      const double high=std::max(std::max(fa,fb),std::max(fc,fd));
+      const double low=std::min(std::min(fa,fb),std::min(fc,fd));
+      if (high-low<0.25 || !(a<c && c<d && d<b)) break;
+      if (fc>fd) { b=d;fb=fd;d=c;fd=fc;c=a+ratio*(b-a);fc=log_value(c); }
+      else { a=c;fa=fc;c=d;fc=fd;d=b-ratio*(b-a);fd=log_value(d); }
+    }
+    mode=fa>=fb && fa>=fc && fa>=fd ? a : (fb>=fc && fb>=fd ? b : (fc>=fd ? c : d));
+  }
+  const double scale=log_value(mode);
+  if (!is_finite(scale)) return scale;
+  struct Work { F& f; double scale; } work{log_value,scale};
+  auto integrand=[](unsigned,const double* x,void* p,unsigned,double* out) -> int {
+    const auto& w=*static_cast<Work*>(p);
+    out[0]=std::exp(w.f(x[0])-w.scale);
+    return 0;
+  };
+  double total=0.0;
+  for (int direction : {-1,1}) {
+    const double end=direction<0 ? 0.0 : 1.0;
+    double step=std::fabs(end-mode), at=mode;
+    if (step==0.0) continue;
+    while (step>1e-15 && log_value(mode+direction*step)<scale-1.0) step*=0.5;
+    while (at!=end) {
+      const double next=direction<0 ? std::max(end,at-step) : std::min(end,at+step);
+      double lo=std::min(at,next),hi=std::max(at,next),value=0.0,error=0.0;
+      if (lo==hi) break;
+      const double tolerance=std::max(rel_tol,16*std::numeric_limits<double>::epsilon()*std::fabs(scale));
+      hcubature(integrand,&work,1,&lo,&hi,10000,tolerance*total/128,
+                tolerance,&value,&error);
+      total+=value;
+      at=next;
+      step*=2.0;
+    }
+  }
+  return scale+std::log(total);
 }
 
 #endif // composite_functions_h
