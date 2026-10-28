@@ -34,7 +34,6 @@
 #include "composite_functions.h"  // log1m, log1m_exp, log_sum_exp, log_mix
 #include "exgaussian_functions.h" // dtexg, ptexg
 #include "wald_functions.h"       // digt, pigt
-#include "ss_stop.h"
 #include "ss_integrate.h"         // ss_integrate (hcubature), window helpers
 
 // integration accuracy for the stop-success and lower-censoring integrals
@@ -132,7 +131,7 @@ inline double go_lsurv(const SSSpec& s, const ParamTable& pt, int r, double t) {
 }
 
 // log survivor of the stop process (parameters on row r0) at stop-relative time q
-inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q) {
+inline double stop_lsurv(const SSSpec& s, int r0, double q) {
   double v = s.stop_family==SSStopFamily::ExGaussian
     ? s.stop_exg[r0 / s.n_acc].prob(q, false, true)
     : s.stop_other[r0 / s.n_acc].log_survivor(q);
@@ -276,12 +275,12 @@ inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
   if (s.is_go[r0+w]) {
     const double gf = par(pt, r0, s.col_gf);
     double go_lprob = go_lpdf(s, pt, r0 + w, t);
-    if (!is_finite(go_lprob)) go_lprob = neg_inf();
+    if (!is_finite(go_lprob)) return neg_inf();
     for (int k = 0; k < s.n_acc; ++k)
       if (s.is_go[r0 + k] && k != w) go_lprob += go_lsurv(s, pt, r0 + k, t);
     if (!s.stop_presented[trial] || t<=s.ssd[trial]) return log1m(gf) + go_lprob;
     const double tf = par(pt, r0, s.col_tf), te = t-s.ssd[trial];
-    double lss = stop_lsurv(s, pt, r0, te);
+    double lss = stop_lsurv(s, r0, te);
     double st_loss = 0.0;
     for (int k = 0; k < s.n_acc; ++k)
       if (s.is_st[r0 + k] && k != w) st_loss += go_lsurv(s, pt, r0 + k, te);
@@ -291,7 +290,7 @@ inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
   const double te=t-s.ssd[trial];
   const double gf = par(pt, r0, s.col_gf), tf = par(pt, r0, s.col_tf);
   double st_base = go_lpdf(s, pt, r0 + w, te);
-  if (!is_finite(st_base)) st_base = neg_inf();
+  if (!is_finite(st_base)) return neg_inf();
   for (int k = 0; k < s.n_acc; ++k)
     if (s.is_st[r0 + k] && k != w) st_base += go_lsurv(s, pt, r0 + k, te);
   double go_loss = 0.0;
@@ -300,7 +299,7 @@ inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
   double lps = stop_success_lp(s, pt, trial, te);
   const double term_gf   = std::log(gf) + st_base;
   const double term_win  = log1m(gf) + lps + st_base;
-  const double term_lose = log1m(gf) + stop_lsurv(s, pt, r0, te) + st_base + go_loss;
+  const double term_lose = log1m(gf) + stop_lsurv(s, r0, te) + st_base + go_loss;
   return log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_win, term_lose));
 }
 
@@ -322,12 +321,12 @@ inline int lc_integrand(unsigned, const double* x, void* p, unsigned, double* ou
   return 0;
 }
 
-inline double lower_censor_lp(const SSSpec& s, const ParamTable& pt, int trial, double min_ll) {
+inline double lower_censor_lp(const SSSpec& s, const ParamTable& pt, int trial) {
   const double lo = s.lt[trial], hi = s.lc[trial];
-  if (!(hi > lo)) return min_ll;
+  if (!(hi > lo)) return neg_inf();
   LcIntegrand d{&s, &pt, trial, s.resp_local[trial]};
   double res = ss_integrate(lc_integrand, &d, lo, hi, SSF_ABS_TOL, SSF_REL_TOL, SSF_LC_MAX_EVAL);
-  return (!is_finite(res) || res <= 0.0) ? min_ll : std::log(res);
+  return (!is_finite(res) || res <= 0.0) ? neg_inf() : std::log(res);
 }
 
 // log P(no response at all) on a trial without a deadline
@@ -357,7 +356,7 @@ inline double upper_deadline_lp(const SSSpec& s, const ParamTable& pt, int trial
   const double uc_eff = s.uc_eff[trial];
   double lps = neg_inf(), logS_stop = 0.0;
   if (s.stop_can_act[trial]) {
-    logS_stop = stop_lsurv(s, pt, r0, uc_eff);
+    logS_stop = stop_lsurv(s, r0, uc_eff);
     lps = stop_success_lp(s, pt, trial, uc_eff);
   }
   const double log_core = log_sum_exp(lps, logS_go + logS_stop);
@@ -370,7 +369,6 @@ inline double upper_deadline_lp(const SSSpec& s, const ParamTable& pt, int trial
   const double log_tfb  = log_sum_exp(std::log(gf), log1m(gf) + logS_go);
   return log_mix(tf, log_tfb, log_trig);
 }
-
 
 } // namespace ssf
 
@@ -414,7 +412,7 @@ inline void ss_prepare_distributions(const SSSpec& s) {
   }
 }
 
-inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
+inline void ss_log_likelihood(const SSSpec& s, double* ll_buf,
                               const std::vector<int>& is_ok) {
   ss_prepare_distributions(s);
   const ParamTable& pt=*s.pt;
@@ -427,10 +425,10 @@ inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
       case SSKind::ObsST:         v = ssf::response_lp(s, pt, t, s.rt[t], s.winner_local[t]); break;
       case SSKind::Withheld:      v = ssf::withheld_lp(s, pt, t); break;
       case SSKind::UpperCens:     v = ssf::upper_deadline_lp(s, pt, t); break;
-      case SSKind::LowerCens:     v = ssf::lower_censor_lp(s, pt, t, min_ll); break;
-      case SSKind::BothCens:      v = log_sum_exp(ssf::lower_censor_lp(s, pt, t, min_ll),
+      case SSKind::LowerCens:     v = ssf::lower_censor_lp(s, pt, t); break;
+      case SSKind::BothCens:      v = log_sum_exp(ssf::lower_censor_lp(s, pt, t),
                                                   ssf::upper_deadline_lp(s, pt, t)); break;
-      default:                    v = min_ll; break;
+      default:                    v = neg_inf(); break;
     }
     ll_buf[t] = v;
   }
@@ -450,10 +448,7 @@ inline Rcpp::NumericVector ss_col_or_default(const Rcpp::DataFrame& df, const ch
   return Rcpp::NumericVector(n, def);
 }
 
-inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
-                           const ParamTable& pt) {
-  using namespace Rcpp;
-  SSSpec s;
+inline void ss_set_parameter_columns(SSSpec& s, const std::string& type, const ParamTable& pt) {
   s.is_exg = type=="SSEXG" || type=="SSLNORM" || type=="SSNORM" || type=="SSWEIBULL";
   if (type=="SSLNORM" || type=="SSRDLNORM") s.stop_family=SSStopFamily::Lognormal;
   else if (type=="SSNORM" || type=="SSRDNORM") s.stop_family=SSStopFamily::Normal;
@@ -487,6 +482,13 @@ inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
       s.col_stop1=pt.base_index_for("shapeS"); s.col_stop2=pt.base_index_for("scaleS");
       break;
   }
+}
+
+inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
+                           const ParamTable& pt) {
+  using namespace Rcpp;
+  SSSpec s;
+  ss_set_parameter_columns(s,type,pt);
   s.col_tf=pt.base_index_for("tf"); s.col_gf=pt.base_index_for("gf");
 
   NumericVector RT = data["rt"];

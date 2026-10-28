@@ -3,6 +3,7 @@
 #endif
 
 #include <Rcpp.h>
+#include <numeric>
 #include <unordered_map>
 #include "LikelihoodContext.h"
 #include "openmp.h"
@@ -548,12 +549,19 @@ NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string typ
   const int n_trials=n_rows/n_acc;
   if (upper.size()!=1 && upper.size()!=n_trials) stop("Invalid stop integral bounds.");
   ParamTable pt=ParamTable::from_rcpp(pars,colnames(pars));
-  IntegerVector lR(n_rows);
-  for (int r=0;r<n_rows;++r) lR[r]=r % n_acc+1;
-  DataFrame data=DataFrame::create(_["rt"]=NumericVector(n_rows,NA_REAL),
-    _["R"]=IntegerVector(n_rows,NA_INTEGER), _["lR"]=lR,
-    _["SSD"]=pars(_,pt.base_index_for("SSD")), _["winner"]=LogicalVector(n_rows,false));
-  SSSpec spec=make_ss_spec(type,data,pt);
+  SSSpec spec;
+  ss_set_parameter_columns(spec,type,pt);
+  spec.rebind(pt);
+  spec.n_rows=n_rows; spec.n_trials=n_trials; spec.n_acc=n_acc;
+  spec.base_row.resize(n_trials); spec.go_offsets.resize(n_trials);
+  spec.n_accG.assign(n_trials,n_acc); spec.ssd.resize(n_trials);
+  spec.go_rows.resize(n_rows);
+  std::iota(spec.go_rows.begin(),spec.go_rows.end(),0);
+  const int col_ssd=pt.base_index_for("SSD");
+  for (int t=0; t<n_trials; ++t) {
+    spec.base_row[t]=spec.go_offsets[t]=t*n_acc;
+    spec.ssd[t]=pt.base(t*n_acc,col_ssd);
+  }
   // The R callbacks already honor their approximation settings. Keep that
   // behavior; extending the new fitting kernels' options is a separate change.
   if (pt.name_to_base_idx.count("exg_normal_ratio"))
@@ -888,7 +896,7 @@ struct LikelihoodContext::Impl {
       c_log_likelihood_multinomial_probit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data(), s.is_ok);
       break;
     case STOP_SIGNAL:
-      ss_log_likelihood(s.ss, min_ll, s.ll_buf.data(), s.is_ok);
+      ss_log_likelihood(s.ss, s.ll_buf.data(), s.is_ok);
       break;
     case CDM:
     case PSDM:
