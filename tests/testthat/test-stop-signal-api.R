@@ -147,52 +147,45 @@ test_that("stop_signal routes only existing C++ stop-signal backends", {
   expect_identical(stop_signal(go = "racing_diffusion", stop = "normal")$c_name, "SSRDNORM")
 })
 
-test_that("SSEXG and SSRDEX are compatibility wrappers for stop_signal", {
-  expect_identical(SSEXG()$p_types, stop_signal(go = "exgaussian", stop = "exgaussian")$p_types)
-  expect_identical(SSEXG()$c_name, stop_signal(go = "exgaussian", stop = "exgaussian")$c_name)
-
-  expect_identical(SSRDEX()$p_types, stop_signal(go = "racing_diffusion", stop = "exgaussian")$p_types)
-  expect_identical(SSRDEX()$c_name, stop_signal(go = "racing_diffusion", stop = "exgaussian")$c_name)
+test_that("SSEXG and SSRDEX use zero lower bounds by default", {
+  expect_identical(SSEXG()$p_types[c("exg_lb", "exgS_lb")],
+                   c(exg_lb = 0, exgS_lb = 0))
+  expect_identical(SSRDEX()$p_types["exgS_lb"], c(exgS_lb = 0))
 })
 
-test_that("design accepts a stop_signal model object directly", {
-  direct <- design(
-    model = stop_signal(),
-    factors = list(subjects = 1, S = c("left", "right")),
-    Rlevels = c("left", "right"),
-    matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
-    formula = list(
-      mu ~ lM,
-      sigma ~ 1,
-      tau ~ 1,
-      muS ~ 1,
-      sigmaS ~ 1,
-      tauS ~ 1,
-      gf ~ 1,
-      tf ~ 1
-    ),
-    report_p_vector = FALSE
-  )
+test_that("legacy, direct and wrapped SS constructors agree through fitting", {
+  withr::local_options(emc.ll_backend = "multiprocess")
+  settings <- list(default = NULL, normal = list(normal_ratio = 3),
+                   exponential = list(shifted_exponential_sigma = .1))
+  for (go in c("exgaussian", "racing_diffusion")) {
+    constructor <- if (go == "exgaussian") SSEXG else SSRDEX
+    for (setting in settings) {
+      legacy <- suppressWarnings(constructor(exgaussian_approximation = setting))
+      direct <- suppressWarnings(stop_signal(go = go, exgaussian_approximation = setting))
+      for (field in c("p_types", "transform", "bound", "ss_info"))
+        expect_identical(legacy[[field]], direct[[field]], info = paste(go, field))
+      expect_identical(legacy$c_name, direct$c_name)
 
-  wrapped <- design(
-    model = function() stop_signal(),
-    factors = list(subjects = 1, S = c("left", "right")),
-    Rlevels = c("left", "right"),
-    matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
-    formula = list(
-      mu ~ lM,
-      sigma ~ 1,
-      tau ~ 1,
-      muS ~ 1,
-      sigmaS ~ 1,
-      tauS ~ 1,
-      gf ~ 1,
-      tf ~ 1
-    ),
-    report_p_vector = FALSE
-  )
-
-  expect_true(is.function(direct$model))
-  expect_identical(direct$model()$p_types, wrapped$model()$p_types)
-  expect_identical(direct$model()$c_name, wrapped$model()$c_name)
+      designs <- list(
+        ss_test_design(go, model = direct),
+        ss_test_design(go, model = function() suppressWarnings(
+          stop_signal(go = go, exgaussian_approximation = setting))),
+        ss_test_design(go, model = function() suppressWarnings(
+          constructor(exgaussian_approximation = setting)))
+      )
+      p <- make_stop_cpp_p(designs[[1]])
+      likelihoods <- lapply(designs, function(des) {
+        expect_true(is.function(des$model))
+        expect_identical(sampled_pars(des, doMap = FALSE),
+                         sampled_pars(designs[[1]], doMap = FALSE))
+        emc <- make_emc(ss_test_data(), des, type = "single", n_chains = 1,
+                        compress = FALSE, verbose = FALSE)
+        calc_ll_manager(rbind(p, p + .01), emc[[1]]$data[[1]], emc[[1]]$model,
+                         return_trialwise = TRUE)
+      })
+      expect_true(all(is.finite(likelihoods[[1]])))
+      expect_identical(likelihoods[[1]], likelihoods[[2]])
+      expect_identical(likelihoods[[1]], likelihoods[[3]])
+    }
+  }
 })

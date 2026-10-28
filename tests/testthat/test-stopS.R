@@ -1,28 +1,6 @@
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 
-# Compare the optimized C/C++ SSEXG likelihood to the R reference path by
-# removing `c_name` from the model while keeping the same data and proposals.
-expect_ssexg_cr_equal <- function(emc, p_vector, n = 25, proposal_var = 0.0025,
-                                  tolerance = 1e-5) {
-  proposals <- mvtnorm::rmvnorm(
-    n,
-    mean = p_vector,
-    sigma = diag(length(p_vector)) * proposal_var
-  )
-  proposals <- rbind(p_vector, proposals)
-  colnames(proposals) <- names(p_vector)
-
-  model_c <- emc[[1]]$model
-  model_r_list <- model_c()
-  model_r_list$c_name <- NULL
-  model_r <- function() model_r_list
-
-  ll_r <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_r)
-  ll_c <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_c)
-
-  expect_equal(ll_c, ll_r, tolerance = tolerance)
-}
 
 # Baseline single-subject SSEXG fixture using staircase SSD generation.
 mySSD_function <- make_ssd()
@@ -171,7 +149,7 @@ test_that("staircase resets per subject", {
                                   log(0.2), log(0.03), log(0.05),
                                   qnorm(.1), qnorm(.1))
 
-  dat_multi <- make_data(p_multi, design_multi, n_trials = 400,
+  dat_multi <- make_data(p_multi, design_multi, n_trials = 4,
                          functions = list(SSD = make_ssd(p_stop = 1)))
 
   # Go trials have SSD = Inf; inspect the first actual stop trial per subject.

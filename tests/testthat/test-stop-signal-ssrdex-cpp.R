@@ -12,35 +12,6 @@ make_ssrdex_cpp_design <- function() {
   )
 }
 
-make_stop_cpp_p <- function(design, values) {
-  p <- sampled_pars(design, doMap = FALSE)
-  missing <- setdiff(names(p), names(values))
-  if (length(missing)) stop("Missing values for: ", paste(missing, collapse = ", "))
-  p[] <- values[names(p)]
-  p
-}
-
-expect_stop_cpp_equal_r <- function(design, p, tolerance = 1e-5) {
-  dat <- make_data(p, design, n_trials = 30, functions = list(SSD = make_ssd()))
-  emc <- make_emc(dat, design, type = "single", n_chains = 1, compress = FALSE)
-
-  proposals <- rbind(
-    p,
-    p + rep(c(-0.003, 0.002, 0.001), length.out = length(p)),
-    p + rep(c(0.002, -0.001, 0.003), length.out = length(p))
-  )
-  colnames(proposals) <- names(p)
-
-  model_c <- emc[[1]]$model
-  model_r_list <- model_c()
-  model_r_list$c_name <- NULL
-  model_r <- function() model_r_list
-
-  ll_c <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_c)
-  ll_r <- calc_ll_manager(proposals, emc[[1]]$data[[1]], model_r)
-
-  expect_equal(as.vector(ll_c), as.vector(ll_r), tolerance = tolerance)
-}
 
 test_that("SSRDEX C++ likelihood matches R reference path", {
   design_ssrdex <- make_ssrdex_cpp_design()
