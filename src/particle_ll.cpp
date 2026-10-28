@@ -538,8 +538,9 @@ inline void c_log_likelihood_multinomial_probit(const ParamTable& pt,
   }
 }
 
-// Shared stop-success integral for the R model callbacks. Parameter mapping and
-// validation have already happened; all rows here are participating go racers.
+// Internal R entry point for the normal, lognormal and Weibull model$sfun callbacks,
+// using the same stop-success integral as fitting. pars contains mapped go rows
+// grouped by trial; upper is in stop-relative time, one bound or one per trial.
 // [[Rcpp::export]]
 NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string type,
                                  NumericVector upper) {
@@ -562,8 +563,7 @@ NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string typ
     spec.base_row[t]=spec.go_offsets[t]=t*n_acc;
     spec.ssd[t]=pt.base(t*n_acc,col_ssd);
   }
-  // The R callbacks already honor their approximation settings. Keep that
-  // behavior; extending the new fitting kernels' options is a separate change.
+  // R callbacks use their supplied exGaussian approximation settings.
   if (pt.name_to_base_idx.count("exg_normal_ratio"))
     spec.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
   if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))

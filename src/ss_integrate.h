@@ -59,10 +59,13 @@ enum class SSStopFamily { ExGaussian, Normal, Lognormal, Weibull };
 
 // Prepared non-exGaussian stop distributions. Integration uses standardized
 // normal/lognormal time or Weibull cumulative hazard, including the Jacobian.
+// ExGaussian stops use the existing ExGaussian class in exgaussian_functions.h.
 struct SSStop {
   SSStopFamily family;
   double location, scale, lower, inv_scale, log_scale, alpha, log_tail_factor;
 
+  // (a, b) = (mu, sigma), (meanlog, sdlog), or (shape, scale).
+  // lb is the normal lower truncation bound; alpha is its standardized value.
   SSStop(SSStopFamily f, double a, double b, double lb=0.0)
     : family(f), location(a), scale(b), lower(lb), inv_scale(1.0/b),
       log_scale(std::log(b)), alpha((lb-a)/b), log_tail_factor(0.0) {
@@ -71,11 +74,13 @@ struct SSStop {
                              : PNORM_STD(alpha,false,true);
   }
 
+  // log P(T_stop > t), conditional on lower truncation for normal stops.
   double log_survivor(double t) const {
     if (family==SSStopFamily::Normal) {
       if (t<=lower) return 0.0;
       if (is_pos_inf(t)) return neg_inf();
       if (alpha>0) {
+        // Use scaled normal tails to avoid underflow in the truncation ratio.
         const double d=(t-lower)*inv_scale;
         return -d*(alpha+0.5*d) +
           std::log(pnorm_detail::normal_tail_factor(alpha+d))-log_tail_factor;
@@ -88,6 +93,8 @@ struct SSStop {
     return -std::exp(location*(std::log(t)-log_scale));
   }
 
+  // Map the integration coordinate to stop-relative time.
+  // For alpha > 0, normal time is scaled by the tail width sigma/(1+alpha).
   double time(double x) const {
     if (family==SSStopFamily::Weibull)
       return x<=0 ? 0.0 : std::exp(log_scale+std::log(x)/location);
@@ -103,6 +110,7 @@ struct SSStop {
     return alpha>0 ? ((t-lower)*inv_scale)*(1.0+alpha) : (t-location)*inv_scale;
   }
 
+  // Stop density in integration coordinates: log(f_stop(t(x)) * dt/dx).
   double log_weight(double x) const {
     if (family==SSStopFamily::Weibull) return -x;
     if (family==SSStopFamily::Normal && alpha>0) {

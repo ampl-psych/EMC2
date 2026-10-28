@@ -36,7 +36,7 @@
 #include "wald_functions.h"       // digt, pigt
 #include "ss_integrate.h"         // ss_integrate (hcubature), window helpers
 
-// integration accuracy for the stop-success and lower-censoring integrals
+// Integration accuracy for exGaussian stop-success and lower-censoring integrals
 // (matches the R reference: rel 1e-6 / abs 1e-8)
 constexpr double SSF_ABS_TOL = 1e-8;
 constexpr double SSF_REL_TOL = 1e-6;
@@ -81,6 +81,7 @@ struct SSSpec {
   mutable std::unordered_map<std::uint64_t, MemoEntry> memo;
   mutable std::vector<double> memo_keys;
 
+  // Prepared per particle: go distributions per row, stop distributions per trial.
   mutable std::vector<ExGaussian> go_exg, stop_exg;
   mutable std::vector<SSStop> stop_other;
 
@@ -150,6 +151,7 @@ struct StopIntegrand {
   const SSStop* other;
 };
 
+// f_stop(t) * prod_i S_go,i(t + SSD), including the Jacobian when time is transformed.
 inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, double* out) {
   const StopIntegrand* w = static_cast<const StopIntegrand*>(p);
   const double xx = w->other ? w->other->time(x[0]) : x[0];
@@ -181,9 +183,9 @@ inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
     hi=ss_stop_window_hi(upper,stop.mu,stop.sigma,stop.tau);
   } else w.other->bounds(upper,lo,hi);
   if (!(hi > lo)) return neg_inf();
-  // Clip once in the integration coordinate when the go survival product
-  // becomes negligible. This also resolves races far into the stop left tail.
-  // Keep the established exGaussian cutoff and tolerances.
+  // The stop window can extend well beyond the go finishing times. Clip hi
+  // where the go survival product falls below exp(-30) for exGaussian stops
+  // or exp(-45) for the other families. Bisection uses its monotone decrease.
   auto log_S_go = [&](double x) {
     const double t=w.other ? w.other->time(x) : x;
     double ls = 0.0;
@@ -268,7 +270,10 @@ inline double stop_success_lp(const SSSpec& s, const ParamTable& pt, int trial, 
   return lp;
 }
 
-// Density for a specified response, shared by observed and censored trials.
+// ---------------------------------------------------------------------------
+// Density for a specified go or stop-triggered response at time t, shared by
+// observed trials and the lower-censoring integral. ST densities use t - SSD.
+// ---------------------------------------------------------------------------
 inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
                           double t, int w) {
   const int r0=s.base_row[trial];
@@ -284,6 +289,7 @@ inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
     double st_loss = 0.0;
     for (int k = 0; k < s.n_acc; ++k)
       if (s.is_st[r0 + k] && k != w) st_loss += go_lsurv(s, pt, r0 + k, te);
+    // Trigger failure, or a triggered stop and ST racers still running at t.
     return log1m(gf) + log_mix(tf, go_lprob, go_lprob + lss + st_loss);
   }
   if (!s.stop_presented[trial] || t<=s.ssd[trial]) return neg_inf();
@@ -297,12 +303,14 @@ inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
   for (int k = 0; k < s.n_acc; ++k)
     if (s.is_go[r0 + k]) go_loss += go_lsurv(s, pt, r0 + k, t);
   double lps = stop_success_lp(s, pt, trial, te);
+  // An ST response can follow go failure, a stop win, or go and stop still running.
   const double term_gf   = std::log(gf) + st_base;
   const double term_win  = log1m(gf) + lps + st_base;
   const double term_lose = log1m(gf) + stop_lsurv(s, r0, te) + st_base + go_loss;
   return log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_win, term_lose));
 }
 
+// Sum over all possible winners when the response identity is missing.
 inline double trial_log_response_density(const SSSpec& s, const ParamTable& pt, int trial,
                                          double t, int resp_local) {
   if (resp_local>=0) return response_lp(s,pt,trial,t,resp_local);
@@ -372,12 +380,7 @@ inline double upper_deadline_lp(const SSSpec& s, const ParamTable& pt, int trial
 
 } // namespace ssf
 
-// ---------------------------------------------------------------------------
-// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
-// checks bounds first and applies penalties, clamping, expansion and summation
-// afterwards, as for the race models. Thread-safe given a per-thread
-// SSSpec (rebind) and ParamTable.
-// ---------------------------------------------------------------------------
+// Reset the integral cache and prepare distributions for this particle.
 inline void ss_prepare_distributions(const SSSpec& s) {
   const ParamTable& pt = *s.pt;
   s.memo.clear();
@@ -412,6 +415,12 @@ inline void ss_prepare_distributions(const SSSpec& s) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
+// checks bounds first and applies penalties, clamping, expansion and summation
+// afterwards, as for the race models. Thread-safe given a per-thread
+// SSSpec (rebind) and ParamTable.
+// ---------------------------------------------------------------------------
 inline void ss_log_likelihood(const SSSpec& s, double* ll_buf,
                               const std::vector<int>& is_ok) {
   ss_prepare_distributions(s);
