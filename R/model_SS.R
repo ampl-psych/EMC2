@@ -809,25 +809,14 @@ ss_model_ttransform <- function(go_spec, model_label) {
 
 
 ss_model_sfun <- function(go_spec, stop_spec) {
-  force(go_spec)
-  force(stop_spec)
-  if (identical(go_spec$family, "exgaussian")) {
-    switch(
-      stop_spec$family,
-      exgaussian = function(pars, n_acc, upper = Inf) pstopTEXG(pars, n_acc, upper = upper),
-      lognormal = function(pars, n_acc, upper = Inf) pstopLNormalTEXG(pars, n_acc, upper = upper),
-      weibull = function(pars, n_acc, upper = Inf) pstopWeibullTEXG(pars, n_acc, upper = upper),
-      normal = function(pars, n_acc, upper = Inf) pstopNormalTEXG(pars, n_acc, upper = upper)
-    )
-  } else {
-    switch(
-      stop_spec$family,
-      exgaussian = function(pars, n_acc, upper = Inf) pstopHybrid(pars, n_acc, upper = upper),
-      lognormal = function(pars, n_acc, upper = Inf) pstopLNormalHybrid(pars, n_acc, upper = upper),
-      weibull = function(pars, n_acc, upper = Inf) pstopWeibullHybrid(pars, n_acc, upper = upper),
-      normal = function(pars, n_acc, upper = Inf) pstopNormalHybrid(pars, n_acc, upper = upper)
-    )
+  if (identical(stop_spec$family, "exgaussian")) {
+    if (identical(go_spec$family, "exgaussian")) {
+      return(function(pars, n_acc, upper = Inf) pstopTEXG(pars, n_acc, upper = upper))
+    }
+    return(function(pars, n_acc, upper = Inf) pstopHybrid(pars, n_acc, upper = upper))
   }
+  type <- ss_model_c_name(go_spec, stop_spec)
+  function(pars, n_acc, upper = Inf) ss_stop_probability(pars, n_acc, type, upper)
 }
 
 
@@ -1371,56 +1360,6 @@ pstopTEXG <- function(
 }
 
 
-stopfn_lnormal_texg <- function(
-    t, mu, sigma, tau, lb, meanlogS, sdlogS, SSD,
-    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
-) {
-  out <- stats::dlnorm(t, meanlog = meanlogS, sdlog = sdlogS)
-  for (i in seq_along(mu)) {
-    pars_i <- cbind(
-      mu = rep(mu[i], length(t)),
-      sigma = rep(sigma[i], length(t)),
-      tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t)),
-      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
-      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
-    )
-    out <- out * (1 - ptexGaussian(t + SSD, pars_i))
-  }
-  out
-}
-
-
-pstopLNormalTEXG <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
-    spars = c("meanlogS", "sdlogS")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_lnormal_texg, lower = 0, SSD = SSDs[i], upper = upper[i],
-      mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
-      lb = pgo[, i, "exg_lb"],
-      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
-      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
-      meanlogS = ps[i, "meanlogS"], sdlogS = ps[i, "sdlogS"]
-    )
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
-
 rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_lnormal_stop_spec()
   rSSexGaussian(
@@ -1430,116 +1369,12 @@ rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
-stopfn_normal_texg <- function(
-    t, mu, sigma, tau, lb, muS, sigmaS, normS_lb, SSD,
-    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
-) {
-  normalizer <- stats::pnorm(normS_lb, mean = muS, sd = sigmaS, lower.tail = FALSE)
-  out <- stats::dnorm(t, mean = muS, sd = sigmaS) / normalizer
-  out[t <= normS_lb] <- 0
-  for (i in seq_along(mu)) {
-    pars_i <- cbind(
-      mu = rep(mu[i], length(t)),
-      sigma = rep(sigma[i], length(t)),
-      tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t)),
-      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
-      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
-    )
-    out <- out * (1 - ptexGaussian(t + SSD, pars_i))
-  }
-  out
-}
-
-
-pstopNormalTEXG <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
-    spars = c("muS", "sigmaS", "normS_lb")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_normal_texg, lower = ps[i, "normS_lb"], SSD = SSDs[i], upper = upper[i],
-      mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
-      lb = pgo[, i, "exg_lb"],
-      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
-      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
-      muS = ps[i, "muS"], sigmaS = ps[i, "sigmaS"], normS_lb = ps[i, "normS_lb"]
-    )
-  })
-  ups[as.numeric(factor(cells, levels = cells[uniq]))]
-}
-
-
 rSSexGaussianNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_normal_stop_spec()
   rSSexGaussian(
     data, pars, ok = ok,
     stop_sampler = stop_spec$rfun
   )
-}
-
-
-stopfn_weibull_texg <- function(
-    t, mu, sigma, tau, lb, shapeS, scaleS, SSD,
-    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
-) {
-  out <- stats::dweibull(t, shape = shapeS, scale = scaleS)
-  for (i in seq_along(mu)) {
-    pars_i <- cbind(
-      mu = rep(mu[i], length(t)),
-      sigma = rep(sigma[i], length(t)),
-      tau = rep(tau[i], length(t)),
-      exg_lb = rep(lb[i], length(t)),
-      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
-      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
-    )
-    out <- out * (1 - ptexGaussian(t + SSD, pars_i))
-  }
-  out
-}
-
-
-pstopWeibullTEXG <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
-    spars = c("shapeS", "scaleS")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_weibull_texg, lower = 0, SSD = SSDs[i], upper = upper[i],
-      mu = pgo[, i, "mu"], sigma = pgo[, i, "sigma"], tau = pgo[, i, "tau"],
-      lb = pgo[, i, "exg_lb"],
-      exg_normal_ratio = pgo[, i, "exg_normal_ratio"],
-      exg_shifted_exp_sigma = pgo[, i, "exg_shifted_exp_sigma"],
-      shapeS = ps[i, "shapeS"], scaleS = ps[i, "scaleS"]
-    )
-  })
-  ups[as.numeric(factor(cells, levels = cells[uniq]))]
 }
 
 
@@ -1880,47 +1715,6 @@ pstopHybrid <- function(
 }
 
 
-stopfn_lnormal_rdex <- function(
-    t, n_acc, meanlogS, sdlogS, v, B, A, t0, s, SSD
-) {
-  out <- stats::dlnorm(t, meanlog = meanlogS, sdlog = sdlogS)
-  for (i in seq_len(n_acc)) {
-    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
-  }
-  out
-}
-
-
-pstopLNormalHybrid <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("meanlogS", "sdlogS")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_lnormal_rdex, lower = 0, upper = upper[i],
-      n_acc = n_acc,
-      meanlogS = ps[i, "meanlogS"], sdlogS = ps[i, "sdlogS"],
-      v = pgo[, i, "v"], B = pgo[, i, "B"], A = pgo[, i, "A"],
-      t0 = pgo[, i, "t0"], s = pgo[, i, "s"],
-      SSD = SSDs[i]
-    )
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
-
-
 rSShybridLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_lnormal_stop_spec()
   rSShybrid(
@@ -1930,96 +1724,12 @@ rSShybridLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 }
 
 
-stopfn_normal_rdex <- function(
-    t, n_acc, muS, sigmaS, normS_lb, v, B, A, t0, s, SSD
-) {
-  normalizer <- stats::pnorm(normS_lb, mean = muS, sd = sigmaS, lower.tail = FALSE)
-  out <- stats::dnorm(t, mean = muS, sd = sigmaS) / normalizer
-  out[t <= normS_lb] <- 0
-  for (i in seq_len(n_acc)) {
-    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
-  }
-  out
-}
-
-
-pstopNormalHybrid <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "normS_lb")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_normal_rdex, lower = ps[i, "normS_lb"], upper = upper[i],
-      n_acc = n_acc,
-      muS = ps[i, "muS"], sigmaS = ps[i, "sigmaS"], normS_lb = ps[i, "normS_lb"],
-      v = pgo[, i, "v"], B = pgo[, i, "B"], A = pgo[, i, "A"],
-      t0 = pgo[, i, "t0"], s = pgo[, i, "s"],
-      SSD = SSDs[i]
-    )
-  })
-  ups[as.numeric(factor(cells, levels = cells[uniq]))]
-}
-
-
 rSShybridNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
   stop_spec <- ss_normal_stop_spec()
   rSShybrid(
     data, pars, ok = ok,
     stop_sampler = stop_spec$rfun
   )
-}
-
-
-stopfn_weibull_rdex <- function(
-    t, n_acc, shapeS, scaleS, v, B, A, t0, s, SSD
-) {
-  out <- stats::dweibull(t, shape = shapeS, scale = scaleS)
-  for (i in seq_len(n_acc)) {
-    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
-  }
-  out
-}
-
-
-pstopWeibullHybrid <- function(
-    parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("shapeS", "scaleS")
-) {
-  sindex <- seq(1, nrow(parstop), by = n_acc)
-  ps <- parstop[sindex, spars, drop = FALSE]
-  SSDs <- parstop[sindex, "SSD", drop = FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper) == 1) upper <- rep(upper, length.out = ntrials)
-  pgo <- array(parstop[, gpars], dim = c(n_acc, ntrials, length(gpars)),
-               dimnames = list(NULL, NULL, gpars))
-  cells <- apply(
-    cbind(SSDs, ps, upper, matrix(as.vector(aperm(pgo, c(2, 1, 3))), nrow = ntrials)),
-    1, paste, collapse = ""
-  )
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq), function(i) {
-    my.integrate(
-      f = stopfn_weibull_rdex, lower = 0, upper = upper[i],
-      n_acc = n_acc,
-      shapeS = ps[i, "shapeS"], scaleS = ps[i, "scaleS"],
-      v = pgo[, i, "v"], B = pgo[, i, "B"], A = pgo[, i, "A"],
-      t0 = pgo[, i, "t0"], s = pgo[, i, "s"],
-      SSD = SSDs[i]
-    )
-  })
-  ups[as.numeric(factor(cells, levels = cells[uniq]))]
 }
 
 
@@ -2385,8 +2095,7 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
         }
 
         # ST WINS (never tf)
-        if (any(ispSST)) { # Go triggered 1a) with (1-pStop), all race,
-          #              1b) with pStop, only ST races
+        if (any(ispSST)) { # Go triggered: stop already won, or both stop and go unfinished
           # Go failure    2) Only ST races
           # ST winner rows
           ispSSTwin <-  dadm$winner &  ispSST
@@ -2415,10 +2124,11 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
           llG <- apply(matrix(log(1-model$pfunG(
             rt=dadm$rt[ispSGloss],pars=pars[ispSGloss,,drop=FALSE])),
             nrow=n_accG),2,sum)
+          Sstop <- 1-model$pfunS(dadm$rt[ispSSTwin], pars[ispSSTwin,,drop=FALSE])
           like[tST] <- (1-tf[tST])*(                 # Never trigger failure
             gf[tST]*exp(like[tST]) +             # Case 2, gf only ST race
               (1-gf[tST])*(pStop*exp(like[tST]) +      # Case 1b, no gf, stop beats go, ST race
-                             (1-pStop)*exp(like[tST]+llG))) # Case 1a, no  gf, all race (no stop win)
+                             Sstop*exp(like[tST]+llG))) # Stop and go are both still running
         }
       }
       allLL[allok][allr] <- log(like)

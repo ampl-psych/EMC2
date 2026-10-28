@@ -640,6 +640,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ss_stop_probability
+NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string type, NumericVector upper);
+RcppExport SEXP _EMC2_ss_stop_probability(SEXP parsSEXP, SEXP n_accSEXP, SEXP typeSEXP, SEXP upperSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_acc(n_accSEXP);
+    Rcpp::traits::input_parameter< std::string >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type upper(upperSEXP);
+    rcpp_result_gen = Rcpp::wrap(ss_stop_probability(pars, n_acc, type, upper));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calc_ll
 NumericMatrix calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool return_trialwise);
 RcppExport SEXP _EMC2_calc_ll(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP return_trialwiseSEXP) {
@@ -978,6 +992,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
+    {"_EMC2_ss_stop_probability", (DL_FUNC) &_EMC2_ss_stop_probability, 4},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
     {"_EMC2_calc_ll_multithreaded", (DL_FUNC) &_EMC2_calc_ll_multithreaded, 13},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},

@@ -18,8 +18,6 @@
 // for extract_y -- should be moved elsewhere
 #include "model_MRI.h"
 #include "model_multinomial.h"
-#include "model_SS_EXG.h"
-#include "model_SS_RDEX.h"
 
 // RaceSetup last — references functions defined in model headers above
 #include "RaceSetup.h"
@@ -539,45 +537,34 @@ inline void c_log_likelihood_multinomial_probit(const ParamTable& pt,
   }
 }
 
-NumericVector c_log_likelihood_stop_signal(NumericMatrix pars, DataFrame data,
-                                    double min_ll,
-                                    const std::vector<int>& is_ok, const String& type) {
-  NumericVector RT = data["rt"];
-  IntegerVector R = data["R"];
-  NumericVector SSD = data["SSD"];
-  NumericVector lR = data["lR"];
-  LogicalVector winner = data["winner"];
-  NumericVector unique_lR = unique(lR);
-  const int n_acc = unique_lR.length();
-  const int n_trials = lR.length() / n_acc;
-
-  LogicalVector trial_ok(n_trials);
-  for (int trial = 0; trial < n_trials; ++trial) {
-    trial_ok[trial] = is_ok[trial * n_acc];
-  }
-
-  NumericVector ll_trial;
-  if (type == "SSEXG") {
-    ll_trial = ss_texg_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSLNORM") {
-    ll_trial = ss_texg_lnormal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSWEIBULL") {
-    ll_trial = ss_texg_weibull_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSNORM") {
-    ll_trial = ss_texg_normal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSRDEX") {
-    ll_trial = ss_rdex_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSRDLNORM") {
-    ll_trial = ss_rdex_lnormal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSRDWEIBULL") {
-    ll_trial = ss_rdex_weibull_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else if (type == "SSRDNORM") {
-    ll_trial = ss_rdex_normal_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
-  } else {
-    stop("Unsupported stop-signal C++ likelihood.");
-  }
-
-  return ll_trial;
+// Shared stop-success integral for the R model callbacks. Parameter mapping and
+// validation have already happened; all rows here are participating go racers.
+// [[Rcpp::export]]
+NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string type,
+                                 NumericVector upper) {
+  const int n_rows=pars.nrow();
+  if (n_acc<=0 || n_rows % n_acc!=0) stop("Invalid stop-signal accumulator rows.");
+  if (n_rows==0) return NumericVector(0);
+  const int n_trials=n_rows/n_acc;
+  if (upper.size()!=1 && upper.size()!=n_trials) stop("Invalid stop integral bounds.");
+  ParamTable pt=ParamTable::from_rcpp(pars,colnames(pars));
+  IntegerVector lR(n_rows);
+  for (int r=0;r<n_rows;++r) lR[r]=r % n_acc+1;
+  DataFrame data=DataFrame::create(_["rt"]=NumericVector(n_rows,NA_REAL),
+    _["R"]=IntegerVector(n_rows,NA_INTEGER), _["lR"]=lR,
+    _["SSD"]=pars(_,pt.base_index_for("SSD")), _["winner"]=LogicalVector(n_rows,false));
+  SSSpec spec=make_ss_spec(type,data,pt);
+  // The R callbacks already honor their approximation settings. Keep that
+  // behavior; extending the new fitting kernels' options is a separate change.
+  if (pt.name_to_base_idx.count("exg_normal_ratio"))
+    spec.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
+  if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))
+    spec.col_shifted_exp_sigma=pt.base_index_for("exg_shifted_exp_sigma");
+  ss_prepare_distributions(spec);
+  NumericVector out(n_trials);
+  for (int t=0;t<n_trials;++t)
+    out[t]=std::exp(ssf::stop_success_lp(spec,pt,t,upper[upper.size()==1 ? 0 : t]));
+  return out;
 }
 
 void c_log_likelihood_MRI_white(const ParamTable& pt,
@@ -645,7 +632,7 @@ namespace emc2 {
 
 struct LikelihoodContext::Impl {
   enum Model { MRI, MRI_AR1, ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT, MULTINOMIAL_PROBIT,
-               SSEXG, SSRDEX, SS_OTHER, CDM, PSDM, PHSDM, DDM, RACE };
+               STOP_SIGNAL, CDM, PSDM, PHSDM, DDM, RACE };
 
   // Per-thread mutable state
   struct State {
@@ -767,15 +754,10 @@ struct LikelihoodContext::Impl {
         choice = make_choice_only_spec(ctx.param_table, std::string(type));
         lR_vec = data["lR"];
         lR_ptr = lR_vec.begin();
-      } else if (type == "SSEXG" || type == "SSRDEX") {
-        model = type == "SSEXG" ? SSEXG : SSRDEX;
-      } else if (type == "SSLNORM" || type == "SSWEIBULL" || type == "SSNORM" ||
+      } else if (type == "SSEXG" || type == "SSRDEX" ||
+                 type == "SSLNORM" || type == "SSWEIBULL" || type == "SSNORM" ||
                  type == "SSRDLNORM" || type == "SSRDWEIBULL" || type == "SSRDNORM") {
-        model = SS_OTHER;
-        // These existing kernels use Rcpp and must run on the R thread.
-        safe = false;
-        for (const auto& name : ctx.keep_names)
-          keep_indices.push_back(ctx.param_table.base_index_for(as<std::string>(name)));
+        model = STOP_SIGNAL;
       } else {
         rts = data["rt"];
         rts_ptr = rts.begin();
@@ -826,11 +808,11 @@ struct LikelihoodContext::Impl {
         for (int col : mri.col_means) s.mean_cols.push_back(s.pt_local.base.colptr(col));
       } else if (model == ORDERED_PROBIT || model == ORDERED_LOGIT) {
         s.cut_buf.resize(n_rows);
-      } else if (model == SSEXG || model == SSRDEX) {
+      } else if (model == STOP_SIGNAL) {
         // The SS likelihood handles missingness codes itself (deadline / lower
         // censoring / intrinsic no-response), so no CensorSpec/TruncSpec here.
         s.ss = make_ss_spec(std::string(type), data, s.pt_local);
-      } else if (model == SS_OTHER || model == CDM || model == PSDM || model == PHSDM) {
+      } else if (model == CDM || model == PSDM || model == PHSDM) {
         s.pars = NumericMatrix(n_rows, keep_indices.size());
         colnames(s.pars) = ctx.keep_names;
         s.pars_ptr = s.pars.begin();
@@ -905,18 +887,9 @@ struct LikelihoodContext::Impl {
     case MULTINOMIAL_PROBIT:
       c_log_likelihood_multinomial_probit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data(), s.is_ok);
       break;
-    case SSEXG:
-    case SSRDEX:
+    case STOP_SIGNAL:
       ss_log_likelihood(s.ss, min_ll, s.ll_buf.data(), s.is_ok);
       break;
-    case SS_OTHER: {
-      for (size_t j = 0; j < keep_indices.size(); ++j)
-        std::copy_n(s.pt_local.base.colptr(keep_indices[j]), n_rows, s.pars_ptr + j * n_rows);
-      NumericVector ll = c_log_likelihood_stop_signal(s.pars,as<DataFrame>(fixed_inputs[0]),
-                                                     min_ll,s.is_ok,String(model_name));
-      std::copy(ll.begin(),ll.end(),s.ll_buf.begin());
-      break;
-    }
     case CDM:
     case PSDM:
     case PHSDM:

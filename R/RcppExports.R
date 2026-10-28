@@ -157,6 +157,10 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
+ss_stop_probability <- function(pars, n_acc, type, upper) {
+    .Call(`_EMC2_ss_stop_probability`, pars, n_acc, type, upper)
+}
+
 calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, return_trialwise = FALSE) {
     .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, return_trialwise)
 }
