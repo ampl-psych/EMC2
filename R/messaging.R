@@ -14,7 +14,7 @@ format_duration <- function(dt) {
 # Stage assumptions:
 #   preburn: 1-1
 #   burn   : 1-max_tries
-#   adapt  : 1-2
+#   adapt  : 1-max_tries
 #   sample : 10-max_tries
 estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L,
                                           current_iters = NULL, target_iters = NULL,
@@ -23,7 +23,8 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
   if (isTRUE(done) && stage == "sample") return(list(min_time = 0 * elapsed_dt, max_time = 0 * elapsed_dt))
 
   min_total <- c(preburn = 1L, burn = 1L, adapt = 1L, sample = 10L)
-  max_total <- c(preburn = 1L, burn = max_tries, adapt = 2L, sample = max_tries)
+  max_total <- c(preburn = 1L, burn = max_tries, adapt = max_tries, sample = max_tries)
+  min_total <- pmin(min_total, max_total)
 
   if (!stage %in% stage_order) {
     min_rem_tries <- max(0L, 1L - tries_done)
@@ -47,7 +48,7 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
   }
 
   # --- Remaining in current stage ---
-  max_current_rem <- max(0L, max_total[stage] - tries_done)
+  max_current_rem <- if(isTRUE(done)) 0L else max(0L, max_total[stage] - tries_done)
 
   # For sample stage: use iteration-based minimum if we have the info
   if (stage == "sample" &&
@@ -59,7 +60,7 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
                              max(iters_remaining * time_per_iter, min_checks * elapsed_dt))
     min_time <- min_current_time + min_later_rem * elapsed_dt
   } else {
-    min_current_rem <- max(0L, min_total[stage] - tries_done)
+    min_current_rem <- if(isTRUE(done)) 0L else max(0L, min_total[stage] - tries_done)
     min_time <- (min_current_rem + min_later_rem) * elapsed_dt
   }
 

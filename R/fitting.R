@@ -203,6 +203,7 @@ run_emc <- function(emc, stage, stop_criteria,
                               cores_per_chain = cores_per_chain, cores_for_chains = cores_for_chains,
                               n_blocks = n_blocks, on_singular = on_singular, context = .context)
   }
+  if(stage == "adapt" && progress$met && verbose) message("Adaptation complete")
 
   emc <- strip_duplicates(emc)
   class(emc) <- "emc"
@@ -230,6 +231,7 @@ adapt_stop <- function(h, n_adapt){
 tune_sample_kernel <- function(emc, verbose, verboseProgress, fileName, particle_factor,
                                search_width, cores_per_chain, cores_for_chains, n_blocks,
                                on_singular, context){
+  if(verbose || verboseProgress) message("Final adaptation tuning (100 iterations)")
   n_cores <- cores_per_chain*cores_for_chains
   emc <- add_proposals(emc, "sample", n_cores, n_blocks, window = kernel_window)
   emc <- map_pm_settings(emc, function(x){
@@ -412,19 +414,17 @@ check_progress <- function (emc, stage, iter, stop_criteria,
       samples_merged <- merge_chains(emc)
       test_samples <- extract_samples(samples_merged, stage = "adapt",
                                       samples_merged$samples$idx, n_chains = length(emc))
-      adapted <- test_adapted(emc[[1]], test_samples, min_unique, n_cores, verbose)
+      adapted <- test_adapted(emc[[1]], test_samples, min_unique, n_cores)
     } else {
       adapted <- TRUE
     }
-    # Only a failure of adapt's uniqueness check needs the max_tries warning.
-    enough_unique <- adapted
     adapt_rhat <- progress$adapt_rhat
     if(stage == "adapt" && adapted){
       adapted <- adapt_converged(emc, total_iters_stage, adapt_rhat)
       adapt_rhat <- attr(adapted, "rhat"); adapted <- as.vector(adapted)
     }
     list(total_iters_stage = total_iters_stage, iter_done = iter_done, es_done = es_done,
-         curr_min_es = curr_min_es, adapted = adapted, enough_unique = enough_unique,
+         curr_min_es = curr_min_es, adapted = adapted,
          adapt_rhat = adapt_rhat, met = es_done & iter_done & gd$gd_done & adapted)
   }
   r <- evaluate(gd)
@@ -437,18 +437,16 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   }
   gd$short <- NULL
   total_iters_stage <- r$total_iters_stage; iter_done <- r$iter_done; es_done <- r$es_done
-  curr_min_es <- r$curr_min_es; adapted <- r$adapted; enough_unique <- r$enough_unique; adapt_rhat <- r$adapt_rhat
+  curr_min_es <- r$curr_min_es; adapted <- r$adapted; adapt_rhat <- r$adapt_rhat
   trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries) & (iter_done | stage == "sample")
   done <- r$met | trys_done
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  if (trys_done) {
-    if(!(es_done & gd$gd_done & enough_unique & iter_done)){
-      warning("Max tries reached before all stopping criteria were met.")
-    }
+  if(trys_done && !r$met){
+    warning(stage, ": max_tries reached before all stopping criteria were met.")
   }
-  return(list(emc = gd$emc, done = done, step_size = step_size,
+  return(list(emc = gd$emc, done = done, met = r$met, step_size = step_size,
               trys = trys, gd=gd,
               total_iters_stage=total_iters_stage, adapt_rhat = adapt_rhat,
               curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
@@ -618,8 +616,7 @@ reset_pm_settings <- function(emc, stage){
   })
 }
 
-test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
-                         verbose = FALSE)
+test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1)
 {
   # Function used by run_adapt to check whether we can create the conditional.
 
@@ -633,10 +630,6 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   components <- attr(sampler$data, "components")
 
   if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
-    if(verbose){
-      message("Enough unique values detected: ", min_unique)
-      message("Testing proposal distribution creation")
-    }
     attempt <- tryCatch({
       for(comp in unique(components)){
         idx <- comp == components
@@ -645,14 +638,9 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
       }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
-      if(verbose){
-        message("Can't create efficient distribution yet")
-        message("Increasing required unique values and continuing adaptation")
-      }
       return(FALSE)
     }
     else {
-      if(verbose) message("Successfully adapted - stopping adaptation")
       return(TRUE)
     }
   } else{
