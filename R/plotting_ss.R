@@ -1068,6 +1068,21 @@ plot_stop_signal_summary <- function(input,
 #' summary across predictive draws. Observed data are plotted with error bars
 #' (plus/minus the standard error per SSD bin/category).
 #'
+#' @section SSD binning:
+#' Quantile bins need distinct breakpoints. With fixed or staircase SSDs,
+#' repeated values can make two or more requested quantiles identical, even
+#' when several distinct SSD values are present.
+#'
+#' For discrete SSD designs, use `ssd_binning = "value"` to plot each SSD value
+#' separately. Set `ssd_round` if small numerical differences should be treated
+#' as the same delay. In this mode, `probs`, `use_global_quantiles`, and
+#' `on_duplicate_quantiles` are ignored.
+#'
+#' To use quantile bins when possible, set `on_duplicate_quantiles = "value"`
+#' to switch all plotted sources to value bins when quantile breaks coincide.
+#' Alternatively, `on_duplicate_quantiles = "reduce"` tries fewer quantile bins.
+#' If only one SSD value remains, use value binning.
+#'
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
@@ -1104,7 +1119,20 @@ plot_stop_signal_summary <- function(input,
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Invisibly returns the plotted summary data.
-#' @noRd
+#' @examples
+#' # Repeated fixed SSDs can give identical quantile breakpoints.
+#' dat <- data.frame(
+#'   subjects = factor(rep(1:2, each = 8)),
+#'   SSD = rep(c(.1, .1, .1, .1, .1, .2, .3, .4), 2),
+#'   R = factor(rep(c("go", NA, "go", NA, "go", "go", "go", "go"), 2)),
+#'   rt = rep(c(.40, NA, .45, NA, .50, .55, .60, .65), 2)
+#' )
+#' EMC2:::plot_ss_if(dat, ssd_binning = "value",
+#'                     to_plot = "data", use_lim = "data")
+#' EMC2:::plot_ss_if(dat, on_duplicate_quantiles = "value",
+#'                     to_plot = "data", use_lim = "data")
+#' EMC2:::plot_ss_if(dat, on_duplicate_quantiles = "reduce",
+#'                     to_plot = "data", use_lim = "data")
 plot_ss_if <- function(input,
                     post_predict = NULL,
                     prior_predict = NULL,
@@ -1443,6 +1471,21 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' simulated. Sparse high-SSD bins can therefore produce predictive intervals based
 #' on fewer contributing draw-level summaries.
 #'
+#' @section SSD binning:
+#' Quantile bins need distinct breakpoints. With fixed or staircase SSDs,
+#' repeated values can make two or more requested quantiles identical, even
+#' when several distinct SSD values are present.
+#'
+#' For discrete SSD designs, use `ssd_binning = "value"` to plot each SSD value
+#' separately. Set `ssd_round` if small numerical differences should be treated
+#' as the same delay. In this mode, `probs`, `use_global_quantiles`, and
+#' `on_duplicate_quantiles` are ignored.
+#'
+#' To use quantile bins when possible, set `on_duplicate_quantiles = "value"`
+#' to switch all plotted sources to value bins when quantile breaks coincide.
+#' Alternatively, `on_duplicate_quantiles = "reduce"` tries fewer quantile bins.
+#' If only one SSD value remains, use value binning.
+#'
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
@@ -1478,7 +1521,20 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Invisibly returns the plotted summary data.
-#' @noRd
+#' @examples
+#' # Repeated fixed SSDs can give identical quantile breakpoints.
+#' dat <- data.frame(
+#'   subjects = factor(rep(1:2, each = 8)),
+#'   SSD = rep(c(.1, .1, .1, .1, .1, .2, .3, .4), 2),
+#'   R = factor(rep(c("go", NA, "go", NA, "go", "go", "go", "go"), 2)),
+#'   rt = rep(c(.40, NA, .45, NA, .50, .55, .60, .65), 2)
+#' )
+#' EMC2:::plot_ss_srrt(dat, ssd_binning = "value",
+#'                     to_plot = "data", use_lim = "data")
+#' EMC2:::plot_ss_srrt(dat, on_duplicate_quantiles = "value",
+#'                     to_plot = "data", use_lim = "data")
+#' EMC2:::plot_ss_srrt(dat, on_duplicate_quantiles = "reduce",
+#'                     to_plot = "data", use_lim = "data")
 plot_ss_srrt <- function(input,
                       post_predict = NULL,
                       prior_predict = NULL,
