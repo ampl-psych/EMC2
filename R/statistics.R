@@ -556,7 +556,7 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
   if(is.null(stat_name)) stat_name <- stat
   row_names <- names(object)
   col_names <- unique(unlist(lapply(object, names)))
-  if(all(row_names %in% col_names)){
+  if(setequal(row_names, col_names)){
     col_names <- row_names
   }
   out_mat <- matrix(NA, nrow = length(row_names), ncol = length(col_names))
