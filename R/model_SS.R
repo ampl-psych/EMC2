@@ -107,7 +107,7 @@ staircase_function <- function(dts,staircase) {
       Ri <- which.min(trial)
     }
     if (Ri==1) {
-      if (!is.null(accST) && length(accST) > 0) {
+      if (!is.null(accST) && length(accST) > 0 && any(is.finite(trial[accST]))) {
         st_cols <- accST
         st_finish <- trial[st_cols]
         st_idx <- st_cols[which.min(st_finish)]
