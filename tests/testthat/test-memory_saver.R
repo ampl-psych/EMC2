@@ -1,28 +1,23 @@
-test_that("predict requires data for memory_saver fits", {
-  dat <- subset(forstmann, subjects == levels(forstmann$subjects)[1])
-  dat <- dat[seq_len(100), , drop = FALSE]
-
-  design_in <- design(
-    data = dat,
-    model = DDM,
-    formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
-    constants = c(s = log(1)), report_p_vector=FALSE
-  )
-
-  emc_mem <- make_emc(
-    dat,
-    design_in,
-    type = "single",
-    compress = FALSE,
-    memory_saver = TRUE
-  )
+test_that("memory_saver fits predict from supplied data", {
+  withr::local_seed(123)
+  dat <- data.frame(subjects = factor(rep(1:2, each = 4)), R = factor(1),
+                    rt = .2 + exp(c(-.7, -.2, .1, .4, .3, .8, -.4, .6)))
+  design_in <- design(data = dat, model = LNR, formula = list(m ~ 1),
+                      constants = c(s = 0, t0 = log(.2)), report_p_vector = FALSE)
+  emc_mem <- make_emc(dat, design_in, type = "single", n_chains = 2,
+                      compress = FALSE, memory_saver = TRUE)
+  criteria <- list(preburn = list(iter = 10), burn = list(iter = 10),
+                   adapt = list(iter = 20, min_unique = 5), sample = list(iter = 20))
+  emc_mem <- fit(emc_mem, cores_for_chains = 1, stop_criteria = criteria,
+                 particle_factor = 10, step_size = 20, trim = FALSE, verbose = FALSE)
 
   expect_error(
     predict(emc_mem, n_post = 1, n_cores = 1),
     "predict\\(\\) requires `data` when the model was created with memory_saver = TRUE"
   )
-  expect_error(
-    predict(emc_mem, data = dat, n_post = 1, n_cores = 1),
-    "Run fit to collect MCMC samples before using this function"
-  )
+  post <- predict(emc_mem, data = dat, n_post = 2, n_cores = 1)
+  expect_equal(nrow(post), 2 * nrow(dat))
+  expect_equal(table(post$postn, post$subjects), matrix(4L, 2, 2), ignore_attr = TRUE)
+  expect_true(all(is.finite(post$rt) & post$rt > .2))
+  expect_equal(levels(post$R), levels(dat$R))
 })

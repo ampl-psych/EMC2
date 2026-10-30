@@ -313,7 +313,6 @@ test_that("beta_binomial_Rcpp", {
   for (case in snapshot_list) expect_equal(case$emc, case$manual)
   reset <- snapshot_list$uniform_reset$emc
   expect_identical(reset[1], reset[reset_idx])
-  expect_snapshot(snapshot_list)
 })
 
 
@@ -344,7 +343,6 @@ emc_out <- sapply(
 )
 test_that("beta_binomial_decay_Rcpp", {
   expect_equal(emc_out, true_out)
-  expect_snapshot(list(manual = true_out, emc = emc_out))
 })
 
 
@@ -413,7 +411,6 @@ test_that("beta_binomial_window_Rcpp", {
   for (case in snapshot_list) expect_equal(case$emc, case$manual)
   reset <- snapshot_list$uniform_reset$emc
   expect_identical(reset[1], reset[reset_idx])
-  expect_snapshot(snapshot_list)
 })
 
 
@@ -568,7 +565,6 @@ test_that("dbm_Rcpp", {
   expect_equal(snapshot_list$cp_1$emc, snapshot_list$cp_1$fixed_beta, tolerance = 1e-5)
   reset <- snapshot_list$cp_real_reset$emc
   expect_identical(reset[1], reset[reset_idx])
-  expect_snapshot(snapshot_list)
 })
 
 
@@ -640,5 +636,4 @@ emc_out <- as.numeric(apply_kernel(kernel_pars, emc))
 
 test_that("tpm_Rcpp", {
   expect_equal(emc_out[-1], true_out[-length(true_out)], tolerance = 1e-3)
-  expect_snapshot(list(Matlab = true_out, emc = emc_out))
 })

@@ -15,8 +15,15 @@ prior_LBABE <- prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
 emc <- make_emc(forstmann,design_LBABE,type="standard",  prior=prior_LBABE,
                           compress = FALSE)
 
-test_that("make_emc", {
-  expect_snapshot(str(emc, give.attr = F))
+test_that("make_emc preserves the sampled parameters and supplied prior", {
+  expect_s3_class(emc, "emc")
+  expect_length(emc, 3)
+  for (chain in emc) {
+    expect_identical(chain$par_names, names(pmean))
+    expect_length(chain$data, nlevels(forstmann$subjects))
+    expect_equal(chain$prior$theta_mu_mean, pmean)
+    expect_equal(diag(chain$prior$theta_mu_var), psd^2)
+  }
 })
 
 # Structural identifiability: a parameter mapped to an all-zero design column has

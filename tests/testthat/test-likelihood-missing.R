@@ -1,35 +1,5 @@
 withr::local_preserve_seed()
 
-calc_lls <- function(emc, n_particles=1e3) {
-  model <- emc[[1]]$model()
-  p_types <- names(model$p_types)
-  dadm <- emc[[1]]$data[[1]]
-
-  designs <- list()
-  for(p in p_types){
-    designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-  }
-  constants <- attr(dadm, "constants")
-  if(is.null(constants)) constants <- NA
-
-  # make p_mat
-
-  p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
-  colnames(p_mat) <- p_types
-  ## always set t0 to log(runif(0, min(dadm$rt))) to ensure there's actual density
-  p_mat[,'t0'] <- log(runif(nrow(p_mat), min=0, max=min(dadm$rt, na.rm=TRUE)))
-
-  ## if the model is an RDM, set half of the A-values to 0 to ensure both pathways (digt0/pigt0 and digt_core/pigt_core) are tested
-  if(model$c_name == 'RDM') {
-    p_mat[1:(nrow(p_mat)/2),'A'] <- log(0)
-  }
-
-  lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
-                            model$bound, model$transform, model$pre_transform, p_types = p_types,
-                            min_ll = log(1e-10), model$trend)[1,]
-  round(lls_new, 3)  # prevent numerical precision issues messing with the results
-}
-
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 matchfun=function(d)d$S==d$lR
 dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2],]
@@ -62,22 +32,47 @@ RDM_s1_m <- make_emc(dat_m, design_RDM, rt_resolution = 0.05, n_chains = 2, comp
 LBA_s1_m <- make_emc(dat_m, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
 WDM_s1_m <- make_emc(dat_m, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
 
-# Keep the original coefficient draws after removing the duplicated core cases.
-assign(".Random.seed", c(10407L, -1186531652L, 1469460740L, 1702494635L,
-                        2142430657L, 57016431L, 881925066L), envir = .GlobalEnv)
-test_that("LNR with missing", {expect_snapshot(calc_lls(LNR_s1_m))})
-test_that("RDM with missing", {expect_snapshot(calc_lls(RDM_s1_m))})
-test_that("LBA with missing", {expect_snapshot(calc_lls(LBA_s1_m))})
-test_that("WDM with missing", {expect_snapshot(calc_lls(WDM_s1_m))})
+# Explicit coefficients on the sampled scale.
+p_LNR <- rbind(
+  c(m = -1, m_lMd = -.6, s = log(.5), t0 = log(.1)),
+  c(m = -.5, m_lMd = -.3, s = log(.8), t0 = log(.05)))
+# A = 0 and A > 0 use separate density/CDF implementations.
+p_RDM <- rbind(
+  c(v = log(2), v_lMd = .6, s = 0, t0 = log(.1), A = -Inf, B = log(.4)),
+  c(v = log(2), v_lMd = .6, s = 0, t0 = log(.1), A = log(.2), B = log(.4)))
+p_LBA <- rbind(
+  c(v = 2, v_lMd = 1, sv = 0, t0 = log(.1), A = log(.2), B = log(.4)),
+  c(v = 1.5, v_lMd = .5, sv = log(.7), t0 = log(.05), A = log(.4), B = log(.6)))
+p_WDM <- rbind(
+  c(v = 1, a = log(2), t0 = log(.1), Z = qnorm(.4)),
+  c(v = -1, a = log(1.5), t0 = log(.05), Z = qnorm(.6)))
+
+test_that("LNR with missing", {
+  expect_snapshot(round(model_likelihood(LNR_s1_m, p_LNR), 3))
+})
+test_that("RDM with missing", {
+  expect_snapshot(round(model_likelihood(RDM_s1_m, p_RDM), 3))
+})
+test_that("LBA with missing", {
+  expect_snapshot(round(model_likelihood(LBA_s1_m, p_LBA), 3))
+})
+test_that("WDM with missing", {
+  expect_snapshot(round(model_likelihood(WDM_s1_m, p_WDM), 3))
+})
 
 # Racing ExGaussian -------------------------------------------------------
 design_REXG <- design(data = dat,model=REXG,matchfun=matchfun,
                       formula=list(mu~lM,tau~1,sigma~1,t0~1),
                       contrasts=list(v=list(lM=ADmat)), report_p_vector=FALSE)
 REXG_s <- make_emc(dat, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
+p_REXG <- rbind(
+  c(mu = log(.25), mu_lMTRUE = log(1.3), tau = log(.15), sigma = log(.08), t0 = log(.05)),
+  c(mu = log(.3), mu_lMTRUE = log(1.2), tau = log(.25), sigma = log(.12), t0 = log(.1)))
 test_that("REXG", {
-  expect_snapshot(calc_lls(REXG_s))
+  expect_snapshot(round(model_likelihood(REXG_s, p_REXG), 3))
 })
 
 REXG_s1_m <- make_emc(dat_m, design_REXG, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
-test_that("REXG with missing", {expect_snapshot(calc_lls(REXG_s1_m))})
+test_that("REXG with missing", {
+  expect_snapshot(round(model_likelihood(REXG_s1_m, p_REXG), 3))
+})

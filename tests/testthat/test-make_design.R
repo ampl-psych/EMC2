@@ -14,11 +14,15 @@ design_custom <- design(factors = list(S = c("left", "right"),
                           formula =list(m~0+S,s~1, t0~1),
                           constants=c(s=log(1)), report_p_vector=FALSE)
 
-test_that("design", {
-  expect_snapshot(
-    str(design_data, give.attr = FALSE)
-  )
-  expect_snapshot(
-    str(design_custom, give.attr = FALSE)
-  )
+test_that("design builds coefficients from contrasts, covariates and factors", {
+  expect_named(sampled_pars(design_data),
+               c("v", "v_lMd", "sv_lMTRUE", "B", "B_Eneutral", "B_Eaccuracy",
+                 "B_lRright", "t0", "t0_E2nonspeed", "t0_CO"))
+  expect_equal(design_data$constants, c(sv = 0, A = -Inf))
+  expect_equal(design_data$Clist$v$lM[, 1], c(-.5, .5))
+  expect_equal(as.character(design_data$Ffunctions$E2(forstmann)),
+               ifelse(forstmann$E == "speed", "speed", "nonspeed"))
+  expect_named(sampled_pars(design_custom), c("m_Sleft", "m_Sright", "t0"))
+  expect_equal(design_custom$Ffactors$subjects, 1:3)
+  expect_equal(design_custom$Rlevels, c("left", "right"))
 })

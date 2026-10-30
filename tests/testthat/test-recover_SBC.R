@@ -62,12 +62,13 @@ write_hier_run <- function(dir, par_names, var_names, reps_idx, replicates,
 
 # --- single ------------------------------------------------------------------
 
-test_that("recover_sbc reassembles a complete single run", {
-  dir <- tempfile("sbc_"); dir.create(dir)
+test_that("recover_sbc reassembles a complete single run and saves it elsewhere", {
+  in_dir <- withr::local_tempdir()
+  out_dir <- withr::local_tempdir()
   par_names <- c("m", "m_lMTRUE", "s", "t0")
-  tdir <- write_single_run(dir, par_names, reps_idx = 1:5, replicates = 5)
+  tdir <- write_single_run(in_dir, par_names, reps_idx = 1:5, replicates = 5)
 
-  save_to <- file.path(dir, "out.RData")
+  save_to <- file.path(out_dir, "out.RData")
   SBC <- recover_sbc(tdir, par_names, fileName = save_to, type = "single", verbose = FALSE)
   expect_named(SBC, c("rank", "med", "bias", "coverage"))
   expect_equal(nrow(SBC$rank$alpha), 5)
@@ -80,6 +81,7 @@ test_that("recover_sbc reassembles a complete single run", {
 
   # saved file round-trips in run_sbc's single format (SBC + prior_alpha)
   expect_true(file.exists(save_to))
+  expect_length(list.files(tdir, pattern = "\\.RData$"), 0)
   env <- new.env(); load(save_to, envir = env)
   expect_true(all(c("SBC", "prior_alpha") %in% ls(env)))
   expect_equal(env$SBC$rank$alpha, SBC$rank$alpha)
@@ -152,19 +154,6 @@ test_that("recover_sbc skips failed single replicates", {
   SBC <- recover_sbc(temp_dir, par_names, type = "single", verbose = FALSE)
   expect_equal(nrow(SBC$rank$alpha), 2)
   expect_equal(attr(SBC, "recovered_reps"), c(1, 3))
-})
-
-test_that("recover_sbc reads reps from `tempdir` and saves the result elsewhere", {
-  in_dir  <- tempfile("sbc_in_");  dir.create(in_dir)
-  out_dir <- tempfile("sbc_out_"); dir.create(out_dir)
-  par_names <- c("m", "s", "t0")
-  tdir <- write_single_run(in_dir, par_names, reps_idx = 1:4, replicates = 4)
-  save_to <- file.path(out_dir, "run.RData")
-
-  SBC <- recover_sbc(tdir, par_names, fileName = save_to, type = "single", verbose = FALSE)
-  expect_equal(nrow(SBC$rank$alpha), 4)
-  expect_true(file.exists(save_to))            # saved to fileName, not in tempdir
-  expect_length(list.files(tdir, pattern = "\\.RData$"), 0)
 })
 
 # --- hierarchical ------------------------------------------------------------

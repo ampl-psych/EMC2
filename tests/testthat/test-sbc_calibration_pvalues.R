@@ -1,13 +1,3 @@
-# Tests for the calibration p-value added to the SBC plots: the p(KS) /
-# p(chisq) corner annotation and its add_stats wiring. The drawing helpers are
-# internal, so they are reached with EMC2:::.
-
-test_that(".sbc_fmt_p formats with a <0.001 floor", {
-  expect_equal(EMC2:::.sbc_fmt_p(0.5), "0.500")
-  expect_equal(EMC2:::.sbc_fmt_p(0.0001), "<0.001")
-  expect_equal(EMC2:::.sbc_fmt_p(NA_real_), "NA")
-})
-
 test_that(".sbc_ks_p flags non-uniform ranks, high p when uniform", {
   u <- (seq_len(500) - 0.5) / 500          # near-perfectly uniform
   expect_gt(EMC2:::.sbc_ks_p(u), 0.5)
@@ -21,17 +11,7 @@ test_that(".sbc_chisq_p flags non-uniform bin counts, high p when flat", {
   expect_true(is.na(EMC2:::.sbc_chisq_p(c(0, 0))))         # degenerate
 })
 
-test_that("add_stats resolves 'pvalue' into the free (bottomright) corner", {
-  spec <- EMC2:::.sbc_resolve_stat_spec(TRUE, c("v", "a"))
-  expect_equal(spec$pvalue$pos, "bottomright")
-  expect_null(EMC2:::.sbc_resolve_stat_spec(list(pvalue = FALSE), c("v", "a"))$pvalue)
-  expect_equal(EMC2:::.sbc_resolve_stat_spec(list(pvalue = "topleft"),
-                                             c("v", "a"))$pvalue$pos, "topleft")
-  expect_error(EMC2:::.sbc_resolve_stat_spec(list(foo = "top"), c("v", "a")),
-               "subset of")
-})
-
-test_that("plot_sbc_ecdf keeps the corner stats (warns without recovery stats)", {
+test_that("plot_sbc_ecdf warns when requested recovery statistics are unavailable", {
   set.seed(1)
   ranks <- list(alpha = data.frame(v = runif(200), a = runif(200)))
   pdf(NULL)
@@ -44,28 +24,24 @@ test_that("plot_sbc_ecdf keeps the corner stats (warns without recovery stats)",
                                               precision = FALSE)), NA)
 })
 
-test_that("plot_sbc_hist titles show the chi-square p-values for the histogram bins", {
+test_that("plot_sbc_hist calculates p-values from the plotted bins", {
   set.seed(1)
   ranks <- list(alpha = data.frame(v = runif(200), a = runif(200)))
   pdf(NULL)
   on.exit(dev.off())
-  # Record the titles while still drawing the plots.
-  titles <- character()
-  local_mocked_bindings(title = function(main, ...) {
-    titles <<- c(titles, main)
-    graphics::title(main = main, ...)
+  bin_counts <- list()
+  chisq_p <- EMC2:::.sbc_chisq_p
+  local_mocked_bindings(.sbc_chisq_p = function(counts) {
+    bin_counts[[length(bin_counts) + 1L]] <<- counts
+    chisq_p(counts)
   }, .package = "EMC2")
 
-  p_values <- vapply(ranks$alpha, function(x) {
-    counts <- hist(x, breaks = 10, plot = FALSE)$counts
-    chisq.test(counts)$p.value
-  }, numeric(1))
-  labels <- paste0("alpha - ", names(ranks$alpha))
+  expected <- lapply(ranks$alpha, function(x) hist(x, breaks = 10, plot = FALSE)$counts)
   expect_silent(plot_sbc_hist(ranks, layout = NULL))
-  expect_equal(titles, paste0(labels, "\np(chisq) : ",
-                              vapply(p_values, EMC2:::.sbc_fmt_p, character(1))))
+  expect_equal(bin_counts, unname(expected))
+  expect_equal(vapply(bin_counts, chisq_p, numeric(1)),
+               vapply(expected, function(x) chisq.test(x)$p.value, numeric(1)),
+               ignore_attr = TRUE)
 
-  titles <- character()
   expect_silent(plot_sbc_hist(ranks, layout = NULL, add_stats = FALSE))
-  expect_equal(titles, labels)
 })

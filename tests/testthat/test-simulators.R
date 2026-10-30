@@ -115,9 +115,13 @@ for (name in names(circular_parameters)) {
   test_that(paste(name, "simulator agrees with direction and RT probabilities"), {
     withr::local_seed(123, .rng_kind = "Mersenne-Twister", .rng_normal_kind = "Inversion")
     centre <- circular_parameters[[name]]
-    # Shorter diffusion times keep the default-step simulators inexpensive.
+    # Shorter diffusion times and a doubled time step keep these checks inexpensive.
     centre[c("v", "a", "sv")] <- log(c(2, .4, .4))
     des <- circular_design(name)
+    model <- des$model()
+    simulate <- get(paste0("r", name), asNamespace("EMC2"))
+    model$rfun <- function(data = NULL, pars) simulate(pars, attr(pars, "ok"), dt = 2e-5)
+    des$model <- function() model
     dat <- make_data(centre, des, n_trials = n)
     dimension <- c(CDM = 2, SDM = 3, HSDM = 4, PSDM = 3, PHSDM = 4)[[name]]
     surface <- c(CDM = 2*pi, SDM = 4*pi, HSDM = 2*pi^2, PSDM = 2, PHSDM = pi)[[name]]
@@ -139,7 +143,6 @@ for (name in names(circular_parameters)) {
     zero <- p
     zero[c("v", "sv")] <- 0
     response <- as.list(setNames(rep(0, length(angle_names)), c("R", "R2", "R3")[seq_along(angle_names)]))
-    model <- des$model()
     kappa <- function(t) p[["a"]] * p[["v"]] / (p[["s"]]^2 + p[["sv"]]^2 * t * time_scale)
     # Integrate the directional exponential over the sphere analytically.
     rt_density <- function(t) {

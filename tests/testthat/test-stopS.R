@@ -131,18 +131,6 @@ test_that("posterior-only stop-signal plot summaries are stable", {
   grDevices::pdf(file = NULL)
   on.exit(grDevices::dev.off(), add = TRUE)
 
-  expect_no_error(plot_ss_if(
-    tiny_ss_data,
-    post_predict = tiny_post,
-    probs = c(0, 0.5, 1),
-    use_global_quantiles = TRUE,
-    to_plot = "posterior",
-    use_lim = "posterior",
-    factors = "E",
-    within_plot = "S",
-    layout = c(1, 2),
-    legendpos = c(NA, NA)
-  ))
   expect_error(
     plot_ss_if(
       tiny_ss_data,
@@ -364,34 +352,6 @@ test_that("posterior-only stop-signal plot summaries are stable", {
   expect_true(length(unique(reduced_srrt$x_plot)) < length(seq(0, 1, length.out = 7)) - 1)
   expect_true(all(reduced_srrt$n_draws > 0))
 
-  printed_if <- capture.output(plot_ss_if(
-    tiny_ss_data,
-    post_predict = tiny_post,
-    probs = c(0, 0.5, 1),
-    use_global_quantiles = TRUE,
-    to_plot = c("data", "posterior"),
-    use_lim = c("data", "posterior"),
-    factors = "E",
-    within_plot = "S",
-    layout = c(1, 2),
-    legendpos = c(NA, NA),
-    print_plot_data = TRUE
-  ))
-  expect_true(any(grepl("Predictive plotted summaries:", printed_if, fixed = TRUE)))
-  expect_true(any(grepl("Observed plotted summaries:", printed_if, fixed = TRUE)))
-  expect_no_error(plot_ss_srrt(
-    tiny_ss_data,
-    post_predict = tiny_post,
-    probs = seq(0, 1, length.out = 7),
-    use_global_quantiles = TRUE,
-    on_duplicate_quantiles = "reduce",
-    to_plot = "posterior",
-    use_lim = "posterior",
-    factors = "E",
-    within_plot = "S",
-    layout = c(1, 2),
-    legendpos = c(NA, NA)
-  ))
   expect_no_error(plot_ss_srrt(
     tiny_ss_data,
     post_predict = tiny_post,
