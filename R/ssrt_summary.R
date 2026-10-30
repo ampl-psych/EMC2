@@ -5,7 +5,8 @@
 #' moments are computed from each subject's posterior `alpha` draws. For
 #' population-level summaries, implied individuals are sampled from each
 #' posterior draw of the hierarchical multivariate normal distribution before
-#' transforming to seconds.
+#' transforming to seconds. Trends on stop-distribution parameters are not
+#' currently supported.
 #'
 #' @param emc A fitted EMC2 object using a stop-signal model.
 #' @param level Character. `"population"` summarizes the marginal population
@@ -124,6 +125,20 @@ ssrt_summary <- function(emc,
   }
   n_population <- as.integer(n_population)
   info <- ssrt_model_info(emc)
+  trend <- get_design(emc)[[1]]$model()$trend
+  stop_parameters <- c(
+    ssrt_required_parameters(info$stop_family),
+    switch(info$stop_family, exgaussian = "exgS_lb", normal = "normS_lb")
+  )
+  has_stop_trend <- any(vapply(trend$bases, function(base) {
+    base$target_parameter %in% stop_parameters ||
+      (identical(base$phase, "premap") &&
+         any(startsWith(base$target_parameter, paste0(stop_parameters, "_"))))
+  }, logical(1)))
+  if (has_stop_trend) {
+    stop("`ssrt_summary()` does not yet support trends on stop-distribution parameters.",
+         call. = FALSE)
+  }
   has_stop_effect <- ssrt_has_stop_parameter_effects(emc, info)
   if (has_stop_effect && !identical(level, "condition")) {
     stop(
@@ -255,9 +270,14 @@ ssrt_required_parameters <- function(stop_family) {
          stop("Unsupported stop distribution: ", stop_family, call. = FALSE))
 }
 
-ssrt_stop_formula_variables <- function(emc, info) {
-  design <- get_design(emc)[[1]]
+ssrt_formulas <- function(design) {
   formulas <- design$Flist
+  names(formulas) <- vapply(formulas, function(form) as.character(form[[2]]), character(1))
+  formulas
+}
+
+ssrt_stop_formula_variables <- function(emc, info) {
+  formulas <- ssrt_formulas(get_design(emc)[[1]])
   stop_parameters <- ssrt_required_parameters(info$stop_family)
 
   unique(unlist(lapply(stop_parameters, function(parameter) {
@@ -268,8 +288,7 @@ ssrt_stop_formula_variables <- function(emc, info) {
 }
 
 ssrt_has_stop_parameter_effects <- function(emc, info) {
-  design <- get_design(emc)[[1]]
-  formulas <- design$Flist
+  formulas <- ssrt_formulas(get_design(emc)[[1]])
   stop_parameters <- ssrt_required_parameters(info$stop_family)
 
   has_effect <- vapply(stop_parameters, function(parameter) {
@@ -282,9 +301,10 @@ ssrt_has_stop_parameter_effects <- function(emc, info) {
   any(has_effect)
 }
 
-ssrt_compute_moments <- function(pars, info) {
+ssrt_compute_moments <- function(pars, info, natural_scale = FALSE) {
   pars <- as.data.frame(pars, check.names = FALSE)
   stop_family <- info$stop_family
+  transform <- if (natural_scale) identity else exp
   missing <- setdiff(ssrt_required_parameters(stop_family), names(pars))
   if (length(missing)) {
     stop("Missing stop parameter(s): ", paste(missing, collapse = ", "),
@@ -292,9 +312,9 @@ ssrt_compute_moments <- function(pars, info) {
   }
 
   if (identical(stop_family, "exgaussian")) {
-    mu <- exp(pars$muS)
-    sigma <- exp(pars$sigmaS)
-    tau <- exp(pars$tauS)
+    mu <- transform(pars$muS)
+    sigma <- transform(pars$sigmaS)
+    tau <- transform(pars$tauS)
     lb <- if ("exgS_lb" %in% names(pars)) pars$exgS_lb else info$exgS_lb
     out <- ssrt_exgaussian_lower_truncated_moments(mu, sigma, tau, lb)
     out$method <- "lower_truncated_exgaussian_analytic"
@@ -303,7 +323,7 @@ ssrt_compute_moments <- function(pars, info) {
 
   if (identical(stop_family, "lognormal")) {
     meanlog <- pars$meanlogS
-    sdlog <- exp(pars$sdlogS)
+    sdlog <- transform(pars$sdlogS)
     mean <- exp(meanlog + sdlog^2 / 2)
     sd <- sqrt((exp(sdlog^2) - 1) * exp(2 * meanlog + sdlog^2))
     return(data.frame(
@@ -315,16 +335,16 @@ ssrt_compute_moments <- function(pars, info) {
   }
 
   if (identical(stop_family, "normal")) {
-    mu <- exp(pars$muS)
-    sigma <- exp(pars$sigmaS)
+    mu <- transform(pars$muS)
+    sigma <- transform(pars$sigmaS)
     lb <- if ("normS_lb" %in% names(pars)) pars$normS_lb else info$normS_lb
     out <- ssrt_normal_lower_truncated_moments(mu, sigma, lb)
     out$method <- "lower_truncated_normal_analytic"
     return(out)
   }
 
-  shape <- exp(pars$shapeS)
-  scale <- exp(pars$scaleS)
+  shape <- transform(pars$shapeS)
+  scale <- transform(pars$scaleS)
   mean <- scale * gamma(1 + 1 / shape)
   second <- scale^2 * gamma(1 + 2 / shape)
   data.frame(
@@ -542,6 +562,15 @@ ssrt_summary_condition <- function(emc, info, probs, stage, data,
          call. = FALSE)
   }
 
+  subjects <- dimnames(alpha)[[2]]
+  if (!"subjects" %in% names(data) || any(!subjects %in% data$subjects)) {
+    stop("`data` must contain every selected subject for condition-level SSRT summaries.",
+         call. = FALSE)
+  }
+  data <- data[data$subjects %in% subjects, , drop = FALSE]
+  # The mapper matches subjects by position, so use the posterior draw order.
+  data$subjects <- factor(data$subjects, levels = subjects)
+
   mapped <- par_data_map(
     alpha,
     design = design,
@@ -743,7 +772,7 @@ ssrt_summary_condition_by_subject <- function(mapped_data, mapped_pars, info,
 
   out <- lapply(seq_len(nrow(mapped_data)), function(i) {
     pars <- ssrt_mapped_pars_frame(mapped_pars, rows = i)
-    moments <- ssrt_compute_moments(pars, info)
+    moments <- ssrt_compute_moments(pars, info, natural_scale = TRUE)
     summary <- ssrt_summarize_draws(moments, probs)
     cbind(
       level = "condition",
@@ -777,7 +806,7 @@ ssrt_summary_condition_population <- function(mapped_data, mapped_pars, info,
 
     for (iter in seq_len(n_iter)) {
       pars <- ssrt_mapped_pars_frame(mapped_pars, rows = idx, iter = iter)
-      moments <- ssrt_compute_moments(pars, info)
+      moments <- ssrt_compute_moments(pars, info, natural_scale = TRUE)
       within_var <- moments$ssrt_sd^2
       between_var <- if (length(idx) > 1L) stats::var(moments$ssrt_mean) else 0
       draws[iter, "ssrt_mean"] <- mean(moments$ssrt_mean, na.rm = TRUE)
