@@ -1331,6 +1331,12 @@ pstopTEXG <- function(
     gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
     spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
+  # Missing optional thresholds leave the approximations disabled.
+  missing <- setdiff(c("exg_normal_ratio", "exg_shifted_exp_sigma"), colnames(parstop))
+  if (length(missing)) {
+    parstop <- cbind(parstop, matrix(0, nrow(parstop), length(missing),
+                                    dimnames = list(NULL, missing)))
+  }
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
@@ -1687,6 +1693,12 @@ pstopHybrid <- function(
     gpars = c("v", "B", "A", "t0", "s"),
     spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
+  # Missing optional thresholds leave the approximations disabled.
+  missing <- setdiff(c("exg_normal_ratio", "exg_shifted_exp_sigma"), colnames(parstop))
+  if (length(missing)) {
+    parstop <- cbind(parstop, matrix(0, nrow(parstop), length(missing),
+                                    dimnames = list(NULL, missing)))
+  }
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
