@@ -367,11 +367,12 @@ print_stop_signal_plot_data <- function(x) {
   invisible(NULL)
 }
 
-get_stop_signal_bin_label <- function(x_plot, binning, ssd = NULL) {
+get_stop_signal_bin_label <- function(x_plot, binning, ssd = NULL, probs = NULL) {
   # Participant-quantile plots do not have a single shared absolute SSD interval,
   # so the diagnostic table reports the quantile-bin label separately from SSD.
   if (identical(unname(binning), "individual_quantile")) {
-    return(format_stop_signal_quantile_intervals(c(0, x_plot)))
+    if (is.null(probs)) probs <- c(0, x_plot)
+    return(format_stop_signal_quantile_intervals(probs)[match(x_plot, probs[-1])])
   }
   if (!is.null(ssd)) return(as.character(ssd))
 
@@ -379,7 +380,7 @@ get_stop_signal_bin_label <- function(x_plot, binning, ssd = NULL) {
 }
 
 get_stop_signal_plot_data <- function(summary_by_source, draw_quantiles_by_source, sources,
-                                      source_bin_modes, value_col) {
+                                      source_bin_modes, value_col, probs = NULL) {
   # Build the table that mirrors what is actually drawn. This is returned
   # invisibly and optionally printed for checking sparse bins or draw counts.
   out <- list()
@@ -400,6 +401,9 @@ get_stop_signal_plot_data <- function(summary_by_source, draw_quantiles_by_sourc
           mat <- quant_group[[level]]
           if (is.null(mat)) next
 
+          bin_labels <- get_stop_signal_bin_label(unname(mat[nrow(mat), ]),
+                                                    source_bin_modes[sname],
+                                                    colnames(mat), probs)
           for (i in seq_len(ncol(mat))) {
             ssd <- if (!is.null(colnames(mat))) colnames(mat)[i] else NA_character_
             counts <- get_stop_signal_predictive_count_summary(
@@ -412,9 +416,7 @@ get_stop_signal_plot_data <- function(summary_by_source, draw_quantiles_by_sourc
                          group_key = group_key,
                          within_level = level,
                          x_plot = unname(mat[nrow(mat), i]),
-                         bin_label = get_stop_signal_bin_label(unname(mat[nrow(mat), i]),
-                                                               source_bin_modes[sname],
-                                                               ssd),
+                         bin_label = bin_labels[i],
                          ssd = ssd,
                          lower = unname(mat[1, i]),
                          median = unname(mat[2, i]),
@@ -437,7 +439,8 @@ get_stop_signal_plot_data <- function(summary_by_source, draw_quantiles_by_sourc
             x_plot = df$x_plot,
             bin_label = get_stop_signal_bin_label(df$x_plot,
                                                   source_bin_modes[sname],
-                                                  if ("ssd" %in% names(df)) df$ssd else NULL),
+                                                  if ("ssd" %in% names(df)) df$ssd else NULL,
+                                                  probs),
             ssd = if ("ssd" %in% names(df)) as.character(df$ssd) else NA_character_,
             value = df[[value_col]],
             se = if ("se" %in% names(df)) df$se else NA_real_,
@@ -883,18 +886,27 @@ plot_stop_signal_summary <- function(input,
     par(mfrow = layout)
   }
 
-  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
-    ylim <- default_ylim
-  } else {
+  if (is.finite(y_min) && is.finite(y_max) &&
+      (y_min < y_max || is.null(default_ylim))) {
+    # Base graphics expands equal finite limits around a constant value.
     y_buffer <- 0.05 * (y_max - y_min)
     ylim <- c(y_min - y_buffer, y_max + y_buffer)
+  } else {
+    ylim <- default_ylim
   }
 
-  if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
+  if (!is.finite(x_min) || !is.finite(x_max) || x_min > x_max) {
     xlim <- NULL
   } else {
     x_buffer <- 0.05 * (x_max - x_min)
     xlim <- c(x_min - x_buffer, x_max + x_buffer)
+  }
+
+  if (is.null(xlim) && is.null(dots$xlim)) {
+    stop("No finite SSD summaries available for the sources selected in `use_lim`.")
+  }
+  if (is.null(ylim) && is.null(dots$ylim)) {
+    stop("No finite ", value_col, " values available for the sources selected in `use_lim`.")
   }
 
   # Second pass: draw one panel per factor combination, reusing the summaries
@@ -992,7 +1004,7 @@ plot_stop_signal_summary <- function(input,
       sname <- names(sources)[k]
       if (!("postn" %in% names(data_sources[[k]]))) {
         tick_group <- summary_by_source[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
+        if (length(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
           draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
                                   "Global SSD Quantile Bin (%, sec.)",
@@ -1002,7 +1014,7 @@ plot_stop_signal_summary <- function(input,
         }
       } else {
         tick_group <- draw_quantiles_by_source[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
+        if (length(tick_group)) {
           tick_mat <- tick_group[[names(tick_group)[1]]]
           if (!is.null(tick_mat)) {
             tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
@@ -1035,7 +1047,7 @@ plot_stop_signal_summary <- function(input,
   }
 
   plot_data <- get_stop_signal_plot_data(summary_by_source, draw_quantiles_by_source, sources,
-                                         source_bin_modes, value_col)
+                                         source_bin_modes, value_col, effective_probs)
   if (print_plot_data) print_stop_signal_plot_data(plot_data)
 
   invisible(plot_data)
@@ -1161,6 +1173,7 @@ plot_ss_if <- function(input,
 get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_bin_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
   subjects <- unique(x$subjects)
 
@@ -1255,6 +1268,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_bin_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
   subjects <- unique(x$subjects)
 
@@ -1342,6 +1356,7 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
   # Value binning is for discrete/staircase SSD designs. SSDs have already been
   # routed through the same rounding helper used by the quantile paths.
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
 
   if (!is.null(group_factor)) {
@@ -1532,6 +1547,7 @@ plot_ss_srrt <- function(input,
 get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_bin_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
   subjects <- unique(x$subjects)
 
@@ -1622,6 +1638,7 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
 
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_bin_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
   subjects <- unique(x$subjects)
 
@@ -1714,6 +1731,7 @@ get_srrt_by_ssd_value <- function(x, group_factor, probs, dots) {
   # Value binning is for discrete/staircase SSD designs. SSDs have already been
   # routed through the same rounding helper used by the quantile paths.
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  if (!nrow(x)) return(NULL)
   x$SSD_value <- get_stop_signal_bin_ssd(x, dots$ssd_round)
 
   if (!is.null(group_factor)) {
