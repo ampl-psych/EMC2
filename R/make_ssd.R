@@ -267,7 +267,7 @@ make_ssd <- function(values = NULL,
       if (isFALSE(staircase)) {
         pv <- prepare_value_probabilities(values, p, p_stop)
         SSD[cur] <- if (stats::runif(1) < pv$total_prob)
-          sample(values, 1, prob = pv$weights) else Inf
+          values[sample.int(length(values), 1, prob = pv$weights)] else Inf
       } else {
         gid <- gid_of(cur)
         spec <- spec_of(gid, cur)
@@ -325,7 +325,8 @@ assign_fixed_ssd <- function(SSD, values, p, p_stop) {
   prob <- prepare_value_probabilities(values, p, p_stop)
   stop_trials <- stats::rbinom(n, 1, prob$total_prob) == 1
   if (any(stop_trials)) {
-    SSD[stop_trials] <- sample(values, size = sum(stop_trials), replace = TRUE, prob = prob$weights)
+    SSD[stop_trials] <- values[sample.int(length(values), size = sum(stop_trials),
+                                         replace = TRUE, prob = prob$weights)]
   }
   SSD
 }
