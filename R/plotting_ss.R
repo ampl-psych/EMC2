@@ -699,7 +699,7 @@ plot_stop_signal_summary <- function(input,
                                      use_global_quantiles = FALSE,
                                      ssd_binning = c("quantile", "value"),
                                      ssd_round = NULL,
-                                     on_duplicate_quantiles = c("error", "value", "reduce"),
+                                     on_duplicate_quantiles = c("value", "error", "reduce"),
                                      subject = NULL,
                                      quants = c(0.025, 0.975),
                                      functions = NULL,
@@ -1078,10 +1078,10 @@ plot_stop_signal_summary <- function(input,
 #' as the same delay. In this mode, `probs`, `use_global_quantiles`, and
 #' `on_duplicate_quantiles` are ignored.
 #'
-#' To use quantile bins when possible, set `on_duplicate_quantiles = "value"`
-#' to switch all plotted sources to value bins when quantile breaks coincide.
+#' By default, `on_duplicate_quantiles = "value"` switches all plotted sources
+#' to value bins with a message when quantile breaks coincide.
 #' Alternatively, `on_duplicate_quantiles = "reduce"` tries fewer quantile bins.
-#' If only one SSD value remains, use value binning.
+#' Set `on_duplicate_quantiles = "error"` to stop instead.
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
@@ -1095,9 +1095,9 @@ plot_stop_signal_summary <- function(input,
 #' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
 #' @param ssd_round Optional numeric bin width for rounding SSD values before stop-signal binning.
 #' @param on_duplicate_quantiles Character. What to do when quantile breaks are duplicated:
-#'   `"error"` stops with a message; `"value"` falls back to value-based SSD bins
-#'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
-#'   grid without duplicated breaks.
+#'   `"value"` (the default) falls back to value-based SSD bins for all plotted
+#'   sources with a message; `"error"` stops; `"reduce"` uses the largest evenly
+#'   spaced quantile grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of exactly two predictive interval quantile bounds
 #'   that bracket 0.5 (e.g. c(0.025, 0.975)).
@@ -1142,7 +1142,7 @@ plot_ss_if <- function(input,
                     use_global_quantiles = FALSE,
                     ssd_binning = c("quantile", "value"),
                     ssd_round = NULL,
-                    on_duplicate_quantiles = c("error", "value", "reduce"),
+                    on_duplicate_quantiles = c("value", "error", "reduce"),
                     subject = NULL,
                     quants = c(0.025, 0.975), functions = NULL,
                     n_cores = 1,
@@ -1481,10 +1481,10 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' as the same delay. In this mode, `probs`, `use_global_quantiles`, and
 #' `on_duplicate_quantiles` are ignored.
 #'
-#' To use quantile bins when possible, set `on_duplicate_quantiles = "value"`
-#' to switch all plotted sources to value bins when quantile breaks coincide.
+#' By default, `on_duplicate_quantiles = "value"` switches all plotted sources
+#' to value bins with a message when quantile breaks coincide.
 #' Alternatively, `on_duplicate_quantiles = "reduce"` tries fewer quantile bins.
-#' If only one SSD value remains, use value binning.
+#' Set `on_duplicate_quantiles = "error"` to stop instead.
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
@@ -1497,9 +1497,9 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
 #' @param ssd_round Optional numeric bin width for rounding SSD values before stop-signal binning.
 #' @param on_duplicate_quantiles Character. What to do when quantile breaks are duplicated:
-#'   `"error"` stops with a message; `"value"` falls back to value-based SSD bins
-#'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
-#'   grid without duplicated breaks.
+#'   `"value"` (the default) falls back to value-based SSD bins for all plotted
+#'   sources with a message; `"error"` stops; `"reduce"` uses the largest evenly
+#'   spaced quantile grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of exactly two predictive interval quantile bounds
 #'   that bracket 0.5 (e.g. c(0.025, 0.975)).
@@ -1544,7 +1544,7 @@ plot_ss_srrt <- function(input,
                       use_global_quantiles = TRUE,
                       ssd_binning = c("quantile", "value"),
                       ssd_round = NULL,
-                      on_duplicate_quantiles = c("error", "value", "reduce"),
+                      on_duplicate_quantiles = c("value", "error", "reduce"),
                       subject = NULL,
                       quants = c(0.025, 0.975), functions = NULL,
                       n_cores = 1,
