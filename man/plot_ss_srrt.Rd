@@ -14,7 +14,7 @@ plot_ss_srrt(
   use_global_quantiles = TRUE,
   ssd_binning = c("quantile", "value"),
   ssd_round = NULL,
-  on_duplicate_quantiles = c("value", "error", "reduce"),
+  on_duplicate_quantiles = c("reduce", "value", "error"),
   subject = NULL,
   quants = c(0.025, 0.975),
   functions = NULL,
@@ -53,9 +53,10 @@ SSD distribution for each participant, and then averaged over participants.}
 \item{ssd_round}{Optional numeric bin width for rounding SSD values before stop-signal binning.}
 
 \item{on_duplicate_quantiles}{Character. What to do when quantile breaks are duplicated:
-\code{"value"} (the default) falls back to value-based SSD bins for all plotted
-sources with a message; \code{"error"} stops; \code{"reduce"} uses the largest evenly
-spaced quantile grid without duplicated breaks.}
+\code{"reduce"} (the default) uses the largest evenly spaced quantile grid with
+distinct breaks and at least two bins, or falls back to value-based SSD bins;
+\code{"value"} switches directly to value bins for all plotted sources;
+\code{"error"} stops. Reductions and switches are reported with a message.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
@@ -124,9 +125,11 @@ separately. Set \code{ssd_round} if small numerical differences should be treate
 as the same delay. In this mode, \code{probs}, \code{use_global_quantiles}, and
 \code{on_duplicate_quantiles} are ignored.
 
-By default, \code{on_duplicate_quantiles = "value"} switches all plotted sources
-to value bins with a message when quantile breaks coincide.
-Alternatively, \code{on_duplicate_quantiles = "reduce"} tries fewer quantile bins.
+By default, \code{on_duplicate_quantiles = "reduce"} tries fewer quantile bins
+when quantile breaks coincide. If no shared grid with at least two bins is
+available, all plotted sources switch to SSD-value bins. Both changes are
+reported with a message. \code{on_duplicate_quantiles = "value"} switches directly
+to value bins.
 Set \code{on_duplicate_quantiles = "error"} to stop instead.
 }
 
