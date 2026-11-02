@@ -68,6 +68,20 @@
 #' }
 #' In all outputs, quantile columns are named by their percentages, for example
 #' `2.5%`, `50%`, and `97.5%`.
+#'
+#' Population summaries warn about non-finite calculations. The detailed output
+#' reports `population_evaluations` and `invalid_population_evaluations` for the
+#' individual moments required by each quantity, across all posterior draws.
+#' It also reports `posterior_draws`, `omitted_draws` (NA/NaN), `infinite_draws`
+#' (retained), and `partial_draws` (finite population quantities computed despite
+#' non-finite individual moments). Counts are separate for each quantity and,
+#' where applicable, condition. These diagnostics do not change missing-value
+#' handling or the summaries.
+#' A separate message flags when the posterior mean of population mean SSRT
+#' exceeds its 97.5% quantile, comparing finite draws only. This is an upper-tail
+#' sensitivity flag, not a numerical-error test. The detailed `tail_dominated`
+#' column records the flag for `ssrt_mean`; it is NA for other quantities or
+#' when no finite draws are available.
 #' @noRd
 ssrt_summary <- function(emc,
                          level = c("population", "individual", "condition"),
@@ -196,13 +210,41 @@ ssrt_summary <- function(emc,
 }
 
 ssrt_format_output <- function(out, details) {
+  if ("invalid_population_evaluations" %in% names(out) &&
+      any(out$invalid_population_evaluations > 0 |
+          out$omitted_draws > 0 | out$infinite_draws > 0)) {
+    warning(
+      "Non-finite population SSRT calculations detected. ",
+      "See `details = TRUE` for counts of invalid participant evaluations, ",
+      "omitted NA/NaN draws, retained infinite draws and partially usable draws. ",
+      "Existing missing-value handling is unchanged.",
+      call. = FALSE
+    )
+  }
+  if ("tail_dominated" %in% names(out) && any(out$tail_dominated, na.rm = TRUE)) {
+    condition_note <- if ("condition" %in% names(out)) {
+      paste0(" in condition(s) ",
+             paste(unique(out$condition[which(out$tail_dominated)]), collapse = ", "))
+    } else {
+      ""
+    }
+    message(
+      "The posterior mean of population mean SSRT exceeds its 97.5% quantile",
+      condition_note, " (comparing finite draws), indicating strong influence ",
+      "from the upper tail. Check sensitivity to the population-simulation ",
+      "seed and `n_population` before interpreting the mean."
+    )
+  }
   if (isTRUE(details)) {
     return(out)
   }
 
   detailed_out <- out
   out <- out[out$parameter %in% c("ssrt_mean", "ssrt_sd"), , drop = FALSE]
-  technical_columns <- c("level", "stop_family", "method")
+  technical_columns <- c("level", "stop_family", "method",
+                         "population_evaluations", "invalid_population_evaluations",
+                         "posterior_draws", "omitted_draws", "infinite_draws",
+                         "partial_draws", "tail_dominated")
   out <- out[, setdiff(names(out), technical_columns), drop = FALSE]
 
   empty_identifier <- vapply(out, function(x) {
@@ -212,6 +254,37 @@ ssrt_format_output <- function(out, details) {
   out <- out[, !empty_identifier | names(out) %in% protected_columns, drop = FALSE]
   attr(out, "ssrt_details") <- detailed_out
   out
+}
+
+ssrt_invalid_population_moments <- function(moments) {
+  invalid_mean <- !is.finite(moments$ssrt_mean)
+  invalid_sd <- !is.finite(moments$ssrt_sd)
+  n_invalid_mean <- sum(invalid_mean)
+  c(ssrt_mean = n_invalid_mean,
+    ssrt_sd = sum(invalid_mean | invalid_sd),
+    between_subject_sd = n_invalid_mean,
+    mean_within_subject_sd = sum(invalid_sd))
+}
+
+ssrt_population_diagnostics <- function(summary, draws, invalid, n_population) {
+  draws <- draws[, summary$parameter, drop = FALSE]
+  invalid <- invalid[, summary$parameter, drop = FALSE]
+  x <- draws[is.finite(draws[, "ssrt_mean"]), "ssrt_mean"]
+  tail_dominated <- if (length(x)) {
+    mean(x) > stats::quantile(x, .975, names = FALSE)
+  } else {
+    NA
+  }
+  cbind(
+    summary,
+    population_evaluations = nrow(draws) * n_population,
+    invalid_population_evaluations = unname(colSums(invalid)),
+    posterior_draws = nrow(draws),
+    omitted_draws = unname(colSums(is.na(draws))),
+    infinite_draws = unname(colSums(is.infinite(draws))),
+    partial_draws = unname(colSums(invalid > 0 & is.finite(draws))),
+    tail_dominated = ifelse(summary$parameter == "ssrt_mean", tail_dominated, NA)
+  )
 }
 
 ssrt_is_single_level <- function(emc) {
@@ -802,11 +875,14 @@ ssrt_summary_condition_population <- function(mapped_data, mapped_pars, info,
                     dimnames = list(NULL, c("ssrt_mean", "ssrt_sd",
                                             "between_subject_sd",
                                             "mean_within_subject_sd")))
+    invalid_population <- matrix(0L, nrow = n_iter, ncol = ncol(draws),
+                                 dimnames = dimnames(draws))
     methods <- character(n_iter)
 
     for (iter in seq_len(n_iter)) {
       pars <- ssrt_mapped_pars_frame(mapped_pars, rows = idx, iter = iter)
       moments <- ssrt_compute_moments(pars, info, natural_scale = TRUE)
+      invalid_population[iter, ] <- ssrt_invalid_population_moments(moments)
       within_var <- moments$ssrt_sd^2
       between_var <- if (length(idx) > 1L) stats::var(moments$ssrt_mean) else 0
       draws[iter, "ssrt_mean"] <- mean(moments$ssrt_mean, na.rm = TRUE)
@@ -829,6 +905,8 @@ ssrt_summary_condition_population <- function(mapped_data, mapped_pars, info,
       )
     })
     summary <- rbind(summary, do.call(rbind, extras))
+    summary <- ssrt_population_diagnostics(summary, draws, invalid_population,
+                                           length(idx))
 
     condition_data <- mapped_data[idx[[1]], condition_vars, drop = FALSE]
     cbind(
@@ -904,6 +982,8 @@ ssrt_summary_population <- function(emc, info, probs, stage, n_population,
                   dimnames = list(NULL, c("ssrt_mean", "ssrt_sd",
                                           "between_subject_sd",
                                           "mean_within_subject_sd")))
+  invalid_population <- matrix(0L, nrow = n_iter, ncol = ncol(draws),
+                               dimnames = dimnames(draws))
   methods <- character(n_iter)
 
   for (i in seq_len(n_iter)) {
@@ -914,6 +994,7 @@ ssrt_summary_population <- function(emc, info, probs, stage, n_population,
     )
     colnames(pop_pars) <- par_names
     moments <- ssrt_compute_moments(pop_pars, info)
+    invalid_population[i, ] <- ssrt_invalid_population_moments(moments)
     within_var <- moments$ssrt_sd^2
     between_var <- stats::var(moments$ssrt_mean)
     draws[i, "ssrt_mean"] <- mean(moments$ssrt_mean)
@@ -936,6 +1017,8 @@ ssrt_summary_population <- function(emc, info, probs, stage, n_population,
     )
   })
   summary <- rbind(summary, do.call(rbind, extras))
+  summary <- ssrt_population_diagnostics(summary, draws, invalid_population,
+                                         n_population)
 
   cbind(
     level = "population",
