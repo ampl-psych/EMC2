@@ -846,7 +846,7 @@ ss_model_rfun <- function(go_spec, stop_spec) {
 make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signal") {
   go_tail_default <- NULL
   if (identical(go_spec$family, "exgaussian")) {
-    go_tail_default <- c(exg_lb = if (identical(stop_spec$family, "exgaussian")) 0 else .05)
+    go_tail_default <- c(exg_lb = 0)
   }
   approximation_p_types <- NULL
   approximation_transform <- NULL
