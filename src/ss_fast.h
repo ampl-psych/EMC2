@@ -213,7 +213,13 @@ inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
   // part of this interval. Split where go survival first changes appreciably,
   // so quadrature cannot miss it. The preceding part is flat to 1e-12 relative.
   double split=lo;
-  if (!exg && log_S_go(hi)<ls_lo-1e-12) split=locate(ls_lo-1e-12);
+  if (exg && w.exg->approximation==ExGaussian::Exact) {
+    // With sigma << tau, both quadrature rules can miss the narrow density
+    // rise and extrapolate the exponential tail across it. Resolve that rise
+    // separately, without changing the explicitly requested approximations.
+    const auto& stop=*w.exg;
+    split=std::max(lo,std::min(hi,stop.mu+SS_WINDOW_K_SIGMA*stop.sigma));
+  } else if (!exg && log_S_go(hi)<ls_lo-1e-12) split=locate(ls_lo-1e-12);
   const double abs_tol=exg ? SSF_ABS_TOL : 1e-18;
   const double rel_tol=exg ? SSF_REL_TOL : 1e-8;
   double res=ss_integrate(stop_success_integrand,&w,lo,split,abs_tol,rel_tol,SSF_STOP_MAX_EVAL)+
