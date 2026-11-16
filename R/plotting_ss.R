@@ -1075,10 +1075,34 @@ plot_stop_signal_summary <- function(input,
 #' summary across predictive draws. Observed data are plotted with error bars
 #' (plus/minus the standard error per SSD bin/category).
 #'
+#' @section Data format:
+#' Data frames must contain `subjects`, `SSD`, `R`, and `rt`. Columns named in
+#' `factors` or `within_plot` must be present or created using `functions`.
+#' `subjects` identifies participants;
+#' `SSD` and `rt` are in seconds. Use `SSD = Inf` for go trials and `NA` in
+#' both `R` and `rt` for non-responses. Only trials with finite SSDs contribute
+#' to the stop-signal summaries.
+#'
+#' Supplied posterior/prior predictive data should contain the same trial
+#' columns and a `postn` column identifying the predictive draw. All trials
+#' and participants belonging to one draw share its `postn` value. Summaries
+#' are calculated separately for each draw before taking predictive quantiles.
+#' Without `postn`, supplied predictions are pooled into one data set and
+#' summarized like observed data, without intervals across predictive draws.
+#' Predictives generated from an emc object already contain `postn`.
+#'
 #' @section SSD binning:
 #' Quantile bins need distinct breakpoints. With fixed or staircase SSDs,
 #' repeated values can make two or more requested quantiles identical, even
 #' when several distinct SSD values are present.
+#'
+#' Global quantile binning (`use_global_quantiles = TRUE`) requires matching
+#' sets of distinct finite SSD values across plotted sources containing stop
+#' trials. Matching is checked after any rounding specified by `ssd_round`.
+#' If the sets differ, `on_duplicate_quantiles = "reduce"` or `"value"` switches
+#' to SSD-value bins, while `"error"` stops, even when the quantile breakpoints
+#' are distinct. Differences can occur when predictive simulations rerun an
+#' adaptive staircase.
 #'
 #' For discrete SSD designs, use `ssd_binning = "value"` to plot each SSD value
 #' separately. Set `ssd_round` if small numerical differences should be treated
@@ -1092,9 +1116,14 @@ plot_stop_signal_summary <- function(input,
 #' to value bins.
 #' Set `on_duplicate_quantiles = "error"` to stop instead.
 #'
-#' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
-#' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
-#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
+#' @param input An emc object, a stop-signal data frame, or a named list of
+#'   objects of the same type. See Data format for required columns.
+#' @param post_predict Optional posterior predictive data frame, or a
+#'   corresponding named list when `input` is a list. Include `postn` to
+#'   identify predictive draws; see Data format.
+#' @param prior_predict Optional prior predictive data frame, or a
+#'   corresponding named list when `input` is a list. Include `postn` to
+#'   identify predictive draws; see Data format.
 #' @param probs Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
@@ -1111,11 +1140,17 @@ plot_stop_signal_summary <- function(input,
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of exactly two predictive interval quantile bounds
 #'   that bracket 0.5 (e.g. c(0.025, 0.975)).
-#' @param functions A function (or list of functions) that create new columns in the datasets or predictives
+#' @param functions A named list of functions that create columns in the data
+#'   and predictives. Each function receives a data frame and returns a column;
+#'   the list name specifies the column name. See Examples for combining
+#'   difficulty and age group into one plotting factor.
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
 #' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
-#' @param to_plot Character vector: any of "data", "posterior", "prior".
+#' @param to_plot Character vector containing any of "data", "posterior",
+#'   or "prior". Controls observed-data display and generation of missing
+#'   predictives. Explicitly supplied `post_predict` and `prior_predict` are
+#'   plotted even when their source is omitted from `to_plot`.
 #' @param use_lim Character vector controlling which source(s) define axis limits
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
@@ -1143,6 +1178,22 @@ plot_stop_signal_summary <- function(input,
 #'                     to_plot = "data", use_lim = "data")
 #' EMC2:::plot_ss_if(dat, on_duplicate_quantiles = "reduce",
 #'                     to_plot = "data", use_lim = "data")
+#'
+#' # Overlay each combination of difficulty and age group.
+#' dat$difficulty <- factor(rep(c("easy", "difficult"), length.out = nrow(dat)))
+#' dat$age_group <- factor(ifelse(dat$subjects == "1", "younger", "older"))
+#' EMC2:::plot_ss_if(
+#'   dat,
+#'   functions = list(
+#'     condition = function(d) interaction(
+#'       d$difficulty, d$age_group, sep = "_", drop = TRUE
+#'     )
+#'   ),
+#'   within_plot = "condition",
+#'   ssd_binning = "value",
+#'   to_plot = "data",
+#'   use_lim = "data"
+#' )
 plot_ss_if <- function(input,
                     post_predict = NULL,
                     prior_predict = NULL,
@@ -1466,11 +1517,11 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #'
 #' Plots panels of the mean signal-respond response time (SRRT) as a function of user-defined
 #' SSD bins/categories for each level of specified factors of stop-signal data.
-#' Optionally, posterior and/or prior predictive inhibition functions can be overlaid.
+#' Optionally, posterior and/or prior predictive SRRT summaries can be overlaid.
 #'
 #' Per default, SSDs are pooled over participants before calculating quantiles, so
 #' the same absolute SSD range is used to get mean SRRT for each participant,
-#' and then these probabilities are averaged over participants (see `use_global_quantiles`).
+#' and then these mean SRRTs are averaged over participants (see `use_global_quantiles`).
 #'
 #' Posterior/prior predictive intervals are quantile intervals of the plotted
 #' summary across predictive draws. Observed data are plotted with error bars
@@ -1481,10 +1532,34 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' simulated. Sparse high-SSD bins can therefore produce predictive intervals based
 #' on fewer contributing draw-level summaries.
 #'
+#' @section Data format:
+#' Data frames must contain `subjects`, `SSD`, `R`, and `rt`. Columns named in
+#' `factors` or `within_plot` must be present or created using `functions`.
+#' `subjects` identifies participants;
+#' `SSD` and `rt` are in seconds. Use `SSD = Inf` for go trials and `NA` in
+#' both `R` and `rt` for non-responses. Only trials with finite SSDs contribute
+#' to the stop-signal summaries.
+#'
+#' Supplied posterior/prior predictive data should contain the same trial
+#' columns and a `postn` column identifying the predictive draw. All trials
+#' and participants belonging to one draw share its `postn` value. Summaries
+#' are calculated separately for each draw before taking predictive quantiles.
+#' Without `postn`, supplied predictions are pooled into one data set and
+#' summarized like observed data, without intervals across predictive draws.
+#' Predictives generated from an emc object already contain `postn`.
+#'
 #' @section SSD binning:
 #' Quantile bins need distinct breakpoints. With fixed or staircase SSDs,
 #' repeated values can make two or more requested quantiles identical, even
 #' when several distinct SSD values are present.
+#'
+#' Global quantile binning (`use_global_quantiles = TRUE`) requires matching
+#' sets of distinct finite SSD values across plotted sources containing stop
+#' trials. Matching is checked after any rounding specified by `ssd_round`.
+#' If the sets differ, `on_duplicate_quantiles = "reduce"` or `"value"` switches
+#' to SSD-value bins, while `"error"` stops, even when the quantile breakpoints
+#' are distinct. Differences can occur when predictive simulations rerun an
+#' adaptive staircase.
 #'
 #' For discrete SSD designs, use `ssd_binning = "value"` to plot each SSD value
 #' separately. Set `ssd_round` if small numerical differences should be treated
@@ -1498,12 +1573,17 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' to value bins.
 #' Set `on_duplicate_quantiles = "error"` to stop instead.
 #'
-#' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
-#' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
-#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
+#' @param input An emc object, a stop-signal data frame, or a named list of
+#'   objects of the same type. See Data format for required columns.
+#' @param post_predict Optional posterior predictive data frame, or a
+#'   corresponding named list when `input` is a list. Include `postn` to
+#'   identify predictive draws; see Data format.
+#' @param prior_predict Optional prior predictive data frame, or a
+#'   corresponding named list when `input` is a list. Include `postn` to
+#'   identify predictive draws; see Data format.
 #' @param probs Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
-#' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
+#' @param within_plot Character indicating factor for which SRRT summaries are plotted in the same panel
 #' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the quantiles of the
 #' SSD distribution for each participant, and then averaged over participants.
 #' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
@@ -1516,11 +1596,17 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of exactly two predictive interval quantile bounds
 #'   that bracket 0.5 (e.g. c(0.025, 0.975)).
-#' @param functions A function (or list of functions) that create new columns in the datasets or predictives
+#' @param functions A named list of functions that create columns in the data
+#'   and predictives. Each function receives a data frame and returns a column;
+#'   the list name specifies the column name. See Examples for combining
+#'   difficulty and age group into one plotting factor.
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
 #' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
-#' @param to_plot Character vector: any of "data", "posterior", "prior".
+#' @param to_plot Character vector containing any of "data", "posterior",
+#'   or "prior". Controls observed-data display and generation of missing
+#'   predictives. Explicitly supplied `post_predict` and `prior_predict` are
+#'   plotted even when their source is omitted from `to_plot`.
 #' @param use_lim Character vector controlling which source(s) define axis limits
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
@@ -1548,6 +1634,22 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #'                     to_plot = "data", use_lim = "data")
 #' EMC2:::plot_ss_srrt(dat, on_duplicate_quantiles = "reduce",
 #'                     to_plot = "data", use_lim = "data")
+#'
+#' # Overlay each combination of difficulty and age group.
+#' dat$difficulty <- factor(rep(c("easy", "difficult"), length.out = nrow(dat)))
+#' dat$age_group <- factor(ifelse(dat$subjects == "1", "younger", "older"))
+#' EMC2:::plot_ss_srrt(
+#'   dat,
+#'   functions = list(
+#'     condition = function(d) interaction(
+#'       d$difficulty, d$age_group, sep = "_", drop = TRUE
+#'     )
+#'   ),
+#'   within_plot = "condition",
+#'   ssd_binning = "value",
+#'   to_plot = "data",
+#'   use_lim = "data"
+#' )
 plot_ss_srrt <- function(input,
                       post_predict = NULL,
                       prior_predict = NULL,

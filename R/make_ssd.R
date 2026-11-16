@@ -30,8 +30,9 @@
 #'   corresponding field.
 #' @param p_stop Default probability of a stop trial for staircase modes (and
 #'   for fixed SSDs when `p` is omitted). Must lie between 0 and 1.
-#' @param factors Character vector of column names that define separate
-#'   staircases. When `NULL`, all trials share the same staircase.
+#' @param factors Character vector of additional column names defining separate
+#'   staircases within each participant. Participants are always separated when
+#'   a `subjects` column is present. `NULL` adds no grouping variables.
 #' @param formula Optional formula specifying the grouping structure, e.g.
 #'   `SSD ~ S | subjects`. The right-hand side (and, if present, the
 #'   conditioning part beyond the `|`) are converted into grouping factor
@@ -75,10 +76,20 @@
 #'
 #' @examples
 #' # Fixed SSDs sampled on 25% of trials
-#' ssd_fixed <- make_ssd(values = c(.26, .35, .46), p = rep(.25 / 3, 3), staircase = FALSE)
+#' ssd_fixed <- EMC2:::make_ssd(values = c(.26, .35, .46), p = rep(.25 / 3, 3), staircase = FALSE)
 #'
 #' # Staircase with default parameters operating per subject and stimulus
-#' ssd_stair <- make_ssd(factors = c("subjects", "S"))
+#' ssd_stair <- EMC2:::make_ssd(factors = c("subjects", "S"))
+#'
+#' # Different starting SSDs for participants with IDs "a" and "b".
+#' # Names must match participant IDs; other settings retain their defaults.
+#' ssd_by_subject <- EMC2:::make_ssd(
+#'   factors = "subjects",
+#'   staircase = list(
+#'     a = list(SSD0 = .15),
+#'     b = list(SSD0 = .30)
+#'   )
+#' )
 #'
 #' # Complex paradigms with stop-triggered responses -----------------
 #'
@@ -91,7 +102,7 @@
 #' # recorded as "down" or "up", and the original go responses remain
 #' # "left"/"right". The following applies the staircase rules accordingly:
 #'
-#' ssd_change <- make_ssd(
+#' ssd_change <- EMC2:::make_ssd(
 #'   staircase_up   = c("down", "up"),
 #'   staircase_down = c("left", "right")
 #' )
@@ -99,12 +110,11 @@
 #' # A mixture of NA (complete inhibition) and stop-triggered wins can be
 #' # handled by listing both the NA marker and the relevant response labels:
 #'
-#' ssd_sel <- make_ssd(
+#' ssd_sel <- EMC2:::make_ssd(
 #'   staircase_up   = c(NA, "ST_left", "ST_right"),
 #'   staircase_down = c("left", "right")
 #' )
 #'
-#' @noRd
 make_ssd <- function(values = NULL,
                      p = NULL,
                      staircase = TRUE,

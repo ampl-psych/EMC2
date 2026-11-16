@@ -11,7 +11,6 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
-#' @noRd
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -967,12 +966,23 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #'
 #' The stop runner can be:
 #'
+#' In the mean formulas below, parameters refer to their mapped values, after
+#' applying the model transformations. For example, `sdlogS` denotes the
+#' standard deviation of log finishing times, rather than the logarithm of
+#' that standard deviation.
+#'
 #' | **Family** | **Parameters** | **Interpretation** |
 #' |-----------|----------------|--------------------|
-#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. The stop mean is `muS + tauS`. See `SSEXG()` and `SSRDEX()` for the ex-Gaussian stop-parameter description. |
-#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is estimated on the log scale and transformed with `exp(sdlogS)` to obtain the standard deviation of the associated normal distribution on the log-seconds scale. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + exp(sdlogS)^2 / 2)`. |
-#' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and transformed with `exp(shapeS)` and `exp(scaleS)`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `exp(scaleS) * gamma(1 + 1 / exp(shapeS))`. |
-#' | `"normal"` | `muS`, `sigmaS`, `normS_lb` | Lower-truncated normal stop finish-time distribution. `muS` and `sigmaS` are estimated on the log scale and transformed with `exp(muS)` and `exp(sigmaS)`. `muS` is the location of the underlying normal distribution, `sigmaS` is its standard deviation, and `normS_lb` is the lower truncation point. The default lower bound is `0`, so generated stop finishing times are non-negative. |
+#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. See `SSEXG()` and `SSRDEX()` for the ex-Gaussian stop-parameter description. |
+#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is the standard deviation of the associated normal distribution on the log-seconds scale. It is estimated on the log scale and mapped with `exp`. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + sdlogS^2 / 2)`. |
+#' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and mapped with `exp`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `scaleS * gamma(1 + 1 / shapeS)`. |
+#' | `"normal"` | `muS`, `sigmaS`, `normS_lb` | Lower-truncated normal stop finish-time distribution. `muS` and `sigmaS` are estimated on the log scale and mapped with `exp`. `muS` is the location of the underlying normal distribution, `sigmaS` is its standard deviation, and `normS_lb` is the lower truncation point. The default lower bound is `0`, so generated stop finishing times are non-negative. |
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
 #'
 #' All stop-signal models include `tf` and `gf`. `tf` is the attentional lapse
 #' rate for the stop process ("trigger failure") and `gf` is the attentional
@@ -985,7 +995,6 @@ make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signa
 #' `stop_signal(go = "racing_diffusion", stop = "weibull")$p_types`.
 #'
 #' @return A model list with all the necessary functions to sample.
-#' @noRd
 stop_signal <- function(
     go = c("exgaussian", "racing_diffusion"),
     stop = c("exgaussian", "lognormal", "weibull", "normal"),
@@ -1399,6 +1408,8 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #'
 #' Model files are almost exclusively used in `design()`.
 #'
+#' @inheritParams stop_signal
+#'
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
@@ -1440,12 +1451,18 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Lastly, attentional lapse rate parameters for the stop process and go process, termed "trigger failure" (`tf`) and "go failure" (`gf`) respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
 #'
 #' Note that the ex-Gaussian parameters `mu`, `sigma`, and `tau` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
-#' Inference is typically based on the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
-#' The mean of the ex-Gaussian stop process finish time distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+#' Inference is typically based on the mean of the ex-Gaussian distribution. For an untruncated go distribution, this is `mu + tau`, using parameters on their natural scale.
+#' The mean of the stop process finish time distribution is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters `exg_lb` and `exgS_lb`, respectively.
-#' The default values for these lower bounds are `0`.
+#' The default value of `exg_lb` is also `0`.
 #' If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both `exg_lb` and `exgS_lb` should be set to `-Inf`, using the `constants` argument of the [design()] function.
 #'
 #' @references
@@ -1476,7 +1493,6 @@ rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Verbruggen, F., Aron, A. R., Band, G. P., Beste, C., Bissett, P. G., Brockett, A. T., ... & Boehler, C. N. (2019). A consensus guide to capturing the ability to inhibit actions and impulsive behaviors in the stop-signal task. *elife*, *8*, e46323. \doi{10.7554/eLife.46323}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @noRd
 SSEXG <- function(exgaussian_approximation = NULL) {
   stop_signal(
     go = "exgaussian",
@@ -1762,6 +1778,8 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #'
 #' Model files are almost exclusively used in `design()`.
 #'
+#' @inheritParams stop_signal
+#'
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
@@ -1808,11 +1826,16 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
 #' Thus, this hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 #'
-#' The mean of the ex-Gaussian stop distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT).
+#' The mean of the stop distribution is taken as the stop signal reaction time (SSRT).
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter `exgS_lb`.
-#' The default value for this lower bound is `0`.
 #'
 #' @references
 #'
@@ -1823,7 +1846,6 @@ rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
 #' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @noRd
 SSRDEX <- function(exgaussian_approximation = NULL) {
   stop_signal(
     go = "racing_diffusion",

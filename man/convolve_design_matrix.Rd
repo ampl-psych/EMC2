@@ -16,7 +16,7 @@ convolve_design_matrix(
   scale = TRUE,
   high_pass = TRUE,
   high_pass_model = "cosine",
-  cut_off = 1e-12
+  cut_off = 0.000000000001
 )
 }
 \arguments{

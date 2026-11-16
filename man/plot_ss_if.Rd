@@ -33,11 +33,16 @@ plot_ss_if(
 )
 }
 \arguments{
-\item{input}{Either an emc object or a stop-signal data frame, or a \emph{list} of such objects. SSD column in data required.}
+\item{input}{An emc object, a stop-signal data frame, or a named list of
+objects of the same type. See Data format for required columns.}
 
-\item{post_predict}{Optional posterior predictive data (matching columns) or \emph{list} thereof.}
+\item{post_predict}{Optional posterior predictive data frame, or a
+corresponding named list when \code{input} is a list. Include \code{postn} to
+identify predictive draws; see Data format.}
 
-\item{prior_predict}{Optional prior predictive data (matching columns) or list thereof.}
+\item{prior_predict}{Optional prior predictive data frame, or a
+corresponding named list when \code{input} is a list. Include \code{postn} to
+identify predictive draws; see Data format.}
 
 \item{probs}{Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.}
 
@@ -64,7 +69,10 @@ distinct breaks and at least two bins, or falls back to value-based SSD bins;
 \item{quants}{Numeric vector of exactly two predictive interval quantile bounds
 that bracket 0.5 (e.g. c(0.025, 0.975)).}
 
-\item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
+\item{functions}{A named list of functions that create columns in the data
+and predictives. Each function receives a data frame and returns a column;
+the list name specifies the column name. See Examples for combining
+difficulty and age group into one plotting factor.}
 
 \item{n_cores}{Number of CPU cores to use if generating predictives from an emc object.}
 
@@ -72,7 +80,10 @@ that bracket 0.5 (e.g. c(0.025, 0.975)).}
 
 \item{layout}{Numeric vector used in par(mfrow=...); use NA for auto-layout.}
 
-\item{to_plot}{Character vector: any of "data", "posterior", "prior".}
+\item{to_plot}{Character vector containing any of "data", "posterior",
+or "prior". Controls observed-data display and generation of missing
+predictives. Explicitly supplied \code{post_predict} and \code{prior_predict} are
+plotted even when their source is omitted from \code{to_plot}.}
 
 \item{use_lim}{Character vector controlling which source(s) define axis limits}
 
@@ -110,11 +121,37 @@ Posterior/prior predictive intervals are quantile intervals of the plotted
 summary across predictive draws. Observed data are plotted with error bars
 (plus/minus the standard error per SSD bin/category).
 }
+\section{Data format}{
+
+Data frames must contain \code{subjects}, \code{SSD}, \code{R}, and \code{rt}. Columns named in
+\code{factors} or \code{within_plot} must be present or created using \code{functions}.
+\code{subjects} identifies participants;
+\code{SSD} and \code{rt} are in seconds. Use \code{SSD = Inf} for go trials and \code{NA} in
+both \code{R} and \code{rt} for non-responses. Only trials with finite SSDs contribute
+to the stop-signal summaries.
+
+Supplied posterior/prior predictive data should contain the same trial
+columns and a \code{postn} column identifying the predictive draw. All trials
+and participants belonging to one draw share its \code{postn} value. Summaries
+are calculated separately for each draw before taking predictive quantiles.
+Without \code{postn}, supplied predictions are pooled into one data set and
+summarized like observed data, without intervals across predictive draws.
+Predictives generated from an emc object already contain \code{postn}.
+}
+
 \section{SSD binning}{
 
 Quantile bins need distinct breakpoints. With fixed or staircase SSDs,
 repeated values can make two or more requested quantiles identical, even
 when several distinct SSD values are present.
+
+Global quantile binning (\code{use_global_quantiles = TRUE}) requires matching
+sets of distinct finite SSD values across plotted sources containing stop
+trials. Matching is checked after any rounding specified by \code{ssd_round}.
+If the sets differ, \code{on_duplicate_quantiles = "reduce"} or \code{"value"} switches
+to SSD-value bins, while \code{"error"} stops, even when the quantile breakpoints
+are distinct. Differences can occur when predictive simulations rerun an
+adaptive staircase.
 
 For discrete SSD designs, use \code{ssd_binning = "value"} to plot each SSD value
 separately. Set \code{ssd_round} if small numerical differences should be treated
@@ -143,4 +180,20 @@ EMC2:::plot_ss_if(dat, on_duplicate_quantiles = "value",
                     to_plot = "data", use_lim = "data")
 EMC2:::plot_ss_if(dat, on_duplicate_quantiles = "reduce",
                     to_plot = "data", use_lim = "data")
+
+# Overlay each combination of difficulty and age group.
+dat$difficulty <- factor(rep(c("easy", "difficult"), length.out = nrow(dat)))
+dat$age_group <- factor(ifelse(dat$subjects == "1", "younger", "older"))
+EMC2:::plot_ss_if(
+  dat,
+  functions = list(
+    condition = function(d) interaction(
+      d$difficulty, d$age_group, sep = "_", drop = TRUE
+    )
+  ),
+  within_plot = "condition",
+  ssd_binning = "value",
+  to_plot = "data",
+  use_lim = "data"
+)
 }

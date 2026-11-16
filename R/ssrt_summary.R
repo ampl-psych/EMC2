@@ -23,8 +23,11 @@
 #' `TRUE`, return the detailed summary directly, including technical metadata
 #' and population variance-decomposition rows.
 #' @param stage Sampling stage passed to [get_pars()].
-#' @param n_population Number of implied population members sampled per
-#' posterior draw when `level = "population"`.
+#' @param n_population Number of simulated population members per posterior
+#' draw. Used when `level = "population"`, and when `level = "condition"` with
+#' `condition_level = "population"`. Within each posterior draw, the same
+#' simulated members are evaluated in every condition. Controls the Monte Carlo
+#' approximation of population summaries; ignored for individual summaries.
 #' @param seed Optional random seed used for population sampling.
 #' @param data Optional data frame used to define condition cells when
 #' `level = "condition"`. Defaults to the fitted data.
@@ -35,8 +38,21 @@
 #' `"population"` samples implied individuals from each hierarchical
 #' population draw and summarizes each condition. `"individual"` maps each
 #' observed subject's `alpha` draws and returns subject-by-condition summaries.
-#' @param thin,filter,length.out,subject Passed to [get_pars()].
+#' @param thin,filter,length.out Passed to [get_pars()].
+#' @param subject Select observed participants for `level = "individual"` or
+#'   `level = "condition"` with `condition_level = "individual"`. Passed to
+#'   [get_pars()] in those cases. Ignored for population summaries, which
+#'   describe the population implied by the fitted hierarchical distribution.
 #' @param ... Additional arguments passed to [get_pars()].
+#'
+#' @details
+#' Population summaries are not currently supported for models using
+#' [group_design()] to include participant-level predictors. This applies to
+#' `level = "population"` and to `level = "condition"` with
+#' `condition_level = "population"`. Such summaries would require specifying
+#' predictor values or their distribution in the target population. Individual
+#' summaries remain supported, including condition-specific summaries with
+#' `condition_level = "individual"`.
 #'
 #' @return By default (`details = FALSE`), a compact data frame with one row for
 #' each requested SSRT quantity:
@@ -82,7 +98,6 @@
 #' sensitivity flag, not a numerical-error test. The detailed `tail_dominated`
 #' column records the flag for `ssrt_mean`; it is NA for other quantities or
 #' when no finite draws are available.
-#' @noRd
 ssrt_summary <- function(emc,
                          level = c("population", "individual", "condition"),
                          probs = c(0.025, 0.5, 0.975),
