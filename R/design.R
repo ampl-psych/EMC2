@@ -1,3 +1,15 @@
+as_model_function <- function(model) {
+  if (is.function(model)) {
+    return(model)
+  }
+  if (is.list(model) && !is.null(model$p_types) && !is.null(model$Ttransform)) {
+    model_obj <- model
+    return(function() model_obj)
+  }
+  stop("`model` must be a model function or a model object with `p_types` and `Ttransform`.",
+       call. = FALSE)
+}
+
 #' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -14,7 +26,7 @@
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' Example: `c("right", "left")`
-#' @param model A function, specifies the model type.
+#' @param model A function or model object, specifies the model type.
 #' Choose from the drift diffusion model`DDM()`,
 #' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
 #' the racing diffusion model `RDM()`, or define your own
@@ -136,6 +148,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     class(design) <- "emc.design"
     return(design)
   }
+  model <- as_model_function(model)
   if (!is.null(data)) {
     if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
     data$subjects <- factor(data$subjects)
@@ -154,7 +167,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       if(length(covariates) == 0) covariates <- NULL
     }
   }
-  if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
+  if (is_stop_signal_model(model())) {
     covariates <- unique(c(covariates, "SSD"))
   }
 
@@ -509,85 +522,15 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   out
 }
 
-# compress_dadm <- function(da,designs,Fcov,Ffun)
-#     # out keeps only unique rows in terms of all parameters design matrices
-#     # R, lR and rt (at given resolution) from full data set
-#   {
-#     nacc <- length(unique(da$lR))
-#     # contract output
-#     design_expands <- lapply(designs, function(x) attr(x, "expand"))
-#     cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
-#     cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
-#     # Make sure that if row is included for a trial so are other rows
-#     if (!is.null(Fcov)) {
-#       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
-#       cov_cells <- do.call(paste, c(da[, nFcov, drop = FALSE], list(sep = "+")))
-#       cells <- paste(cells, cov_cells, sep = "+")
-#     }
-#     if (!is.null(Ffun))
-#       cells <- paste(cells, do.call(paste, c(da[, Ffun, drop = FALSE], list(sep = "+"))), sep = "+")
-#
-#     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-#                                     each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
-#
-#     contract <- !duplicated(cells)
-#     out <- da[contract,,drop=FALSE]
-#     attr(out,"contract") <- contract
-#     attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
-#     lR1 <- da$lR==levels(da$lR)[[1]]
-#     attr(out,"expand_winner") <- as.integer(factor(cells[lR1],levels=unique(cells[lR1])))
-#     attr(out,"s_expand") <- da$subjects
-#     attr(out,"designs") <- lapply(designs,function(x){
-#       attr(x,"expand") <- attr(x,"expand")[contract]; x})
-#
-#     # indices to use to contract further ignoring rt then expand back
-#     cells_nort <- paste(cells_design, da$subjects, da$R, da$lR, sep = "+")[contract]
-#     attr(out,"unique_nort") <- !duplicated(cells_nort)
-#     attr(out,"expand_nort") <- as.integer(factor(cells_nort,levels=unique(cells_nort)))
-#
-#     # cells_nort <- paste(
-#     #   apply(do.call(cbind,lapply(designs,function(x){
-#     #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-#     #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
-#     # attr(out,"unique_nort") <- !duplicated(cells_nort)
-#     # # Only first level WHY????
-#     # cells <- cells[da$lR==levels(da$lR)[1]]
-#     # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
-#     # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
-#     #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
-#
-#     # indices to use to contract ignoring rt and response (R), then expand back
-#     cells_nortR <- paste(cells_design, da$subjects, da$lR, sep = "+")[contract]
-#     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-#     attr(out,"expand_nortR") <- as.integer(factor(cells_nortR,levels=unique(cells_nortR)))
-#
-#     # # indices to use to contract ignoring rt and response (R), then expand back
-#     # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
-#     #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-#     #   da$subjects,da$lR,sep="+")[contract]
-#     # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-#     # # Only first level WHY????
-#     # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
-#     # attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
-#     #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
-#
-#     # Lower censor
-#     # if (!any(is.na(out$rt))) { # Not a choice only model
-#     #   winner <- out$lR==levels(out$lR)[[1]]
-#     #   ok <- out$rt[winner]==-Inf
-#     #   if (any(ok)) {
-#     #     ok[ok] <- 1:sum(ok)
-#     #     attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
-#     #   }
-#     #   # Upper censor
-#     #   ok <- out$rt[winner]==Inf
-#     #   if (any(ok)) {
-#     #     ok[ok] <- 1:sum(ok)
-#     #     attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
-#     #   }
-#     # }
-#     out
-# }
+is_stop_signal_model <- function(model_info) {
+  model_p_types <- names(model_info$p_types)
+  is_stop_signal_name <- !is.null(model_info$c_name) &&
+    model_info$c_name %in% c("SSEXG", "SSRDEX", "SSLNORM", "SSWEIBULL", "SSNORM",
+                             "SSRDLNORM", "SSRDWEIBULL", "SSRDNORM")
+  is_stop_signal_params <- isTRUE(all(c("tf", "gf", "SSD") %in% model_p_types)) ||
+    isTRUE(all(c("dfunS", "pfunS", "sfun") %in% names(model_info)))
+  is_stop_signal_name || is_stop_signal_params
+}
 
 check_rt <- function(b,d,upper=TRUE)
   # Check bounds respected if present
@@ -776,6 +719,10 @@ design_model <- function(data,design,model=NULL,
     model <- design$model
   }
   model_info <- model()
+  if (compress && is_stop_signal_model(model_info)) {
+    stop("Compression is not supported for stop-signal models.")
+  }
+  if (is_stop_signal_model(model_info)) rt_resolution <- NULL
   if (is_choice_only_model_type(model_info)) rt_check <- FALSE
   if(grepl("MRI", model_type(model_info))){
     dadm <- data
@@ -810,7 +757,7 @@ design_model <- function(data,design,model=NULL,
   # Stop-signal models support censoring (LC/UC) but not yet truncation: the
   # likelihood is not renormalised for a truncation window, so refuse rather
   # than fit a biased model.
-  if (!is.null(model_info$c_name) && model_info$c_name %in% c("SSEXG", "SSRDEX")) {
+  if (is_stop_signal_model(model_info)) {
     trunc_LT <- if ("LT" %in% names(da)) any(da$LT > 0, na.rm = TRUE) else FALSE
     trunc_UT <- if ("UT" %in% names(da)) any(is.finite(da$UT)) else FALSE
     if (trunc_LT || trunc_UT)
@@ -1584,20 +1531,76 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
       Fcovariates <- covariates
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
+  model_info <- model()
+  is_stop_signal <- is_stop_signal_model(model_info)
+  if (is_stop_signal) {
+    Fcovariates <- setdiff(Fcovariates, "SSD")
+    design$Fcovariates <- setdiff(design$Fcovariates, "SSD")
+  }
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
-
   design_in <- design
   acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
   design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
-  md <- minimal_design(design_in, covariates = Fcovariates, verbose = F,
-                       drop_R = F, add_acc = F, drop_subjects = F)
-  dadm <- design_model(md,design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
-  ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
+
+  md <- minimal_design(
+    design_in,
+    covariates = Fcovariates,
+    verbose = F,
+    drop_R = F,
+    add_acc = F,
+    drop_subjects = F
+  )
+
+  dadm <- design_model(
+    md,
+    design,
+    model,
+    rt_check = FALSE,
+    compress = FALSE,
+    verbose = FALSE
+  )
+
+  if (is_stop_signal && is.null(dadm$SSD)) {
+    dadm$SSD <- Inf
+  }
+
+  hidden_if_constant <- function(x, col) {
+    if (!col %in% colnames(x)) return(character(0))
+    vals <- unique(x[, col])
+    vals <- vals[!is.na(vals)]
+    if (length(vals) <= 1) col else character(0)
+  }
+
+  hidden_data_cols <- c("subjects", "trials", "R", "rt", "winner")
+  if (is_stop_signal) {
+    hidden_data_cols <- c(hidden_data_cols, "SSD", hidden_if_constant(dadm, "lI"))
+  }
+
+  ok <- !(names(dadm) %in% hidden_data_cols)
+
+  mapped_values <- round(
+    get_pars_matrix_oo(
+      p_vector,
+      dadm,
+      design$model(),
+      allow_missing_ssd = TRUE
+    ),
+    digits
+  )
+
+  hidden_mapped_cols <- if (is_stop_signal) c("SSD", "lI") else character(0)
+  mapped_values <- mapped_values[
+    ,
+    !(colnames(mapped_values) %in% hidden_mapped_cols),
+    drop = FALSE
+  ]
+
+  out <- cbind(dadm[, ok, drop = F], mapped_values)
+
   if (is_ordered_response_type(model()))
     out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
-  if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
+  if (model_info$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
 

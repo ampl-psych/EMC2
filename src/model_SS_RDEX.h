@@ -2,21 +2,15 @@
 #define ss_rdex_h
 
 #include <cmath>
+#include <string>
 #include <vector>
-#include "nan_check.h" // is_finite
-#include "r_constants.h" // pos / neg infinity; na_real
-#include "exgaussian_functions.h"
+#include <Rcpp.h>
+#ifndef rdm_h
 #include "wald_functions.h"
-#include "composite_functions.h" // log1m etc
+#endif
+#include "exgaussian_functions.h"
+#include "pnorm_utils.h"
 using namespace Rcpp;
-
-// R-facing helpers for the stop-signal Wald-go / ex-Gaussian-stop race (used
-// by the R reference likelihood, pstopHybrid in R/model_SS.R). The C++
-// likelihood lives in ss_fast.h.
-
-// ----------------------------------------------------------------------------
-// EXPORTS USED BY THE R REFERENCE LIKELIHOOD (pstopHybrid in R/model_SS.R)
-// ----------------------------------------------------------------------------
 
 // [[Rcpp::export]]
 NumericVector dWald_RDEX(
@@ -26,10 +20,10 @@ NumericVector dWald_RDEX(
   int n = t.size();
   NumericVector pdf(n);
   for (int i = 0; i < n; i++) {
-    const double tt = t[i] - t0;   // do not mutate the input vector
+    double t_eff = t[i] - t0;
     pdf[i] = 0.;
-    if (tt > 0.) {
-      pdf[i] = digt(tt, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
+    if (t_eff > 0.) {
+      pdf[i] = digt(t_eff, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
     }
   }
   return pdf;
@@ -44,10 +38,10 @@ NumericVector pWald_RDEX(
   int n = t.size();
   NumericVector cdf(n);
   for (int i = 0; i < n; i++) {
-    const double tt = t[i] - t0;   // do not mutate the input vector
+    double t_eff = t[i] - t0;
     cdf[i] = 0.;
-    if (tt > 0.) {
-      cdf[i] = pigt(tt, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
+    if (t_eff > 0.) {
+      cdf[i] = pigt(t_eff, (B/s) + .5 * (A/s), (v/s), .5 * (A/s));
     }
   }
   return cdf;
@@ -61,12 +55,12 @@ NumericVector pTEXG_RDEX(
 ) {
   int n = q.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector cdf(n, na_real());
+    NumericVector cdf(n, NA_REAL);
     return cdf;
   }
   NumericVector cdf(n);
   for (int i = 0; i < n; i++){
-    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, pos_inf(), lower_tail, log_p);
+    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, R_PosInf, lower_tail, log_p);
   }
   return cdf;
 }
@@ -78,16 +72,15 @@ NumericVector dTEXG_RDEX(
 ) {
   int n = x.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector pdf(n, na_real());
+    NumericVector pdf(n, NA_REAL);
     return pdf;
   }
   NumericVector pdf(n);
   for (int i = 0; i < n; i++){
-    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, pos_inf(), log_d);
+    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, R_PosInf, log_d);
   }
   return pdf;
 }
-
 
 
 
@@ -114,7 +107,6 @@ NumericVector dRDEXrace(
 }
 
 
-
 // [[Rcpp::export]]
 NumericVector stopfn_rdex(
     NumericVector t, int n_acc,
@@ -130,4 +122,3 @@ NumericVector stopfn_rdex(
 }
 
 #endif
-

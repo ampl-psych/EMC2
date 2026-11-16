@@ -133,7 +133,8 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
     sources['posterior'] <- 'posterior'
     post_predict <- list(post_predict)
   }
-  if (!is.list(post_predict) || is.data.frame(post_predict) || length(post_predict) != length(input)) {
+  if (!is.list(post_predict) || is.data.frame(post_predict) ||
+      length(post_predict) != length(input)) {
     post_predict <- vector("list", length(input))
   }
 
@@ -146,7 +147,8 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
     sources['prior'] <- 'prior'
     prior_predict <- list(prior_predict)
   }
-  if (!is.list(prior_predict) || is.data.frame(prior_predict) || length(prior_predict) != length(input)) {
+  if (!is.list(prior_predict) || is.data.frame(prior_predict) ||
+      length(prior_predict) != length(input)) {
     prior_predict <- vector("list", length(input))
   }
 
@@ -211,8 +213,14 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       }
       quants <- aggregate(datasets[[j]][density_over],
                           list(group_key = datasets[[j]]$group_key),
-                          quantile, probs = x_lim_probs, na.rm = TRUE)  # NA rts kept when remove_na = FALSE
-      xlim <- range(xlim, unlist(quants[[density_over]]))
+                          function(x) {
+                            # Stop-signal no-response trials can carry missing RTs that
+                            # should remain in the data but not determine plotting limits.
+                            x <- x[is.finite(x)]
+                            if (!length(x)) return(rep(NA_real_, length(x_lim_probs)))
+                            quantile(x, probs = x_lim_probs, na.rm = TRUE)
+                          })
+      xlim <- range(xlim, unlist(quants[[density_over]]), na.rm = TRUE)
     }
   }
 

@@ -2,19 +2,13 @@
 #define ss_exg_h
 
 #include <cmath>
+#include <string>
 #include <vector>
-#include "nan_check.h" // is_finite
-#include "r_constants.h" // pos / neg infinity; na_real
+#include <Rcpp.h>
+#include "utility_functions.h"
 #include "exgaussian_functions.h"
+#include "pnorm_utils.h"
 using namespace Rcpp;
-
-// R-facing helpers for the stop-signal ex-Gaussian race (used by the R
-// reference likelihood, pstopTEXG in R/model_SS.R). The C++ likelihood lives
-// in ss_fast.h.
-
-// ----------------------------------------------------------------------------
-// EXPORTS USED BY THE R REFERENCE LIKELIHOOD (pstopTEXG in R/model_SS.R)
-// ----------------------------------------------------------------------------
 
 // [[Rcpp::export]]
 NumericVector pTEXG_vec(
@@ -23,12 +17,12 @@ NumericVector pTEXG_vec(
 ) {
   int n = q.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector cdf(n, na_real());
+    NumericVector cdf(n, NA_REAL);
     return cdf;
   }
   NumericVector cdf(n);
   for (int i = 0; i < n; i++){
-    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, pos_inf(), lower_tail, log_p);
+    cdf[i] = ptexg(q[i], mu, sigma, tau, lb, R_PosInf, lower_tail, log_p);
   }
   return cdf;
 }
@@ -40,12 +34,12 @@ NumericVector dTEXG_vec(
 ) {
   int n = x.size();
   if (tau <= 0. || sigma <= 0.) {
-    NumericVector pdf(n, na_real());
+    NumericVector pdf(n, NA_REAL);
     return pdf;
   }
   NumericVector pdf(n);
   for (int i = 0; i < n; i++){
-    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, pos_inf(), log_d);
+    pdf[i] = dtexg(x[i], mu, sigma, tau, lb, R_PosInf, log_d);
   }
   return pdf;
 }
@@ -78,4 +72,3 @@ NumericVector stopfn_texg(
 }
 
 #endif
-

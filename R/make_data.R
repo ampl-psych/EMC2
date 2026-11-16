@@ -388,10 +388,18 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% c(names(functions), names(design$Ffunctions))]
     acc_funs <- vapply(design_in$Ffunctions, uses_accumulator, logical(1))
     design_in$Ffunctions <- design_in$Ffunctions[!acc_funs]
-    data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=F,
-                           do_functions = FALSE, ## SM: MIRRORS ZACH'S BRANCH
-                           drop_R = F)
+
+    is_stop_signal <- is_stop_signal_model(model())
+
+    data <- minimal_design(
+      design_in,
+      covariates = list(...)$covariates,
+      do_functions = !is_stop_signal,
+      drop_subjects = F,
+      n_trials = n_trials,
+      add_acc = FALSE,
+      drop_R = F
+    )
     # Match design_model's subject order before creating staircase metadata.
     data <- data[order(data$subjects), ]
   } else {

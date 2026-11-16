@@ -2,7 +2,7 @@
 #define ss_fast_h
 
 // ---------------------------------------------------------------------------
-// Stop-signal likelihood (SSEXG / SSRDEX) in the race-model style:
+// Stop-signal likelihood (all go/stop families) in the race-model style:
 //
 //  * SSSpec: everything that depends on the DATA only (trial kinds, row masks,
 //    winner / response indices, SSD, censoring bounds) is computed once per
@@ -36,7 +36,7 @@
 #include "wald_functions.h"       // digt, pigt
 #include "ss_integrate.h"         // ss_integrate (hcubature), window helpers
 
-// integration accuracy for the stop-success and lower-censoring integrals
+// Integration accuracy for exGaussian stop-success and lower-censoring integrals
 // (matches the R reference: rel 1e-6 / abs 1e-8)
 constexpr double SSF_ABS_TOL = 1e-8;
 constexpr double SSF_REL_TOL = 1e-6;
@@ -56,18 +56,21 @@ enum class SSKind : std::int8_t {
 
 struct SSSpec {
   bool is_exg = true;
+  SSStopFamily stop_family = SSStopFamily::ExGaussian;
   // parameter columns in the ParamTable (resolved once by name)
   int col_mu = -1, col_sigma = -1, col_tau = -1, col_lb = -1;   // SSEXG go
   int col_v = -1, col_B = -1, col_A = -1, col_t0 = -1, col_s = -1; // SSRDEX go
-  int col_muS = -1, col_sigmaS = -1, col_tauS = -1, col_lbS = -1;
+  int col_stop1 = -1, col_stop2 = -1, col_tauS = -1, col_lbS = -1;
   int col_tf = -1, col_gf = -1;
+  int col_normal_ratio = -1, col_shifted_exp_sigma = -1;
 
   int n_trials = 0, n_rows = 0, n_acc = 0;
 
   // per trial (data only)
   std::vector<SSKind>  kind;
   std::vector<int>     base_row, n_accG, n_accST, winner_local, resp_local;
-  std::vector<double>  rt, ssd, rt_eff, lt, lc, uc, uc_eff;
+  std::vector<int>     go_rows, go_offsets;
+  std::vector<double>  rt, ssd, lt, lc, uc, uc_eff;
   std::vector<std::uint8_t> stop_presented, stop_can_act;
   // per row (data only)
   std::vector<std::uint8_t> is_go, is_st;
@@ -78,7 +81,9 @@ struct SSSpec {
   mutable std::unordered_map<std::uint64_t, MemoEntry> memo;
   mutable std::vector<double> memo_keys;
 
+  // Prepared per particle: go distributions per row, stop distributions per trial.
   mutable std::vector<ExGaussian> go_exg, stop_exg;
+  mutable std::vector<SSStop> stop_other;
 
   const ParamTable* pt = nullptr;
   void rebind(const ParamTable& p) { pt = &p; }
@@ -90,6 +95,13 @@ struct SSSpec {
 namespace ssf {
 
 inline double par(const ParamTable& pt, int row, int col) { return pt.base(row, col); }
+
+inline double normal_ratio(const SSSpec& s, const ParamTable& pt, int row) {
+  return s.col_normal_ratio < 0 ? 0.0 : par(pt,row,s.col_normal_ratio);
+}
+inline double shifted_exp_sigma(const SSSpec& s, const ParamTable& pt, int row) {
+  return s.col_shifted_exp_sigma < 0 ? 0.0 : par(pt,row,s.col_shifted_exp_sigma);
+}
 
 // log density of a go accumulator (row r) finishing at time t
 inline double go_lpdf(const SSSpec& s, const ParamTable& pt, int r, double t) {
@@ -120,8 +132,10 @@ inline double go_lsurv(const SSSpec& s, const ParamTable& pt, int r, double t) {
 }
 
 // log survivor of the stop process (parameters on row r0) at stop-relative time q
-inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q) {
-  double v = s.stop_exg[r0 / s.n_acc].prob(q, false, true);
+inline double stop_lsurv(const SSSpec& s, int r0, double q) {
+  double v = s.stop_family==SSStopFamily::ExGaussian
+    ? s.stop_exg[r0 / s.n_acc].prob(q, false, true)
+    : s.stop_other[r0 / s.n_acc].log_survivor(q);
   return is_finite(v) ? v : neg_inf();
 }
 
@@ -131,15 +145,17 @@ inline double stop_lsurv(const SSSpec& s, const ParamTable& pt, int r0, double q
 // ---------------------------------------------------------------------------
 struct StopIntegrand {
   const SSSpec* s; const ParamTable* pt;
-  double ssd, muS, sigS, tauS, lbS;
+  double ssd;
   const int* go_rows; int n_go;
-  const ExGaussian* stop;
+  const ExGaussian* exg;
+  const SSStop* other;
 };
 
+// f_stop(t) * prod_i S_go,i(t + SSD), including the Jacobian when time is transformed.
 inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, double* out) {
   const StopIntegrand* w = static_cast<const StopIntegrand*>(p);
-  const double xx = x[0];
-  double lf = w->stop->pdf(xx, true);
+  const double xx = w->other ? w->other->time(x[0]) : x[0];
+  double lf = w->other ? w->other->log_weight(x[0]) : w->exg->pdf(xx, true);
   if (!is_finite(lf)) { out[0] = 0.0; return 0; }
   double ls = 0.0;
   for (int i = 0; i < w->n_go; ++i) {
@@ -155,39 +171,59 @@ inline int stop_success_integrand(unsigned, const double* x, void* p, unsigned, 
 // (stop parameters are trial-constant)
 inline double stop_success_lp_raw(const SSSpec& s, const ParamTable& pt, int r0,
                                   const int* go_rows, int n_go, double ssd, double upper) {
-  StopIntegrand w{&s, &pt, ssd, par(pt, r0, s.col_muS), par(pt, r0, s.col_sigmaS),
-                  par(pt, r0, s.col_tauS), par(pt, r0, s.col_lbS), go_rows, n_go,
-                  &s.stop_exg[r0 / s.n_acc]};
-  const double lo = ss_stop_window_lo(w.lbS, w.muS, w.sigS);
-  double hi = ss_stop_window_hi(upper, w.muS, w.sigS, w.tauS);
+  const bool exg=s.stop_family==SSStopFamily::ExGaussian;
+  const int trial=r0/s.n_acc;
+  StopIntegrand w{&s, &pt, ssd, go_rows, n_go,
+                  exg ? &s.stop_exg[trial] : nullptr,
+                  exg ? nullptr : &s.stop_other[trial]};
+  double lo,hi;
+  if (exg) {
+    const auto& stop=*w.exg;
+    lo=ss_stop_window_lo(stop.lower,stop.mu,stop.sigma);
+    hi=ss_stop_window_hi(upper,stop.mu,stop.sigma,stop.tau);
+  } else w.other->bounds(upper,lo,hi);
   if (!(hi > lo)) return neg_inf();
-  // The integrand is f_stop(x) * prod_i S_go,i(x + SSD). The stop window can be
-  // very wide (large sigmaS / tauS, as sampled early in a fit) while the go
-  // survivors vanish much earlier; integrating over that dead tail wastes the
-  // whole evaluation budget. Clip hi to the point where the go survival
-  // product drops below exp(-30) (~1e-13, far below the relative tolerance),
-  // found by bisection (survival is monotone decreasing).
+  // The stop window can extend well beyond the go finishing times. Clip hi
+  // where the go survival product falls below exp(-30) for exGaussian stops
+  // or exp(-45) for the other families. Bisection uses its monotone decrease.
   auto log_S_go = [&](double x) {
+    const double t=w.other ? w.other->time(x) : x;
     double ls = 0.0;
     for (int i = 0; i < n_go; ++i) {
-      double v = go_lsurv(s, pt, go_rows[i], x + ssd);
+      double v = go_lsurv(s, pt, go_rows[i], t + ssd);
       if (!is_finite(v)) return neg_inf();
       ls += v;
     }
     return ls;
   };
-  const double LS_MIN = -30.0;
-  if (log_S_go(lo) < LS_MIN) return neg_inf();          // go always finishes first
-  if (log_S_go(hi) < LS_MIN) {
-    double a = lo, b = hi;
-    for (int it = 0; it < 30; ++it) {
-      const double m = 0.5 * (a + b);
-      if (log_S_go(m) < LS_MIN) b = m; else a = m;
+  const double LS_MIN = exg ? -30.0 : -45.0;
+  const double ls_lo=log_S_go(lo);
+  if (ls_lo < LS_MIN) return neg_inf();
+  auto locate = [&](double target) {
+    double a=lo, b=hi;
+    for (int it=0; it<(exg ? 30 : 48); ++it) {
+      const double m=0.5*(a+b);
+      if (m==a || m==b) break;
+      if (log_S_go(m)<target) b=m; else a=m;
     }
-    hi = b;
-  }
-  double res = ss_integrate(stop_success_integrand, &w, lo, hi, SSF_ABS_TOL, SSF_REL_TOL,
-                            SSF_STOP_MAX_EVAL);
+    return b;
+  };
+  if (log_S_go(hi)<LS_MIN) hi=locate(LS_MIN);
+  // A broad stop distribution can compress the go transition into a tiny
+  // part of this interval. Split where go survival first changes appreciably,
+  // so quadrature cannot miss it. The preceding part is flat to 1e-12 relative.
+  double split=lo;
+  if (exg && w.exg->approximation==ExGaussian::Exact) {
+    // With sigma << tau, both quadrature rules can miss the narrow density
+    // rise and extrapolate the exponential tail across it. Resolve that rise
+    // separately, without changing the explicitly requested approximations.
+    const auto& stop=*w.exg;
+    split=std::max(lo,std::min(hi,stop.mu+SS_WINDOW_K_SIGMA*stop.sigma));
+  } else if (!exg && log_S_go(hi)<ls_lo-1e-12) split=locate(ls_lo-1e-12);
+  const double abs_tol=exg ? SSF_ABS_TOL : 1e-18;
+  const double rel_tol=exg ? SSF_REL_TOL : 1e-8;
+  double res=ss_integrate(stop_success_integrand,&w,lo,split,abs_tol,rel_tol,SSF_STOP_MAX_EVAL)+
+    ss_integrate(stop_success_integrand,&w,split,hi,abs_tol,rel_tol,SSF_STOP_MAX_EVAL);
   return (!is_finite(res) || res <= 0.0) ? neg_inf() : std::log(res);
 }
 
@@ -202,20 +238,22 @@ inline std::uint64_t mix64(std::uint64_t h, double x) {
 // memoised stop-success integral; key = (ssd, upper, stop params, go params)
 inline double stop_success_lp(const SSSpec& s, const ParamTable& pt, int trial, double upper) {
   const int r0 = s.base_row[trial];
-  int go_rows[64]; int n_go = 0;
-  for (int k = 0; k < s.n_acc && n_go < 64; ++k)
-    if (s.is_go[r0 + k]) go_rows[n_go++] = r0 + k;
+  const int* go_rows=s.go_rows.data()+s.go_offsets[trial];
+  const int n_go=s.n_accG[trial];
   // build the key at the end of memo_keys
   std::vector<double>& keys = s.memo_keys;
   const std::size_t k0 = keys.size();
   keys.push_back(s.ssd[trial]); keys.push_back(upper);
-  keys.push_back(par(pt, r0, s.col_muS)); keys.push_back(par(pt, r0, s.col_sigmaS));
-  keys.push_back(par(pt, r0, s.col_tauS)); keys.push_back(par(pt, r0, s.col_lbS));
+  keys.push_back(par(pt, r0, s.col_stop1)); keys.push_back(par(pt, r0, s.col_stop2));
+  if (s.col_tauS>=0) keys.push_back(par(pt,r0,s.col_tauS));
+  if (s.col_lbS>=0) keys.push_back(par(pt,r0,s.col_lbS));
+  keys.push_back(normal_ratio(s,pt,r0)); keys.push_back(shifted_exp_sigma(s,pt,r0));
   for (int i = 0; i < n_go; ++i) {
     const int r = go_rows[i];
     if (s.is_exg) {
       keys.push_back(par(pt, r, s.col_mu)); keys.push_back(par(pt, r, s.col_sigma));
       keys.push_back(par(pt, r, s.col_tau)); keys.push_back(par(pt, r, s.col_lb));
+      keys.push_back(normal_ratio(s,pt,r)); keys.push_back(shifted_exp_sigma(s,pt,r));
     } else {
       keys.push_back(par(pt, r, s.col_v)); keys.push_back(par(pt, r, s.col_B));
       keys.push_back(par(pt, r, s.col_A)); keys.push_back(par(pt, r, s.col_t0));
@@ -239,59 +277,53 @@ inline double stop_success_lp(const SSSpec& s, const ParamTable& pt, int trial, 
 }
 
 // ---------------------------------------------------------------------------
-// Trial response density at time t (go path; ST accumulators handled too),
-// used for the lower-censoring response mass. Mirrors
-// ss_trial_log_response_density in ss_likelihood.h.
+// Density for a specified go or stop-triggered response at time t, shared by
+// observed trials and the lower-censoring integral. ST densities use t - SSD.
 // ---------------------------------------------------------------------------
-inline double trial_log_response_density(const SSSpec& s, const ParamTable& pt, int trial,
-                                         double t, int resp_local) {
-  const int r0 = s.base_row[trial];
-  const bool stop = s.stop_presented[trial];
-  const double tf = par(pt, r0, s.col_tf), gf = par(pt, r0, s.col_gf);
-  const double ssd = s.ssd[trial];
-  double log_go_any = neg_inf();
-  for (int w = 0; w < s.n_acc; ++w) {
-    if (!s.is_go[r0 + w]) continue;
-    if (resp_local >= 0 && w != resp_local) continue;
+inline double response_lp(const SSSpec& s, const ParamTable& pt, int trial,
+                          double t, int w) {
+  const int r0=s.base_row[trial];
+  if (s.is_go[r0+w]) {
+    const double gf = par(pt, r0, s.col_gf);
     double go_lprob = go_lpdf(s, pt, r0 + w, t);
-    if (!is_finite(go_lprob)) continue;
+    if (!is_finite(go_lprob)) return neg_inf();
     for (int k = 0; k < s.n_acc; ++k)
       if (s.is_go[r0 + k] && k != w) go_lprob += go_lsurv(s, pt, r0 + k, t);
-    if (!is_finite(go_lprob)) continue;
-    double term = log1m(gf) + go_lprob;
-    if (stop && t > ssd) {
-      const double te = t - ssd;
-      double lss = stop_lsurv(s, pt, r0, te);
-      double st_loss = 0.0;
-      for (int k = 0; k < s.n_acc; ++k)
-        if (s.is_st[r0 + k]) st_loss += go_lsurv(s, pt, r0 + k, te);
-      term = log1m(gf) + log_mix(tf, go_lprob, go_lprob + lss + st_loss);
-    }
-    log_go_any = log_sum_exp(log_go_any, term);
+    if (!s.stop_presented[trial] || t<=s.ssd[trial]) return log1m(gf) + go_lprob;
+    const double tf = par(pt, r0, s.col_tf), te = t-s.ssd[trial];
+    double lss = stop_lsurv(s, r0, te);
+    double st_loss = 0.0;
+    for (int k = 0; k < s.n_acc; ++k)
+      if (s.is_st[r0 + k] && k != w) st_loss += go_lsurv(s, pt, r0 + k, te);
+    // Trigger failure, or a triggered stop and ST racers still running at t.
+    return log1m(gf) + log_mix(tf, go_lprob, go_lprob + lss + st_loss);
   }
-  if (!stop || s.n_accST[trial] == 0) return log_go_any;
+  if (!s.stop_presented[trial] || t<=s.ssd[trial]) return neg_inf();
+  const double te=t-s.ssd[trial];
+  const double gf = par(pt, r0, s.col_gf), tf = par(pt, r0, s.col_tf);
+  double st_base = go_lpdf(s, pt, r0 + w, te);
+  if (!is_finite(st_base)) return neg_inf();
+  for (int k = 0; k < s.n_acc; ++k)
+    if (s.is_st[r0 + k] && k != w) st_base += go_lsurv(s, pt, r0 + k, te);
+  double go_loss = 0.0;
+  for (int k = 0; k < s.n_acc; ++k)
+    if (s.is_go[r0 + k]) go_loss += go_lsurv(s, pt, r0 + k, t);
+  double lps = stop_success_lp(s, pt, trial, te);
+  // An ST response can follow go failure, a stop win, or go and stop still running.
+  const double term_gf   = std::log(gf) + st_base;
+  const double term_win  = log1m(gf) + lps + st_base;
+  const double term_lose = log1m(gf) + stop_lsurv(s, r0, te) + st_base + go_loss;
+  return log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_win, term_lose));
+}
 
-  double log_st_any = neg_inf();
-  for (int w = 0; w < s.n_acc; ++w) {
-    if (!s.is_st[r0 + w]) continue;
-    if (resp_local >= 0 && w != resp_local) continue;
-    if (t <= ssd) continue;
-    const double te = t - ssd;
-    double st_base = go_lpdf(s, pt, r0 + w, te);
-    if (!is_finite(st_base)) continue;
-    for (int k = 0; k < s.n_acc; ++k)
-      if (s.is_st[r0 + k] && k != w) st_base += go_lsurv(s, pt, r0 + k, te);
-    double go_loss = 0.0;
-    for (int k = 0; k < s.n_acc; ++k)
-      if (s.is_go[r0 + k]) go_loss += go_lsurv(s, pt, r0 + k, t);
-    double lps = stop_success_lp(s, pt, trial, te);
-    const double term_gf   = std::log(gf) + st_base;
-    const double term_win  = log1m(gf) + lps + st_base;
-    const double term_lose = log1m(gf) + log1m_exp(lps) + st_base + go_loss;
-    log_st_any = log_sum_exp(log_st_any,
-                             log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_win, term_lose)));
-  }
-  return log_sum_exp(log_go_any, log_st_any);
+// Sum over all possible winners when the response identity is missing.
+inline double trial_log_response_density(const SSSpec& s, const ParamTable& pt, int trial,
+                                         double t, int resp_local) {
+  if (resp_local>=0) return response_lp(s,pt,trial,t,resp_local);
+  double out=neg_inf();
+  for (int w=0; w<s.n_acc; ++w)
+    out=log_sum_exp(out,response_lp(s,pt,trial,t,w));
+  return out;
 }
 
 struct LcIntegrand { const SSSpec* s; const ParamTable* pt; int trial; int resp_local; };
@@ -303,12 +335,12 @@ inline int lc_integrand(unsigned, const double* x, void* p, unsigned, double* ou
   return 0;
 }
 
-inline double lower_censor_lp(const SSSpec& s, const ParamTable& pt, int trial, double min_ll) {
+inline double lower_censor_lp(const SSSpec& s, const ParamTable& pt, int trial) {
   const double lo = s.lt[trial], hi = s.lc[trial];
-  if (!(hi > lo)) return min_ll;
+  if (!(hi > lo)) return neg_inf();
   LcIntegrand d{&s, &pt, trial, s.resp_local[trial]};
   double res = ss_integrate(lc_integrand, &d, lo, hi, SSF_ABS_TOL, SSF_REL_TOL, SSF_LC_MAX_EVAL);
-  return (!is_finite(res) || res <= 0.0) ? min_ll : std::log(res);
+  return (!is_finite(res) || res <= 0.0) ? neg_inf() : std::log(res);
 }
 
 // log P(no response at all) on a trial without a deadline
@@ -338,7 +370,7 @@ inline double upper_deadline_lp(const SSSpec& s, const ParamTable& pt, int trial
   const double uc_eff = s.uc_eff[trial];
   double lps = neg_inf(), logS_stop = 0.0;
   if (s.stop_can_act[trial]) {
-    logS_stop = stop_lsurv(s, pt, r0, uc_eff);
+    logS_stop = stop_lsurv(s, r0, uc_eff);
     lps = stop_success_lp(s, pt, trial, uc_eff);
   }
   const double log_core = log_sum_exp(lps, logS_go + logS_stop);
@@ -352,53 +384,10 @@ inline double upper_deadline_lp(const SSSpec& s, const ParamTable& pt, int trial
   return log_mix(tf, log_tfb, log_trig);
 }
 
-// observed response: go accumulator won (go trial or signal-respond)
-inline double observed_go_lp(const SSSpec& s, const ParamTable& pt, int trial) {
-  const int r0 = s.base_row[trial], w = s.winner_local[trial];
-  const double t = s.rt[trial];
-  const double gf = par(pt, r0, s.col_gf);
-  double go_lprob = go_lpdf(s, pt, r0 + w, t);
-  if (!is_finite(go_lprob)) go_lprob = neg_inf();
-  for (int k = 0; k < s.n_acc; ++k)
-    if (s.is_go[r0 + k] && k != w) go_lprob += go_lsurv(s, pt, r0 + k, t);
-  if (!s.stop_presented[trial]) return log1m(gf) + go_lprob;
-  const double tf = par(pt, r0, s.col_tf), te = s.rt_eff[trial];
-  double lss = stop_lsurv(s, pt, r0, te);
-  double st_loss = 0.0;
-  for (int k = 0; k < s.n_acc; ++k)
-    if (s.is_st[r0 + k] && k != w) st_loss += go_lsurv(s, pt, r0 + k, te);
-  return log1m(gf) + log_mix(tf, go_lprob, go_lprob + lss + st_loss);
-}
-
-// observed response: stop-triggered accumulator won
-inline double observed_st_lp(const SSSpec& s, const ParamTable& pt, int trial) {
-  const int r0 = s.base_row[trial], w = s.winner_local[trial];
-  const double t = s.rt[trial], te = s.rt_eff[trial];
-  const double gf = par(pt, r0, s.col_gf), tf = par(pt, r0, s.col_tf);
-  double st_base = go_lpdf(s, pt, r0 + w, te);
-  if (!is_finite(st_base)) st_base = neg_inf();
-  for (int k = 0; k < s.n_acc; ++k)
-    if (s.is_st[r0 + k] && k != w) st_base += go_lsurv(s, pt, r0 + k, te);
-  double go_loss = 0.0;
-  for (int k = 0; k < s.n_acc; ++k)
-    if (s.is_go[r0 + k]) go_loss += go_lsurv(s, pt, r0 + k, t);
-  double lps = stop_success_lp(s, pt, trial, te);
-  const double term_gf   = std::log(gf) + st_base;
-  const double term_win  = log1m(gf) + lps + st_base;
-  const double term_lose = log1m(gf) + log1m_exp(lps) + st_base + go_loss;
-  return log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_win, term_lose));
-}
-
 } // namespace ssf
 
-// ---------------------------------------------------------------------------
-// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
-// checks bounds first and applies penalties, clamping, expansion and summation
-// afterwards, as for the race models. Thread-safe given a per-thread
-// SSSpec (rebind) and ParamTable.
-// ---------------------------------------------------------------------------
-inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
-                              const std::vector<int>& is_ok) {
+// Reset the integral cache and prepare distributions for this particle.
+inline void ss_prepare_distributions(const SSSpec& s) {
   const ParamTable& pt = *s.pt;
   s.memo.clear();
   s.memo_keys.clear();
@@ -409,28 +398,52 @@ inline void ss_log_likelihood(const SSSpec& s, double min_ll, double* ll_buf,
     s.go_exg.reserve(s.n_rows);
     for (int r=0; r<s.n_rows; ++r)
       s.go_exg.emplace_back(ssf::par(pt,r,s.col_mu), ssf::par(pt,r,s.col_sigma),
-                           ssf::par(pt,r,s.col_tau), ssf::par(pt,r,s.col_lb));
+                           ssf::par(pt,r,s.col_tau), ssf::par(pt,r,s.col_lb), pos_inf(),
+                           ssf::normal_ratio(s,pt,r), ssf::shifted_exp_sigma(s,pt,r));
   }
   s.stop_exg.clear();
-  s.stop_exg.reserve(s.n_trials);
-  for (int t=0; t<s.n_trials; ++t) {
-    const int r=s.base_row[t];
-    s.stop_exg.emplace_back(ssf::par(pt,r,s.col_muS), ssf::par(pt,r,s.col_sigmaS),
-                           ssf::par(pt,r,s.col_tauS), ssf::par(pt,r,s.col_lbS));
+  s.stop_other.clear();
+  if (s.stop_family==SSStopFamily::ExGaussian) {
+    s.stop_exg.reserve(s.n_trials);
+    for (int t=0; t<s.n_trials; ++t) {
+      const int r=s.base_row[t];
+      s.stop_exg.emplace_back(ssf::par(pt,r,s.col_stop1), ssf::par(pt,r,s.col_stop2),
+                             ssf::par(pt,r,s.col_tauS), ssf::par(pt,r,s.col_lbS), pos_inf(),
+                             ssf::normal_ratio(s,pt,r), ssf::shifted_exp_sigma(s,pt,r));
+    }
+  } else {
+    s.stop_other.reserve(s.n_trials);
+    for (int t=0; t<s.n_trials; ++t) {
+      const int r=s.base_row[t];
+      s.stop_other.emplace_back(s.stop_family,ssf::par(pt,r,s.col_stop1),ssf::par(pt,r,s.col_stop2),
+                                s.col_lbS>=0 ? ssf::par(pt,r,s.col_lbS) : 0.0);
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Per-particle likelihood: fills ll_buf[trial] (compressed trials). The caller
+// checks bounds first and applies penalties, clamping, expansion and summation
+// afterwards, as for the race models. Thread-safe given a per-thread
+// SSSpec (rebind) and ParamTable.
+// ---------------------------------------------------------------------------
+inline void ss_log_likelihood(const SSSpec& s, double* ll_buf,
+                              const std::vector<int>& is_ok) {
+  ss_prepare_distributions(s);
+  const ParamTable& pt=*s.pt;
   for (int t = 0; t < s.n_trials; ++t) {
     if (!is_ok[s.base_row[t]]) continue;
     double v;
     switch (s.kind[t]) {
       case SSKind::ObsGo:
-      case SSKind::ObsStopFailGo: v = ssf::observed_go_lp(s, pt, t); break;
-      case SSKind::ObsST:         v = ssf::observed_st_lp(s, pt, t); break;
+      case SSKind::ObsStopFailGo:
+      case SSKind::ObsST:         v = ssf::response_lp(s, pt, t, s.rt[t], s.winner_local[t]); break;
       case SSKind::Withheld:      v = ssf::withheld_lp(s, pt, t); break;
       case SSKind::UpperCens:     v = ssf::upper_deadline_lp(s, pt, t); break;
-      case SSKind::LowerCens:     v = ssf::lower_censor_lp(s, pt, t, min_ll); break;
-      case SSKind::BothCens:      v = log_sum_exp(ssf::lower_censor_lp(s, pt, t, min_ll),
+      case SSKind::LowerCens:     v = ssf::lower_censor_lp(s, pt, t); break;
+      case SSKind::BothCens:      v = log_sum_exp(ssf::lower_censor_lp(s, pt, t),
                                                   ssf::upper_deadline_lp(s, pt, t)); break;
-      default:                    v = min_ll; break;
+      default:                    v = neg_inf(); break;
     }
     ll_buf[t] = v;
   }
@@ -450,11 +463,15 @@ inline Rcpp::NumericVector ss_col_or_default(const Rcpp::DataFrame& df, const ch
   return Rcpp::NumericVector(n, def);
 }
 
-inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
-                           const ParamTable& pt) {
-  using namespace Rcpp;
-  SSSpec s;
-  s.is_exg = (type == "SSEXG");
+inline void ss_set_parameter_columns(SSSpec& s, const std::string& type, const ParamTable& pt) {
+  s.is_exg = type=="SSEXG" || type=="SSLNORM" || type=="SSNORM" || type=="SSWEIBULL";
+  if (type=="SSLNORM" || type=="SSRDLNORM") s.stop_family=SSStopFamily::Lognormal;
+  else if (type=="SSNORM" || type=="SSRDNORM") s.stop_family=SSStopFamily::Normal;
+  else if (type=="SSWEIBULL" || type=="SSRDWEIBULL") s.stop_family=SSStopFamily::Weibull;
+  if (pt.name_to_base_idx.count("exg_normal_ratio"))
+    s.col_normal_ratio=pt.base_index_for("exg_normal_ratio");
+  if (pt.name_to_base_idx.count("exg_shifted_exp_sigma"))
+    s.col_shifted_exp_sigma=pt.base_index_for("exg_shifted_exp_sigma");
   if (s.is_exg) {
     s.col_mu = pt.base_index_for("mu"); s.col_sigma = pt.base_index_for("sigma");
     s.col_tau = pt.base_index_for("tau"); s.col_lb = pt.base_index_for("exg_lb");
@@ -463,9 +480,30 @@ inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
     s.col_A = pt.base_index_for("A"); s.col_t0 = pt.base_index_for("t0");
     s.col_s = pt.base_index_for("s");
   }
-  s.col_muS = pt.base_index_for("muS"); s.col_sigmaS = pt.base_index_for("sigmaS");
-  s.col_tauS = pt.base_index_for("tauS"); s.col_lbS = pt.base_index_for("exgS_lb");
-  s.col_tf = pt.base_index_for("tf"); s.col_gf = pt.base_index_for("gf");
+  switch (s.stop_family) {
+    case SSStopFamily::ExGaussian:
+      s.col_tauS=pt.base_index_for("tauS");
+      s.col_lbS=pt.base_index_for("exgS_lb");
+      [[fallthrough]];
+    case SSStopFamily::Normal:
+      s.col_stop1=pt.base_index_for("muS"); s.col_stop2=pt.base_index_for("sigmaS");
+      if (s.stop_family==SSStopFamily::Normal) s.col_lbS=pt.base_index_for("normS_lb");
+      break;
+    case SSStopFamily::Lognormal:
+      s.col_stop1=pt.base_index_for("meanlogS"); s.col_stop2=pt.base_index_for("sdlogS");
+      break;
+    case SSStopFamily::Weibull:
+      s.col_stop1=pt.base_index_for("shapeS"); s.col_stop2=pt.base_index_for("scaleS");
+      break;
+  }
+}
+
+inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
+                           const ParamTable& pt) {
+  using namespace Rcpp;
+  SSSpec s;
+  ss_set_parameter_columns(s,type,pt);
+  s.col_tf=pt.base_index_for("tf"); s.col_gf=pt.base_index_for("gf");
 
   NumericVector RT = data["rt"];
   IntegerVector R  = data["R"];
@@ -489,14 +527,16 @@ inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
   s.kind.assign(n, SSKind::Invalid);
   s.base_row.assign(n, 0); s.n_accG.assign(n, 0); s.n_accST.assign(n, 0);
   s.winner_local.assign(n, -1); s.resp_local.assign(n, -1);
-  s.rt.assign(n, 0.0); s.ssd.assign(n, 0.0); s.rt_eff.assign(n, 0.0);
+  s.rt.assign(n, 0.0); s.ssd.assign(n, 0.0);
   s.lt.assign(n, 0.0); s.lc.assign(n, 0.0); s.uc.assign(n, 0.0); s.uc_eff.assign(n, 0.0);
   s.stop_presented.assign(n, 0); s.stop_can_act.assign(n, 0);
+  s.go_rows.reserve(n_rows); s.go_offsets.resize(n);
   s.is_go.assign(n_rows, 1); s.is_st.assign(n_rows, 0);
 
   for (int t = 0; t < n; ++t) {
     const int r0 = t * na;
     s.base_row[t] = r0;
+    s.go_offsets[t] = s.go_rows.size();
     // go / stop-triggered accumulators (lI: 2 = go, 1 = ST; as in the R reference
     // the go code is the maximum code present in the trial)
     int go_code = lI[r0];
@@ -504,14 +544,13 @@ inline SSSpec make_ss_spec(const std::string& type, const Rcpp::DataFrame& data,
     for (int k = 0; k < na; ++k) {
       const bool go = (lI[r0 + k] == go_code);
       s.is_go[r0 + k] = go; s.is_st[r0 + k] = !go;
-      if (go) ++s.n_accG[t]; else ++s.n_accST[t];
+      if (go) { ++s.n_accG[t]; s.go_rows.push_back(r0+k); } else ++s.n_accST[t];
     }
     const double rt = RT[r0], ssd = SSD[r0], uc = UC[r0];
     const bool rt_ok = !NumericVector::is_na(rt) && is_finite(rt);
     s.rt[t] = rt_ok ? rt : neg_inf();
     s.ssd[t] = NumericVector::is_na(ssd) ? pos_inf() : ssd;
     s.stop_presented[t] = is_finite(s.ssd[t]);
-    s.rt_eff[t] = rt_ok ? std::max(rt - s.ssd[t], 0.0) : 0.0;
     s.lt[t] = LT[r0]; s.lc[t] = LC[r0]; s.uc[t] = uc;
     double uce = uc - s.ssd[t];
     if (!is_finite(uce) || uce <= 0.0) uce = 0.0;

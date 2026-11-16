@@ -3,6 +3,7 @@
 #endif
 
 #include <Rcpp.h>
+#include <numeric>
 #include <unordered_map>
 #include "LikelihoodContext.h"
 #include "openmp.h"
@@ -537,6 +538,38 @@ inline void c_log_likelihood_multinomial_probit(const ParamTable& pt,
   }
 }
 
+// Internal R entry point for the normal, lognormal and Weibull model$sfun callbacks,
+// using the same stop-success integral as fitting. pars contains mapped go rows
+// grouped by trial; upper is in stop-relative time, one bound or one per trial.
+// [[Rcpp::export]]
+NumericVector ss_stop_probability(NumericMatrix pars, int n_acc, std::string type,
+                                 NumericVector upper) {
+  const int n_rows=pars.nrow();
+  if (n_acc<=0 || n_rows % n_acc!=0) stop("Invalid stop-signal accumulator rows.");
+  if (n_rows==0) return NumericVector(0);
+  const int n_trials=n_rows/n_acc;
+  if (upper.size()!=1 && upper.size()!=n_trials) stop("Invalid stop integral bounds.");
+  ParamTable pt=ParamTable::from_rcpp(pars,colnames(pars));
+  SSSpec spec;
+  ss_set_parameter_columns(spec,type,pt);
+  spec.rebind(pt);
+  spec.n_rows=n_rows; spec.n_trials=n_trials; spec.n_acc=n_acc;
+  spec.base_row.resize(n_trials); spec.go_offsets.resize(n_trials);
+  spec.n_accG.assign(n_trials,n_acc); spec.ssd.resize(n_trials);
+  spec.go_rows.resize(n_rows);
+  std::iota(spec.go_rows.begin(),spec.go_rows.end(),0);
+  const int col_ssd=pt.base_index_for("SSD");
+  for (int t=0; t<n_trials; ++t) {
+    spec.base_row[t]=spec.go_offsets[t]=t*n_acc;
+    spec.ssd[t]=pt.base(t*n_acc,col_ssd);
+  }
+  ss_prepare_distributions(spec);
+  NumericVector out(n_trials);
+  for (int t=0;t<n_trials;++t)
+    out[t]=std::exp(ssf::stop_success_lp(spec,pt,t,upper[upper.size()==1 ? 0 : t]));
+  return out;
+}
+
 void c_log_likelihood_MRI_white(const ParamTable& pt,
                                 const MRISpec& spec,
                                 const std::vector<const double*>& mean_cols,
@@ -602,7 +635,7 @@ namespace emc2 {
 
 struct LikelihoodContext::Impl {
   enum Model { MRI, MRI_AR1, ORDERED_PROBIT, ORDERED_LOGIT, MULTINOMIAL_LOGIT, MULTINOMIAL_PROBIT,
-               SSEXG, SSRDEX, CDM, PSDM, PHSDM, DDM, RACE };
+               STOP_SIGNAL, CDM, PSDM, PHSDM, DDM, RACE };
 
   // Per-thread mutable state
   struct State {
@@ -724,8 +757,10 @@ struct LikelihoodContext::Impl {
         choice = make_choice_only_spec(ctx.param_table, std::string(type));
         lR_vec = data["lR"];
         lR_ptr = lR_vec.begin();
-      } else if (type == "SSEXG" || type == "SSRDEX") {
-        model = type == "SSEXG" ? SSEXG : SSRDEX;
+      } else if (type == "SSEXG" || type == "SSRDEX" ||
+                 type == "SSLNORM" || type == "SSWEIBULL" || type == "SSNORM" ||
+                 type == "SSRDLNORM" || type == "SSRDWEIBULL" || type == "SSRDNORM") {
+        model = STOP_SIGNAL;
       } else {
         rts = data["rt"];
         rts_ptr = rts.begin();
@@ -776,12 +811,13 @@ struct LikelihoodContext::Impl {
         for (int col : mri.col_means) s.mean_cols.push_back(s.pt_local.base.colptr(col));
       } else if (model == ORDERED_PROBIT || model == ORDERED_LOGIT) {
         s.cut_buf.resize(n_rows);
-      } else if (model == SSEXG || model == SSRDEX) {
+      } else if (model == STOP_SIGNAL) {
         // The SS likelihood handles missingness codes itself (deadline / lower
         // censoring / intrinsic no-response), so no CensorSpec/TruncSpec here.
         s.ss = make_ss_spec(std::string(type), data, s.pt_local);
       } else if (model == CDM || model == PSDM || model == PHSDM) {
         s.pars = NumericMatrix(n_rows, keep_indices.size());
+        colnames(s.pars) = ctx.keep_names;
         s.pars_ptr = s.pars.begin();
       } else if (model == DDM || model == RACE) {
         auto slots = race_scratch_slots(type);
@@ -854,9 +890,8 @@ struct LikelihoodContext::Impl {
     case MULTINOMIAL_PROBIT:
       c_log_likelihood_multinomial_probit(s.pt_local, choice, idx_win, n_lR, s.ll_buf.data(), s.is_ok);
       break;
-    case SSEXG:
-    case SSRDEX:
-      ss_log_likelihood(s.ss, min_ll, s.ll_buf.data(), s.is_ok);
+    case STOP_SIGNAL:
+      ss_log_likelihood(s.ss, s.ll_buf.data(), s.is_ok);
       break;
     case CDM:
     case PSDM:

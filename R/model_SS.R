@@ -11,7 +11,6 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
-#' @noRd
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -107,7 +106,7 @@ staircase_function <- function(dts,staircase) {
       Ri <- which.min(trial)
     }
     if (Ri==1) {
-      if (!is.null(accST) && length(accST) > 0) {
+      if (!is.null(accST) && length(accST) > 0 && any(is.finite(trial[accST]))) {
         st_cols <- accST
         st_finish <- trial[st_cols]
         st_idx <- st_cols[which.min(st_finish)]
@@ -177,10 +176,12 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
     idx <- which(group_id == lvl)
     if (!length(idx)) next
     spec <- specs[[lvl]]
-    spec$rules <- spec$rules %||% staircase$rules
-    spec$labels <- spec$labels %||% staircase$labels
-    stair_fun <- spec$staircase_function %||% attr(spec, "staircase_function") %||%
-      specs_fun %||% base_fun
+    if (is.null(spec$rules)) spec$rules <- staircase$rules
+    if (is.null(spec$labels)) spec$labels <- staircase$labels
+    stair_fun <- spec$staircase_function
+    if (is.null(stair_fun)) stair_fun <- attr(spec, "staircase_function")
+    if (is.null(stair_fun)) stair_fun <- specs_fun
+    if (is.null(stair_fun)) stair_fun <- base_fun
     if (length(accST) > 0) {
       spec$accST <- 1 + accST
     }
@@ -217,11 +218,22 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
 
 
 dexGaussian <- function(rt,pars)
-  # exGaussian pdf (returns normal or exponential for small tau/sigma)
+  # exGaussian pdf. Optional approximation thresholds are off by default.
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
+  shifted_exp_sigma <- if ("exg_shifted_exp_sigma" %in% colnames(pars)) {
+    pars[, "exg_shifted_exp_sigma"]
+  } else {
+    rep(0, nrow(pars))
+  }
+  normal_ratio <- if ("exg_normal_ratio" %in% colnames(pars)) {
+    pars[, "exg_normal_ratio"]
+  } else {
+    rep(0, nrow(pars))
+  }
+
+  isexp <- shifted_exp_sigma > 0 & pars[,"sigma"] < shifted_exp_sigma
   rt[isexp] <- dexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
+  isnorm <- !isexp & normal_ratio > 0 & pars[,"tau"] < normal_ratio * pars[,"sigma"]
   rt[isnorm] <- dnorm(rt[isnorm], mean = pars[isnorm,"mu"],
                       sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
@@ -238,11 +250,22 @@ dexGaussian <- function(rt,pars)
 }
 
 pexGaussian <- function(rt,pars)
-  # exGaussian cdf (returns normal or exponential for small tau/sigma)
+  # exGaussian cdf. Optional approximation thresholds are off by default.
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
+  shifted_exp_sigma <- if ("exg_shifted_exp_sigma" %in% colnames(pars)) {
+    pars[, "exg_shifted_exp_sigma"]
+  } else {
+    rep(0, nrow(pars))
+  }
+  normal_ratio <- if ("exg_normal_ratio" %in% colnames(pars)) {
+    pars[, "exg_normal_ratio"]
+  } else {
+    rep(0, nrow(pars))
+  }
+
+  isexp <- shifted_exp_sigma > 0 & pars[,"sigma"] < shifted_exp_sigma
   rt[isexp] <- pexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
+  isnorm <- !isexp & normal_ratio > 0 & pars[,"tau"] < normal_ratio * pars[,"sigma"]
   rt[isnorm] <- pnorm(rt[isnorm], mean = pars[isnorm,"mu"],
                       sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
@@ -332,6 +355,678 @@ ptexGaussianS <- function(rt,pars)
   ptexGaussian(rt,pars)
 }
 
+validate_exgaussian_approximation <- function(exgaussian_approximation) {
+  if (is.null(exgaussian_approximation)) {
+    return(c(exg_normal_ratio = 0, exg_shifted_exp_sigma = 0))
+  }
+  if (!is.list(exgaussian_approximation)) {
+    stop("`exgaussian_approximation` must be NULL or a list.", call. = FALSE)
+  }
+
+  valid_names <- c("normal_ratio", "shifted_exponential_sigma")
+  unknown <- setdiff(names(exgaussian_approximation), valid_names)
+  if (length(unknown)) {
+    stop(
+      "Unknown `exgaussian_approximation` field(s): ",
+      paste(unknown, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  get_threshold <- function(name) {
+    value <- exgaussian_approximation[[name]]
+    if (is.null(value)) return(0)
+    if (!is.numeric(value) || length(value) != 1L || is.na(value) || value < 0) {
+      stop(
+        "`exgaussian_approximation$", name,
+        "` must be NULL or a non-negative numeric scalar.",
+        call. = FALSE
+      )
+    }
+    as.numeric(value)
+  }
+
+  normal_ratio <- get_threshold("normal_ratio")
+  shifted_exponential_sigma <- get_threshold("shifted_exponential_sigma")
+
+  c(
+    exg_normal_ratio = normal_ratio,
+    exg_shifted_exp_sigma = shifted_exponential_sigma
+  )
+}
+
+
+#### Stop Single Lognormal ----
+dlnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::dlnorm(
+    st[ok],
+    meanlog = pars[ok, "meanlogS"],
+    sdlog = pars[ok, "sdlogS"]
+  )
+  out
+}
+
+
+plnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  out[is.infinite(st) & st > 0] <- 1
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::plnorm(
+    st[ok],
+    meanlog = pars[ok, "meanlogS"],
+    sdlog = pars[ok, "sdlogS"]
+  )
+  out
+}
+
+
+ss_lnormal_stop_spec <- function() {
+  list(
+    family = "lognormal",
+    name = "lognormal",
+    parameters = c("meanlogS", "sdlogS"),
+    p_types = c(meanlogS = log(.3), sdlogS = log(.25)),
+    transform = c(meanlogS = "identity", sdlogS = "exp"),
+    minmax = cbind(meanlogS = c(-Inf, Inf), sdlogS = c(1e-4, 3)),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c("meanlogS", "sdlogS", "SSD"), drop = FALSE]
+      dlnormalS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c("meanlogS", "sdlogS", "SSD"), drop = FALSE]
+      plnormalS(rt, parsS)
+    },
+    rfun = function(n, stop_pars) {
+      stats::rlnorm(n, meanlog = stop_pars[, "meanlogS"], sdlog = stop_pars[, "sdlogS"])
+    },
+    mean = function(pars) {
+      exp(pars[, "meanlogS"] + pars[, "sdlogS"]^2 / 2)
+    },
+    sd = function(pars) {
+      sqrt((exp(pars[, "sdlogS"]^2) - 1) *
+             exp(2 * pars[, "meanlogS"] + pars[, "sdlogS"]^2))
+    }
+  )
+}
+
+
+#### Stop Single Normal ----
+dtnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  lb <- pars[, "normS_lb"]
+  ok <- (st > lb) & is.finite(st) & pars[, "sigmaS"] > 0
+  ok[is.na(ok)] <- FALSE
+  if (any(ok)) {
+    normalizer <- stats::pnorm(
+      lb[ok],
+      mean = pars[ok, "muS"],
+      sd = pars[ok, "sigmaS"],
+      lower.tail = FALSE
+    )
+    out[ok] <- stats::dnorm(
+      st[ok],
+      mean = pars[ok, "muS"],
+      sd = pars[ok, "sigmaS"]
+    ) / normalizer
+  }
+  out
+}
+
+
+ptnormalS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  lb <- pars[, "normS_lb"]
+  out[is.infinite(st) & st > 0] <- 1
+  ok <- (st > lb) & is.finite(st) & pars[, "sigmaS"] > 0
+  ok[is.na(ok)] <- FALSE
+  if (any(ok)) {
+    lower <- stats::pnorm(lb[ok], mean = pars[ok, "muS"], sd = pars[ok, "sigmaS"])
+    upper <- stats::pnorm(st[ok], mean = pars[ok, "muS"], sd = pars[ok, "sigmaS"])
+    out[ok] <- (upper - lower) / (1 - lower)
+  }
+  pmin(pmax(out, 0), 1)
+}
+
+
+ss_normal_lower_truncated_moments <- function(mu, sigma, lb) {
+  n <- max(length(mu), length(sigma), length(lb))
+  mu <- rep(mu, length.out = n)
+  sigma <- rep(sigma, length.out = n)
+  lb <- rep(lb, length.out = n)
+
+  alpha <- (lb - mu) / sigma
+  normalizer <- stats::pnorm(alpha, lower.tail = FALSE)
+  lambda <- stats::dnorm(alpha) / normalizer
+  mean <- mu + sigma * lambda
+  variance <- sigma^2 * (1 + alpha * lambda - lambda^2)
+
+  data.frame(
+    mean = mean,
+    sd = sqrt(pmax(variance, 0)),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+ss_normal_stop_spec <- function() {
+  list(
+    family = "normal",
+    name = "normal",
+    parameters = c("muS", "sigmaS"),
+    p_types = c(muS = log(.25), sigmaS = log(.05)),
+    transform = c(muS = "exp", sigmaS = "exp"),
+    minmax = cbind(muS = c(0, Inf), sigmaS = c(1e-4, Inf)),
+    tail_p_types = c(normS_lb = 0),
+    tail_transform = c(normS_lb = "identity"),
+    tail_minmax = cbind(normS_lb = c(-Inf, Inf)),
+    tail_exception = c(normS_lb = -Inf),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c("muS", "sigmaS", "SSD", "normS_lb"), drop = FALSE]
+      dtnormalS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c("muS", "sigmaS", "SSD", "normS_lb"), drop = FALSE]
+      ptnormalS(rt, parsS)
+    },
+    rfun = function(n, stop_pars) {
+      lower_p <- stats::pnorm(
+        stop_pars[, "normS_lb"],
+        mean = stop_pars[, "muS"],
+        sd = stop_pars[, "sigmaS"]
+      )
+      stats::qnorm(
+        stats::runif(n, lower_p, 1),
+        mean = stop_pars[, "muS"],
+        sd = stop_pars[, "sigmaS"]
+      )
+    },
+    mean = function(pars) {
+      moments <- ss_normal_lower_truncated_moments(
+        pars[, "muS"], pars[, "sigmaS"], pars[, "normS_lb"]
+      )
+      moments$mean
+    },
+    sd = function(pars) {
+      moments <- ss_normal_lower_truncated_moments(
+        pars[, "muS"], pars[, "sigmaS"], pars[, "normS_lb"]
+      )
+      moments$sd
+    }
+  )
+}
+
+
+#### Stop Single Weibull ----
+dweibullS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::dweibull(
+    st[ok],
+    shape = pars[ok, "shapeS"],
+    scale = pars[ok, "scaleS"]
+  )
+  out
+}
+
+
+pweibullS <- function(rt, pars)
+{
+  st <- rt - pars[, "SSD"]
+  out <- numeric(length(st))
+  out[is.infinite(st) & st > 0] <- 1
+  ok <- (st > 0) & is.finite(st)
+  ok[is.na(ok)] <- FALSE
+  out[ok] <- stats::pweibull(
+    st[ok],
+    shape = pars[ok, "shapeS"],
+    scale = pars[ok, "scaleS"]
+  )
+  out
+}
+
+
+ss_weibull_stop_spec <- function() {
+  list(
+    family = "weibull",
+    name = "weibull",
+    parameters = c("shapeS", "scaleS"),
+    p_types = c(shapeS = log(2), scaleS = log(.25)),
+    transform = c(shapeS = "exp", scaleS = "exp"),
+    minmax = cbind(shapeS = c(1e-4, Inf), scaleS = c(1e-4, Inf)),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c("shapeS", "scaleS", "SSD"), drop = FALSE]
+      dweibullS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c("shapeS", "scaleS", "SSD"), drop = FALSE]
+      pweibullS(rt, parsS)
+    },
+    rfun = function(n, stop_pars) {
+      stats::rweibull(n, shape = stop_pars[, "shapeS"], scale = stop_pars[, "scaleS"])
+    },
+    mean = function(pars) {
+      pars[, "scaleS"] * gamma(1 + 1 / pars[, "shapeS"])
+    },
+    sd = function(pars) {
+      pars[, "scaleS"] *
+        sqrt(gamma(1 + 2 / pars[, "shapeS"]) -
+               gamma(1 + 1 / pars[, "shapeS"])^2)
+    }
+  )
+}
+
+
+ss_exgaussian_stop_spec <- function(exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
+  list(
+    family = "exgaussian",
+    name = "exgaussian",
+    parameters = c("muS", "sigmaS", "tauS"),
+    p_types = c(muS = log(.3), sigmaS = log(.025), tauS = log(.05)),
+    transform = c(muS = "exp", sigmaS = "exp", tauS = "exp"),
+    minmax = cbind(muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf)),
+    tail_p_types = c(exgS_lb = 0),
+    tail_transform = c(exgS_lb = "identity"),
+    tail_minmax = cbind(exgS_lb = c(-Inf, Inf)),
+    tail_exception = c(exgS_lb = -Inf),
+    dfun = function(rt, pars) {
+      parsS <- pars[, c(
+        "muS", "sigmaS", "tauS", "SSD", "exgS_lb",
+        "exg_normal_ratio", "exg_shifted_exp_sigma"
+      ), drop = FALSE]
+      dtexGaussianS(rt, parsS)
+    },
+    pfun = function(rt, pars) {
+      parsS <- pars[, c(
+        "muS", "sigmaS", "tauS", "SSD", "exgS_lb",
+        "exg_normal_ratio", "exg_shifted_exp_sigma"
+      ), drop = FALSE]
+      ptexGaussianS(rt, parsS)
+    },
+    approximation_p_types = exg_approximation,
+    approximation_transform = c(
+      exg_normal_ratio = "identity",
+      exg_shifted_exp_sigma = "identity"
+    ),
+    approximation_minmax = cbind(
+      exg_normal_ratio = c(0, Inf),
+      exg_shifted_exp_sigma = c(0, Inf)
+    ),
+    approximation_exception = c(
+      exg_normal_ratio = 0,
+      exg_shifted_exp_sigma = 0
+    ),
+    rfun = NULL,
+    mean = function(pars) {
+      pars[, "muS"] + pars[, "tauS"]
+    },
+    sd = function(pars) {
+      sqrt(pars[, "sigmaS"]^2 + pars[, "tauS"]^2)
+    }
+  )
+}
+
+
+ss_stop_spec <- function(stop, exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
+  stop <- match.arg(stop, c("exgaussian", "lognormal", "weibull", "normal"))
+  switch(
+    stop,
+    exgaussian = ss_exgaussian_stop_spec(exg_approximation),
+    lognormal = ss_lnormal_stop_spec(),
+    weibull = ss_weibull_stop_spec(),
+    normal = ss_normal_stop_spec()
+  )
+}
+
+
+ss_go_spec <- function(go, exg_approximation = c(
+  exg_normal_ratio = 0,
+  exg_shifted_exp_sigma = 0
+)) {
+  go <- match.arg(go, c("exgaussian", "racing_diffusion"))
+  switch(
+    go,
+    exgaussian = list(
+      family = "exgaussian",
+      name = "exgaussian",
+      parameters = c("mu", "sigma", "tau"),
+      p_types = c(mu = log(.4), sigma = log(.05), tau = log(.1)),
+      transform = c(mu = "exp", sigma = "exp", tau = "exp"),
+      minmax = cbind(mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf)),
+      tail_transform = c(exg_lb = "identity"),
+      tail_minmax = cbind(exg_lb = c(-Inf, Inf)),
+      tail_exception = c(exg_lb = -Inf),
+      approximation_p_types = exg_approximation,
+      approximation_transform = c(
+        exg_normal_ratio = "identity",
+        exg_shifted_exp_sigma = "identity"
+      ),
+      approximation_minmax = cbind(
+        exg_normal_ratio = c(0, Inf),
+        exg_shifted_exp_sigma = c(0, Inf)
+      ),
+      approximation_exception = c(
+        exg_normal_ratio = 0,
+        exg_shifted_exp_sigma = 0
+      ),
+      dfun = function(rt, pars) dtexGaussianG(rt, pars),
+      pfun = function(rt, pars) ptexGaussianG(rt, pars)
+    ),
+    racing_diffusion = list(
+      family = "racing_diffusion",
+      name = "racing_diffusion",
+      parameters = c("v", "B", "A", "t0", "s"),
+      p_types = c(v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1)),
+      transform = c(v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp"),
+      minmax = cbind(
+        v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf),
+        t0 = c(0.05, Inf), s = c(0, Inf)
+      ),
+      exception = c(v = 0, A = 0),
+      dfun = function(rt, pars) dRDM(rt, pars),
+      pfun = function(rt, pars) pRDM(rt, pars)
+    )
+  )
+}
+
+
+ss_model_c_name <- function(go_spec, stop_spec) {
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "exgaussian")) {
+    return("SSEXG")
+  }
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "lognormal")) {
+    return("SSLNORM")
+  }
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "weibull")) {
+    return("SSWEIBULL")
+  }
+  if (identical(go_spec$family, "exgaussian") &&
+      identical(stop_spec$family, "normal")) {
+    return("SSNORM")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "exgaussian")) {
+    return("SSRDEX")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "lognormal")) {
+    return("SSRDLNORM")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "weibull")) {
+    return("SSRDWEIBULL")
+  }
+  if (identical(go_spec$family, "racing_diffusion") &&
+      identical(stop_spec$family, "normal")) {
+    return("SSRDNORM")
+  }
+  NULL
+}
+
+
+ss_model_ttransform <- function(go_spec, model_label) {
+  force(go_spec)
+  force(model_label)
+  function(pars, dadm) {
+    if (is.null(dadm$SSD)) {
+      stop(model_label, " requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
+    }
+    if (is.null(dadm$lI)) {
+      dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
+    }
+    if (identical(go_spec$family, "racing_diffusion")) {
+      pars <- cbind(pars, b = pars[, "B"] + pars[, "A"])
+    }
+    pars <- cbind(pars, SSD = dadm$SSD)
+    pars <- cbind(pars, lI = as.numeric(dadm$lI))
+    pars
+  }
+}
+
+
+ss_model_sfun <- function(go_spec, stop_spec) {
+  if (identical(stop_spec$family, "exgaussian")) {
+    if (identical(go_spec$family, "exgaussian")) {
+      return(function(pars, n_acc, upper = Inf) pstopTEXG(pars, n_acc, upper = upper))
+    }
+    return(function(pars, n_acc, upper = Inf) pstopHybrid(pars, n_acc, upper = upper))
+  }
+  type <- ss_model_c_name(go_spec, stop_spec)
+  function(pars, n_acc, upper = Inf) ss_stop_probability(pars, n_acc, type, upper)
+}
+
+
+ss_model_rfun <- function(go_spec, stop_spec) {
+  force(go_spec)
+  force(stop_spec)
+  if (identical(go_spec$family, "exgaussian")) {
+    switch(
+      stop_spec$family,
+      exgaussian = function(data = NULL, pars) rSSexGaussian(data, pars, ok = attr(pars, "ok")),
+      lognormal = function(data = NULL, pars) rSSexGaussianLNormal(data, pars, ok = attr(pars, "ok")),
+      weibull = function(data = NULL, pars) rSSexGaussianWeibull(data, pars, ok = attr(pars, "ok")),
+      normal = function(data = NULL, pars) rSSexGaussianNormal(data, pars, ok = attr(pars, "ok"))
+    )
+  } else {
+    switch(
+      stop_spec$family,
+      exgaussian = function(data = NULL, pars) rSShybrid(data, pars, ok = attr(pars, "ok")),
+      lognormal = function(data = NULL, pars) rSShybridLNormal(data, pars, ok = attr(pars, "ok")),
+      weibull = function(data = NULL, pars) rSShybridWeibull(data, pars, ok = attr(pars, "ok")),
+      normal = function(data = NULL, pars) rSShybridNormal(data, pars, ok = attr(pars, "ok"))
+    )
+  }
+}
+
+
+make_stop_signal_model <- function(go_spec, stop_spec, model_label = "stop_signal") {
+  go_tail_default <- NULL
+  if (identical(go_spec$family, "exgaussian")) {
+    go_tail_default <- c(exg_lb = 0)
+  }
+  approximation_p_types <- NULL
+  approximation_transform <- NULL
+  approximation_minmax <- NULL
+  approximation_exception <- NULL
+  if (identical(go_spec$family, "exgaussian")) {
+    approximation_p_types <- go_spec$approximation_p_types
+    approximation_transform <- go_spec$approximation_transform
+    approximation_minmax <- go_spec$approximation_minmax
+    approximation_exception <- go_spec$approximation_exception
+  } else if (identical(stop_spec$family, "exgaussian")) {
+    approximation_p_types <- stop_spec$approximation_p_types
+    approximation_transform <- stop_spec$approximation_transform
+    approximation_minmax <- stop_spec$approximation_minmax
+    approximation_exception <- stop_spec$approximation_exception
+  }
+
+  p_types <- c(
+    go_spec$p_types,
+    stop_spec$p_types,
+    tf = qnorm(0), gf = qnorm(0),
+    go_tail_default,
+    stop_spec$tail_p_types,
+    approximation_p_types
+  )
+  transform <- c(
+    go_spec$transform,
+    stop_spec$transform,
+    tf = "pnorm", gf = "pnorm",
+    go_spec$tail_transform,
+    stop_spec$tail_transform,
+    approximation_transform
+  )
+  minmax <- do.call(cbind, Filter(Negate(is.null), list(
+    go_spec$minmax,
+    stop_spec$minmax,
+    cbind(tf = c(.001, .999), gf = c(.001, .999)),
+    go_spec$tail_minmax,
+    stop_spec$tail_minmax,
+    approximation_minmax
+  )))
+  exception <- c(
+    go_spec$exception,
+    tf = 0, gf = 0,
+    go_spec$tail_exception,
+    stop_spec$tail_exception,
+    approximation_exception
+  )
+
+  list(
+    type = "RACE",
+    c_name = ss_model_c_name(go_spec, stop_spec),
+    p_types = p_types,
+    transform = list(func = transform),
+    bound = list(minmax = minmax, exception = exception),
+    Ttransform = ss_model_ttransform(go_spec, model_label),
+    dfunG = go_spec$dfun,
+    pfunG = go_spec$pfun,
+    dfunS = stop_spec$dfun,
+    pfunS = stop_spec$pfun,
+    sfun = ss_model_sfun(go_spec, stop_spec),
+    rfun = ss_model_rfun(go_spec, stop_spec),
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
+    },
+    ss_info = list(
+      go_family = go_spec$family,
+      stop_family = stop_spec$family,
+      go_parameters = go_spec$parameters,
+      stop_parameters = stop_spec$parameters,
+      stop_mean = stop_spec$mean,
+      stop_sd = stop_spec$sd,
+      exgaussian_approximation = approximation_p_types
+    )
+  )
+}
+
+
+#' Stop-signal race model
+#'
+#' Creates a stop-signal race model by combining a go runner with a stop runner.
+#'
+#' @param go Character string. Go-runner family: `"exgaussian"` or
+#'   `"racing_diffusion"`. The default is `"exgaussian"`.
+#' @param stop Character string. Stop-runner family: `"exgaussian"`,
+#'   `"lognormal"`, `"weibull"`, or `"normal"`. The default is `"exgaussian"`.
+#' @param exgaussian_approximation Optional list controlling legacy
+#'   ex-Gaussian approximations. The default `NULL` disables these
+#'   approximations. Use `list(normal_ratio = .05)` to evaluate the
+#'   ex-Gaussian density and CDF with a normal approximation when
+#'   `tau < normal_ratio * sigma`, and
+#'   `list(shifted_exponential_sigma = 1e-5)` to use a shifted-exponential
+#'   approximation when `sigma < shifted_exponential_sigma`. These controls are
+#'   intended for compatibility and sensitivity checks.
+#'
+#' @details
+#'
+#' The default model is `stop_signal(go = "exgaussian", stop = "exgaussian")`,
+#' which is equivalent to `SSEXG()`. The hybrid racing-diffusion /
+#' ex-Gaussian model `stop_signal(go = "racing_diffusion",
+#' stop = "exgaussian")` is equivalent to `SSRDEX()`.
+#'
+#' A stop-signal model is represented as a race between stochastic finishing
+#' times. On go trials, only the go runner is triggered. On stop trials, the go
+#' runner is triggered by the choice stimulus and the stop runner is triggered
+#' after the stop-signal delay. If the stop runner finishes before the go runner,
+#' the response is inhibited; otherwise a response is observed. The go runner
+#' family controls the finish-time distribution for response execution. The
+#' stop runner family controls the finish-time distribution for response
+#' inhibition.
+#'
+#' The go runner can be:
+#'
+#' | **Family** | **Parameters** | **Interpretation** |
+#' |-----------|----------------|--------------------|
+#' | `"exgaussian"` | `mu`, `sigma`, `tau`, `exg_lb` | Descriptive ex-Gaussian go finish-time distribution. `mu` is the mean of the Gaussian component, `sigma` is the standard deviation of the Gaussian component, `tau` is the mean of the exponential component, and `exg_lb` is the lower bound used for truncation. See `SSEXG()` for the full parameter description. |
+#' | `"racing_diffusion"` | `v`, `B`, `A`, `t0`, `s` | Racing-diffusion go process. `v` is the evidence-accumulation rate, `A` is between-trial variation in start point, `B` is the distance from `A` to the response threshold, `t0` is non-decision time, and `s` is within-trial drift-rate standard deviation. See `SSRDEX()` for the full parameter description. |
+#'
+#' The stop runner can be:
+#'
+#' In the mean formulas below, parameters refer to their mapped values, after
+#' applying the model transformations. For example, `sdlogS` denotes the
+#' standard deviation of log finishing times, rather than the logarithm of
+#' that standard deviation.
+#'
+#' | **Family** | **Parameters** | **Interpretation** |
+#' |-----------|----------------|--------------------|
+#' | `"exgaussian"` | `muS`, `sigmaS`, `tauS`, `exgS_lb` | Descriptive ex-Gaussian stop finish-time distribution. `muS` is the mean of the Gaussian component, `sigmaS` is the standard deviation of the Gaussian component, `tauS` is the mean of the exponential component, and `exgS_lb` is the lower bound used for truncation. See `SSEXG()` and `SSRDEX()` for the ex-Gaussian stop-parameter description. |
+#' | `"lognormal"` | `meanlogS`, `sdlogS` | Lognormal stop finish-time distribution. `meanlogS` is the mean of the associated normal distribution on the log-seconds scale. `sdlogS` is the standard deviation of the associated normal distribution on the log-seconds scale. It is estimated on the log scale and mapped with `exp`. The mapped lognormal standard deviation is bounded above at `3` as a numerical guardrail. The stop mean is `exp(meanlogS + sdlogS^2 / 2)`. |
+#' | `"weibull"` | `shapeS`, `scaleS` | Weibull stop finish-time distribution. `shapeS` and `scaleS` are estimated on the log scale and mapped with `exp`. `shapeS` controls the shape of the hazard and distribution skew; `scaleS` controls the time scale. The stop mean is `scaleS * gamma(1 + 1 / shapeS)`. |
+#' | `"normal"` | `muS`, `sigmaS`, `normS_lb` | Lower-truncated normal stop finish-time distribution. `muS` and `sigmaS` are estimated on the log scale and mapped with `exp`. `muS` is the location of the underlying normal distribution, `sigmaS` is its standard deviation, and `normS_lb` is the lower truncation point. The default lower bound is `0`, so generated stop finishing times are non-negative. |
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
+#'
+#' All stop-signal models include `tf` and `gf`. `tf` is the attentional lapse
+#' rate for the stop process ("trigger failure") and `gf` is the attentional
+#' lapse rate for the go process ("go failure"). Both are estimated on the
+#' probit scale and transformed to probabilities.
+#'
+#' Default values are used for parameters that are not explicitly listed in the
+#' `formula` argument of [design()]. They can be inspected with, for example,
+#' `stop_signal()$p_types`, `stop_signal(stop = "lognormal")$p_types`, or
+#' `stop_signal(go = "racing_diffusion", stop = "weibull")$p_types`.
+#'
+#' @return A model list with all the necessary functions to sample.
+stop_signal <- function(
+    go = c("exgaussian", "racing_diffusion"),
+    stop = c("exgaussian", "lognormal", "weibull", "normal"),
+    exgaussian_approximation = NULL
+) {
+  go <- match.arg(go)
+  stop <- match.arg(stop)
+  exg_approximation <- validate_exgaussian_approximation(exgaussian_approximation)
+  has_exgaussian <- identical(go, "exgaussian") || identical(stop, "exgaussian")
+  if (!has_exgaussian && any(exg_approximation > 0)) {
+    warning(
+      "`exgaussian_approximation` was supplied, but this stop-signal model ",
+      "does not contain an ex-Gaussian runner; the settings will have no effect.",
+      call. = FALSE
+    )
+  }
+  if (has_exgaussian && exg_approximation["exg_normal_ratio"] > 0) {
+    warning(
+      "Using the ex-Gaussian normal approximation for tau < ",
+      as.numeric(exg_approximation["exg_normal_ratio"]),
+      " * sigma. This changes the ex-Gaussian likelihood and is intended ",
+      "only for compatibility or sensitivity checks.",
+      call. = FALSE
+    )
+  }
+  make_stop_signal_model(
+    ss_go_spec(go, exg_approximation),
+    ss_stop_spec(stop, exg_approximation),
+    model_label = sprintf("stop_signal(go = \"%s\", stop = \"%s\")", go, stop)
+  )
+}
+
 
 #### ExG Race function ----
 
@@ -410,7 +1105,8 @@ rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
 
 #### EXG Stop signal random -----
 
-rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
+rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]),
+                          stop_sampler = NULL)
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars must contain an SSD column and an lI column indicating if an
   # accumulator is triggered by the stop signal (ST = stop-triggered).
@@ -480,12 +1176,19 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   isTS[isStrial][isT] <- TRUE
   ns <- sum(isTS)
 
-  # Fill in stop accumulators (apply lower bound exgS_lb)
-  if (any(isTS)) dt[1, isTS] <- rtexG(
-    ns,
-    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
-    lb = pars[is1, "exgS_lb"][isTS]
-  )
+  # Fill in stop accumulators
+  if (any(isTS)) {
+    stop_pars <- pars[is1,,drop=FALSE][isTS,,drop=FALSE]
+    if (is.null(stop_sampler)) {
+      dt[1, isTS] <- rtexG(
+        ns,
+        mu = stop_pars[, "muS"], sigma = stop_pars[, "sigmaS"], tau = stop_pars[, "tauS"],
+        lb = stop_pars[, "exgS_lb"]
+      )
+    } else {
+      dt[1, isTS] <- stop_sampler(ns, stop_pars)
+    }
+  }
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
@@ -609,10 +1312,40 @@ my.integrate <- function(..., upper = Inf, big = 10) {
   return(out$value)
 }
 
+stopfn_texg_r <- function(
+    t, mu, sigma, tau, lb, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
+  out <- rep(1, length(t))
+  for (i in seq_along(mu)) {
+    pars_i <- cbind(
+      mu = rep(mu[i], length(t)),
+      sigma = rep(sigma[i], length(t)),
+      tau = rep(tau[i], length(t)),
+      exg_lb = rep(lb[i], length(t)),
+      exg_normal_ratio = rep(exg_normal_ratio[i], length(t)),
+      exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma[i], length(t))
+    )
+    if (i == 1L) {
+      out <- out * dtexGaussian(t, pars_i)
+    } else {
+      out <- out * (1 - ptexGaussian(t + SSD, pars_i))
+    }
+  }
+  out
+}
+
 pstopTEXG <- function(
     parstop, n_acc, upper=Inf,
-    gpars=c("mu","sigma","tau","exg_lb"), spars=c("muS","sigmaS","tauS","exgS_lb")
+    gpars = c("mu", "sigma", "tau", "exg_lb", "exg_normal_ratio", "exg_shifted_exp_sigma"),
+    spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
+  # Missing optional thresholds leave the approximations disabled.
+  missing <- setdiff(c("exg_normal_ratio", "exg_shifted_exp_sigma"), colnames(parstop))
+  if (length(missing)) {
+    parstop <- cbind(parstop, matrix(0, nrow(parstop), length(missing),
+                                    dimnames = list(NULL, missing)))
+  }
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
@@ -628,13 +1361,44 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
+    my.integrate(f=stopfn_texg_r,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                  mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                  sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                  tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
-                 lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]))
+                 lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]),
+                 exg_normal_ratio=c(ps[i,"exg_normal_ratio"],pgo[,i,"exg_normal_ratio"]),
+                 exg_shifted_exp_sigma=c(
+                   ps[i,"exg_shifted_exp_sigma"],pgo[,i,"exg_shifted_exp_sigma"]
+                 ))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
+}
+
+
+rSSexGaussianLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_lnormal_stop_spec()
+  rSSexGaussian(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+rSSexGaussianNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_normal_stop_spec()
+  rSSexGaussian(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+rSSexGaussianWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_weibull_stop_spec()
+  rSSexGaussian(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
 }
 
 
@@ -643,6 +1407,8 @@ pstopTEXG <- function(
 #' Model file to estimate the ex-Gaussian race model of stop signal task data in EMC2.
 #'
 #' Model files are almost exclusively used in `design()`.
+#'
+#' @inheritParams stop_signal
 #'
 #' @details
 #'
@@ -659,8 +1425,8 @@ pstopTEXG <- function(
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
-#' | *exg_lb*      | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian go finish time distribution           |
-#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
+#' | *exg_lb*      | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian go finish time distribution           |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
 #' Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
@@ -685,12 +1451,18 @@ pstopTEXG <- function(
 #' Lastly, attentional lapse rate parameters for the stop process and go process, termed "trigger failure" (`tf`) and "go failure" (`gf`) respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
 #'
 #' Note that the ex-Gaussian parameters `mu`, `sigma`, and `tau` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
-#' Inference is typically based on the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
-#' The mean of the ex-Gaussian stop process finish time distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+#' Inference is typically based on the mean of the ex-Gaussian distribution. For an untruncated go distribution, this is `mu + tau`, using parameters on their natural scale.
+#' The mean of the stop process finish time distribution is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters `exg_lb` and `exgS_lb`, respectively.
-#' The default values for these lower bounds are `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+#' The default value of `exg_lb` is also `0`.
 #' If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both `exg_lb` and `exgS_lb` should be set to `-Inf`, using the `constants` argument of the [design()] function.
 #'
 #' @references
@@ -721,76 +1493,11 @@ pstopTEXG <- function(
 #' Verbruggen, F., Aron, A. R., Band, G. P., Beste, C., Bissett, P. G., Brockett, A. T., ... & Boehler, C. N. (2019). A consensus guide to capturing the ability to inhibit actions and impulsive behaviors in the stop-signal task. *elife*, *8*, e46323. \doi{10.7554/eLife.46323}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @noRd
-SSEXG <- function() {
-  list(
-    type = "RACE",
-    c_name = "SSEXG",
-    p_types = c(
-      mu = log(.4), sigma = log(.05), tau = log(.1),
-      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
-      tf = qnorm(0), gf = qnorm(0),
-      exg_lb = .05, exgS_lb = .05
-    ),
-    transform = list(
-      func = c(
-        mu = "exp", sigma = "exp", tau = "exp",
-        muS = "exp", sigmaS = "exp", tauS = "exp",
-        tf = "pnorm", gf = "pnorm",
-        exg_lb = "identity", exgS_lb = "identity"
-      )
-    ),
-    bound = list(
-      minmax = cbind(
-        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
-        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
-        tf = c(.001, .999), gf = c(.001, .999),
-        exg_lb = c(-Inf, Inf), exgS_lb = c(-Inf, Inf)
-      ),
-      exception = c(
-        tf = 0, gf = 0,
-        exg_lb = -Inf, exgS_lb = -Inf
-      )
-    ),
-    # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      if (is.null(dadm$SSD)) {
-        stop("SSEXG requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
-      }
-      if (is.null(dadm$lI)) {
-        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
-      }
-      pars <- cbind(pars, SSD = dadm$SSD)
-      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
-      return(pars)
-    },
-    # Density function (PDF) for single go racer
-    dfunG = function(rt, pars) return(dtexGaussianG(rt, pars)),
-    # Probability function (CDF) for single go racer
-    pfunG = function(rt, pars) return(ptexGaussianG(rt, pars)),
-    # Density function (PDF) for single stop racer
-    dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
-      return(dtexGaussianS(rt, parsS))
-    },
-    # Probability function (CDF) for single stop racer
-    pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
-      return(ptexGaussianS(rt, parsS))
-    },
-    # Stop probability integral
-    sfun = function(pars, n_acc, upper = Inf) {
-      return(pstopTEXG(pars, n_acc, upper = upper))
-    },
-    # Random function for SS race
-    # TODO
-    rfun = function(data = NULL, pars) {
-      return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
-    },
-    # Race likelihood combining pfun and dfun
-    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
-    }
+SSEXG <- function(exgaussian_approximation = NULL) {
+  stop_signal(
+    go = "exgaussian",
+    stop = "exgaussian",
+    exgaussian_approximation = exgaussian_approximation
   )
 }
 
@@ -798,7 +1505,8 @@ SSEXG <- function() {
 #####################  RDEX ----
 
 #### RDEX SS random ----
-rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
+rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]),
+                      stop_sampler = NULL)
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars must contain an SSD column and an lI column indicating if an
   # accumulator is triggered by the stop signal (ST = stop-triggered).
@@ -858,12 +1566,19 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   isTS[isStrial][isT] <- TRUE
   ns <- sum(isTS)
 
-  # Fill in stop accumulators (apply lower bound exgS_lb)
-  if (any(isTS)) dt[1, isTS] <- rtexG(
-    ns,
-    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
-    lb = pars[is1, "exgS_lb"][isTS]
-  )
+  # Fill in stop accumulators
+  if (any(isTS)) {
+    stop_pars <- pars[is1,,drop=FALSE][isTS,,drop=FALSE]
+    if (is.null(stop_sampler)) {
+      dt[1, isTS] <- rtexG(
+        ns,
+        mu = stop_pars[, "muS"], sigma = stop_pars[, "sigmaS"], tau = stop_pars[, "tauS"],
+        lb = stop_pars[, "exgS_lb"]
+      )
+    } else {
+      dt[1, isTS] <- stop_sampler(ns, stop_pars)
+    }
+  }
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
@@ -970,11 +1685,36 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 # pWald_RDEX
 # stopfn_rdex
 
+stopfn_rdex_r <- function(
+    t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD,
+    exg_normal_ratio = 0, exg_shifted_exp_sigma = 0
+) {
+  pars <- cbind(
+    mu = rep(mu, length(t)),
+    sigma = rep(sigma, length(t)),
+    tau = rep(tau, length(t)),
+    exg_lb = rep(lb, length(t)),
+    exg_normal_ratio = rep(exg_normal_ratio, length(t)),
+    exg_shifted_exp_sigma = rep(exg_shifted_exp_sigma, length(t))
+  )
+  out <- dtexGaussian(t, pars)
+  for (i in seq_len(n_acc)) {
+    out <- out * (1 - pWald_RDEX(t + SSD, v[i], B[i], A[i], t0[i], s[i]))
+  }
+  out
+}
 
 pstopHybrid <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "tauS", "exgS_lb")
+    gpars = c("v", "B", "A", "t0", "s"),
+    spars = c("muS", "sigmaS", "tauS", "exgS_lb", "exg_normal_ratio", "exg_shifted_exp_sigma")
 ) {
+  # Missing optional thresholds leave the approximations disabled.
+  missing <- setdiff(c("exg_normal_ratio", "exg_shifted_exp_sigma"), colnames(parstop))
+  if (length(missing)) {
+    parstop <- cbind(parstop, matrix(0, nrow(parstop), length(missing),
+                                    dimnames = list(NULL, missing)))
+  }
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
@@ -989,15 +1729,44 @@ pstopHybrid <- function(
   ups <- sapply(which(uniq),function(i){
     my.integrate(
       # args passed to `my.integrate`
-      f = stopfn_rdex, lower = ps[i, "exgS_lb"], upper = upper[i],
+      f = stopfn_rdex_r, lower = ps[i, "exgS_lb"], upper = upper[i],
       # args passed to `stopfn_rdex`
       n_acc = n_acc,
       mu = ps[i, "muS"], sigma = ps[i, "sigmaS"], tau = ps[i, "tauS"], lb = ps[i, "exgS_lb"],
+      exg_normal_ratio = ps[i, "exg_normal_ratio"],
+      exg_shifted_exp_sigma = ps[i, "exg_shifted_exp_sigma"],
       v = pgo[ , i, "v"], B = pgo[ , i, "B"], A = pgo[ , i, "A"], t0 = pgo[ , i, "t0"], s = pgo[ , i, "s"],
       SSD = SSDs[i]
     )
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
+}
+
+
+rSShybridLNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_lnormal_stop_spec()
+  rSShybrid(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+rSShybridNormal <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_normal_stop_spec()
+  rSShybrid(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
+}
+
+
+rSShybridWeibull <- function(data, pars, ok = rep(TRUE, dim(pars)[1])) {
+  stop_spec <- ss_weibull_stop_spec()
+  rSShybrid(
+    data, pars, ok = ok,
+    stop_sampler = stop_spec$rfun
+  )
 }
 
 
@@ -1008,6 +1777,8 @@ pstopHybrid <- function(
 #' Model file to estimate the hybrid Wald / ex-Gaussian race model of stop signal task data in EMC2.
 #'
 #' Model files are almost exclusively used in `design()`.
+#'
+#' @inheritParams stop_signal
 #'
 #' @details
 #'
@@ -1026,7 +1797,7 @@ pstopHybrid <- function(
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
-#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | 0    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
 #' All parameters are estimated on the log scale, with the exception of `tf` and `gf` which are estimated on the probit scale, and `exgS_lb` which is estimated on the natural scale.
 #'
@@ -1055,11 +1826,16 @@ pstopHybrid <- function(
 #' Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
 #' Thus, this hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 #'
-#' The mean of the ex-Gaussian stop distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT).
+#' The mean of the stop distribution is taken as the stop signal reaction time (SSRT).
+#'
+#' For an untruncated ex-Gaussian stop distribution, the mean is `muS + tauS`,
+#' using parameters on their natural scale. By default, the distribution is
+#' truncated below zero (`exgS_lb = 0`), so its mean generally differs from this
+#' sum. Use [ssrt_summary()] for posterior SSRT summaries that account for
+#' truncation.
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter `exgS_lb`.
-#' The default value for this lower bound is `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
 #'
 #' @references
 #'
@@ -1070,81 +1846,11 @@ pstopHybrid <- function(
 #' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 #'
 #' @return A model list with all the necessary functions to sample
-#' @noRd
-SSRDEX <- function() {
-  list(
-    type = "RACE",
-    c_name = "SSRDEX",
-    p_types = c(
-      v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
-      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
-      tf = qnorm(0), gf = qnorm(0),
-      exgS_lb = .05
-    ),
-    transform = list(
-      func = c(
-        v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp",
-        muS = "exp", sigmaS = "exp", tauS = "exp",
-        tf = "pnorm", gf = "pnorm",
-        exgS_lb = "identity"
-      )
-    ),
-    bound = list(
-      minmax = cbind(
-        v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf), t0 = c(0.05, Inf), s = c(0, Inf),
-        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4,Inf),
-        tf = c(.001, .999), gf = c(.001, .999),
-        exgS_lb = c(-Inf, Inf)
-      ),
-      exception = c(
-        v = 0, A = 0,
-        tf = 0, gf = 0,
-        exgS_lb = -Inf
-      )
-    ),
-    # Trial dependent parameter transform
-    Ttransform = function(pars, dadm) {
-      if (is.null(dadm$SSD)) {
-        stop("SSRDEX requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
-      }
-      if (is.null(dadm$lI)) {
-        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
-      }
-      pars <- cbind(pars, b = pars[,"B"] + pars[,"A"])
-      pars <- cbind(pars, SSD = dadm$SSD)
-      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
-      return(pars)
-    },
-    # Density function (PDF) for single go racer
-    dfunG = function(rt, pars) {
-      return(dRDM(rt, pars))
-    },
-    # Probability function (CDF) for single go racer
-    pfunG = function(rt, pars) {
-      return(pRDM(rt, pars))
-    },
-    # Density function (PDF) for single stop racer
-    dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
-      return(dtexGaussianS(rt, parsS))
-    },
-    # Probability function (CDF) for single stop racer
-    pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
-      return(ptexGaussianS(rt, parsS))
-    },
-    # Stop probability integral
-    sfun = function(pars, n_acc, upper = Inf) {
-      return(pstopHybrid(pars, n_acc, upper = upper))
-    },
-    # Random function for SS race
-    rfun = function(data = NULL, pars) {
-      return(rSShybrid(data, pars, ok = attr(pars, "ok")))
-    },
-    # Race likelihood combining pfun and dfun
-    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
-    }
+SSRDEX <- function(exgaussian_approximation = NULL) {
+  stop_signal(
+    go = "racing_diffusion",
+    stop = "exgaussian",
+    exgaussian_approximation = exgaussian_approximation
   )
 }
 
@@ -1423,8 +2129,7 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
         }
 
         # ST WINS (never tf)
-        if (any(ispSST)) { # Go triggered 1a) with (1-pStop), all race,
-          #              1b) with pStop, only ST races
+        if (any(ispSST)) { # Go triggered: stop already won, or both stop and go unfinished
           # Go failure    2) Only ST races
           # ST winner rows
           ispSSTwin <-  dadm$winner &  ispSST
@@ -1453,10 +2158,11 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
           llG <- apply(matrix(log(1-model$pfunG(
             rt=dadm$rt[ispSGloss],pars=pars[ispSGloss,,drop=FALSE])),
             nrow=n_accG),2,sum)
+          Sstop <- 1-model$pfunS(dadm$rt[ispSSTwin], pars[ispSSTwin,,drop=FALSE])
           like[tST] <- (1-tf[tST])*(                 # Never trigger failure
             gf[tST]*exp(like[tST]) +             # Case 2, gf only ST race
               (1-gf[tST])*(pStop*exp(like[tST]) +      # Case 1b, no gf, stop beats go, ST race
-                             (1-pStop)*exp(like[tST]+llG))) # Case 1a, no  gf, all race (no stop win)
+                             Sstop*exp(like[tST]+llG))) # Stop and go are both still running
         }
       }
       allLL[allok][allr] <- log(like)

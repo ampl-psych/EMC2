@@ -1,16 +1,34 @@
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 
-designSSexG <- design(model=SSEXG,
-                      factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),
-                      matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
-                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)
+
+# Baseline single-subject SSEXG fixture using staircase SSD generation.
+mySSD_function <- make_ssd()
+
+designSSexG <- design(
+  model = function() stop_signal(go = "exgaussian", stop = "exgaussian"),
+  factors = list(subjects = 1, S = c("left", "right")),
+  Rlevels = c("left", "right"),
+  matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+  formula = list(
+    mu ~ lM,
+    sigma ~ 1,
+    tau ~ 1,
+    muS ~ 1,
+    sigmaS ~ 1,
+    tauS ~ 1,
+    gf ~ 1,
+    tf ~ 1
+  ),
+  report_p_vector = FALSE
 )
 
-p_vector <- sampled_pars(designSSexG,doMap = FALSE)
-p_vector[1:length(p_vector)] <- c(log(.6), log(.8), log(0.05), log(0.2),
-                                  log(0.2),log(0.03), log(0.05),
-                                  qnorm(.1),qnorm(.1))
+p_vector <- sampled_pars(designSSexG, doMap = FALSE)
+p_vector[1:length(p_vector)] <- c(
+  log(.6), log(.8), log(0.05), log(0.2),
+  log(0.2), log(0.03), log(0.05),
+  qnorm(.1), qnorm(.1)
+)
 
 
 dat <- data.frame(
@@ -28,22 +46,110 @@ test_that("exG likelihood", {
   expect_snapshot(round(model_likelihood(emc, parameters), 6))
 })
 
+test_that("SSEXG mapped_pars supplies internal SSD and hides bookkeeping columns", {
+  mapped <- mapped_pars(designSSexG, p_vector)
+
+  expect_s3_class(mapped, "data.frame")
+  expect_false("SSD" %in% names(mapped))
+  expect_false("lI" %in% names(mapped))
+  expect_true(all(c("S", "lR", "lM", "mu", "sigma", "tau", "muS", "sigmaS", "tauS", "gf", "tf") %in% names(mapped)))
+})
+
+test_that("SSEXG mapped_pars supports the R reference model path", {
+  SSEXG_R <- function() {
+    model <- stop_signal(go = "exgaussian", stop = "exgaussian")
+    model$c_name <- NULL
+    model
+  }
+  design_R <- design(model = SSEXG_R,
+                     factors = list(subjects = 1, S = c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+                     formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
+                                    muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                                    gf ~ 1, tf ~ 1))
+
+  mapped <- mapped_pars(design_R, p_vector)
+
+  expect_s3_class(mapped, "data.frame")
+  expect_false("SSD" %in% names(mapped))
+  expect_false("lI" %in% names(mapped))
+})
+
+test_that("SSEXG mapped_pars keeps lI when it varies by accumulator", {
+  design_lI <- design(model = function() stop_signal(go = "exgaussian", stop = "exgaussian"),
+                      factors = list(subjects = 1, S = c("left", "right"), lI = 1:2),
+                      Rlevels = c("left", "right"),
+                      matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
+                      formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
+                                     muS ~ 1, sigmaS ~ 1, tauS ~ 1,
+                                     gf ~ 1, tf ~ 1))
+  p_lI <- p_vector
+  names(p_lI) <- names(sampled_pars(design_lI, doMap = FALSE))
+
+  mapped <- mapped_pars(design_lI, p_lI)
+
+  expect_false("SSD" %in% names(mapped))
+  expect_true("lI" %in% names(mapped))
+  expect_equal(sort(unique(as.numeric(as.character(mapped$lI)))), c(1, 2))
+})
+
+test_that("SSEXG mapped prior plotting supplies internal SSD", {
+  prior_SS <- prior(designSSexG, type = "single")
+  samples <- get_objects(design = designSSexG, prior = prior_SS, type = "single",
+                         sample_prior = TRUE, selection = "alpha", N = 10)
+
+  expect_error(get_pars(samples, selection = "alpha", type = "single",
+                        stage = "sample", map = TRUE), NA)
+})
+
+
+
+test_that("stop-signal models disable compression and RT binning", {
+  tiny_dat <- data.frame(
+    subjects = factor(c(1, 1)),
+    S = factor(c("left", "left"), levels = c("left", "right")),
+    R = factor(c("left", "left"), levels = c("left", "right")),
+    rt = c(0.123, 0.178),
+    SSD = c(Inf, Inf)
+  )
+
+  expect_error(
+    EMC2:::design_model(
+      tiny_dat, designSSexG,
+      compress = TRUE, verbose = FALSE, rt_check = FALSE
+    ),
+    "Compression is not supported for stop-signal models"
+  )
+
+  expect_message(
+    emc_stop <- make_emc(
+      tiny_dat, designSSexG, type = "single",
+      n_chains = 1, compress = TRUE, rt_resolution = 0.05
+    ),
+    "Stop-signal models do not support compression"
+  )
+
+  winner_rows <- emc_stop[[1]]$data[[1]]$winner
+  expect_equal(emc_stop[[1]]$data[[1]]$rt[winner_rows], tiny_dat$rt)
+})
+
 test_that("staircase resets per subject", {
   # Each subject-specific staircase should start from the same initial SSD.
-  design_multi <- design(model = SSEXG,
+  design_multi <- design(model = function() stop_signal(go = "exgaussian", stop = "exgaussian"),
                          factors = list(subjects = 1:3, S = c("left", "right")),
                          Rlevels = c("left", "right"),
                          matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
                          formula = list(mu ~ lM, sigma ~ 1, tau ~ 1,
                                          muS ~ 1, sigmaS ~ 1, tauS ~ 1,
-                                         gf ~ 1, tf ~ 1), report_p_vector = FALSE)
+                                         gf ~ 1, tf ~ 1))
 
   p_multi <- sampled_pars(design_multi, doMap = FALSE)
   p_multi[1:length(p_multi)] <- c(log(.6), log(.8), log(0.05), log(0.2),
                                   log(0.2), log(0.03), log(0.05),
                                   qnorm(.1), qnorm(.1))
 
-  dat_multi <- make_data(p_multi, design_multi, n_trials = 400,
+  dat_multi <- make_data(p_multi, design_multi, n_trials = 4,
                          functions = list(SSD = make_ssd(p_stop = 1)))
 
   # Go trials have SSD = Inf; inspect the first actual stop trial per subject.
